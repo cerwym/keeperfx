@@ -127,6 +127,9 @@
 #include "game_legacy.h"
 #include "room_list.h"
 #include "steam_api.hpp"
+#include "keeperfx/achivement/achievement_api.h"
+#include "keeperfx/achivement/achievement_definitions.h"
+#include "keeperfx/achivement/achievement_tracker.h"
 #include "game_loop.h"
 #include "net_input_lag.h"
 #include "moonphase.h"
@@ -2769,6 +2772,8 @@ void first_gameturn_actions() {
     if (game.play_gameturn == 1) {
         apply_default_flee_and_imprison_setting();
         send_sprite_zip_count_to_other_players();
+        // Init achievvement system for this level.
+        achievement_tracker_init(get_loaded_level_number);
     }
     //intentional_desync();
 }
@@ -3713,7 +3718,7 @@ static TbBool wait_at_frontend(void)
                 WARNMSG("Unable to load campaign associated with the specified level CMD Line parameter, default loaded.");
             }
             else {
-                JUSTLOG("No campaign specified. Default campaign loaded for selected level (%u).", start_params.selected_level_number);
+                ("No campaign specified. Default campaign loaded for selected level (%u).", start_params.selected_level_number);
             }
         }
         set_selected_level_number(start_params.selected_level_number);
@@ -4397,7 +4402,9 @@ int LbBullfrogMain(unsigned short argc, char *argv[])
     retval = setup_game();
     if (retval == 1)
     {
+        // Post-original game setup things, our custom stuff
         steam_api_init();
+        achievements_init();
     }
     if (retval == 1)
     {
@@ -4450,6 +4457,7 @@ int LbBullfrogMain(unsigned short argc, char *argv[])
     }
 
     LbErrorLogClose();
+    achievements_shutdown();
     steam_api_shutdown();
     return 0;
 }
