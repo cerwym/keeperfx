@@ -138,7 +138,8 @@ struct AchievementDefinition {
     char name[ACHIEVEMENT_NAME_LEN];
     char description[ACHIEVEMENT_DESC_LEN];
     char icon_path[ACHIEVEMENT_ICON_PATH_LEN];
-    int points;
+    int points;va_arg
+    int icon_sprite;  // Custom sprite index for achievement icon (0 = use default trophy icon)
     TbBool hidden;
     int name_text_id;   ///< String ID for localized name
     int desc_text_id;   ///< String ID for localized description

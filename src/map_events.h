@@ -68,6 +68,7 @@ enum EventKinds {
     EvKind_EnemyDoor,                      // ComputerKeeper: DoorAtck1 [event20] --> attacks enemy doors
     EvKind_SecretDoorDiscovered,
     EvKind_SecretDoorSpotted,
+    EvKind_AchievementUnlocked, // System Wide: an achievement event should be triggered
 };
 
 enum EventFlags {

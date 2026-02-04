@@ -275,6 +275,7 @@ const struct NamedCommand mevents_desc[] = {
     {"MEVENT_FRIENDLYFIGHT",   EvKind_FriendlyFight},
     {"MEVENT_WORKROMUNREACHBL",EvKind_WorkRoomUnreachable},
     {"MEVENT_STRGROMUNREACHBL",EvKind_StorageRoomUnreachable},
+    {"MEVENT_ACHIEVEMENTUNLKD",EvKind_AchievementUnlocked},
     {NULL,                    0},
 };
 
@@ -1202,7 +1203,7 @@ TbBool parse_creaturetype_instance_blocks(char *buf, long len, const char *confi
             {
                 inst_inf->func_idx = k;
                 n++;
-                //JUSTLOG("Function = %s %s %d",creature_instances_func_type[k-1].name,spell_code_name(inst_inf->func_params[0]),inst_inf->func_params[1]);
+                //("Function = %s %s %d",creature_instances_func_type[k-1].name,spell_code_name(inst_inf->func_params[0]),inst_inf->func_params[1]);
             }
             // Second parameter may be a different thing based on first parameter
             switch (k)

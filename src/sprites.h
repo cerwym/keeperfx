@@ -854,6 +854,8 @@ enum GUIFrontendSprite {
     GFS_slider_horiz_c = 93,
     GFS_slider_horiz_r = 94,
     GFS_specicon_voice = 95,
+    GPS_message_rpanel_msg_trophy_act = 900,
+    GPS_message_rpanel_msg_trophy_std = 901,
 };
 
 #endif

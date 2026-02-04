@@ -387,6 +387,8 @@ enum GUIStrings {
     GUIStr_EventSecretDoorDiscovered,
     GUIStr_EventSecretDoorSpottedDesc,
     GUIStr_EventSecretDoorSpotted,
+    GUIStr_EventAchievementUnlocked,
+    GUIStr_EventAchievementUnlockedDesc,
     GUIStr_MnuFreePlayLevels = STRINGS_MAX+941,
     GUIStr_MnuLandSelection = STRINGS_MAX+942,
     GUIStr_MnuCampaigns = STRINGS_MAX+943,
