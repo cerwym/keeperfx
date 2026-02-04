@@ -1446,7 +1446,17 @@ TbBool load_map_file(LevelNumber lvnum)
 {
     TbBool result = load_level_file(lvnum);
     if (result)
+    {
         set_loaded_level_number(lvnum);
+        /// Initialize achievement tracker for this level
+        extern void achievement_tracker_init(LevelNumber level_num);
+        achievement_tracker_init(lvnum);
+        
+        // Check for level-specific achievements
+        extern int achievement_count(void);
+        int total_achievements = achievement_count();
+        JUSTLOG("Level %d loaded, %d total achievements registered", lvnum, total_achievements);
+    }
     else
         set_loaded_level_number(SINGLEPLAYER_NOTSTARTED);
     return result;

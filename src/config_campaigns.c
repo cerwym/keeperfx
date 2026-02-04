@@ -28,7 +28,7 @@
 #include "config.h"
 #include "config_strings.h"
 #include "config_keeperfx.h"
-#include "keeperfx/achivement/achievement_definitions.h"'
+#include "keeperfx/achievement/achievement_definitions.h"
 #include "lvl_filesdk1.h"
 #include "frontmenu_ingame_tabs.h"
 #include "map_data.h"
@@ -1186,6 +1186,10 @@ TbBool change_campaign(const char *cmpgn_fname)
     update_room_tab_to_config();
     update_trap_tab_to_config();
     update_powers_tab_to_config();
+    // Initialize achievement system
+    extern TbBool achievements_init(void);
+    achievements_init();
+    // Load campaign-specific achievements
     load_campaign_achievements(&campaign);
     return result;
 }

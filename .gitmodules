@@ -1,0 +1,3 @@
+[submodule "tools/pngpal2raw/src"]
+	path = tools/pngpal2raw/src
+	url = https://github.com/dkfans/pngpal2raw.git

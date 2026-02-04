@@ -639,6 +639,10 @@ void slap_creature(struct PlayerInfo *player, struct Thing *thing)
     cctrl->frozen_on_hit = 6; // Could be configurable.
     cctrl->cowers_from_slap_turns = 18; // Could be configurable.
     play_creature_sound(thing, CrSnd_Slap, 3, 0);
+    
+    /// Track achievement for slapping this creature
+    extern void achievement_tracker_slap_used(struct Thing *thing);
+    achievement_tracker_slap_used(thing);
 }
 
 TbBool can_cast_power_at_xy(PlayerNumber plyr_idx, PowerKind pwkind, MapSubtlCoord stl_x, MapSubtlCoord stl_y, unsigned long allow_flags)

@@ -361,7 +361,7 @@ pkg/data/%.jty:
 gfx/%:: | gfx/LICENSE ;
 
 gfx/LICENSE:
-	git clone --depth=1 https://github.com/dkfans/FXGraphics.git gfx
+	git clone --depth=1 https://github.com/Cerwym/FXGraphics.git gfx
 
 # The package is extracted only if targets does not exits; the "|" causes file dates to be ignored
 # Note that ignoring timestamp means it is possible to have outadated files after a new

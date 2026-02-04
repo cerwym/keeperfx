@@ -127,9 +127,9 @@
 #include "game_legacy.h"
 #include "room_list.h"
 #include "steam_api.hpp"
-#include "keeperfx/achivement/achievement_api.h"
-#include "keeperfx/achivement/achievement_definitions.h"
-#include "keeperfx/achivement/achievement_tracker.h"
+#include "keeperfx/achievement/achievement_api.h"
+#include "keeperfx/achievement/achievement_definitions.h"
+#include "keeperfx/achievement/achievement_tracker.h"
 #include "game_loop.h"
 #include "net_input_lag.h"
 #include "moonphase.h"
@@ -2714,6 +2714,9 @@ void update(void)
         process_dungeons();
         update_research();
         update_manufacturing();
+        /// Update achievement tracker
+        extern void achievement_tracker_update(void);
+        achievement_tracker_update();
         event_process_events();
         update_all_events();
         process_level_script();
@@ -2773,7 +2776,7 @@ void first_gameturn_actions() {
         apply_default_flee_and_imprison_setting();
         send_sprite_zip_count_to_other_players();
         // Init achievvement system for this level.
-        achievement_tracker_init(get_loaded_level_number);
+        achievement_tracker_init(get_loaded_level_number());
     }
     //intentional_desync();
 }
@@ -3718,7 +3721,7 @@ static TbBool wait_at_frontend(void)
                 WARNMSG("Unable to load campaign associated with the specified level CMD Line parameter, default loaded.");
             }
             else {
-                ("No campaign specified. Default campaign loaded for selected level (%u).", start_params.selected_level_number);
+                WARNMSG("No campaign specified. Default campaign loaded for selected level (%u).", start_params.selected_level_number);
             }
         }
         set_selected_level_number(start_params.selected_level_number);

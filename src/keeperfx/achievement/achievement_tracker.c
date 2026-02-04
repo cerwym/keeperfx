@@ -40,7 +40,38 @@ void achievement_tracker_init(LevelNumber level_num)
     achievement_tracker.current_level = level_num;
     achievement_tracker.level_start_time = game.play_gameturn;
     
-    SYNCLOG("Achievement tracker initialized for level %d", level_num);
+    /// Load active achievements for this level
+    achievement_tracker.active_achievement_count = 0;
+    for (int i = 0; i < achievement_definitions_count; i++)
+    {
+        struct AchievementDefinition* ach_def = &achievement_definitions[i];
+        
+        /// Check if achievement applies to this level
+        TbBool applies_to_level = true;
+        for (int j = 0; j < ach_def->condition_count; j++)
+        {
+            struct AchievementCondition* cond = &ach_def->conditions[j];
+            if (cond->type == AchCond_Level)
+            {
+                if (cond->data.level.level_num != level_num)
+                    applies_to_level = false;
+            }
+            else if (cond->type == AchCond_LevelRange)
+            {
+                if (level_num < cond->data.level_range.min_level || level_num > cond->data.level_range.max_level)
+                    applies_to_level = false;
+            }
+        }
+        
+        if (applies_to_level)
+        {
+            achievement_tracker.active_achievements[achievement_tracker.active_achievement_count++] = ach_def;
+            JUSTLOG("Loaded active achievement: %s", ach_def->id);
+        }
+    }
+    
+    JUSTLOG("Achievement tracker initialized for level %d with %d active achievements", 
+            level_num, achievement_tracker.active_achievement_count);
 }
 
 /**
@@ -65,12 +96,67 @@ void achievement_tracker_reset(void)
 /**
  * Update achievement tracker (called each game turn).
  * Checks conditions and unlocks achievements.
- * @note This is where we'd evaluate achievement conditions.
- * @todo Iterate through active achievements and check conditions.
- * @todo Unlock achievements when all conditions are met.
  */
 void achievement_tracker_update(void)
 {
+    /// Check active achievements
+    for (int i = 0; i < achievement_tracker.active_achievement_count; i++)
+    {
+        struct AchievementDefinition* ach_def = achievement_tracker.active_achievements[i];
+        
+        /// Construct namespaced achievement ID
+        char namespaced_id[128];
+        snprintf(namespaced_id, sizeof(namespaced_id), "%s.%s", 
+                 ach_def->campaign_name, ach_def->id);
+        
+        /// Skip if already unlocked
+        if (achievement_is_unlocked(namespaced_id))
+            continue;
+        
+        /// Check all conditions
+        TbBool all_conditions_met = true;
+        for (int j = 0; j < ach_def->condition_count; j++)
+        {
+            struct AchievementCondition* cond = &ach_def->conditions[j];
+            
+            switch (cond->type)
+            {
+                case AchCond_CreatureUsed:
+                    /// Check if creature type has been used
+                    if (!(achievement_tracker.creature_types_used & (1 << cond->data.creature.creature_model)))
+                        all_conditions_met = false;
+                    break;
+                    
+                case AchCond_RoomRequired:
+                    /// TODO: Check if player has built the required room
+                    /// For now, fail this check until implemented
+                    all_conditions_met = false;
+                    break;
+                    
+                case AchCond_ScriptFlag:
+                    /// TODO: Check script flags from level script
+                    /// For now, fail this check until implemented
+                    all_conditions_met = false;
+                    break;
+                    
+                case AchCond_Level:
+                case AchCond_LevelRange:
+                    /// Already filtered in init, always true for active achievements
+                    break;
+                    
+                default:
+                    /// Other conditions not implemented yet
+                    break;
+            }
+        }
+        
+        /// Unlock if all conditions met
+        if (all_conditions_met)
+        {
+            SYNCLOG("[%d] achievement_tracker_update: Achievement unlocked: %s", game.play_gameturn, ach_def->id);
+            achievement_unlock(namespaced_id);
+        }
+    }
 }
 
 /**
@@ -83,7 +169,7 @@ void achievement_tracker_level_complete(void)
 {
     achievement_tracker.level_completed = true;
     
-    SYNCLOG("Level completed, checking achievements");
+    JUSTLOG("Level completed, checking achievements");
 }
 
 /**
@@ -110,7 +196,7 @@ void achievement_tracker_creature_died(int creature_model, TbBool is_friendly)
     if (is_friendly)
     {
         achievement_tracker.creature_deaths++;
-        SYNCLOG("Friendly creature died, total deaths: %ld", achievement_tracker.creature_deaths);
+        JUSTLOG("Friendly creature died, total deaths: %ld", achievement_tracker.creature_deaths);
     }
 }
 
@@ -127,11 +213,25 @@ void achievement_tracker_creature_killed(int killer_model, int victim_model)
 
 /**
  * Track slap usage.
+ * @param thing The thing being slapped (can be NULL for global tracking).
  */
-void achievement_tracker_slap_used(void)
+void achievement_tracker_slap_used(struct Thing *thing)
 {
     achievement_tracker.slaps_used++;
-    SYNCLOG("Slap used, total slaps: %ld", achievement_tracker.slaps_used);
+    JUSTLOG("Slap used, total slaps: %ld", achievement_tracker.slaps_used);
+    
+    /// Track creature-specific slaps if a creature was slapped
+    if (thing != NULL && thing->class_id == TCls_Creature)
+    {
+        JUSTLOG("Slapped creature index %d (model %d)", (int)thing->index, (int)thing->model);
+        
+        /// Mark this creature type as used for CreatureUsed conditions
+        achievement_tracker_creature_spawned(thing->model);
+        
+        /// Don't manually check achievements here - let achievement_tracker_update() handle it
+        /// This function was incorrectly unlocking ALL achievements that didn't have
+        /// CreatureUsed conditions, when it should only unlock achievements that DO have them
+    }
 }
 
 /**
@@ -152,7 +252,7 @@ void achievement_tracker_battle(TbBool won)
 void achievement_tracker_heart_destroyed(void)
 {
     achievement_tracker.hearts_destroyed++;
-    SYNCLOG("Heart destroyed, total: %ld", achievement_tracker.hearts_destroyed);
+    JUSTLOG("Heart destroyed, total: %ld", achievement_tracker.hearts_destroyed);
 }
 
 /**
@@ -209,7 +309,7 @@ void achievement_tracker_trap_used(int trap_kind)
  */
 void achievement_tracker_script_flag(int flag_id)
 {
-    SYNCLOG("Achievement script flag triggered: %d", flag_id);
+    JUSTLOG("Achievement script flag triggered: %d", flag_id);
 }
 
 /******************************************************************************/

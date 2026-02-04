@@ -48,14 +48,16 @@ enum AchievementPlatform {
 /** Structure representing a single achievement */
 struct Achievement {
     char id[ACHIEVEMENT_ID_LEN];              ///< Unique identifier (campaign.id)
-    char name[ACHIEVEMENT_NAME_LEN];          ///< Display name
-    char description[ACHIEVEMENT_DESC_LEN];   ///< Description
+    char name[ACHIEVEMENT_NAME_LEN];          ///< Display name (fallback if text ID fails)
+    char description[ACHIEVEMENT_DESC_LEN];   ///< Description (fallback if text ID fails)
     char icon_path[ACHIEVEMENT_ICON_PATH_LEN];///< Path to icon image
     int points;                               ///< Point/Gamerscore value
     TbBool hidden;                            ///< Hidden until unlocked
     TbBool unlocked;                          ///< Current unlock state
     time_t unlock_time;                       ///< Unix timestamp of unlock (0 if locked)
     float progress;                           ///< Progress towards unlock (0.0-1.0)
+    int name_text_id;                         ///< String ID for localized name (0 = use name field)
+    int desc_text_id;                         ///< String ID for localized description (0 = use description field)
 };
 
 /** Platform-specific achievement backend interface */
@@ -198,6 +200,26 @@ const char* achievements_get_platform_name(enum AchievementPlatform platform);
  * @return True if successfully registered.
  */
 TbBool achievements_register_backend(struct AchievementBackend* backend);
+
+/**
+ * Get achievement name by index.
+ * @param ach_idx Achievement index.
+ * @return Achievement name or NULL if invalid.
+ */
+const char* achievement_get_name_by_index(int ach_idx);
+
+/**
+ * Get achievement description by index.
+ * @param ach_idx Achievement index.
+ * @return Achievement description or NULL if invalid.
+ */
+const char* achievement_get_description_by_index(int ach_idx);
+
+/**
+ * Get total number of registered achievements.
+ * @return Total achievement count.
+ */
+int achievement_count(void);
 
 /******************************************************************************/
 #ifdef __cplusplus

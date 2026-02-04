@@ -231,6 +231,9 @@ obj/game_loop.o \
 obj/game_lghtshdw.o \
 obj/game_merge.o \
 obj/game_saves.o \
+obj/keeperfx/achievement/achievement_api.o \
+obj/keeperfx/achievement/achievement_tracker.o \
+obj/keeperfx/achievement/achievement_definitions.o \
 obj/gui_boxmenu.o \
 obj/gui_draw.o \
 obj/gui_frontbtns.o \
@@ -346,7 +349,8 @@ TESTS_OBJ = obj/tests/tst_main.o \
 obj/tests/tst_fixes.o \
 obj/tests/001_test.o \
 obj/tests/tst_enet_server.o \
-obj/tests/tst_enet_client.o
+obj/tests/tst_enet_client.o \
+obj/tests/tst_achievement_parser.o
 
 CU_DIR = deps/CUnit-2.1-3/CUnit
 CU_INC = -I"$(CU_DIR)/Headers"
@@ -494,6 +498,8 @@ heavylog: hvlog-before $(HVLOGBIN) hvlog-after
 FOLDERS = bin obj/std obj/hvlog \
 obj/std/ftests \
 obj/std/ftests/tests \
+obj/std/keeperfx/achievement \
+obj/hvlog/keeperfx/achievement \
 obj/tests obj/cu \
 obj/std/centitoml obj/hvlog/centitoml \
 sdl/for_final_package

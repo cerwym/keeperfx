@@ -6624,21 +6624,31 @@ msgid "Enemy spotted your secret door"
 msgstr "L'ennemi a repéré votre porte secrète"
 
 #: guitext:941
+msgctxt "Game event name"
+msgid "Imp Slapped!"
+msgstr "Diablotin Dégommé !"
+
+#: guitext:942
+msgctxt "Game event description"
+msgid "Well done, Keeper! You've slapped your first Imp, the first of many I hope..."
+msgstr "Excellent travail, Gardien ! Vous avez administré votre première claque à un Diablotin… qu'il s'en souvienne à jamais. Et maintenant, allez donc en gifler d'autres — la terreur ne va pas se répandre toute seule."
+
+#: guitext:943
 msgctxt "Menu interface, Main Menu item"
 msgid "Free Play levels"
 msgstr "Jeu Libre"
 
-#: guitext:942
+#: guitext:944
 msgctxt "Menu interface item"
 msgid "Land selection"
 msgstr "Sélection de Cartes"
 
-#: guitext:943
+#: guitext:945
 msgctxt "Menu interface item"
 msgid "Campaigns"
 msgstr "Campagnes"
 
-#: guitext:944
+#: guitext:946
 msgctxt "Menu interface item"
 msgid "Add computer"
 msgstr "Ajouter IA"

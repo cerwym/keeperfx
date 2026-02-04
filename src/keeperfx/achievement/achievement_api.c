@@ -57,14 +57,14 @@ enum AchievementPlatform achievements_detect_platform(void)
 #ifdef _WIN32
     if (LbFileExists("steam_api.dll") && LbFileExists("steam_appid.txt"))
     {
-        ("Achievement platform detected: Steam");
+        JUSTLOG("Achievement platform detected: Steam");
         return AchPlat_Steam;
     }
     
     // Check for GOG Galaxy
     if (LbFileExists("Galaxy.dll"))
     {
-        ("Achievement platform detected: GOG Galaxy");
+        JUSTLOG("Achievement platform detected: GOG Galaxy");
         return AchPlat_GOG;
     }
 #endif
@@ -72,7 +72,7 @@ enum AchievementPlatform achievements_detect_platform(void)
     // TODO: Add Xbox, PlayStation, Epic detection
     
     // Fallback to local storage
-    ("Achievement platform: Local storage (no platform SDK detected)");
+    JUSTLOG("Achievement platform: Local storage (no platform SDK detected)");
     return AchPlat_Local;
 }
 
@@ -192,7 +192,7 @@ TbBool achievement_register(struct Achievement* achievement)
     memcpy(&achievements[achievements_count], achievement, sizeof(struct Achievement));
     achievements_count++;
     
-    ("Registered achievement: %s (%s)", achievement->id, achievement->name);
+    JUSTLOG("Registered achievement: %s (%s)", achievement->id, achievement->name);
     return true;
 }
 
@@ -334,6 +334,27 @@ TbBool achievements_register_backend(struct AchievementBackend* backend)
     registered_backend = backend;
     SYNCLOG("Registered achievement backend: %s", backend->name);
     return true;
+}
+
+const char* achievement_get_name_by_index(int ach_idx)
+{
+    if (ach_idx < 0 || ach_idx >= achievements_count)
+        return NULL;
+    
+    return achievements[ach_idx].name;
+}
+
+const char* achievement_get_description_by_index(int ach_idx)
+{
+    if (ach_idx < 0 || ach_idx >= achievements_count)
+        return NULL;
+    
+    return achievements[ach_idx].description;
+}
+
+int achievement_count(void)
+{
+    return achievements_count;
 }
 
 /******************************************************************************/

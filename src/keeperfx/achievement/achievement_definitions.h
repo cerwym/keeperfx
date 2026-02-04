@@ -138,11 +138,12 @@ struct AchievementDefinition {
     char name[ACHIEVEMENT_NAME_LEN];
     char description[ACHIEVEMENT_DESC_LEN];
     char icon_path[ACHIEVEMENT_ICON_PATH_LEN];
-    int points;va_arg
+    int points;
     int icon_sprite;  // Custom sprite index for achievement icon (0 = use default trophy icon)
     TbBool hidden;
     int name_text_id;   ///< String ID for localized name
     int desc_text_id;   ///< String ID for localized description
+    char campaign_name[64];  ///< Campaign this achievement belongs to (for namespaced ID)
     
     /** @name Conditions that must be met */
     /**@{*/
@@ -150,6 +151,11 @@ struct AchievementDefinition {
     int condition_count;
     /**@}*/
 };
+
+/******************************************************************************/
+/// Global achievement definitions array
+extern struct AchievementDefinition achievement_definitions[MAX_ACHIEVEMENTS_PER_CAMPAIGN];
+extern int achievement_definitions_count;
 
 /******************************************************************************/
 /**

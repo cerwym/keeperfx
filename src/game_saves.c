@@ -24,8 +24,8 @@
 #include "bflib_fileio.h"
 #include "bflib_dernc.h"
 
-#include "keeperfx/achivement/achievement_api.h"
-#include "keeperfx/achivement/achievement_tracker.h"
+#include "keeperfx/achievement/achievement_api.h"
+#include "keeperfx/achievement/achievement_tracker.h"
 #include "config.h"
 #include "config_campaigns.h"
 #include "config_creature.h"
@@ -309,6 +309,7 @@ int load_game_chunks(TbFileHandle fhandle, struct CatalogueEntry *centry)
                     WARNLOG("Could not read AchievementData chunk");
                 }
             }
+            break;
         default:
             WARNLOG("Unrecognized chunk, ID = %08lx", hdr.id);
             if (LbFileSeek(fhandle, hdr.len, Lb_FILE_SEEK_CURRENT) < 0)

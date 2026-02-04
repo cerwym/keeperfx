@@ -17,6 +17,9 @@
 #ifndef ACHIEVEMENT_TRACKER_H
 #define ACHIEVEMENT_TRACKER_H
 
+// Forward declarations
+struct Thing;
+
 #include "../../bflib_basics.h"
 #include "achievement_api.h"
 #include "achievement_definitions.h"
@@ -105,8 +108,9 @@ void achievement_tracker_creature_killed(int killer_model, int victim_model);
 
 /**
  * Track slap usage.
+ * @param thing The thing being slapped (can be NULL for global tracking).
  */
-void achievement_tracker_slap_used(void);
+void achievement_tracker_slap_used(struct Thing *thing);
 
 /**
  * Track battle result.

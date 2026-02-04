@@ -5058,21 +5058,31 @@ msgid "Enemy spotted your secret door"
 msgstr ""
 
 #: guitext:941
+msgctxt "Game event name"
+msgid "Achievement Unlocked"
+msgstr ""
+
+#: guitext:942
+msgctxt "Game event tooltip"
+msgid "Achievement Unlocked"
+msgstr ""
+
+#: guitext:943
 msgctxt "Menu interface, Main Menu item"
 msgid "Free Play levels"
 msgstr ""
 
-#: guitext:942
+#: guitext:944
 msgctxt "Menu interface item"
 msgid "Land selection"
 msgstr ""
 
-#: guitext:943
+#: guitext:945
 msgctxt "Menu interface item"
 msgid "Campaigns"
 msgstr ""
 
-#: guitext:944
+#: guitext:946
 msgctxt "Menu interface item"
 msgid "Add computer"
 msgstr ""
@@ -5730,4 +5740,44 @@ msgstr ""
 #: guitext:1081
 msgctxt "Creature spell"
 msgid "Summon: Call upon temporary guardians to assist the creature in combat."
+msgstr ""
+
+#: guitext:1082
+msgctxt "Achievement name"
+msgid "Gold Digger"
+msgstr ""
+
+#: guitext:1083
+msgctxt "Achievement description"
+msgid "Dig 9 gold tiles"
+msgstr ""
+
+#: guitext:1084
+msgctxt "Achievement name"
+msgid "Treasure Hoarder"
+msgstr ""
+
+#: guitext:1085
+msgctxt "Achievement description"
+msgid "A fine Treasure Room indeed! Your creatures will feel more secure knowing their pay is well protected."
+msgstr ""
+
+#: guitext:1086
+msgctxt "Achievement name"
+msgid "Portal Master"
+msgstr ""
+
+#: guitext:1087
+msgctxt "Achievement description"
+msgid "The Portal is now under your control. Creatures from across the underworld will be drawn to your dungeon."
+msgstr ""
+
+#: guitext:1088
+msgctxt "Achievement name"
+msgid "Imp Slapped"
+msgstr ""
+
+#: guitext:1089
+msgctxt "Achievement description"
+msgid "Well done, Keeper! You've slapped your first Imp, the first of many I hope..."
 msgstr ""

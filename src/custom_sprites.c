@@ -2178,7 +2178,13 @@ const struct TbSprite *get_new_icon_sprite(short sprite_idx)
 const struct TbSprite *get_panel_sprite(short sprite_idx)
 {
     if ((sprite_idx >= 0) && (sprite_idx < num_sprites(gui_panel_sprites))) {
-        return get_sprite(gui_panel_sprites, sprite_idx);
+        const struct TbSprite *spr = get_sprite(gui_panel_sprites, sprite_idx);
+        // Debug logging for trophy sprite
+        if (sprite_idx == 841 || sprite_idx == 842) {
+            JUSTLOG("get_panel_sprite(%d): width=%d, height=%d, data offset=%p", 
+                         sprite_idx, spr->SWidth, spr->SHeight, spr->Data);
+        }
+        return spr;
     }
     sprite_idx -= GUI_PANEL_SPRITES_COUNT;
     if ((sprite_idx >= 0) && (sprite_idx < num_sprites(custom_sprites))) {

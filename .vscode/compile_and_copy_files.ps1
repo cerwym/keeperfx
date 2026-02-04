@@ -87,4 +87,71 @@ else
     Write-Host 'Compilation failed!' -ForegroundColor Red;
     exit 1;
 }
+
+# Copy compiled binary
+Write-Host 'Copying binary files...' -ForegroundColor Cyan;
 Copy-Item -Path "${workspaceFolder}\\bin\\*" -Destination $gameDir -Force;
+
+# Copy only modified campaign/config/lang/level files using git to detect changes
+Write-Host 'Detecting modified base game files...' -ForegroundColor Cyan;
+
+# Get list of modified, added, and untracked files in relevant directories
+$gitOutput = git -C $workspaceFolder status --porcelain campgns config lang levels 2>$null;
+
+if ($gitOutput) {
+    $modifiedFiles = @();
+    foreach ($line in $gitOutput -split "`n") {
+        # Match git status codes: M (modified), A (added), U (unmerged), ?? (untracked)
+        if ($line -match '^\s*([MAU]|\?\?)\s+(.+)$') {
+            $file = $matches[2].Trim();
+            # Only include files from directories we care about (exclude .pot/.po source files)
+            if ($file -match '^(campgns|config|levels)[\\/]' -or ($file -match '^lang[\\/]' -and $file -notmatch '\.(pot|po)$')) {
+                $modifiedFiles += $file;
+            }
+        }
+    }
+    
+    if ($modifiedFiles.Count -gt 0) {
+        Write-Host "Found $($modifiedFiles.Count) modified file(s) to copy" -ForegroundColor Yellow;
+        foreach ($file in $modifiedFiles) {
+            $sourcePath = Join-Path $workspaceFolder $file;
+            $destPath = Join-Path $gameDir $file;
+            
+            if (Test-Path $sourcePath) {
+                # Ensure destination directory exists
+                $destDir = Split-Path $destPath -Parent;
+                if (-not (Test-Path $destDir)) {
+                    New-Item -ItemType Directory -Path $destDir -Force | Out-Null;
+                }
+                Copy-Item -Path $sourcePath -Destination $destPath -Force;
+                Write-Host "  Copied: $file" -ForegroundColor DarkGray;
+            }
+        }
+    } else {
+        Write-Host 'No modified base game files detected' -ForegroundColor DarkGray;
+    }
+} else {
+    Write-Host 'Git not available or no repository - skipping incremental copy' -ForegroundColor DarkGray;
+}
+
+# Copy compiled pkg files (sprite atlases and language files)
+Write-Host 'Copying compiled data files...' -ForegroundColor Cyan;
+$pkgFiles = @(
+    @{Source='pkg/data/gui2-32.dat'; Dest='data/gui2-32.dat'},
+    @{Source='pkg/data/gui2-64.dat'; Dest='data/gui2-64.dat'},
+    @{Source='pkg/fxdata/gtext_eng.dat'; Dest='fxdata/gtext_eng.dat'}
+);
+foreach ($pkgFile in $pkgFiles) {
+    $sourcePath = Join-Path $workspaceFolder $pkgFile.Source;
+    $destPath = Join-Path $gameDir $pkgFile.Dest;
+    if (Test-Path $sourcePath) {
+        $destDir = Split-Path $destPath -Parent;
+        if (-not (Test-Path $destDir)) {
+            New-Item -ItemType Directory -Path $destDir -Force | Out-Null;
+        }
+        Copy-Item -Path $sourcePath -Destination $destPath -Force;
+        Write-Host "  Copied: $($pkgFile.Dest)" -ForegroundColor DarkGray;
+    }
+}
+
+Write-Host 'All files copied successfully!' -ForegroundColor Green;

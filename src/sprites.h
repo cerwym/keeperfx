@@ -752,6 +752,8 @@ enum GUIPanelSprite {
     GPS_rpanel_manufacture_dis = 838,
     GPS_rpanel_manufacture_cant = 839,
     GPS_portrt_qmark = 840,
+    GPS_message_rpanel_msg_trophy_act = 841,
+    GPS_message_rpanel_msg_trophy_std = 842,
 
     GUI_PANEL_SPRITES_COUNT = 900,
     GUI_PANEL_SPRITES_NEW = 512,
@@ -854,8 +856,6 @@ enum GUIFrontendSprite {
     GFS_slider_horiz_c = 93,
     GFS_slider_horiz_r = 94,
     GFS_specicon_voice = 95,
-    GPS_message_rpanel_msg_trophy_act = 900,
-    GPS_message_rpanel_msg_trophy_std = 901,
 };
 
 #endif

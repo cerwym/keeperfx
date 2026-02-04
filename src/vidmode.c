@@ -124,6 +124,20 @@ short LoadVRes256Data(long scrbuf_size)
     font_sprites = load_font("data/font1-64.dat", "data/font1-64.tab");
     button_sprites = load_spritesheet("data/gui1-64.dat", "data/gui1-64.tab");
     gui_panel_sprites = load_spritesheet("data/gui2-64.dat", "data/gui2-64.tab");
+    if (gui_panel_sprites) {
+        JUSTLOG("Loaded gui2-64.dat: %ld sprites total", num_sprites(gui_panel_sprites));
+        // Debug: check trophy sprite dimensions
+        if (num_sprites(gui_panel_sprites) > 841) {
+            const struct TbSprite *spr841 = get_sprite(gui_panel_sprites, 841);
+            JUSTLOG("  Sprite 841: %dx%d", spr841->SWidth, spr841->SHeight);
+        }
+        if (num_sprites(gui_panel_sprites) > 842) {
+            const struct TbSprite *spr842 = get_sprite(gui_panel_sprites, 842);
+            JUSTLOG("  Sprite 842: %dx%d", spr842->SWidth, spr842->SHeight);
+        }
+    } else {
+        ERRORLOG("Failed to load gui2-64.dat sprite sheet!");
+    }
     if (!winfont || !font_sprites || !button_sprites || !gui_panel_sprites || LbDataLoadAll(gui_load_files_640)) {
         return 0;
     }
@@ -199,6 +213,20 @@ short LoadMcgaData(void)
   winfont = load_font("data/font2-32.dat", "data/font2-32.tab");
   font_sprites = load_font("data/font1-32.dat", "data/font1-32.tab");
   gui_panel_sprites = load_spritesheet("data/gui2-32.dat", "data/gui2-32.tab");
+  if (gui_panel_sprites) {
+      JUSTLOG("Loaded gui2-32.dat: %ld sprites total", num_sprites(gui_panel_sprites));
+      // Debug: check trophy sprite dimensions
+      if (num_sprites(gui_panel_sprites) > 841) {
+          const struct TbSprite *spr841 = get_sprite(gui_panel_sprites, 841);
+          JUSTLOG("  Sprite 841: %dx%d", spr841->SWidth, spr841->SHeight);
+      }
+      if (num_sprites(gui_panel_sprites) > 842) {
+          const struct TbSprite *spr842 = get_sprite(gui_panel_sprites, 842);
+          JUSTLOG("  Sprite 842: %dx%d", spr842->SWidth, spr842->SHeight);
+      }
+  } else {
+      ERRORLOG("Failed to load gui2-32.dat sprite sheet!");
+  }
   return button_sprites && winfont && font_sprites && gui_panel_sprites && (ferror == 0);
 }
 

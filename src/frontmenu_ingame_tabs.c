@@ -366,6 +366,15 @@ void gui_area_event_button(struct GuiButton *gbtn)
         int ps_units_per_px = simple_gui_panel_sprite_height_units_per_px(gbtn, GPS_message_rpanel_msg_questn_act, 100);
         struct Dungeon* dungeon = get_players_num_dungeon(my_player_number);
         unsigned long i = gbtn->content.lval;
+        if (i <= EVENT_BUTTONS_COUNT) {
+            EventIndex evidx = dungeon->event_button_index[i];
+            if (evidx > 0) {
+                struct Event* event = &game.event[evidx];
+                if (event->kind == EvKind_AchievementUnlocked) {
+                    JUSTMSG("Drawing achievement event button: slot=%lu, sprite_idx=%d, pressed=%d", i, gbtn->sprite_idx, (gbtn->button_state_left_pressed || gbtn->button_state_right_pressed));
+                }
+            }
+        }
         if ((gbtn->button_state_left_pressed) || (gbtn->button_state_right_pressed))
         {
             draw_gui_panel_sprite_left(gbtn->scr_pos_x, gbtn->scr_pos_y, ps_units_per_px, gbtn->sprite_idx);
@@ -2172,6 +2181,9 @@ void maintain_event_button(struct GuiButton *gbtn)
         activate_event_box(evidx);
     }
     gbtn->sprite_idx = event_button_info[event->kind].bttn_sprite;
+    if (event->kind == EvKind_AchievementUnlocked) {
+        JUSTLOG("Achievement event button: kind=%d, sprite_idx=%d (GPS_message_rpanel_msg_trophy_act=%d)", event->kind, gbtn->sprite_idx, GPS_message_rpanel_msg_trophy_act);
+    }
     if (((event->kind == EvKind_FriendlyFight) || (event->kind == EvKind_EnemyFight))
         && ((event->mappos_x != 0) || (event->mappos_y != 0)) && ((game.play_gameturn % (2 * gui_blink_rate)) >= gui_blink_rate))
     {
