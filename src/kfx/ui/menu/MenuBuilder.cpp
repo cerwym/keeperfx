@@ -34,6 +34,16 @@ extern "C" void frontend_draw_large_dyntext_button(struct GuiButton *gbtn);
 
 struct GuiButtonInit* MenuBuilder::BuildButtonInitArray(const struct MenuDefinition *menuDef)
 {
+    if (menuDef == NULL)
+    {
+        ERRORLOG("BuildButtonInitArray: NULL menuDef");
+        return NULL;
+    }
+    if (menuDef->button_count <= 0)
+    {
+        WARNLOG("BuildButtonInitArray: menu \"%s\" has no buttons", menuDef->menu_id);
+    }
+
     int count = menuDef->button_count + 1;
     struct GuiButtonInit *arr = (struct GuiButtonInit *)calloc(count, sizeof(struct GuiButtonInit));
     if (arr == NULL)
@@ -60,6 +70,14 @@ struct GuiButtonInit* MenuBuilder::BuildButtonInitArray(const struct MenuDefinit
         gi->ptover_event = callbacks.Resolve(bdef->on_hover.name);
         gi->draw_call = callbacks.Resolve(bdef->on_draw.name);
         gi->maintain_call = callbacks.Resolve(bdef->on_maintain.name);
+
+        // Log if a named callback failed to resolve (helps diagnose missing registrations)
+        if (bdef->on_click.name[0] != '\0' && gi->click_event == NULL)
+            WARNLOG("Button \"%s\": on_click \"%s\" unresolved", bdef->id, bdef->on_click.name);
+        if (bdef->on_draw.name[0] != '\0' && gi->draw_call == NULL)
+            WARNLOG("Button \"%s\": on_draw \"%s\" unresolved", bdef->id, bdef->on_draw.name);
+        if (bdef->on_maintain.name[0] != '\0' && gi->maintain_call == NULL)
+            WARNLOG("Button \"%s\": on_maintain \"%s\" unresolved", bdef->id, bdef->on_maintain.name);
 
         gi->btype_value = bdef->btype_value;
         gi->scr_pos_x = (short)bdef->pos_x;
@@ -130,6 +148,12 @@ void MenuBuilder::BuildGuiMenu(const struct MenuDefinition *menuDef,
                                 struct GuiButtonInit *buttons,
                                 struct GuiMenu *menuOut)
 {
+    if (menuDef == NULL || buttons == NULL || menuOut == NULL)
+    {
+        ERRORLOG("BuildGuiMenu: NULL parameter (menuDef=%p buttons=%p menuOut=%p)",
+                 (void*)menuDef, (void*)buttons, (void*)menuOut);
+        return;
+    }
     memset(menuOut, 0, sizeof(*menuOut));
 
     menuOut->ident = 0;

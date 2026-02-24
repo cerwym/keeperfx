@@ -52,6 +52,7 @@ private:
         struct GuiButtonInit *buttons;
         struct MenuDefinition menu_def;
         TbBool loaded;
+        TbBool discovered; // Cycle detection for DiscoverReferencedMenus
     };
 
     int FindMenu(const char *menuId) const;
