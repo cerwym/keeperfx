@@ -32,6 +32,7 @@
 #include "frontmenu_ingame_tabs.h"
 #include "map_data.h"
 #include "highscores.h"
+#include "lvl_progress.h"
 
 #include "game_merge.h"
 #include "post_inc.h"
@@ -1181,6 +1182,7 @@ TbBool change_campaign(const char *cmpgn_fname)
         find_and_load_lif_files();
     }
     load_or_create_high_score_table();
+    load_progress();
     // Update GUI arrays to new config
     update_room_tab_to_config();
     update_trap_tab_to_config();

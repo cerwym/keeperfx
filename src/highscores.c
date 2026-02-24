@@ -21,6 +21,7 @@
 #include "globals.h"
 #include "config.h"
 #include "config_campaigns.h"
+#include "game_saves.h"
 
 
 #include "post_inc.h"
@@ -30,7 +31,7 @@
 
 static TbBool load_high_score_table(void)
 {
-    char* fname = prepare_file_path(FGrp_Save, campaign.hiscore_fname);
+    char* fname = prepare_campaign_save_path(campaign.hiscore_fname);
     long arr_size = campaign.hiscore_count * sizeof(struct HighScore);
     if (arr_size <= 0)
     {
@@ -93,7 +94,7 @@ void load_or_create_high_score_table(void)
 
 TbBool save_high_score_table(void)
 {
-    char* fname = prepare_file_path(FGrp_Save, campaign.hiscore_fname);
+    char* fname = prepare_campaign_save_path(campaign.hiscore_fname);
     long fsize = campaign.hiscore_count * sizeof(struct HighScore);
     if (fsize <= 0)
         return true;

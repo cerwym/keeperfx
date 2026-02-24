@@ -1,0 +1,134 @@
+{
+  "schema_version": "1.0",
+  "menu_id": "campaign_hub",
+  "description": "Campaign hub — shown after selecting a campaign. Continue, New Game, Load.",
+  "position": {
+    "x": "center",
+    "y": "center"
+  },
+  "size": {
+    "width": 640,
+    "height": 480
+  },
+  "is_monopoly_menu": false,
+  "buttons": [
+    {
+      "id": "btn_campaign_title",
+      "type": "NormalBtn",
+      "id_num": 82,
+      "btype_value": 0,
+      "position": { "x": 999, "y": 46 },
+      "size": { "width": 371, "height": 46 },
+      "dynamic_text": "active_campaign_name",
+      "font_index": 0,
+      "state": {
+        "enabled": true,
+        "visible": true,
+        "clickable": false
+      },
+      "callbacks": {
+        "on_draw": "frontend_draw_large_dyntext_button"
+      }
+    },
+    {
+      "id": "btn_continue",
+      "type": "NormalBtn",
+      "id_num": 0,
+      "btype_value": 0,
+      "position": { "x": 999, "y": 160 },
+      "size": { "width": 371, "height": 46 },
+      "text": "Continue",
+      "font_index": 1,
+      "state": {
+        "enabled": true,
+        "visible": true,
+        "clickable": true
+      },
+      "callbacks": {
+        "on_click": "frontend_load_continue_game",
+        "on_hover": "frontend_over_button",
+        "on_draw": "frontend_draw_large_freetext_button",
+        "on_maintain": "frontend_continue_game_maintain"
+      }
+    },
+    {
+      "id": "btn_new_game",
+      "type": "NormalBtn",
+      "id_num": 0,
+      "btype_value": 0,
+      "position": { "x": 999, "y": 220 },
+      "size": { "width": 371, "height": 46 },
+      "text": "New Game",
+      "font_index": 1,
+      "state": {
+        "enabled": true,
+        "visible": true,
+        "clickable": true
+      },
+      "callbacks": {
+        "on_click": "frontend_start_selected_campaign",
+        "on_hover": "frontend_over_button",
+        "on_draw": "frontend_draw_large_freetext_button"
+      }
+    },
+    {
+      "id": "btn_load_game",
+      "type": "NormalBtn",
+      "id_num": 0,
+      "btype_value": 2,
+      "position": { "x": 999, "y": 280 },
+      "size": { "width": 371, "height": 46 },
+      "text": "Load Game",
+      "font_index": 1,
+      "state": {
+        "enabled": true,
+        "visible": true,
+        "clickable": true
+      },
+      "callbacks": {
+        "on_click": "frontend_navigate_to_campaign_load",
+        "on_hover": "frontend_over_button",
+        "on_draw": "frontend_draw_large_freetext_button",
+        "on_maintain": "frontend_main_menu_load_game_maintain"
+      }
+    },
+    {
+      "id": "btn_high_scores",
+      "type": "NormalBtn",
+      "id_num": 0,
+      "btype_value": 0,
+      "position": { "x": 999, "y": 340 },
+      "size": { "width": 371, "height": 46 },
+      "text": "High Scores",
+      "font_index": 1,
+      "state": {
+        "enabled": true,
+        "visible": true,
+        "clickable": true
+      },
+      "callbacks": {
+        "on_click": "frontend_hub_high_scores",
+        "on_hover": "frontend_over_button",
+        "on_draw": "frontend_draw_large_freetext_button"
+      }
+    },
+    {
+      "id": "btn_back",
+      "type": "NormalBtn",
+      "id_num": 0,
+      "navigate_to": "campaigns_menu",
+      "position": { "x": 999, "y": 404 },
+      "size": { "width": 371, "height": 46 },
+      "content_name": "return_to_main",
+      "state": {
+        "enabled": true,
+        "visible": true,
+        "clickable": true
+      },
+      "callbacks": {
+        "on_hover": "frontend_over_button",
+        "on_draw": "frontend_draw_large_menu_button"
+      }
+    }
+  ]
+}

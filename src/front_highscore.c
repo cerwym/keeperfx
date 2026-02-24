@@ -39,6 +39,7 @@
 #include "gui_frontbtns.h"
 #include "custom_sprites.h"
 #include "highscores.h"
+#include "lvl_progress.h"
 #include "post_inc.h"
 
 /******************************************************************************/
@@ -46,6 +47,7 @@ static unsigned long high_score_entry_index;
 
 char high_score_entry[HISCORE_NAME_LENGTH];
 int fe_high_score_table_from_main_menu;
+int fe_high_score_table_from_json_menu;
 long high_score_entry_input_active = -1;
 int highscore_scroll_offset = 0;
 unsigned long scores_count;
@@ -308,6 +310,7 @@ void frontstats_save_high_score(void)
     {
         dungeon->lvstats.allow_save_score = false;
         add_score_to_high_score_table();
+        record_level_completion(get_loaded_level_number(), dungeon->lvstats.player_score);
     }
     lbInkey = 0;
 }

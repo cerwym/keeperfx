@@ -36,6 +36,7 @@ struct GuiButton;
 extern struct GuiMenu frontend_select_level_menu;
 #define frontend_select_campaign_items_max_visible  7
 extern struct GuiMenu frontend_select_campaign_menu;
+extern int select_campaign_scroll_offset;
 #define frontend_select_mappack_items_max_visible  7
 extern struct GuiMenu frontend_select_mappack_menu;
 /******************************************************************************/

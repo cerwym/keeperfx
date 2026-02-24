@@ -1,0 +1,369 @@
+{
+  "schema_version": "1.0",
+  "menu_id": "GMnu_FEMAIN",
+  "description": "Main Menu - first screen displayed on game launch",
+  "position": {
+    "x": "center",
+    "y": "center"
+  },
+  "size": {
+    "width": 640,
+    "height": 480
+  },
+  "is_monopoly_menu": false,
+  "buttons": [
+    {
+      "id": "btn_title",
+      "type": "NormalBtn",
+      "id_num": 82,
+      "btype_value": 0,
+      "position": { "x": 999, "y": 26 },
+      "size": { "width": 371, "height": 46 },
+      "visual": {
+        "composition": "three_piece",
+        "states": {
+          "default": { "sprites": [14, 15, 16] }
+        }
+      },
+      "content_name": "main_menu",
+      "state": {
+        "enabled": true,
+        "visible": true,
+        "clickable": false
+      },
+      "callbacks": {
+        "on_draw": "frontend_draw_large_menu_button"
+      }
+    },
+    {
+      "id": "btn_start_new_game",
+      "type": "NormalBtn",
+      "id_num": 0,
+      "navigate_to": "campaigns_menu",
+      "position": { "x": 999, "y": 92 },
+      "size": { "width": 371, "height": 46 },
+      "visual": {
+        "composition": "three_piece",
+        "states": {
+          "default": { "sprites": [14, 15, 16] },
+          "hover": {
+            "animation": [
+              { "sprites": [2, 3, 4] },
+              { "sprites": [5, 6, 7] },
+              { "sprites": [8, 9, 10] },
+              { "sprites": [11, 12, 13] },
+              { "sprites": [14, 15, 16] },
+              { "sprites": [11, 12, 13] },
+              { "sprites": [8, 9, 10] },
+              { "sprites": [5, 6, 7] }
+            ],
+            "frame_duration_ms": 100
+          },
+          "disabled": { "sprites": [14, 15, 16], "font_index": 3 }
+        }
+      },
+      "content_name": "start_new_game",
+      "state": {
+        "enabled": true,
+        "visible": true,
+        "clickable": true
+      },
+      "callbacks": {
+        "on_hover": "frontend_over_button",
+        "on_draw": "frontend_draw_large_menu_button"
+      }
+    },
+    {
+      "id": "btn_continue_game",
+      "type": "NormalBtn",
+      "id_num": 0,
+      "btype_value": 0,
+      "position": { "x": 999, "y": 138 },
+      "size": { "width": 371, "height": 46 },
+      "visual": {
+        "composition": "three_piece",
+        "states": {
+          "default": { "sprites": [14, 15, 16] },
+          "hover": {
+            "animation": [
+              { "sprites": [2, 3, 4] },
+              { "sprites": [5, 6, 7] },
+              { "sprites": [8, 9, 10] },
+              { "sprites": [11, 12, 13] },
+              { "sprites": [14, 15, 16] },
+              { "sprites": [11, 12, 13] },
+              { "sprites": [8, 9, 10] },
+              { "sprites": [5, 6, 7] }
+            ],
+            "frame_duration_ms": 100
+          },
+          "disabled": { "sprites": [14, 15, 16], "font_index": 3 }
+        }
+      },
+      "content_name": "continue_game",
+      "state": {
+        "enabled": true,
+        "visible": true,
+        "clickable": true
+      },
+      "callbacks": {
+        "on_click": "frontend_load_continue_game",
+        "on_hover": "frontend_over_button",
+        "on_draw": "frontend_draw_large_menu_button",
+        "on_maintain": "frontend_continue_game_maintain"
+      }
+    },
+    {
+      "id": "btn_free_play",
+      "type": "NormalBtn",
+      "id_num": 0,
+      "btype_value": 34,
+      "position": { "x": 999, "y": 184 },
+      "size": { "width": 371, "height": 46 },
+      "visual": {
+        "composition": "three_piece",
+        "states": {
+          "default": { "sprites": [14, 15, 16] },
+          "hover": {
+            "animation": [
+              { "sprites": [2, 3, 4] },
+              { "sprites": [5, 6, 7] },
+              { "sprites": [8, 9, 10] },
+              { "sprites": [11, 12, 13] },
+              { "sprites": [14, 15, 16] },
+              { "sprites": [11, 12, 13] },
+              { "sprites": [8, 9, 10] },
+              { "sprites": [5, 6, 7] }
+            ],
+            "frame_duration_ms": 100
+          },
+          "disabled": { "sprites": [14, 15, 16], "font_index": 3 }
+        }
+      },
+      "content_name": "free_play_levels",
+      "state": {
+        "enabled": true,
+        "visible": true,
+        "clickable": true
+      },
+      "callbacks": {
+        "on_click": "frontend_load_mappacks",
+        "on_hover": "frontend_over_button",
+        "on_draw": "frontend_draw_large_menu_button",
+        "on_maintain": "frontend_mappacks_maintain"
+      }
+    },
+    {
+      "id": "btn_load_game",
+      "type": "NormalBtn",
+      "id_num": 0,
+      "btype_value": 0,
+      "position": { "x": 999, "y": 230 },
+      "size": { "width": 371, "height": 46 },
+      "visual": {
+        "composition": "three_piece",
+        "states": {
+          "default": { "sprites": [14, 15, 16] },
+          "hover": {
+            "animation": [
+              { "sprites": [2, 3, 4] },
+              { "sprites": [5, 6, 7] },
+              { "sprites": [8, 9, 10] },
+              { "sprites": [11, 12, 13] },
+              { "sprites": [14, 15, 16] },
+              { "sprites": [11, 12, 13] },
+              { "sprites": [8, 9, 10] },
+              { "sprites": [5, 6, 7] }
+            ],
+            "frame_duration_ms": 100
+          },
+          "disabled": { "sprites": [14, 15, 16], "font_index": 3 }
+        }
+      },
+      "content_name": "load_game",
+      "state": {
+        "enabled": true,
+        "visible": true,
+        "clickable": true
+      },
+      "callbacks": {
+        "on_click": "frontend_navigate_to_global_load",
+        "on_hover": "frontend_over_button",
+        "on_draw": "frontend_draw_large_menu_button",
+        "on_maintain": "frontend_main_menu_load_game_maintain"
+      }
+    },
+    {
+      "id": "btn_multiplayer",
+      "type": "NormalBtn",
+      "id_num": 0,
+      "btype_value": 4,
+      "position": { "x": 999, "y": 276 },
+      "size": { "width": 371, "height": 46 },
+      "visual": {
+        "composition": "three_piece",
+        "states": {
+          "default": { "sprites": [14, 15, 16] },
+          "hover": {
+            "animation": [
+              { "sprites": [2, 3, 4] },
+              { "sprites": [5, 6, 7] },
+              { "sprites": [8, 9, 10] },
+              { "sprites": [11, 12, 13] },
+              { "sprites": [14, 15, 16] },
+              { "sprites": [11, 12, 13] },
+              { "sprites": [8, 9, 10] },
+              { "sprites": [5, 6, 7] }
+            ],
+            "frame_duration_ms": 100
+          },
+          "disabled": { "sprites": [14, 15, 16], "font_index": 3 }
+        }
+      },
+      "content_name": "multiplayer",
+      "state": {
+        "enabled": true,
+        "visible": true,
+        "clickable": true
+      },
+      "callbacks": {
+        "on_click": "frontend_netservice_change_state",
+        "on_hover": "frontend_over_button",
+        "on_draw": "frontend_draw_large_menu_button",
+        "on_maintain": "frontend_main_menu_netservice_maintain"
+      }
+    },
+    {
+      "id": "btn_options",
+      "type": "NormalBtn",
+      "id_num": 0,
+      "btype_value": 27,
+      "position": { "x": 999, "y": 322 },
+      "size": { "width": 371, "height": 46 },
+      "visual": {
+        "composition": "three_piece",
+        "states": {
+          "default": { "sprites": [14, 15, 16] },
+          "hover": {
+            "animation": [
+              { "sprites": [2, 3, 4] },
+              { "sprites": [5, 6, 7] },
+              { "sprites": [8, 9, 10] },
+              { "sprites": [11, 12, 13] },
+              { "sprites": [14, 15, 16] },
+              { "sprites": [11, 12, 13] },
+              { "sprites": [8, 9, 10] },
+              { "sprites": [5, 6, 7] }
+            ],
+            "frame_duration_ms": 100
+          },
+          "disabled": { "sprites": [14, 15, 16], "font_index": 3 }
+        }
+      },
+      "content_name": "options",
+      "state": {
+        "enabled": true,
+        "visible": true,
+        "clickable": true
+      },
+      "callbacks": {
+        "on_click": "frontend_change_state",
+        "on_hover": "frontend_over_button",
+        "on_draw": "frontend_draw_large_menu_button"
+      }
+    },
+    {
+      "id": "btn_achievements",
+      "type": "NormalBtn",
+      "id_num": 0,
+      "btype_value": 0,
+      "position": { "x": 999, "y": 368 },
+      "size": { "width": 371, "height": 46 },
+      "visual": {
+        "composition": "three_piece",
+        "states": {
+          "default": { "sprites": [14, 15, 16] },
+          "hover": {
+            "animation": [
+              { "sprites": [2, 3, 4] },
+              { "sprites": [5, 6, 7] },
+              { "sprites": [8, 9, 10] },
+              { "sprites": [11, 12, 13] },
+              { "sprites": [14, 15, 16] },
+              { "sprites": [11, 12, 13] },
+              { "sprites": [8, 9, 10] },
+              { "sprites": [5, 6, 7] }
+            ],
+            "frame_duration_ms": 100
+          },
+          "disabled": { "sprites": [14, 15, 16], "font_index": 3 }
+        }
+      },
+      "text": "Achievements",
+      "state": {
+        "enabled": false,
+        "visible": true,
+        "clickable": false
+      },
+      "callbacks": {
+        "on_draw": "frontend_draw_large_freetext_button"
+      }
+    },
+    {
+      "id": "btn_quit",
+      "type": "NormalBtn",
+      "id_num": 0,
+      "btype_value": 9,
+      "position": { "x": 999, "y": 414 },
+      "size": { "width": 371, "height": 46 },
+      "visual": {
+        "composition": "three_piece",
+        "states": {
+          "default": { "sprites": [14, 15, 16] },
+          "hover": {
+            "animation": [
+              { "sprites": [2, 3, 4] },
+              { "sprites": [5, 6, 7] },
+              { "sprites": [8, 9, 10] },
+              { "sprites": [11, 12, 13] },
+              { "sprites": [14, 15, 16] },
+              { "sprites": [11, 12, 13] },
+              { "sprites": [8, 9, 10] },
+              { "sprites": [5, 6, 7] }
+            ],
+            "frame_duration_ms": 100
+          },
+          "disabled": { "sprites": [14, 15, 16], "font_index": 3 }
+        }
+      },
+      "content_name": "quit",
+      "state": {
+        "enabled": true,
+        "visible": true,
+        "clickable": true
+      },
+      "callbacks": {
+        "on_click": "frontend_change_state",
+        "on_hover": "frontend_over_button",
+        "on_draw": "frontend_draw_large_menu_button"
+      }
+    },
+    {
+      "id": "btn_version",
+      "type": "NormalBtn",
+      "id_num": 0,
+      "btype_value": 0,
+      "position": { "x": 0, "y": 455 },
+      "size": { "width": 371, "height": 46 },
+      "content_value": 0,
+      "state": {
+        "enabled": true,
+        "visible": true,
+        "clickable": false
+      },
+      "callbacks": {
+        "on_draw": "frontend_draw_product_version"
+      }
+    }
+  ]
+}

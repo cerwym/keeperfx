@@ -211,6 +211,13 @@ obj/front_torture.o \
 obj/front_torture_data.o \
 obj/frontend.o \
 obj/frontmenu_options_data.o \
+obj/kfx/ui/menu/MenuLoader.o \
+obj/kfx/ui/menu/CallbackRegistry.o \
+obj/kfx/ui/menu/DynamicText.o \
+obj/kfx/ui/menu/FreeformText.o \
+obj/kfx/ui/menu/JsonParser.o \
+obj/kfx/ui/menu/MenuBuilder.o \
+obj/kfx/ui/menu/MenuRegistry.o \
 obj/frontmenu_saves_data.o \
 obj/frontmenu_select.o \
 obj/frontmenu_select_data.o \
@@ -259,6 +266,7 @@ obj/lua_params.o \
 obj/lua_triggers.o \
 obj/lua_utils.o \
 obj/lvl_filesdk1.o \
+obj/lvl_progress.o \
 obj/lvl_script.o \
 obj/lvl_script_commands.o \
 obj/lvl_script_commands_old.o \
@@ -376,6 +384,7 @@ LINKLIB = -mwindows \
 	deps/luajit/lib/libluajit.a \
 	-lwinmm -lmingw32 -limagehlp -lws2_32 -ldbghelp -lbcrypt -lole32 -luuid
 INCS = \
+	-I"src" \
 	-I"deps/zlib/include" \
 	-I"deps/spng/include" \
 	-I"sdl/include" \
@@ -497,6 +506,8 @@ obj/std/ftests \
 obj/std/ftests/tests \
 obj/tests obj/cu \
 obj/std/centitoml obj/hvlog/centitoml \
+obj/std/keeperfx/ui/menu obj/hvlog/keeperfx/ui/menu \
+obj/std/kfx/ui/menu obj/hvlog/kfx/ui/menu \
 sdl/for_final_package
 
 $(shell $(MKDIR) $(FOLDERS))
@@ -573,8 +584,8 @@ obj/cu/%.o: $(CU_DIR)/Sources/Basic/%.c
 
 define BUILD_CPP_FILES_CMD
 	-$(ECHO) 'Building cpp file: $<'
-	@grep -E "#include \"(\.\./)?(\.\./)?pre_inc.h\"" "$<" >/dev/null || echo "\n\nAll files should have #include \"pre_inc.h\" as first include\n\n" >&2 | false
-	@grep -E "#include \"(\.\./)?(\.\./)?post_inc.h\"" "$<" >/dev/null || echo "\n\nAll files should have #include \"post_inc.h\" as last include\n\n" >&2 | false
+	@grep -E "#include \"(\.\./)*pre_inc.h\"" "$<" >/dev/null || echo "\n\nAll files should have #include \"pre_inc.h\" as first include\n\n" >&2 | false
+	@grep -E "#include \"(\.\./)*post_inc.h\"" "$<" >/dev/null || echo "\n\nAll files should have #include \"post_inc.h\" as last include\n\n" >&2 | false
 	$(CPP) $(CXXFLAGS) -o"$@" "$<"
 endef
 
@@ -587,8 +598,8 @@ obj/hvlog/%.o: src/%.cpp libexterns $(GENSRC)
 
 define BUILD_CC_FILES_CMD
 	-$(ECHO) 'Building cc file: $<'
-	@grep -E "#include \"(\.\./)?(\.\./)?pre_inc.h\"" "$<" >/dev/null || echo "\n\nAll files should have #include \"pre_inc.h\" as first include\n\n" >&2 | false
-	@grep -E "#include \"(\.\./)?(\.\./)?post_inc.h\"" "$<" >/dev/null || echo "\n\nAll files should have #include \"post_inc.h\" as last include\n\n" >&2 | false
+	@grep -E "#include \"(\.\./)*pre_inc.h\"" "$<" >/dev/null || echo "\n\nAll files should have #include \"pre_inc.h\" as first include\n\n" >&2 | false
+	@grep -E "#include \"(\.\./)*post_inc.h\"" "$<" >/dev/null || echo "\n\nAll files should have #include \"post_inc.h\" as last include\n\n" >&2 | false
 	$(CC) $(CFLAGS) -o"$@" "$<"
 endef
 
@@ -644,6 +655,7 @@ deps/enet deps/zlib deps/spng deps/astronomy deps/centijson deps/ffmpeg deps/ope
 	$(MKDIR) $@
 
 src/api.c: deps/centijson/include/json.h
+src/kfx/ui/menu/JsonParser.cpp: deps/centijson/include/json.h
 src/bflib_enet.cpp: deps/enet/include/enet/enet.h
 src/custom_sprites.c: deps/zlib/include/zlib.h deps/spng/include/spng.h deps/centijson/include/json.h
 src/moonphase.c: deps/astronomy/include/astronomy.h

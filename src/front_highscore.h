@@ -31,6 +31,7 @@ extern "C" {
 extern long high_score_entry_input_active;
 extern char high_score_entry[64];
 extern int fe_high_score_table_from_main_menu;
+extern int fe_high_score_table_from_json_menu;
 /******************************************************************************/
 void frontend_draw_high_score_table(struct GuiButton *gbtn);
 void frontend_quit_high_score_table(struct GuiButton *gbtn);

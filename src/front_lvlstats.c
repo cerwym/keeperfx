@@ -311,6 +311,7 @@ void init_menu_state_on_net_stats_exit(void)
     }
     frontend_set_state(nstate);
     fe_high_score_table_from_main_menu = false;
+    fe_high_score_table_from_json_menu = 0;
 }
 
 /**

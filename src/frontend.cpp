@@ -89,6 +89,7 @@
 #include "sprites.h"
 #include "moonphase.h"
 #include "config_keeperfx.h"
+#include "kfx/ui/menu/MenuLoader.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -156,7 +157,7 @@ struct GuiMenu frontend_error_box = // Error box has no background defined - the
  { GMnu_FEERROR_BOX,        0, 1, frontend_error_box_buttons,POS_GAMECTR,POS_GAMECTR, 450,  92, NULL,                        0, NULL,    NULL,                    0, 1, 0,};
 
 // Note: update size in .h file when changing this array.
-struct GuiMenu *menu_list[] = {
+struct GuiMenu *menu_list[MENU_LIST_ITEMS_COUNT] = {
     NULL,
     &main_menu,
     &room_menu,
@@ -206,7 +207,6 @@ struct GuiMenu *menu_list[] = {
     &spell_menu2,
     &room_menu2,
     &trap_menu2,
-    NULL,
 };
 
 /** Array used for mapping buttons to text messages.
@@ -894,7 +894,7 @@ void frontend_continue_game_maintain(struct GuiButton *gbtn)
 
 void frontend_main_menu_load_game_maintain(struct GuiButton *gbtn)
 {
-    if (number_of_saved_games > 0)
+    if (global_save_count > 0)
         gbtn->flags |= LbBtnF_Enabled;
     else
         gbtn->flags &= ~LbBtnF_Enabled;
@@ -1801,7 +1801,8 @@ void frontend_load_mappacks(struct GuiButton *gbtn)
       frontend_set_state(FeSt_LEVEL_SELECT);
     } else
     { // If there's more map packs, go to selection screen
-      frontend_set_state(FeSt_MAPPACK_SELECT);
+      frontend_mappack_list_load();
+      navigate_to_json_menu_by_name("levelpack_menu");
     }
 }
 
@@ -2061,6 +2062,9 @@ short is_toggleable_menu(short mnu_idx)
   case GMnu_FEERROR_BOX:
       return false;
   default:
+      /* Dynamic JSON menus (ID >= GMNU_JSON_BASE) are non-toggleable frontend menus */
+      if (mnu_idx >= GMNU_JSON_BASE)
+          return false;
       return true;
   }
 }
@@ -2740,6 +2744,9 @@ void frontend_shutdown_state(FrontendMenuState pstate)
     case FeSt_CAMPAIGN_SELECT:
         turn_off_menu(GMnu_FECAMPAIGN_SELECT);
         break;
+    case FeSt_JSON_MENU:
+        json_menu_shutdown();
+        break;
     case FeSt_START_KPRLEVEL:
     case FeSt_START_MPLEVEL:
     case FeSt_QUIT_GAME:
@@ -2778,13 +2785,17 @@ FrontendMenuState frontend_setup_state(FrontendMenuState nstate)
           set_pointer_graphic_none();
           break;
       case FeSt_MAIN_MENU:
+          init_json_menus();
           stop_music();
+          find_and_set_continue_campaign();
           continue_game_option_available = continue_game_available();
           if (!continue_game_option_available)
           {
-              char* fname = prepare_file_path(FGrp_Save, continue_game_filename);
+              char* fname = prepare_campaign_save_path(continue_game_filename);
               LbFileDelete(fname);
           }
+          initialise_load_game_slots();
+          scan_all_campaign_saves();
           turn_on_menu(GMnu_FEMAIN);
           last_mouse_x = GetMouseX();
           last_mouse_y = GetMouseY();
@@ -2891,6 +2902,9 @@ FrontendMenuState frontend_setup_state(FrontendMenuState nstate)
         frontend_campaign_list_load();
         set_pointer_graphic_menu();
         break;
+    case FeSt_JSON_MENU:
+        json_menu_setup();
+        break;
   #if (BFDEBUG_LEVEL > 0)
     case FeSt_FONT_TEST:
         fade_palette_in = 0;
@@ -2943,6 +2957,7 @@ static const char * menu_state_str(FrontendMenuState state)
         case FeSt_DRAG: return "FeSt_DRAG";
         case FeSt_CAMPAIGN_INTRO: return "FeSt_CAMPAIGN_INTRO";
         case FeSt_MAPPACK_SELECT: return "FeSt_MAPPACK_SELECT";
+        case FeSt_JSON_MENU: return "FeSt_JSON_MENU";
         case FeSt_FONT_TEST: return "FeSt_FONT_TEST";
     }
     return "unknown";
@@ -3441,6 +3456,7 @@ short frontend_draw(void)
     case FeSt_LEVEL_SELECT:
     case FeSt_MAPPACK_SELECT:
     case FeSt_CAMPAIGN_SELECT:
+    case FeSt_JSON_MENU:
         frontend_copy_background();
         draw_gui();
         break;
@@ -3660,6 +3676,8 @@ void frontend_update(short *finish_menu)
     case FeSt_CAMPAIGN_SELECT:
         frontend_campaign_select_update();
         break;
+    case FeSt_JSON_MENU:
+        break;
     case FeSt_MAPPACK_SELECT:
         frontend_mappack_select_update();
         break;
@@ -3731,6 +3749,11 @@ FrontendMenuState get_menu_state_when_back_from_substate(FrontendMenuState subst
         lvnum = get_loaded_level_number();
         return get_menu_state_based_on_last_level(lvnum);
     case FeSt_HIGH_SCORES:
+        if (fe_high_score_table_from_json_menu)
+        {
+            fe_high_score_table_from_json_menu = 0;
+            return FeSt_JSON_MENU;
+        }
         if (fe_high_score_table_from_main_menu)
             return FeSt_MAIN_MENU;
         lvnum = get_loaded_level_number();

@@ -36,6 +36,7 @@
 #include "kjm_input.h"
 #include "keeperfx.hpp"
 #include "highscores.h"
+#include "lvl_progress.h"
 #include "post_inc.h"
 
 /******************************************************************************/
@@ -108,7 +109,7 @@ void frontend_draw_level_select_button(struct GuiButton *gbtn)
     if ((btn_idx > 0) && (frontend_mouse_over_button == btn_idx))
       i = 2;
     else
-    if (get_level_highest_score(lvnum))
+    if (get_level_highest_score(lvnum) || is_level_completed(lvnum))
       i = 3;
     else
       i = 1;
@@ -224,6 +225,10 @@ void frontend_campaign_select_up_maintain(struct GuiButton *gbtn)
 {
     if (gbtn == NULL)
         return;
+    if (wheel_scrolled_up && select_campaign_scroll_offset > 0)
+        select_campaign_scroll_offset--;
+    if (wheel_scrolled_down && select_campaign_scroll_offset < (long)campaigns_list.items_num - frontend_select_campaign_items_visible + 1)
+        select_campaign_scroll_offset++;
     if (select_campaign_scroll_offset != 0)
         gbtn->flags |= LbBtnF_Enabled;
     else
