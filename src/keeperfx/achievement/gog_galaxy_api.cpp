@@ -20,15 +20,15 @@
 #include "../../pre_inc.h"
 #include "gog_galaxy_api.h"
 #include "achievement_api.h"
-
-#ifdef _WIN32
-#include <windows.h>
-#endif
-
-#include "../../keeperfx.hpp"
 #include "../../bflib_basics.h"
 #include "../../bflib_fileio.h"
 #include "../../post_inc.h"
+
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include "../../keeperfx.hpp"
+#endif
 
 /******************************************************************************/
 // GOG Galaxy Client Credentials (public — embedded in all GOG game binaries)
@@ -98,6 +98,15 @@ typedef void   (__cdecl *GogProcessDataFunc)(void);
 typedef GogIStats*  (__cdecl *GogStatsFunc)(void);
 typedef GogIUser*   (__cdecl *GogUserFunc)(void);
 typedef GogIError*  (__cdecl *GogGetErrorFunc)(void);
+
+/// Type punning unions for safe FARPROC → function pointer conversion
+/// (avoids -Werror=cast-function-type with MinGW)
+union FarProcInit        { FARPROC fp; GogInitFunc fn; };
+union FarProcShutdown    { FARPROC fp; GogShutdownFunc fn; };
+union FarProcProcessData { FARPROC fp; GogProcessDataFunc fn; };
+union FarProcStats       { FARPROC fp; GogStatsFunc fn; };
+union FarProcUser        { FARPROC fp; GogUserFunc fn; };
+union FarProcGetError    { FARPROC fp; GogGetErrorFunc fn; };
 
 /// IStats vtable indices (0-indexed, slot 0 = destructor):
 ///  0: ~IStats (destructor)
@@ -195,13 +204,20 @@ static TbBool gog_backend_init(void)
 
     JUSTLOG("GOG Galaxy: Galaxy.dll loaded");
 
-    // Resolve exports using MSVC-mangled names
-    gog_Init        = (GogInitFunc)GetProcAddress(gog_lib, GALAXY_EXPORT_INIT);
-    gog_Shutdown    = (GogShutdownFunc)GetProcAddress(gog_lib, GALAXY_EXPORT_SHUTDOWN);
-    gog_ProcessData = (GogProcessDataFunc)GetProcAddress(gog_lib, GALAXY_EXPORT_PROCESS_DATA);
-    gog_Stats       = (GogStatsFunc)GetProcAddress(gog_lib, GALAXY_EXPORT_STATS);
-    gog_User        = (GogUserFunc)GetProcAddress(gog_lib, GALAXY_EXPORT_USER);
-    gog_GetError    = (GogGetErrorFunc)GetProcAddress(gog_lib, GALAXY_EXPORT_GET_ERROR);
+    // Resolve exports using MSVC-mangled names (union type punning for safe FARPROC conversion)
+    FarProcInit u_init;               u_init.fp        = GetProcAddress(gog_lib, GALAXY_EXPORT_INIT);
+    FarProcShutdown u_shutdown;       u_shutdown.fp     = GetProcAddress(gog_lib, GALAXY_EXPORT_SHUTDOWN);
+    FarProcProcessData u_process;     u_process.fp      = GetProcAddress(gog_lib, GALAXY_EXPORT_PROCESS_DATA);
+    FarProcStats u_stats;             u_stats.fp        = GetProcAddress(gog_lib, GALAXY_EXPORT_STATS);
+    FarProcUser u_user;               u_user.fp         = GetProcAddress(gog_lib, GALAXY_EXPORT_USER);
+    FarProcGetError u_error;          u_error.fp        = GetProcAddress(gog_lib, GALAXY_EXPORT_GET_ERROR);
+
+    gog_Init        = u_init.fn;
+    gog_Shutdown    = u_shutdown.fn;
+    gog_ProcessData = u_process.fn;
+    gog_Stats       = u_stats.fn;
+    gog_User        = u_user.fn;
+    gog_GetError    = u_error.fn;
 
     if (!gog_Init || !gog_Shutdown || !gog_ProcessData || !gog_Stats || !gog_User)
     {
