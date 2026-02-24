@@ -267,6 +267,17 @@ void frontend_global_load_down_maintain(struct GuiButton *gbtn);
 void frontend_global_load_scroll(struct GuiButton *gbtn);
 void frontend_draw_global_load_scroll_tab(struct GuiButton *gbtn);
 
+/* Achievement screen callbacks */
+void frontend_draw_achievement_row(struct GuiButton *gbtn);
+void frontend_achievement_maintain(struct GuiButton *gbtn);
+void frontend_achievement_scroll_up(struct GuiButton *gbtn);
+void frontend_achievement_scroll_up_maintain(struct GuiButton *gbtn);
+void frontend_achievement_scroll_down(struct GuiButton *gbtn);
+void frontend_achievement_scroll_down_maintain(struct GuiButton *gbtn);
+void frontend_achievement_scroll(struct GuiButton *gbtn);
+void frontend_draw_achievement_scroll_tab(struct GuiButton *gbtn);
+void frontend_achievements_maintain(struct GuiButton *gbtn);
+
 #ifdef __cplusplus
 }
 #endif

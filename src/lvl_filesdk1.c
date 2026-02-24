@@ -1446,7 +1446,11 @@ TbBool load_map_file(LevelNumber lvnum)
 {
     TbBool result = load_level_file(lvnum);
     if (result)
+    {
         set_loaded_level_number(lvnum);
+        extern void achievement_tracker_init(LevelNumber level_num);
+        achievement_tracker_init(lvnum);
+    }
     else
         set_loaded_level_number(SINGLEPLAYER_NOTSTARTED);
     return result;

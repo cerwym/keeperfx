@@ -1,0 +1,242 @@
+{
+  "schema_version": "1.0",
+  "menu_id": "achievements",
+  "description": "Achievement list — shows all achievements for the active campaign with unlock status",
+  "position": {
+    "x": "center",
+    "y": "center"
+  },
+  "size": {
+    "width": 640,
+    "height": 480
+  },
+  "is_monopoly_menu": false,
+  "buttons": [
+    {
+      "id": "btn_title",
+      "type": "NormalBtn",
+      "id_num": 82,
+      "btype_value": 0,
+      "position": { "x": 999, "y": 30 },
+      "size": { "width": 371, "height": 46 },
+      "text": "Achievements",
+      "font_index": 0,
+      "state": { "enabled": true, "visible": true, "clickable": false },
+      "callbacks": {
+        "on_draw": "frontend_draw_large_freetext_button"
+      }
+    },
+    {
+      "id": "btn_progress",
+      "type": "NormalBtn",
+      "id_num": 0,
+      "btype_value": 0,
+      "position": { "x": 999, "y": 76 },
+      "size": { "width": 371, "height": 30 },
+      "dynamic_text": "achievement_progress_text",
+      "font_index": 2,
+      "state": { "enabled": true, "visible": true, "clickable": false },
+      "callbacks": {
+        "on_draw": "frontend_draw_large_dyntext_button"
+      }
+    },
+    {
+      "id": "btn_scroll_box_tab",
+      "type": "NormalBtn",
+      "id_num": 0,
+      "btype_value": 0,
+      "position": { "x": 82, "y": 112 },
+      "size": { "width": 220, "height": 26 },
+      "content_value": 28,
+      "state": { "enabled": true, "visible": true, "clickable": false },
+      "callbacks": {
+        "on_draw": "frontend_draw_scroll_box_tab"
+      }
+    },
+    {
+      "id": "btn_scroll_box",
+      "type": "NormalBtn",
+      "id_num": 0,
+      "btype_value": 0,
+      "position": { "x": 82, "y": 138 },
+      "size": { "width": 450, "height": 220 },
+      "content_value": 26,
+      "state": { "enabled": true, "visible": true, "clickable": false },
+      "callbacks": {
+        "on_draw": "frontend_draw_scroll_box"
+      }
+    },
+    {
+      "id": "btn_scroll_up",
+      "type": "HoldableBtn",
+      "id_num": 0,
+      "btype_value": 0,
+      "position": { "x": 532, "y": 137 },
+      "size": { "width": 26, "height": 14 },
+      "content_value": 17,
+      "state": { "enabled": true, "visible": true, "clickable": true },
+      "callbacks": {
+        "on_click": "frontend_achievement_scroll_up",
+        "on_hover": "frontend_over_button",
+        "on_draw": "frontend_draw_slider_button",
+        "on_maintain": "frontend_achievement_scroll_up_maintain"
+      }
+    },
+    {
+      "id": "btn_scroll_down",
+      "type": "HoldableBtn",
+      "id_num": 0,
+      "btype_value": 0,
+      "position": { "x": 532, "y": 345 },
+      "size": { "width": 26, "height": 14 },
+      "content_value": 18,
+      "state": { "enabled": true, "visible": true, "clickable": true },
+      "callbacks": {
+        "on_click": "frontend_achievement_scroll_down",
+        "on_hover": "frontend_over_button",
+        "on_draw": "frontend_draw_slider_button",
+        "on_maintain": "frontend_achievement_scroll_down_maintain"
+      }
+    },
+    {
+      "id": "btn_scroll_tab",
+      "type": "HoldableBtn",
+      "id_num": 0,
+      "btype_value": 0,
+      "position": { "x": 536, "y": 151 },
+      "size": { "width": 20, "height": 194 },
+      "content_value": 40,
+      "state": { "enabled": true, "visible": true, "clickable": true },
+      "callbacks": {
+        "on_click": "frontend_achievement_scroll",
+        "on_draw": "frontend_draw_achievement_scroll_tab"
+      }
+    },
+    {
+      "id": "btn_ach_0",
+      "type": "NormalBtn",
+      "id_num": 0,
+      "btype_value": 0,
+      "position": { "x": 95, "y": 151 },
+      "size": { "width": 424, "height": 22 },
+      "content_value": 45,
+      "state": { "enabled": true, "visible": true, "clickable": false },
+      "callbacks": {
+        "on_draw": "frontend_draw_achievement_row",
+        "on_maintain": "frontend_achievement_maintain"
+      }
+    },
+    {
+      "id": "btn_ach_1",
+      "type": "NormalBtn",
+      "id_num": 0,
+      "btype_value": 0,
+      "position": { "x": 95, "y": 173 },
+      "size": { "width": 424, "height": 22 },
+      "content_value": 46,
+      "state": { "enabled": true, "visible": true, "clickable": false },
+      "callbacks": {
+        "on_draw": "frontend_draw_achievement_row",
+        "on_maintain": "frontend_achievement_maintain"
+      }
+    },
+    {
+      "id": "btn_ach_2",
+      "type": "NormalBtn",
+      "id_num": 0,
+      "btype_value": 0,
+      "position": { "x": 95, "y": 195 },
+      "size": { "width": 424, "height": 22 },
+      "content_value": 47,
+      "state": { "enabled": true, "visible": true, "clickable": false },
+      "callbacks": {
+        "on_draw": "frontend_draw_achievement_row",
+        "on_maintain": "frontend_achievement_maintain"
+      }
+    },
+    {
+      "id": "btn_ach_3",
+      "type": "NormalBtn",
+      "id_num": 0,
+      "btype_value": 0,
+      "position": { "x": 95, "y": 217 },
+      "size": { "width": 424, "height": 22 },
+      "content_value": 48,
+      "state": { "enabled": true, "visible": true, "clickable": false },
+      "callbacks": {
+        "on_draw": "frontend_draw_achievement_row",
+        "on_maintain": "frontend_achievement_maintain"
+      }
+    },
+    {
+      "id": "btn_ach_4",
+      "type": "NormalBtn",
+      "id_num": 0,
+      "btype_value": 0,
+      "position": { "x": 95, "y": 239 },
+      "size": { "width": 424, "height": 22 },
+      "content_value": 49,
+      "state": { "enabled": true, "visible": true, "clickable": false },
+      "callbacks": {
+        "on_draw": "frontend_draw_achievement_row",
+        "on_maintain": "frontend_achievement_maintain"
+      }
+    },
+    {
+      "id": "btn_ach_5",
+      "type": "NormalBtn",
+      "id_num": 0,
+      "btype_value": 0,
+      "position": { "x": 95, "y": 261 },
+      "size": { "width": 424, "height": 22 },
+      "content_value": 50,
+      "state": { "enabled": true, "visible": true, "clickable": false },
+      "callbacks": {
+        "on_draw": "frontend_draw_achievement_row",
+        "on_maintain": "frontend_achievement_maintain"
+      }
+    },
+    {
+      "id": "btn_ach_6",
+      "type": "NormalBtn",
+      "id_num": 0,
+      "btype_value": 0,
+      "position": { "x": 95, "y": 283 },
+      "size": { "width": 424, "height": 22 },
+      "content_value": 51,
+      "state": { "enabled": true, "visible": true, "clickable": false },
+      "callbacks": {
+        "on_draw": "frontend_draw_achievement_row",
+        "on_maintain": "frontend_achievement_maintain"
+      }
+    },
+    {
+      "id": "btn_ach_7",
+      "type": "NormalBtn",
+      "id_num": 0,
+      "btype_value": 0,
+      "position": { "x": 95, "y": 305 },
+      "size": { "width": 424, "height": 22 },
+      "content_value": 52,
+      "state": { "enabled": true, "visible": true, "clickable": false },
+      "callbacks": {
+        "on_draw": "frontend_draw_achievement_row",
+        "on_maintain": "frontend_achievement_maintain"
+      }
+    },
+    {
+      "id": "btn_back",
+      "type": "NormalBtn",
+      "id_num": 0,
+      "navigate_to": "campaign_hub",
+      "position": { "x": 999, "y": 404 },
+      "size": { "width": 371, "height": 46 },
+      "content_name": "return_to_main",
+      "state": { "enabled": true, "visible": true, "clickable": true },
+      "callbacks": {
+        "on_hover": "frontend_over_button",
+        "on_draw": "frontend_draw_large_menu_button"
+      }
+    }
+  ]
+}

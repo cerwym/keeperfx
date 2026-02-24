@@ -38,6 +38,7 @@
 #include "game_legacy.h"
 #include "config_players.h"
 #include "player_instances.h"
+#include "keeperfx/achievement/achievement_api.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -533,6 +534,41 @@ void go_on_then_activate_the_event_box(PlayerNumber plyr_idx, EventIndex evidx)
             other_off = 1;
             turn_on_menu(GMnu_TEXT_INFO);
             break;
+        case EvKind_AchievementUnlocked:
+        {
+            other_off = 1;
+            int ach_idx = event->target;
+            if (ach_idx >= 0 && ach_idx < achievements_count)
+            {
+                struct Achievement *ach = &achievements[ach_idx];
+                const char *ach_name = NULL;
+                const char *ach_desc = NULL;
+
+                if (ach->name_text_id > 0)
+                    ach_name = get_string(ach->name_text_id);
+                if (ach_name == NULL)
+                    ach_name = ach->name;
+
+                if (ach->desc_text_id > 0)
+                    ach_desc = get_string(ach->desc_text_id);
+                if (ach_desc == NULL)
+                    ach_desc = ach->description;
+
+                const char *unlocked_str = get_string(GUIStr_EventAchievementUnlockedDesc);
+                snprintf(game.evntbox_text_buffer, sizeof(game.evntbox_text_buffer),
+                         "%s: %s", unlocked_str, ach_name);
+                snprintf(game.evntbox_scroll_window.text, sizeof(game.evntbox_scroll_window.text),
+                         "%s: %s", ach_name, ach_desc);
+            }
+            else
+            {
+                snprintf(game.evntbox_text_buffer, sizeof(game.evntbox_text_buffer), "Achievement Unlocked!");
+                snprintf(game.evntbox_scroll_window.text, sizeof(game.evntbox_scroll_window.text),
+                         "%s", game.evntbox_text_buffer);
+            }
+            turn_on_menu(GMnu_TEXT_INFO);
+            break;
+        }
         case EvKind_Information:
             i = (long)event->target;
             // Negative target means the information was not displayed yet

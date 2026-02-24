@@ -54,6 +54,15 @@ extern "C" void frontend_mappack_select_maintain(struct GuiButton *gbtn);
 extern "C" void frontend_mappack_select_up_maintain(struct GuiButton *gbtn);
 extern "C" void frontend_mappack_select_down_maintain(struct GuiButton *gbtn);
 extern "C" void frontend_draw_mappack_scroll_tab(struct GuiButton *gbtn);
+extern "C" void frontend_draw_achievement_row(struct GuiButton *gbtn);
+extern "C" void frontend_achievement_maintain(struct GuiButton *gbtn);
+extern "C" void frontend_achievement_scroll_up(struct GuiButton *gbtn);
+extern "C" void frontend_achievement_scroll_up_maintain(struct GuiButton *gbtn);
+extern "C" void frontend_achievement_scroll_down(struct GuiButton *gbtn);
+extern "C" void frontend_achievement_scroll_down_maintain(struct GuiButton *gbtn);
+extern "C" void frontend_achievement_scroll(struct GuiButton *gbtn);
+extern "C" void frontend_draw_achievement_scroll_tab(struct GuiButton *gbtn);
+extern "C" void frontend_achievements_maintain(struct GuiButton *gbtn);
 
 const CallbackRegistry::Entry CallbackRegistry::s_table[] = {
     /* Draw callbacks */
@@ -80,6 +89,8 @@ const CallbackRegistry::Entry CallbackRegistry::s_table[] = {
     {"frontend_draw_global_load_scroll_tab", frontend_draw_global_load_scroll_tab},
     {"frontend_draw_mappack_select_button",  frontend_draw_mappack_select_button},
     {"frontend_draw_mappack_scroll_tab",     frontend_draw_mappack_scroll_tab},
+    {"frontend_draw_achievement_row",        frontend_draw_achievement_row},
+    {"frontend_draw_achievement_scroll_tab", frontend_draw_achievement_scroll_tab},
     /* Hover callbacks */
     {"frontend_over_button",             frontend_over_button},
     /* Click callbacks */
@@ -124,6 +135,14 @@ const CallbackRegistry::Entry CallbackRegistry::s_table[] = {
     {"frontend_global_load_down",                frontend_global_load_down},
     {"frontend_global_load_down_maintain",       frontend_global_load_down_maintain},
     {"frontend_global_load_scroll",              frontend_global_load_scroll},
+    /* Achievement screen callbacks */
+    {"frontend_achievement_maintain",            frontend_achievement_maintain},
+    {"frontend_achievement_scroll_up",           frontend_achievement_scroll_up},
+    {"frontend_achievement_scroll_up_maintain",  frontend_achievement_scroll_up_maintain},
+    {"frontend_achievement_scroll_down",         frontend_achievement_scroll_down},
+    {"frontend_achievement_scroll_down_maintain",frontend_achievement_scroll_down_maintain},
+    {"frontend_achievement_scroll",              frontend_achievement_scroll},
+    {"frontend_achievements_maintain",           frontend_achievements_maintain},
     {NULL, NULL}
 };
 

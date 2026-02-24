@@ -28,6 +28,7 @@
 #include "../../../sprites.h"
 #include "../../../vidmode.h"
 #include "../../../config_campaigns.h"
+#include "../../../keeperfx/achievement/achievement_api.h"
 
 #include "../../../post_inc.h"
 
@@ -53,13 +54,25 @@ static const char* provider_active_campaign_fname(void)
     return "";
 }
 
+static const char* provider_achievement_progress_text(void)
+{
+    static char buf[64];
+    int total = achievements_get_count();
+    if (total <= 0)
+        return "No Achievements";
+    int unlocked = achievements_get_unlocked_count();
+    snprintf(buf, sizeof(buf), "Achievements %d/%d", unlocked, total);
+    return buf;
+}
+
 /******************************************************************************/
 /* Provider registry                                                          */
 /******************************************************************************/
 
 const DynamicText::ProviderEntry DynamicText::s_providers[] = {
-    {"active_campaign_name",  provider_active_campaign_name},
-    {"active_campaign_fname", provider_active_campaign_fname},
+    {"active_campaign_name",    provider_active_campaign_name},
+    {"active_campaign_fname",   provider_active_campaign_fname},
+    {"achievement_progress_text", provider_achievement_progress_text},
     {NULL, NULL}
 };
 

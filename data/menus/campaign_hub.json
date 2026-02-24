@@ -113,6 +113,27 @@
       }
     },
     {
+      "id": "btn_achievements",
+      "type": "NormalBtn",
+      "id_num": 0,
+      "btype_value": 0,
+      "navigate_to": "achievements",
+      "position": { "x": 999, "y": 370 },
+      "size": { "width": 371, "height": 30 },
+      "dynamic_text": "achievement_progress_text",
+      "font_index": 2,
+      "state": {
+        "enabled": true,
+        "visible": true,
+        "clickable": true
+      },
+      "callbacks": {
+        "on_hover": "frontend_over_button",
+        "on_draw": "frontend_draw_large_dyntext_button",
+        "on_maintain": "frontend_achievements_maintain"
+      }
+    },
+    {
       "id": "btn_back",
       "type": "NormalBtn",
       "id_num": 0,

@@ -41,6 +41,7 @@
 #include "../../../sprites.h"
 #include "../../../game_saves.h"
 #include "../../../keeperfx.hpp"
+#include "../../../keeperfx/achievement/achievement_api.h"
 #include "../../../bflib_datetm.h"
 
 #include "../../../post_inc.h"
@@ -403,4 +404,125 @@ void frontend_draw_global_load_scroll_tab(struct GuiButton *gbtn)
 {
     frontend_draw_scroll_tab(gbtn, global_load_scroll_offset,
         5, global_save_count);
+}
+
+/******************************************************************************/
+/* Achievement screen callbacks                                               */
+/******************************************************************************/
+
+#define ACHIEVEMENT_VISIBLE_ROWS 8
+static long achievement_scroll_offset = 0;
+
+void frontend_draw_achievement_row(struct GuiButton *gbtn)
+{
+    if (gbtn == NULL)
+        return;
+    long btn_idx = gbtn->content.lval;
+    long i = achievement_scroll_offset + btn_idx - 45;
+    if (i < 0 || i >= achievements_count)
+        return;
+    struct Achievement *ach = &achievements[i];
+
+    int font_idx = 1;
+    if ((btn_idx > 0) && (frontend_mouse_over_button == btn_idx))
+        font_idx = 2;
+
+    const char *display_name;
+    if (ach->hidden && !ach->unlocked)
+        display_name = "??? - Hidden Achievement";
+    else if (ach->name_text_id > 0)
+    {
+        display_name = get_string(ach->name_text_id);
+        if (display_name == NULL)
+            display_name = ach->name;
+    }
+    else
+        display_name = ach->name;
+
+    // Draw unlock status indicator on the left
+    LbTextSetFont(frontend_font[2]);
+    int tx_units_per_px = (gbtn->height * 13 / 11) * 16 / LbTextLineHeight();
+    const char *status_text = ach->unlocked ? "[*]" : "[ ]";
+    int status_w = LbTextStringWidth(status_text) * tx_units_per_px / 16;
+    int status_margin = 6;
+
+    lbDisplay.DrawFlags = Lb_TEXT_HALIGN_LEFT;
+    int status_h = LbTextLineHeight() * tx_units_per_px / 16;
+    LbTextSetWindow(gbtn->scr_pos_x, gbtn->scr_pos_y, status_w + 4, status_h);
+    LbTextDrawResized(0, 0, tx_units_per_px, status_text);
+
+    // Draw achievement name
+    LbTextSetFont(frontend_font[font_idx]);
+    tx_units_per_px = (gbtn->height * 13 / 11) * 16 / LbTextLineHeight();
+    int line_h = LbTextLineHeight() * tx_units_per_px / 16;
+    int name_x = gbtn->scr_pos_x + status_w + status_margin;
+    int name_w = gbtn->width - status_w - status_margin;
+
+    LbTextSetWindow(name_x, gbtn->scr_pos_y, name_w, line_h);
+    LbTextDrawResized(0, 0, tx_units_per_px, display_name);
+}
+
+void frontend_achievement_maintain(struct GuiButton *gbtn)
+{
+    if (gbtn == NULL)
+        return;
+    long btn_idx = gbtn->content.lval;
+    long i = achievement_scroll_offset + btn_idx - 45;
+    if (i >= 0 && i < achievements_count)
+        gbtn->flags |= LbBtnF_Enabled;
+    else
+        gbtn->flags = (gbtn->flags & ~LbBtnF_Enabled);
+}
+
+void frontend_achievement_scroll_up(struct GuiButton *gbtn)
+{
+    if (achievement_scroll_offset > 0)
+        achievement_scroll_offset--;
+}
+
+void frontend_achievement_scroll_up_maintain(struct GuiButton *gbtn)
+{
+    if (wheel_scrolled_up && achievement_scroll_offset > 0)
+        achievement_scroll_offset--;
+    if (wheel_scrolled_down && achievement_scroll_offset < achievements_count - ACHIEVEMENT_VISIBLE_ROWS)
+        achievement_scroll_offset++;
+    if (achievement_scroll_offset > 0)
+        gbtn->flags |= LbBtnF_Enabled;
+    else
+        gbtn->flags = (gbtn->flags & ~LbBtnF_Enabled);
+}
+
+void frontend_achievement_scroll_down(struct GuiButton *gbtn)
+{
+    if (achievement_scroll_offset < achievements_count - ACHIEVEMENT_VISIBLE_ROWS)
+        achievement_scroll_offset++;
+}
+
+void frontend_achievement_scroll_down_maintain(struct GuiButton *gbtn)
+{
+    if (achievement_scroll_offset < achievements_count - ACHIEVEMENT_VISIBLE_ROWS)
+        gbtn->flags |= LbBtnF_Enabled;
+    else
+        gbtn->flags = (gbtn->flags & ~LbBtnF_Enabled);
+}
+
+void frontend_achievement_scroll(struct GuiButton *gbtn)
+{
+    achievement_scroll_offset = frontend_scroll_tab_to_offset(gbtn,
+        GetMouseY(), ACHIEVEMENT_VISIBLE_ROWS - 1, achievements_count);
+}
+
+void frontend_draw_achievement_scroll_tab(struct GuiButton *gbtn)
+{
+    frontend_draw_scroll_tab(gbtn, achievement_scroll_offset,
+        ACHIEVEMENT_VISIBLE_ROWS - 1, achievements_count);
+}
+
+void frontend_achievements_maintain(struct GuiButton *gbtn)
+{
+    // Disable the achievements button if no achievements are defined
+    if (achievements_count > 0)
+        gbtn->flags |= LbBtnF_Enabled;
+    else
+        gbtn->flags = (gbtn->flags & ~LbBtnF_Enabled);
 }

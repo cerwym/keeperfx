@@ -239,6 +239,10 @@ obj/game_loop.o \
 obj/game_lghtshdw.o \
 obj/game_merge.o \
 obj/game_saves.o \
+obj/keeperfx/achievement/achievement_api.o \
+obj/keeperfx/achievement/achievement_tracker.o \
+obj/keeperfx/achievement/achievement_definitions.o \
+obj/keeperfx/achievement/achievement_save.o \
 obj/gui_boxmenu.o \
 obj/gui_draw.o \
 obj/gui_frontbtns.o \
@@ -504,6 +508,8 @@ heavylog: hvlog-before $(HVLOGBIN) hvlog-after
 FOLDERS = bin obj/std obj/hvlog \
 obj/std/ftests \
 obj/std/ftests/tests \
+obj/std/keeperfx/achievement \
+obj/hvlog/keeperfx/achievement \
 obj/tests obj/cu \
 obj/std/centitoml obj/hvlog/centitoml \
 obj/std/keeperfx/ui/menu obj/hvlog/keeperfx/ui/menu \
