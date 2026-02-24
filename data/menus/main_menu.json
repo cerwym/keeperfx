@@ -300,12 +300,14 @@
         }
       },
       "text": "Achievements",
+      "navigate_to": "achievements",
       "state": {
-        "enabled": false,
+        "enabled": true,
         "visible": true,
-        "clickable": false
+        "clickable": true
       },
       "callbacks": {
+        "on_hover": "frontend_over_button",
         "on_draw": "frontend_draw_large_freetext_button"
       }
     },

@@ -186,7 +186,7 @@
       "id": "btn_back",
       "type": "NormalBtn",
       "id_num": 0,
-      "navigate_to": "campaign_hub",
+      "navigate_to": "main_menu",
       "position": { "x": 999, "y": 404 },
       "size": { "width": 371, "height": 46 },
       "content_name": "return_to_main",
