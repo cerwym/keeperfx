@@ -32,6 +32,16 @@ extern "C" {
 #define ACHIEVEMENT_DESC_LEN 512
 #define ACHIEVEMENT_ICON_PATH_LEN 128
 #define MAX_ACHIEVEMENTS_PER_CAMPAIGN 100
+#define MAX_PLATFORM_IDS 8
+#define PLATFORM_KEY_LEN 16
+#define PLATFORM_ID_LEN 64
+#define ACHIEVEMENT_SCOPE_GLOBAL "global"
+
+/** Maps an achievement to its platform-specific API key */
+struct PlatformIdMapping {
+    char platform[PLATFORM_KEY_LEN];  ///< Platform key: "gog", "steam", "xbox", "psn", "keeperfx"
+    char api_key[PLATFORM_ID_LEN];    ///< Platform-specific achievement API key
+};
 
 /******************************************************************************/
 /** Enumeration of supported achievement platforms */
@@ -58,6 +68,8 @@ struct Achievement {
     float progress;                           ///< Progress towards unlock (0.0-1.0)
     int name_text_id;                         ///< String ID for localized name (0 = use name field)
     int desc_text_id;                         ///< String ID for localized description (0 = use description field)
+    struct PlatformIdMapping platform_ids[MAX_PLATFORM_IDS]; ///< Platform-specific API keys
+    int platform_id_count;                    ///< Number of platform ID mappings
 };
 
 /** Platform-specific achievement backend interface */
@@ -75,14 +87,17 @@ struct AchievementBackend {
     /**@{*/
     TbBool (*unlock)(const char* achievement_id);              ///< Unlock achievement
     TbBool (*is_unlocked)(const char* achievement_id);         ///< Check if unlocked
-    void (*set_progress)(const char* achievement_id, float progress); ///< Set progress
+    TbBool (*set_progress)(const char* achievement_id, float progress); ///< Set progress
     float (*get_progress)(const char* achievement_id);         ///< Get progress
+    TbBool (*clear)(const char* achievement_id);               ///< Clear/re-lock achievement
     /**@}*/
     
     /** @name Optional batch operations */
     /**@{*/
     void (*sync)(void);                       ///< Sync with platform backend
     /**@}*/
+
+    TbBool needs_worker_thread;               ///< If true, IntegrationManager spawns a dedicated thread
 };
 
 /******************************************************************************/
@@ -161,6 +176,35 @@ TbBool achievement_register(struct Achievement* achievement);
 void achievements_clear(void);
 
 /**
+ * Reset all achievement unlock state (local + platform backend).
+ * Clears unlocked flag, progress, and deletes the save file.
+ * @return True if reset successful.
+ */
+TbBool achievements_reset_all(void);
+
+/**
+ * Reset a single achievement's unlock state (local + platform backend).
+ * @param achievement_id The unique achievement identifier.
+ * @return True if reset successful.
+ */
+TbBool achievement_reset(const char* achievement_id);
+
+/**
+ * Reset only campaign-scoped achievement unlock state.
+ * Resets achievements whose ID starts with the given campaign prefix.
+ * @param campaign_name Campaign scope to reset (e.g. "keeporig"). NULL = current campaign.
+ * @return True if reset successful.
+ */
+TbBool achievements_reset_campaign(const char* campaign_name);
+
+/**
+ * Reset only global-scoped achievement unlock state.
+ * Resets achievements whose ID starts with "global.".
+ * @return True if reset successful.
+ */
+TbBool achievements_reset_global(void);
+
+/**
  * Get total achievement count.
  * @return Number of registered achievements.
  */
@@ -177,6 +221,16 @@ int achievements_get_unlocked_count(void);
  * @return Completion percentage (0.0 to 100.0).
  */
 float achievements_get_completion_percentage(void);
+
+/**
+ * Get the platform-specific API key for an achievement.
+ * Looks up the platform_ids mapping for the given platform key.
+ * Falls back to the bare definition ID (part after last dot) if no mapping exists.
+ * @param achievement_id Full namespaced achievement ID (e.g. "keeporig.imp_slapped").
+ * @param platform Platform key (e.g. "gog", "steam", "xbox", "psn", "keeperfx").
+ * @return Platform-specific API key string, or bare def ID as fallback. Never NULL.
+ */
+const char* achievement_get_platform_id(const char* achievement_id, const char* platform);
 
 /******************************************************************************/
 // Platform detection and selection

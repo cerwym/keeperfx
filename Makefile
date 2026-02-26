@@ -239,11 +239,13 @@ obj/game_loop.o \
 obj/game_lghtshdw.o \
 obj/game_merge.o \
 obj/game_saves.o \
-obj/keeperfx/achievement/achievement_api.o \
-obj/keeperfx/achievement/achievement_tracker.o \
-obj/keeperfx/achievement/achievement_definitions.o \
-obj/keeperfx/achievement/achievement_save.o \
-obj/keeperfx/achievement/gog_galaxy_api.o \
+obj/kfx/achievement/achievement_api.o \
+obj/kfx/achievement/achievement_tracker.o \
+obj/kfx/achievement/achievement_definitions.o \
+obj/kfx/achievement/achievement_save.o \
+obj/kfx/integration/IntegrationManager.o \
+obj/kfx/integration/GogBackend.o \
+obj/kfx/integration/SteamBackend.o \
 obj/gui_boxmenu.o \
 obj/gui_draw.o \
 obj/gui_frontbtns.o \
@@ -329,7 +331,6 @@ obj/scrcapt.o \
 obj/slab_data.o \
 obj/sounds.o \
 obj/spdigger_stack.o \
-obj/steam_api.o \
 obj/tasks_list.o \
 obj/thing_corpses.o \
 obj/thing_creature.o \
@@ -441,7 +442,7 @@ HVLOGFLAGS = -DBFDEBUG_LEVEL=10
 # compiler warning generation flags
 WARNFLAGS = -Wall -W -Wshadow -Wno-sign-compare -Wno-unused-parameter -Wno-maybe-uninitialized -Wno-sign-compare -Wno-strict-aliasing -Wno-unknown-pragmas -Werror
 # disabled warnings: -Wextra -Wtype-limits
-CXXFLAGS = $(CXXINCS) -c -std=gnu++1y -fmessage-length=0 $(WARNFLAGS) $(DEPFLAGS) $(OPTFLAGS) $(DBGFLAGS) $(FTEST_DBGFLAGS) $(INCFLAGS)
+CXXFLAGS = $(CXXINCS) -c -std=gnu++20 -fmessage-length=0 $(WARNFLAGS) $(DEPFLAGS) $(OPTFLAGS) $(DBGFLAGS) $(FTEST_DBGFLAGS) $(INCFLAGS)
 CFLAGS = $(INCS) -c -std=gnu11 -fmessage-length=0 $(WARNFLAGS) -Werror=implicit $(DEPFLAGS) $(FTEST_DBGFLAGS) $(OPTFLAGS) $(DBGFLAGS) $(INCFLAGS)
 LDFLAGS = $(LINKLIB) $(OPTFLAGS) $(DBGFLAGS) $(FTEST_DBGFLAGS) $(LINKFLAGS) -Wl,-Map,"$(@:%.exe=%.map)"
 
@@ -509,11 +510,12 @@ heavylog: hvlog-before $(HVLOGBIN) hvlog-after
 FOLDERS = bin obj/std obj/hvlog \
 obj/std/ftests \
 obj/std/ftests/tests \
-obj/std/keeperfx/achievement \
-obj/hvlog/keeperfx/achievement \
+obj/std/kfx/achievement \
+obj/hvlog/kfx/achievement \
+obj/std/kfx/integration \
+obj/hvlog/kfx/integration \
 obj/tests obj/cu \
 obj/std/centitoml obj/hvlog/centitoml \
-obj/std/keeperfx/ui/menu obj/hvlog/keeperfx/ui/menu \
 obj/std/kfx/ui/menu obj/hvlog/kfx/ui/menu \
 sdl/for_final_package
 
@@ -753,7 +755,7 @@ cppcheck:
 		--check-level=exhaustive \
 		--enable=all \
 		--platform=win32A \
-		--std=c++14 \
+		--std=c++20 \
 		--inconclusive \
 		-j $(shell nproc) \
 		-q \

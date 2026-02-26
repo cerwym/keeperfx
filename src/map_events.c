@@ -38,7 +38,7 @@
 #include "game_legacy.h"
 #include "config_players.h"
 #include "player_instances.h"
-#include "keeperfx/achievement/achievement_api.h"
+#include "kfx/achievement/achievement_api.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus

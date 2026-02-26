@@ -143,7 +143,9 @@ struct AchievementDefinition {
     TbBool hidden;
     int name_text_id;   ///< String ID for localized name
     int desc_text_id;   ///< String ID for localized description
-    char campaign_name[64];  ///< Campaign this achievement belongs to (for namespaced ID)
+    char campaign_name[64];  ///< Campaign short ID (fname) for namespaced ID
+    struct PlatformIdMapping platform_ids[MAX_PLATFORM_IDS]; ///< Platform-specific API keys
+    int platform_id_count;  ///< Number of platform ID mappings
     
     /** @name Conditions that must be met */
     /**@{*/
@@ -168,10 +170,17 @@ int load_campaign_achievements(struct GameCampaign* campaign);
 /**
  * Load achievements from a specific file.
  * @param fname File name/path.
- * @param campaign Campaign context (for namespacing).
+ * @param scope_name Scope name for namespacing (e.g. "keeporig" or "global").
  * @return Number of achievements loaded.
  */
-int load_achievements_config(const char* fname, struct GameCampaign* campaign);
+int load_achievements_config(const char* fname, const char* scope_name);
+
+/**
+ * Load global achievements from data/achievements_global.cfg.
+ * Called once at startup; global achievements persist across campaign switches.
+ * @return Number of global achievements loaded.
+ */
+int load_global_achievements(void);
 
 /**
  * Parse achievement definition from config.

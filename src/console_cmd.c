@@ -70,6 +70,8 @@
 #include <string.h>
 #include <math.h>
 #include "lua_base.h"
+#include "kfx/achievement/achievement_api.h"
+#include "kfx/achievement/achievement_save.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -2183,6 +2185,77 @@ TbBool cmd_cheat_menu(PlayerNumber plyr_idx, char * args)
 }
 
 
+TbBool cmd_achievement_reset(PlayerNumber plyr_idx, char *args)
+{
+    char *id_str = strsep(&args, " ");
+    if (id_str == NULL || id_str[0] == '\0')
+    {
+        // Reset all achievements
+        achievements_reset_all();
+        targeted_message_add(MsgType_Player, plyr_idx, plyr_idx, GUI_MESSAGES_DELAY, "All achievements reset");
+        return true;
+    }
+
+    struct Achievement *ach = achievement_find(id_str);
+    if (ach == NULL)
+    {
+        targeted_message_add(MsgType_Player, plyr_idx, plyr_idx, GUI_MESSAGES_DELAY, "Achievement not found: %s", id_str);
+        return false;
+    }
+
+    achievement_reset(id_str);
+    targeted_message_add(MsgType_Player, plyr_idx, plyr_idx, GUI_MESSAGES_DELAY, "Achievement reset: %s", id_str);
+    return true;
+}
+
+TbBool cmd_achievement_unlock(PlayerNumber plyr_idx, char *args)
+{
+    char *id_str = strsep(&args, " ");
+    if (id_str == NULL || id_str[0] == '\0')
+    {
+        targeted_message_add(MsgType_Player, plyr_idx, plyr_idx, GUI_MESSAGES_DELAY, "Usage: achievement.unlock <id>");
+        return false;
+    }
+
+    if (achievement_unlock(id_str))
+    {
+        targeted_message_add(MsgType_Player, plyr_idx, plyr_idx, GUI_MESSAGES_DELAY, "Achievement unlocked: %s", id_str);
+        return true;
+    }
+    targeted_message_add(MsgType_Player, plyr_idx, plyr_idx, GUI_MESSAGES_DELAY, "Failed to unlock: %s", id_str);
+    return false;
+}
+
+TbBool cmd_achievement_list(PlayerNumber plyr_idx, char *args)
+{
+    for (int i = 0; i < achievements_count; i++)
+    {
+        struct Achievement *ach = &achievements[i];
+        targeted_message_add(MsgType_Player, plyr_idx, plyr_idx, GUI_MESSAGES_DELAY,
+            "%s [%s] %d pts", ach->id, ach->unlocked ? "DONE" : "----", ach->points);
+    }
+    if (achievements_count == 0)
+        targeted_message_add(MsgType_Player, plyr_idx, plyr_idx, GUI_MESSAGES_DELAY, "No achievements loaded");
+    return true;
+}
+
+TbBool cmd_achievement_reset_campaign(PlayerNumber plyr_idx, char *args)
+{
+    char *name_str = strsep(&args, " ");
+    const char *campaign_name = (name_str != NULL && name_str[0] != '\0') ? name_str : NULL;
+    achievements_reset_campaign(campaign_name);
+    targeted_message_add(MsgType_Player, plyr_idx, plyr_idx, GUI_MESSAGES_DELAY,
+        "Campaign achievements reset%s%s", campaign_name ? ": " : "", campaign_name ? campaign_name : "");
+    return true;
+}
+
+TbBool cmd_achievement_reset_global(PlayerNumber plyr_idx, char *args)
+{
+    achievements_reset_global();
+    targeted_message_add(MsgType_Player, plyr_idx, plyr_idx, GUI_MESSAGES_DELAY, "Global achievements reset");
+    return true;
+}
+
 struct ConsoleCommand {
     const char * name;
     TbBool (* function)(PlayerNumber, char *);
@@ -2293,6 +2366,11 @@ static const struct ConsoleCommand console_commands[] = {
     { "lua", cmd_lua},
     { "luatypedump", cmd_luatypedump},
     { "cheat.menu", cmd_cheat_menu},
+    { "achievement.reset", cmd_achievement_reset},
+    { "achievement.reset_campaign", cmd_achievement_reset_campaign},
+    { "achievement.reset_global", cmd_achievement_reset_global},
+    { "achievement.unlock", cmd_achievement_unlock},
+    { "achievement.list", cmd_achievement_list},
 };
 static const int console_command_count = sizeof(console_commands) / sizeof(*console_commands);
 

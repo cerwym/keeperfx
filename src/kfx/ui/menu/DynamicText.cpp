@@ -28,7 +28,7 @@
 #include "../../../sprites.h"
 #include "../../../vidmode.h"
 #include "../../../config_campaigns.h"
-#include "../../../keeperfx/achievement/achievement_api.h"
+#include "../../achievement/achievement_api.h"
 
 #include "../../../post_inc.h"
 

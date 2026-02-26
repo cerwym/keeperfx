@@ -82,6 +82,8 @@ TbBool global_load_is_all_campaigns;
 
 static const char* get_safe_campaign_name(void);
 
+#define CONTINUE_SAVE_MAGIC 0x4B465843  // "CXFK" — compressed continue format
+
 /******************************************************************************/
 TbBool is_primitive_save_version(long filesize)
 {
@@ -1281,35 +1283,210 @@ short save_continue_game(LevelNumber lvnum)
 
     char* fname = prepare_campaign_save_path(continue_game_filename);
 
+    // Back up fields we'll zero for compression
+    struct Configs *conf_backup = (struct Configs *)malloc(sizeof(struct Configs));
+    void *nav_backup = malloc(sizeof(game.navigation_map));
+    if (!conf_backup || !nav_backup) {
+        ERRORLOG("Failed to allocate backup buffers for continue save");
+        free(conf_backup);
+        free(nav_backup);
+        return false;
+    }
+    memcpy(conf_backup, &game.conf, sizeof(struct Configs));
+    memcpy(nav_backup, game.navigation_map, sizeof(game.navigation_map));
 
-    long fsize = LbFileSaveAt(fname, &game, sizeof(struct Game) + sizeof(struct IntralevelData));
-    // Appending IntralevelData
-    TbFileHandle fh = LbFileOpen(fname,Lb_FILE_MODE_OLD);
-    LbFileSeek(fh, sizeof(struct Game), Lb_FILE_SEEK_BEGINNING);
-    LbFileWrite(fh, &intralvl, sizeof(struct IntralevelData));
+    memset(&game.conf, 0, sizeof(struct Configs));
+    memset(game.navigation_map, 0, sizeof(game.navigation_map));
+    memset(&game.log_snapshot, 0, sizeof(game.log_snapshot));
+    memset(&game.host_checksums, 0, sizeof(game.host_checksums));
+
+    // Compress game struct
+    uLongf compressed_bound = compressBound(sizeof(struct Game));
+    unsigned char *compressed = (unsigned char *)malloc(compressed_bound);
+    if (!compressed) {
+        ERRORLOG("Failed to allocate compression buffer for continue save");
+        memcpy(&game.conf, conf_backup, sizeof(struct Configs));
+        memcpy(game.navigation_map, nav_backup, sizeof(game.navigation_map));
+        free(conf_backup);
+        free(nav_backup);
+        return false;
+    }
+
+    uLongf compressed_size = compressed_bound;
+    int zret = compress2(compressed, &compressed_size,
+                         (const Bytef *)&game, sizeof(struct Game), Z_DEFAULT_COMPRESSION);
+
+    // Restore zeroed fields
+    memcpy(&game.conf, conf_backup, sizeof(struct Configs));
+    memcpy(game.navigation_map, nav_backup, sizeof(game.navigation_map));
+    free(conf_backup);
+    free(nav_backup);
+
+    if (zret != Z_OK) {
+        ERRORLOG("zlib compress failed for continue save: %d", zret);
+        free(compressed);
+        return false;
+    }
+
+    SYNCLOG("Continue save compressed: %lu -> %lu bytes (%.1f%%)",
+            (unsigned long)sizeof(struct Game), (unsigned long)compressed_size,
+            100.0f * compressed_size / sizeof(struct Game));
+
+    // Write: magic + campaign_fname + level + comp_len + decomp_len + compressed data + IntralevelData
+    TbFileHandle fh = LbFileOpen(fname, Lb_FILE_MODE_NEW);
+    if (!fh) {
+        ERRORLOG("Can't create continue save file");
+        free(compressed);
+        return false;
+    }
+
+    unsigned long magic = CONTINUE_SAVE_MAGIC;
+    unsigned long comp_len = (unsigned long)compressed_size;
+    unsigned long decomp_len = (unsigned long)sizeof(struct Game);
+    short ok = true;
+
+    if (LbFileWrite(fh, &magic, sizeof(magic)) != sizeof(magic))
+        ok = false;
+    if (ok && LbFileWrite(fh, game.campaign_fname, CAMPAIGN_FNAME_LEN) != CAMPAIGN_FNAME_LEN)
+        ok = false;
+    LevelNumber cont_lvl = get_continue_level_number();
+    if (ok && LbFileWrite(fh, &cont_lvl, sizeof(cont_lvl)) != sizeof(cont_lvl))
+        ok = false;
+    if (ok && LbFileWrite(fh, &comp_len, sizeof(comp_len)) != sizeof(comp_len))
+        ok = false;
+    if (ok && LbFileWrite(fh, &decomp_len, sizeof(decomp_len)) != sizeof(decomp_len))
+        ok = false;
+    if (ok && LbFileWrite(fh, compressed, compressed_size) != (long)compressed_size)
+        ok = false;
+    if (ok && LbFileWrite(fh, &intralvl, sizeof(struct IntralevelData)) != sizeof(struct IntralevelData))
+        ok = false;
+
     LbFileClose(fh);
-    return (fsize == sizeof(struct Game) + sizeof(struct IntralevelData));
+    free(compressed);
+    return ok;
 }
 
+/**
+ * @brief Read a portion of the continue game data.
+ * Supports both legacy raw format and new compressed format.
+ * For the compressed format, only campaign_fname and continue_level_number
+ * can be read via offset; full game data requires load_continue_game().
+ */
 short read_continue_game_part(unsigned char *buf,long pos,long buf_len)
 {
     char* fname = prepare_campaign_save_path(continue_game_filename);
-    
-    if (LbFileLength(fname) != sizeof(struct Game) + sizeof(struct IntralevelData))
+
+    long flen = LbFileLength(fname);
+    if (flen <= 0)
     {
-        SYNCDBG(7, "No correct .SAV file; there's no continue");
+        SYNCDBG(7, "No continue save file found");
         return false;
-  }
-  TbFileHandle fh = LbFileOpen(fname, Lb_FILE_MODE_READ_ONLY);
-  if (!fh)
-  {
-    SYNCDBG(7,"Can't open .SAV file; there's no continue");
-    return false;
-  }
-  LbFileSeek(fh, pos, Lb_FILE_SEEK_BEGINNING);
-  short result = (LbFileRead(fh, buf, buf_len) == buf_len);
-  LbFileClose(fh);
-  return result;
+    }
+
+    TbFileHandle fh = LbFileOpen(fname, Lb_FILE_MODE_READ_ONLY);
+    if (!fh)
+    {
+        SYNCDBG(7,"Can't open .SAV file; there's no continue");
+        return false;
+    }
+
+    // Check for new compressed format
+    unsigned long magic = 0;
+    if (LbFileRead(fh, &magic, sizeof(magic)) != sizeof(magic))
+    {
+        LbFileClose(fh);
+        return false;
+    }
+
+    if (magic == CONTINUE_SAVE_MAGIC)
+    {
+        // New format: header contains campaign_fname and continue_level_number
+        long campaign_fname_offset = offsetof(struct Game, campaign_fname);
+        long continue_lvl_offset = offsetof(struct Game, continue_level_number);
+
+        if (pos == campaign_fname_offset && buf_len == CAMPAIGN_FNAME_LEN)
+        {
+            // Read campaign_fname from header (right after magic)
+            short result = (LbFileRead(fh, buf, CAMPAIGN_FNAME_LEN) == CAMPAIGN_FNAME_LEN);
+            LbFileClose(fh);
+            return result;
+        }
+        else if (pos == continue_lvl_offset && buf_len == (long)sizeof(LevelNumber))
+        {
+            // Skip campaign_fname, read continue_level_number
+            LbFileSeek(fh, sizeof(magic) + CAMPAIGN_FNAME_LEN, Lb_FILE_SEEK_BEGINNING);
+            short result = (LbFileRead(fh, buf, sizeof(LevelNumber)) == sizeof(LevelNumber));
+            LbFileClose(fh);
+            return result;
+        }
+        else
+        {
+            // For any other offset, we need to decompress the full game struct
+            // Skip to compressed data: magic + campaign_fname + level + comp_len + decomp_len
+            LbFileSeek(fh, sizeof(magic) + CAMPAIGN_FNAME_LEN, Lb_FILE_SEEK_BEGINNING);
+            LevelNumber dummy_lvl;
+            LbFileRead(fh, &dummy_lvl, sizeof(dummy_lvl));
+            unsigned long comp_len = 0, decomp_len = 0;
+            LbFileRead(fh, &comp_len, sizeof(comp_len));
+            LbFileRead(fh, &decomp_len, sizeof(decomp_len));
+
+            if (pos == (long)sizeof(struct Game) && buf_len == (long)sizeof(struct IntralevelData))
+            {
+                // Reading IntralevelData — skip past compressed game data
+                LbFileSeek(fh, sizeof(magic) + CAMPAIGN_FNAME_LEN + sizeof(LevelNumber)
+                           + sizeof(comp_len) + sizeof(decomp_len) + comp_len, Lb_FILE_SEEK_BEGINNING);
+                short result = (LbFileRead(fh, buf, sizeof(struct IntralevelData)) == sizeof(struct IntralevelData));
+                LbFileClose(fh);
+                return result;
+            }
+
+            // Generic: decompress and read from offset
+            unsigned char *comp_data = (unsigned char *)malloc(comp_len);
+            unsigned char *decomp_data = (unsigned char *)malloc(decomp_len);
+            if (!comp_data || !decomp_data)
+            {
+                free(comp_data);
+                free(decomp_data);
+                LbFileClose(fh);
+                return false;
+            }
+            LbFileRead(fh, comp_data, comp_len);
+            LbFileClose(fh);
+
+            uLongf out_len = decomp_len;
+            if (uncompress(decomp_data, &out_len, comp_data, comp_len) != Z_OK)
+            {
+                free(comp_data);
+                free(decomp_data);
+                return false;
+            }
+            free(comp_data);
+
+            if (pos + buf_len <= (long)out_len)
+                memcpy(buf, decomp_data + pos, buf_len);
+            else
+            {
+                free(decomp_data);
+                return false;
+            }
+            free(decomp_data);
+            return true;
+        }
+    }
+    else
+    {
+        // Legacy raw format — seek and read directly
+        if (flen != sizeof(struct Game) + sizeof(struct IntralevelData))
+        {
+            LbFileClose(fh);
+            SYNCDBG(7, "No correct .SAV file; there's no continue");
+            return false;
+        }
+        LbFileSeek(fh, pos, Lb_FILE_SEEK_BEGINNING);
+        short result = (LbFileRead(fh, buf, buf_len) == buf_len);
+        LbFileClose(fh);
+        return result;
+    }
 }
 
 /**

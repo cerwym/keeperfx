@@ -43,6 +43,31 @@ TbBool load_achievement_state(void);
  */
 TbBool save_achievement_state(void);
 
+/**
+ * Load global achievement unlock state from save/achievements_global.json.
+ * Must be called after load_global_achievements().
+ * @return True on success (including "no file yet").
+ */
+TbBool load_achievement_state_global(void);
+
+/**
+ * Save global achievement unlock state to save/achievements_global.json.
+ * @return True on success.
+ */
+TbBool save_achievement_state_global(void);
+
+/**
+ * Delete the campaign achievement JSON file (saves/<campaign>/achievements.json).
+ * @return True on success.
+ */
+TbBool delete_achievement_state(void);
+
+/**
+ * Delete the global achievement JSON file (save/achievements_global.json).
+ * @return True on success.
+ */
+TbBool delete_achievement_state_global(void);
+
 #ifdef __cplusplus
 }
 #endif

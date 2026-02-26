@@ -1,5 +1,4 @@
 #include "platform.h"
-#include "steam_api.hpp"
 #include "bflib_crash.h"
 #include "bflib_fileio.h"
 #include "cdrom.h"
@@ -33,17 +32,6 @@ extern "C" const char * get_wine_host()
 extern "C" void install_exception_handler()
 {
     // TODO: install signal handler?
-}
-
-extern "C" int steam_api_init()
-{
-    // Steam not supported on Linux
-    return 0;
-}
-
-extern "C" void steam_api_shutdown()
-{
-    // Steam not supported on Linux
 }
 
 extern "C" void LbErrorParachuteInstall()

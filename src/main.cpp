@@ -126,11 +126,10 @@
 #include "config_keeperfx.h"
 #include "game_legacy.h"
 #include "room_list.h"
-#include "steam_api.hpp"
-#include "keeperfx/achievement/achievement_api.h"
-#include "keeperfx/achievement/achievement_definitions.h"
-#include "keeperfx/achievement/achievement_tracker.h"
-#include "keeperfx/achievement/gog_galaxy_api.h"
+#include "kfx/integration/IntegrationManager.h"
+#include "kfx/achievement/achievement_api.h"
+#include "kfx/achievement/achievement_definitions.h"
+#include "kfx/achievement/achievement_tracker.h"
 #include "game_loop.h"
 #include "net_input_lag.h"
 #include "moonphase.h"
@@ -3727,13 +3726,14 @@ static TbBool wait_at_frontend(void)
         }
         set_selected_level_number(start_params.selected_level_number);
         //game.selected_level_number = start_params.selected_level_number;
+        // Init load/save catalogue (campaign is loaded at this point)
+        initialise_load_game_slots();
     }
     else
     {
         set_selected_level_number(first_singleplayer_level());
+        // Save catalogue is deferred to frontend — no campaign loaded yet
     }
-    // Init load/save catalogue
-    initialise_load_game_slots();
 
     #ifdef FUNCTESTING
     if(flag_is_set(start_params.functest_flags, FTF_Enabled)) //override for functional tests
@@ -4406,8 +4406,7 @@ int LbBullfrogMain(unsigned short argc, char *argv[])
     retval = setup_game();
     if (retval == 1)
     {
-        steam_api_init();
-        gog_galaxy_init();
+        integration_manager_init();
         achievements_init();
     }
     if (retval == 1)
@@ -4461,9 +4460,8 @@ int LbBullfrogMain(unsigned short argc, char *argv[])
     }
 
     LbErrorLogClose();
+    integration_manager_shutdown();
     achievements_shutdown();
-    gog_galaxy_shutdown();
-    steam_api_shutdown();
     return 0;
 }
 

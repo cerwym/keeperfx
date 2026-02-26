@@ -177,8 +177,7 @@ void MenuRegistry::Init()
         return;
     m_initialized = true;
 
-    /* Phase 1: Load main_menu.json and discover all referenced menus */
-    SYNCDBG(5, "MenuRegistry::Init Phase 1: Loading main_menu.json");
+    SYNCDBG(5, "MenuRegistry::Init Loading main_menu.json");
     const char *mainPath = "data/menus/main_menu.json";
     if (LbFileLength(mainPath) > 0)
     {
@@ -202,14 +201,14 @@ void MenuRegistry::Init()
     }
 
     /* Load additional menus not reachable via navigate_to chains */
-    // LoadAndRegister("campaign_hub");
-    // LoadAndRegister("global_load");
-    // LoadAndRegister("levelpack_menu");
+    // TODO I HATE THIS. We should just load all JSON files in the directory and discover from there, but this is easier for now.   
+    LoadAndRegister("campaign_hub");
+    LoadAndRegister("global_load");
+    LoadAndRegister("levelpack_menu");
 
     /* Initialize campaign list visibility for scrollable campaign menus */
     frontend_campaign_list_load();
 
-    /* Phase 2: Resolve navigate_to references to registry indices */
     if (m_mainMenuLoaded)
         ResolveNavigateTo(&m_mainMenuDef);
 
@@ -219,7 +218,6 @@ void MenuRegistry::Init()
             ResolveNavigateTo(&m_registry[i].menu_def);
     }
 
-    /* Phase 3: Build GuiButtonInit arrays and register with engine */
     if (m_mainMenuLoaded)
     {
         struct GuiButtonInit *buttons = MenuBuilder::BuildButtonInitArray(&m_mainMenuDef);

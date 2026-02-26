@@ -2785,3 +2785,73 @@ msgstr ""
 msgctxt "Keeper spell description"
 msgid "Slap: Makes your creatures work harder, for some time. Your creatures take some damage from each slap they receive."
 msgstr ""
+
+#: guitext:965
+msgctxt "Achievement name"
+msgid "First Steps Into Darkness"
+msgstr ""
+
+#: guitext:966
+msgctxt "Achievement description"
+msgid "Complete Eversmile"
+msgstr ""
+
+#: guitext:967
+msgctxt "Achievement name"
+msgid "Quarter of the Realm"
+msgstr ""
+
+#: guitext:968
+msgctxt "Achievement description"
+msgid "Complete 5 campaign levels"
+msgstr ""
+
+#: guitext:969
+msgctxt "Achievement name"
+msgid "Halfway to Hell"
+msgstr ""
+
+#: guitext:970
+msgctxt "Achievement description"
+msgid "Complete 10 campaign levels"
+msgstr ""
+
+#: guitext:971
+msgctxt "Achievement name"
+msgid "The Realm Trembles"
+msgstr ""
+
+#: guitext:972
+msgctxt "Achievement description"
+msgid "Complete 15 campaign levels"
+msgstr ""
+
+#: guitext:973
+msgctxt "Achievement name"
+msgid "Keeper of the Realm"
+msgstr ""
+
+#: guitext:974
+msgctxt "Achievement description"
+msgid "Complete all 20 levels of the original campaign"
+msgstr ""
+
+#: guitext:975
+msgctxt "Achievement name"
+msgid "Hidden Depths"
+msgstr ""
+
+#: guitext:976
+msgctxt "Achievement description"
+msgid "Complete any bonus level"
+msgstr ""
+
+#: guitext:977
+msgctxt "Achievement name"
+msgid "No Stone Unturned"
+msgstr ""
+
+#: guitext:978
+msgctxt "Achievement description"
+msgid "Complete all 5 bonus levels"
+msgstr ""

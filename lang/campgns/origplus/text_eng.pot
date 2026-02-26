@@ -43,3 +43,53 @@ msgid ""
 "Transferring creatures to a new realm has been made very difficult. But "
 "surely an experienced Keeper as yourself can conquer realms without help."
 msgstr ""
+
+#: guitext:3
+msgctxt "Achievement name"
+msgid "Back for More"
+msgstr ""
+
+#: guitext:4
+msgctxt "Achievement description"
+msgid "Start the Original Plus campaign"
+msgstr ""
+
+#: guitext:5
+msgctxt "Achievement name"
+msgid "Familiar Grounds"
+msgstr ""
+
+#: guitext:6
+msgctxt "Achievement description"
+msgid "Complete 5 Original Plus levels"
+msgstr ""
+
+#: guitext:7
+msgctxt "Achievement name"
+msgid "Twice the Evil"
+msgstr ""
+
+#: guitext:8
+msgctxt "Achievement description"
+msgid "Complete 10 Original Plus levels"
+msgstr ""
+
+#: guitext:9
+msgctxt "Achievement name"
+msgid "True Keeper"
+msgstr ""
+
+#: guitext:10
+msgctxt "Achievement description"
+msgid "Complete all 20 Original Plus levels"
+msgstr ""
+
+#: guitext:11
+msgctxt "Achievement name"
+msgid "Overkill"
+msgstr ""
+
+#: guitext:12
+msgctxt "Achievement description"
+msgid "Complete all bonus levels on Original Plus"
+msgstr ""

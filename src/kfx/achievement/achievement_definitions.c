@@ -70,6 +70,11 @@ const struct NamedCommand achievement_commands[] = {
     {"TRAP_USED",          28},
     {"SCRIPT_FLAG",        29},
     {"LUA_CONDITION",      30},
+    {"GOG_ID",             33},
+    {"STEAM_ID",           34},
+    {"XBOX_ID",            35},
+    {"PSN_ID",             36},
+    {"KEEPERFX_ID",        37},
     {NULL,                  0},
 };
 
@@ -98,7 +103,7 @@ int load_campaign_achievements(struct GameCampaign* camp)
         if (LbFileExists(fname))
         {
             SYNCLOG("Loading achievements from: %s", fname);
-            return load_achievements_config(fname, camp);
+            return load_achievements_config(fname, camp->fname);
         }
     }
     
@@ -110,7 +115,7 @@ int load_campaign_achievements(struct GameCampaign* camp)
         if (LbFileExists(fname))
         {
             SYNCLOG("Loading achievements from: %s", fname);
-            return load_achievements_config(fname, camp);
+            return load_achievements_config(fname, camp->fname);
         }
     }
     
@@ -126,7 +131,7 @@ int load_campaign_achievements(struct GameCampaign* camp)
  * @param camp The campaign these achievements belong to.
  * @return Number of achievements loaded.
  */
-int load_achievements_config(const char* fname, struct GameCampaign* camp)
+int load_achievements_config(const char* fname, const char* scope_name)
 {
     char* buf;
     long len;
@@ -235,7 +240,7 @@ int load_achievements_config(const char* fname, struct GameCampaign* camp)
             }
             
             /// Register achievement
-            if (register_achievement_definition(&ach_def, camp->name))
+            if (register_achievement_definition(&ach_def, scope_name))
             {
                 loaded_count++;
             }
@@ -530,6 +535,32 @@ int load_achievements_config(const char* fname, struct GameCampaign* camp)
                         cond->data.lua.function_name[i] = '\0';
                     }
                     break;
+
+                /// Platform-specific API keys
+                case 33: ///< GOG_ID
+                case 34: ///< STEAM_ID
+                case 35: ///< XBOX_ID
+                case 36: ///< PSN_ID
+                case 37: ///< KEEPERFX_ID
+                {
+                    static const char* platform_keys[] = {
+                        [33] = "gog", [34] = "steam", [35] = "xbox",
+                        [36] = "psn", [37] = "keeperfx"
+                    };
+                    if (ach_def.platform_id_count < MAX_PLATFORM_IDS)
+                    {
+                        struct PlatformIdMapping* mapping = &ach_def.platform_ids[ach_def.platform_id_count];
+                        strncpy(mapping->platform, platform_keys[cmd_num], PLATFORM_KEY_LEN - 1);
+                        mapping->platform[PLATFORM_KEY_LEN - 1] = '\0';
+                        while (*pos == ' ' || *pos == '\t') pos++;
+                        i = 0;
+                        while (*pos != ' ' && *pos != '\t' && *pos != '\r' && *pos != '\n' && *pos != '\0' && i < PLATFORM_ID_LEN - 1)
+                            mapping->api_key[i++] = *pos++;
+                        mapping->api_key[i] = '\0';
+                        ach_def.platform_id_count++;
+                    }
+                    break;
+                }
                     
                 default:
                     if (cmd_num != 0)
@@ -547,8 +578,26 @@ int load_achievements_config(const char* fname, struct GameCampaign* camp)
     
     free(buf);
     
-    SYNCLOG("Loaded %d achievements for campaign '%s'", loaded_count, camp->name);
+    SYNCLOG("Loaded %d achievements for scope '%s'", loaded_count, scope_name);
     return loaded_count;
+}
+
+/**
+ * Load global achievements from data/achievements_global.cfg.
+ * Called once at startup; global achievements persist across campaign switches.
+ * @return Number of global achievements loaded.
+ */
+int load_global_achievements(void)
+{
+    char *fname = prepare_file_path(FGrp_StdData, "achievements_global.cfg");
+    if (!LbFileExists(fname))
+    {
+        SYNCDBG(7, "No global achievements file found");
+        return 0;
+    }
+
+    SYNCLOG("Loading global achievements from: %s", fname);
+    return load_achievements_config(fname, "global");
 }
 
 /**
@@ -638,6 +687,13 @@ TbBool register_achievement_definition(struct AchievementDefinition* achievement
     ach.desc_text_id = achievement_def->desc_text_id;
     ach.unlock_time = 0;
     ach.progress = 0.0f;
+    
+    /// Copy platform ID mappings
+    ach.platform_id_count = achievement_def->platform_id_count;
+    for (int p = 0; p < achievement_def->platform_id_count && p < MAX_PLATFORM_IDS; p++)
+    {
+        memcpy(&ach.platform_ids[p], &achievement_def->platform_ids[p], sizeof(struct PlatformIdMapping));
+    }
     
     /// Register with achievement system
     TbBool result = achievement_register(&ach);

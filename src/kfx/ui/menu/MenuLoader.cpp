@@ -42,7 +42,7 @@
 #include "../../../sprites.h"
 #include "../../../game_saves.h"
 #include "../../../keeperfx.hpp"
-#include "../../../keeperfx/achievement/achievement_api.h"
+#include "../../achievement/achievement_api.h"
 #include "../../../bflib_datetm.h"
 
 #include "../../../post_inc.h"
