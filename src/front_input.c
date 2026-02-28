@@ -2138,6 +2138,7 @@ void get_isometric_view_nonaction_inputs(void)
         packet->additional_packet_values |= PCAdV_SpeedupPressed;
     TbBool no_mods = ((rotate_pressed != 0) || (speed_pressed != 0) || (check_current_gui_layer(GuiLayer_OneClick)));
 
+    TbBool camera_pan_allowed = (game.frame_skip == 0) || (global_frameskipTurn == 0);
     get_isometric_or_front_view_mouse_inputs(packet, rotate_pressed, no_mods);
 
     if ( rotate_pressed )
@@ -2166,6 +2167,8 @@ void get_isometric_view_nonaction_inputs(void)
             set_packet_control(packet, PCtr_ViewTiltDown);
         if ( is_game_key_pressed(Gkey_TiltReset, NULL, false) )
             set_packet_control(packet, PCtr_ViewTiltReset);
+        if (camera_pan_allowed)
+        {
         if ( is_game_key_pressed(Gkey_MoveLeft, NULL, no_mods) || is_key_pressed(KC_LEFT,KMod_DONTCARE) )
         {
             movement_accum_x = -1.0f;
@@ -2181,6 +2184,7 @@ void get_isometric_view_nonaction_inputs(void)
         if ( is_game_key_pressed(Gkey_MoveDown, NULL, no_mods) || is_key_pressed(KC_DOWN,KMod_DONTCARE) )
         {
             movement_accum_y = 1.0f;
+        }
         }
         // Packets will be sent by send_camera_catchup_packets() based on position difference
     }
@@ -2233,6 +2237,7 @@ void get_front_view_nonaction_inputs(void)
     if (speed_pressed != 0)
       pckt->additional_packet_values |= PCAdV_SpeedupPressed;
 
+    TbBool camera_pan_allowed = (game.frame_skip == 0) || (global_frameskipTurn == 0);
     get_isometric_or_front_view_mouse_inputs(pckt,rotate_pressed,no_mods);
 
     if ( rotate_pressed )
@@ -2275,6 +2280,8 @@ void get_front_view_nonaction_inputs(void)
             last_rotate_right_time = LbTimerClock();
           }
         }
+        if (camera_pan_allowed)
+        {
         if ( is_game_key_pressed(Gkey_MoveLeft, NULL, no_mods) || is_key_pressed(KC_LEFT,KMod_DONTCARE) )
         {
             movement_accum_x = -1.0f;
@@ -2290,6 +2297,7 @@ void get_front_view_nonaction_inputs(void)
         if ( is_game_key_pressed(Gkey_MoveDown, NULL, no_mods) || is_key_pressed(KC_DOWN,KMod_DONTCARE) )
         {
              movement_accum_y = 1.0f;
+        }
         }
     }
     if ( is_game_key_pressed(Gkey_ZoomIn, NULL, false) )
