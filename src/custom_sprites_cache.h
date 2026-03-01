@@ -31,27 +31,37 @@ typedef struct SpriteCacheCtx {
     short                 *p_next_free_icon;
 } SpriteCacheCtx;
 
-/** Reset the recorded ZIP list; call at the start of init_custom_sprites. */
-void sprite_cache_reset_zips(void);
+/** Counter state captured at a tier boundary; used as the "start" for the next tier's delta. */
+typedef struct SpriteCacheTierSnapshot {
+    int next_free_sprite;
+    int num_added_sprite;
+    int next_free_icon;
+    int num_added_icons;
+    int num_custom_sprites;
+} SpriteCacheTierSnapshot;
 
-/** Record that a ZIP was opened for sprite loading (call in load_file_sprites). */
+/** Call before loading each tier's ZIPs to reset that phase's fingerprint accumulator. */
+void sprite_cache_begin_phase(int phase);  /* 0=global, 1=campaign, 2=level */
+
+/** Record a ZIP opened for sprite loading (called from load_file_sprites). */
 void sprite_cache_record_zip(const char *path);
 
-/**
- * Try to load sprite data from the binary cache for the given level.
- * Verifies ZIP fingerprints (mtime + size) before accepting the cache.
- * Returns true if the cache was valid and all data has been loaded into ctx.
- * Returns false if the cache is missing, stale, or corrupt.
- */
-TbBool sprite_cache_try_load(LevelNumber lvnum, SpriteCacheCtx *ctx);
+/** Capture a snapshot of the current counter state. */
+void sprite_cache_snapshot(const SpriteCacheCtx *ctx, SpriteCacheTierSnapshot *snap);
 
-/**
- * Write current sprite data to the binary cache for the given level.
- * Call after all ZIPs have been loaded successfully.
- * The list of ZIPs is taken from sprite_cache_record_zip calls made during
- * this load cycle.
- */
-void sprite_cache_write(LevelNumber lvnum, const SpriteCacheCtx *ctx);
+/* Load functions: return true on cache hit, false on miss/stale. */
+TbBool sprite_cache_try_load_global(SpriteCacheCtx *ctx);
+TbBool sprite_cache_try_load_campaign(const char *cmpg_dir, SpriteCacheCtx *ctx,
+                                       const SpriteCacheTierSnapshot *global_snap);
+TbBool sprite_cache_try_load_level(const char *level_zip, SpriteCacheCtx *ctx,
+                                    const SpriteCacheTierSnapshot *campaign_snap);
+
+/* Write functions: serialise only the delta since base_snap. */
+void sprite_cache_write_global(SpriteCacheCtx *ctx);
+void sprite_cache_write_campaign(const char *cmpg_dir, SpriteCacheCtx *ctx,
+                                  const SpriteCacheTierSnapshot *global_snap);
+void sprite_cache_write_level(const char *level_zip, SpriteCacheCtx *ctx,
+                               const SpriteCacheTierSnapshot *campaign_snap);
 
 #ifdef __cplusplus
 }

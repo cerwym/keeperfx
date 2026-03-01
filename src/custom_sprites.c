@@ -457,65 +457,77 @@ void init_custom_sprites(LevelNumber lvnum)
 #ifdef PLATFORM_VITA
     {
         SpriteCacheCtx cache_ctx = {
-            keepersprite_add,
-            creature_table_add,
-            iso_td_add,
-            td_iso_add,
-            &next_free_sprite,
-            added_sprites,
-            &num_added_sprite,
-            &custom_sprites,
-            added_icons,
-            &num_added_icons,
-            &next_free_icon
+            keepersprite_add, creature_table_add, iso_td_add, td_iso_add,
+            &next_free_sprite, added_sprites, &num_added_sprite,
+            &custom_sprites, added_icons, &num_added_icons, &next_free_icon
         };
-        sprite_cache_reset_zips();
-        if (sprite_cache_try_load(lvnum, &cache_ctx))
-            return;
+        SpriteCacheTierSnapshot global_snap = {0,0,0,0,0}, campaign_snap = {0,0,0,0,0};
+        TbBool global_hit, campaign_hit, level_hit;
+        char s_lvl_zip[256] = {0};
+        char *dname;
+
+        /* --- Global tier (FxData + after_base) --- */
+        sprite_cache_begin_phase(0);
+        global_hit = sprite_cache_try_load_global(&cache_ctx);
+        if (!global_hit) {
+            dname = prepare_file_path(FGrp_FxData, NULL);
+            load_dir_sprites(dname, "Main FxData dir");
+            if (mods_conf.after_base_cnt > 0)
+                load_sprites_for_mod_list(lvnum, mods_conf.after_base_item, mods_conf.after_base_cnt);
+        }
+        sprite_cache_snapshot(&cache_ctx, &global_snap);
+
+        /* --- Campaign tier (CmpgConfig + after_campaign) --- */
+        sprite_cache_begin_phase(1);
+        dname = prepare_file_path(FGrp_CmpgConfig, NULL);
+        campaign_hit = sprite_cache_try_load_campaign(dname, &cache_ctx, &global_snap);
+        if (!campaign_hit) {
+            dname = prepare_file_path(FGrp_CmpgConfig, NULL);
+            load_dir_sprites(dname, "Main CmpgConfig dir");
+            if (mods_conf.after_campaign_cnt > 0)
+                load_sprites_for_mod_list(lvnum, mods_conf.after_campaign_item, mods_conf.after_campaign_cnt);
+        }
+        sprite_cache_snapshot(&cache_ctx, &campaign_snap);
+
+        /* --- Level tier (map ZIP + after_map) --- */
+        sprite_cache_begin_phase(2);
+        {
+            char *fpath = prepare_file_fmtpath(get_level_fgroup(lvnum), "map%05lu.zip", lvnum);
+            strncpy(s_lvl_zip, fpath, sizeof(s_lvl_zip) - 1);
+        }
+        level_hit = sprite_cache_try_load_level(s_lvl_zip, &cache_ctx, &campaign_snap);
+        if (!level_hit) {
+            if (LbFileExists(s_lvl_zip))
+                load_file_sprites(s_lvl_zip, "Main CmpgLvls file");
+            if (mods_conf.after_map_cnt > 0)
+                load_sprites_for_mod_list(lvnum, mods_conf.after_map_item, mods_conf.after_map_cnt);
+        }
+
+        /* Write any tiers that were cache-missed */
+        if (!global_hit)
+            sprite_cache_write_global(&cache_ctx);
+        if (!campaign_hit) {
+            dname = prepare_file_path(FGrp_CmpgConfig, NULL);
+            sprite_cache_write_campaign(dname, &cache_ctx, &global_snap);
+        }
+        if (!level_hit)
+            sprite_cache_write_level(s_lvl_zip, &cache_ctx, &campaign_snap);
     }
-#endif
-
-    char *dname = prepare_file_path(FGrp_FxData, NULL);
-    load_dir_sprites(dname, "Main FxData dir");
-
-    if (mods_conf.after_base_cnt > 0)
+#else
     {
-        load_sprites_for_mod_list(lvnum, mods_conf.after_base_item, mods_conf.after_base_cnt);
-    }
-
-    dname = prepare_file_path(FGrp_CmpgConfig, NULL);
-    load_dir_sprites(dname, "Main CmpgConfig dir");
-
-    if (mods_conf.after_campaign_cnt > 0)
-    {
-        load_sprites_for_mod_list(lvnum, mods_conf.after_campaign_item, mods_conf.after_campaign_cnt);
-    }
-
-    char *fname = prepare_file_fmtpath(get_level_fgroup(lvnum), "map%05lu.zip", lvnum);
-    if (LbFileExists(fname))
-        load_file_sprites(fname, "Main CmpgLvls file");
-
-    if (mods_conf.after_map_cnt > 0)
-    {
-        load_sprites_for_mod_list(lvnum, mods_conf.after_map_item, mods_conf.after_map_cnt);
-    }
-
-#ifdef PLATFORM_VITA
-    {
-        SpriteCacheCtx cache_ctx = {
-            keepersprite_add,
-            creature_table_add,
-            iso_td_add,
-            td_iso_add,
-            &next_free_sprite,
-            added_sprites,
-            &num_added_sprite,
-            &custom_sprites,
-            added_icons,
-            &num_added_icons,
-            &next_free_icon
-        };
-        sprite_cache_write(lvnum, &cache_ctx);
+        char *dname = prepare_file_path(FGrp_FxData, NULL);
+        load_dir_sprites(dname, "Main FxData dir");
+        if (mods_conf.after_base_cnt > 0)
+            load_sprites_for_mod_list(lvnum, mods_conf.after_base_item, mods_conf.after_base_cnt);
+        dname = prepare_file_path(FGrp_CmpgConfig, NULL);
+        load_dir_sprites(dname, "Main CmpgConfig dir");
+        if (mods_conf.after_campaign_cnt > 0)
+            load_sprites_for_mod_list(lvnum, mods_conf.after_campaign_item, mods_conf.after_campaign_cnt);
+        char *fname = prepare_file_fmtpath(get_level_fgroup(lvnum), "map%05lu.zip", lvnum);
+        if (LbFileExists(fname))
+            load_file_sprites(fname, "Main CmpgLvls file");
+        if (mods_conf.after_map_cnt > 0)
+            load_sprites_for_mod_list(lvnum, mods_conf.after_map_item, mods_conf.after_map_cnt);
     }
 #endif
 }

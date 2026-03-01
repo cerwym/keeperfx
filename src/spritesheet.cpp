@@ -151,3 +151,11 @@ extern "C" long num_sprites(const TbSpriteSheet * sheet)
     }
     return sheet->sprites.size();
 }
+
+extern "C" void trim_spritesheet(TbSpriteSheet *sheet, long count)
+{
+    if (!sheet || count < 0) return;
+    if ((size_t)count >= sheet->sprites.size()) return;
+    sheet->sprites.resize((size_t)count);
+    sheet->data.resize((size_t)count);
+}

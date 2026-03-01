@@ -77,6 +77,7 @@ TbBool add_sprite(struct TbSpriteSheet * sheet, unsigned short width, unsigned s
 TbBool add_sprite(struct TbSpriteSheet * sheet, unsigned char width, unsigned char height, int size, const void * data);
 #endif
 long num_sprites(const struct TbSpriteSheet *);
+void trim_spritesheet(struct TbSpriteSheet *sheet, long count);
 
 #define load_font(data_fname, index_fname) load_spritesheet(data_fname, index_fname)
 #define free_font(font) free_spritesheet(font)
