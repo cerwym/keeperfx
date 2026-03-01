@@ -140,6 +140,7 @@ if(PLATFORM_VITA OR PLATFORM_3DS OR PLATFORM_SWITCH)
     # TODO(3DS/Switch): replicate the same FetchContent pattern for the devkitARM/devkitA64 toolchain to lift this exclusion.
     if(NOT PLATFORM_VITA)
         list(FILTER KEEPERFX_SOURCES_C EXCLUDE REGEX ".*/custom_sprites\\.c$")
+        list(FILTER KEEPERFX_SOURCES_C EXCLUDE REGEX ".*/custom_sprites_cache\\.c$")
     endif()
     list(FILTER KEEPERFX_SOURCES_C EXCLUDE REGEX ".*/moonphase\\.c$")
     # Lua: available on Vita via SonicMastr/LuaJIT-Vita (vdpm). Not yet available on 3DS/Switch.

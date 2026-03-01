@@ -32,6 +32,9 @@
 #include <json-dom.h>
 #include <minizip/unzip.h>
 #include "platform/PlatformManager.h"
+#ifdef PLATFORM_VITA
+#include "custom_sprites_cache.h"
+#endif
 #include "post_inc.h"
 
 // Performance tests
@@ -238,6 +241,9 @@ static int cmp_named_command(const void *a, const void *b)
 static int load_file_sprites(const char *path, const char *file_desc)
 {
     SYNCDBG(8, "Starting");
+#ifdef PLATFORM_VITA
+    sprite_cache_record_zip(path);
+#endif
     int add_flag = 0;
     if (add_custom_sprite(path))
     {
@@ -448,6 +454,26 @@ void init_custom_sprites(LevelNumber lvnum)
         free(anim_names);
     }
 
+#ifdef PLATFORM_VITA
+    {
+        SpriteCacheCtx cache_ctx = {
+            keepersprite_add,
+            creature_table_add,
+            iso_td_add,
+            td_iso_add,
+            &next_free_sprite,
+            added_sprites,
+            &num_added_sprite,
+            &custom_sprites,
+            added_icons,
+            &num_added_icons,
+            &next_free_icon
+        };
+        sprite_cache_reset_zips();
+        if (sprite_cache_try_load(lvnum, &cache_ctx))
+            return;
+    }
+#endif
 
     char *dname = prepare_file_path(FGrp_FxData, NULL);
     load_dir_sprites(dname, "Main FxData dir");
@@ -473,6 +499,25 @@ void init_custom_sprites(LevelNumber lvnum)
     {
         load_sprites_for_mod_list(lvnum, mods_conf.after_map_item, mods_conf.after_map_cnt);
     }
+
+#ifdef PLATFORM_VITA
+    {
+        SpriteCacheCtx cache_ctx = {
+            keepersprite_add,
+            creature_table_add,
+            iso_td_add,
+            td_iso_add,
+            &next_free_sprite,
+            added_sprites,
+            &num_added_sprite,
+            &custom_sprites,
+            added_icons,
+            &num_added_icons,
+            &next_free_icon
+        };
+        sprite_cache_write(lvnum, &cache_ctx);
+    }
+#endif
 }
 
 /**
