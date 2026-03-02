@@ -47,7 +47,9 @@ extern "C" {
 #define  TEXTURE_LAND_MARKED_GOLD     579
 /******************************************************************************/
 
-extern unsigned char block_mem[TEXTURE_VARIATIONS_COUNT * TEXTURE_BLOCKS_STAT_COUNT * 32 * 32];
+#define BLOCK_MEM_SIZE (TEXTURE_VARIATIONS_COUNT * TEXTURE_BLOCKS_STAT_COUNT * 32 * 32)
+
+extern unsigned char *block_mem;
 extern unsigned char *block_ptrs[TEXTURE_VARIATIONS_COUNT * TEXTURE_BLOCKS_COUNT];
 extern long block_dimension;
 /******************************************************************************/

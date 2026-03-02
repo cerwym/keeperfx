@@ -34,7 +34,7 @@
 extern "C" {
 #endif
 /******************************************************************************/
-unsigned char block_mem[TEXTURE_VARIATIONS_COUNT * TEXTURE_BLOCKS_STAT_COUNT * 32 * 32];
+unsigned char *block_mem = NULL;
 unsigned char *block_ptrs[TEXTURE_VARIATIONS_COUNT * TEXTURE_BLOCKS_COUNT];
 
 long block_dimension = 32;
@@ -48,6 +48,8 @@ static long anim_counter;
 /******************************************************************************/
 void setup_texture_block_mem(void)
 {
+    if (block_mem == NULL)
+        block_mem = (unsigned char *)KfxCalloc(1, BLOCK_MEM_SIZE);
     unsigned char** dst = block_ptrs;
     unsigned char* src  = block_mem;
     for (int i = 0; i < (TEXTURE_VARIATIONS_COUNT * TEXTURE_BLOCKS_COUNT); i++)
@@ -225,7 +227,7 @@ static TbBool load_letter_one_file(unsigned long tmapidx, char letter, void *dst
 TbBool load_texture_map_file(unsigned long tmapidx, LevelNumber lvnum, short fgroup)
 {
     SYNCDBG(7,"Starting");
-    memset(block_mem, 130, sizeof(block_mem));
+    memset(block_mem, 130, BLOCK_MEM_SIZE);
     if (!load_letter_one_file(tmapidx,'a', block_mem,lvnum,fgroup))
     {
         return false;
