@@ -34,7 +34,7 @@
 #include "post_inc.h"
 
 
-char consoleLogArray[MAX_CONSOLE_LOG_COUNT][MAX_TEXT_LENGTH];
+char (*consoleLogArray)[MAX_TEXT_LENGTH] = NULL;
 size_t consoleLogArraySize = 0;
 int debug_display_consolelog = 0;
 
@@ -340,9 +340,12 @@ int LbErrorLogClose(void)
 TbFileHandle file = NULL;
 
 void write_log_to_array_for_live_viewing(const char* fmt_str, va_list args, const char* add_log_prefix) {
+    if (consoleLogArray == NULL) {
+        consoleLogArray = (char (*)[MAX_TEXT_LENGTH])KfxCalloc(MAX_CONSOLE_LOG_COUNT, MAX_TEXT_LENGTH);
+    }
     if (consoleLogArraySize >= MAX_CONSOLE_LOG_COUNT) {
         // Array is full - so clear it. This is a bit of a stopgap solution, it will lose us the older entries.
-        memset(consoleLogArray, 0, sizeof(consoleLogArray));
+        memset(consoleLogArray, 0, MAX_CONSOLE_LOG_COUNT * MAX_TEXT_LENGTH);
         consoleLogArraySize = 0;
     }
 
