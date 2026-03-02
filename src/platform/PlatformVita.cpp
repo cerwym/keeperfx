@@ -415,6 +415,7 @@ void        PlatformVita::SetArgv(int, char**) {} // argv[0] unused on Vita
 const char* PlatformVita::GetDataPath() const { return "ux0:data/keeperfx"; }
 const char* PlatformVita::GetSavePath() const { return "ux0:data/keeperfx/save"; }
 size_t      PlatformVita::GetScratchSize() const { return 2 * 1024 * 1024; } /* 2 MB -- conservative until BSS is reduced */
+size_t      PlatformVita::GetPolyPoolSize() const { return 4 * 1024 * 1024; } /* 4 MB -- reduced from 16 MB desktop default */
 
 // ----- Audio sub-interface -----
 

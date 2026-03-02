@@ -64,6 +64,7 @@
 #include "vidfade.h"
 #include "vidmode.h"
 
+#include "platform/PlatformManager.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -396,7 +397,7 @@ unsigned char const height_masks[] = {
 // View distance related
 struct MinMax minmaxs[MINMAX_LENGTH];
 unsigned char *getpoly;
-unsigned char poly_pool[POLY_POOL_SIZE];
+unsigned char *poly_pool = NULL;
 unsigned char *poly_pool_end;
 struct BasicQ *buckets[BUCKETS_COUNT];
 long cells_away;
@@ -742,7 +743,7 @@ void update_engine_settings(struct PlayerInfo *player)
  */
 static void poly_pool_end_reserve(int nitems)
 {
-    poly_pool_end = &poly_pool[sizeof(poly_pool)-(nitems*sizeof(struct BucketKindSlabSelector))];
+    poly_pool_end = poly_pool + PlatformManager_GetPolyPoolSize() - (nitems*sizeof(struct BucketKindSlabSelector));
 }
 
 static TbBool is_free_space_in_poly_pool(int nitems)
@@ -6844,7 +6845,7 @@ void draw_view(struct Camera *cam, unsigned char a2)
 
     getpoly = poly_pool;
     memset(buckets, 0, sizeof(buckets));
-    memset(poly_pool, 0, sizeof(poly_pool));
+    memset(poly_pool, 0, PlatformManager_GetPolyPoolSize());
     if (map_volume_box.visible)
     {
         poly_pool_end_reserve(14);

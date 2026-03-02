@@ -23,7 +23,10 @@
 
 #include "globals.h"
 #include "bflib_video.h"
+#include "platform/PlatformManager.h"
 #include "post_inc.h"
+
+extern unsigned char *poly_pool;
 
 /******************************************************************************/
 TbPixel vec_colour = 112;
@@ -44,6 +47,9 @@ void setup_bflib_render()
 {
     polyscans = KfxAlloc(sizeof(struct PolyPoint) * 4096);
     memset(polyscans, 0, sizeof(struct PolyPoint) * 4096);
+    if (poly_pool == NULL) {
+        poly_pool = (unsigned char *)KfxCalloc(1, PlatformManager_GetPolyPoolSize());
+    }
 }
 
 void reset_bflib_render()

@@ -179,6 +179,11 @@ extern "C" size_t PlatformManager_GetScratchSize()
     return PlatformManager::Get()->GetScratchSize();
 }
 
+extern "C" size_t PlatformManager_GetPolyPoolSize()
+{
+    return PlatformManager::Get()->GetPolyPoolSize();
+}
+
 IAudioPlatform* PlatformManager_GetAudio()
 {
     IPlatform* p = PlatformManager::Get();

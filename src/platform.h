@@ -1,6 +1,8 @@
 #ifndef PLATFORM_H
 #define PLATFORM_H
 
+#include <stddef.h>
+
 // Platform-specific stuff is declared here
 
 #ifdef __cplusplus
@@ -25,6 +27,10 @@ const char * PlatformManager_GetSavePath(void);
 /** Must be called once with argc/argv before any path queries.
  *  Desktop platforms use argv[0] to find the executable directory. */
 void PlatformManager_SetArgv(int argc, char** argv);
+
+/** Returns the size in bytes to allocate for the polygon pool.
+ *  Desktop: 16MB (original), Vita: 4MB (reduced for BSS). */
+size_t PlatformManager_GetPolyPoolSize(void);
 
 /******************************************************************************/
 /* OpenGL context management (implemented per-platform for the GL backend)    */

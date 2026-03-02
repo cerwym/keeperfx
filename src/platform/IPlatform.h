@@ -122,6 +122,10 @@ public:
      *  Default (desktop): 4 MB.  Override to tune for constrained platforms. */
     virtual size_t GetScratchSize() const { return 4 * 1024 * 1024; }
 
+    /** Size of the poly rendering pool in bytes.
+     *  Default (desktop): 16 MB.  Override for constrained platforms. */
+    virtual size_t GetPolyPoolSize() const { return 16 * 1024 * 1024; }
+
     // ----- Audio sub-interface -----
     /** Returns the platform audio implementation, or nullptr if the platform
      *  has no native audio path (desktop CI, headless builds).

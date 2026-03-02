@@ -49,6 +49,7 @@ void        PlatformManager_LogWrite(const char* message);
 void        PlatformManager_FrameTick(void);
 void        PlatformManager_WorkTick(void);
 size_t      PlatformManager_GetScratchSize(void);
+size_t      PlatformManager_GetPolyPoolSize(void);
 
 #ifdef __cplusplus
 } // extern "C"
