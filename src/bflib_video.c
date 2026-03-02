@@ -507,6 +507,13 @@ TbResult LbScreenInitialize(void)
         LbRegisterModernVideoModes(); // register modern and flexible custom modes
     }
     // Initialize SDL library
+#if defined(PLATFORM_VITA) && defined(VITA_HAVE_VITAGL)
+    // vitaGL must take ownership of the GXM display context BEFORE SDL_Init
+    // touches video hardware.  The full GL setup (textures, shaders) is done
+    // later in RendererVita::Init(), but the context must exist first.
+    extern void vita_vitagl_preinit(void);
+    vita_vitagl_preinit();
+#endif
     if (SDL_Init(SDL_INIT_VIDEO|SDL_INIT_JOYSTICK) < 0) {
         ERRORLOG("SDL init: %s",SDL_GetError());
         return Lb_FAIL;

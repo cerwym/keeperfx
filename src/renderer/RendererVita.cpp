@@ -41,6 +41,25 @@
 /******************************************************************************/
 
 // ---------------------------------------------------------------------------
+// vitaGL pre-initialisation
+// Called from LbScreenInitialize() BEFORE SDL_Init(SDL_INIT_VIDEO) so that
+// vitaGL owns the GXM display context before SDL touches video hardware.
+// The GL resource setup (textures, shaders) is done later in Init().
+// ---------------------------------------------------------------------------
+static bool s_vitagl_ready = false;
+
+extern "C" void vita_vitagl_preinit(void)
+{
+    if (s_vitagl_ready) return;
+    shark_init(NULL);
+    if (!vglInitExtended(0, 960, 544, 0x800000, SCE_GXM_MULTISAMPLE_NONE)) {
+        // Cannot call ERRORLOG here (logger not yet up); will be reported in Init().
+        return;
+    }
+    s_vitagl_ready = true;
+}
+
+// ---------------------------------------------------------------------------
 // Cg shader sources (compiled at runtime by vitashark)
 // ---------------------------------------------------------------------------
 
@@ -106,22 +125,13 @@ bool RendererVita::Init()
 {
     if (m_initialized) return true;
 
-    // vitashark must be initialised before vglInitExtended so that
-    // runtime Cg compilation (via glShaderSource/glCompileShader) is available.
-    // NULL = use the system-provided SceShaccCg shader compiler.
-    shark_init(NULL);
-
-    // Initialise vitaGL — takes ownership of the GXM context and the display.
-    // SDL_CreateWindow has already been called by bflib_video.c (logical window
-    // only; SDL does NOT init GXM on Vita until SDL_CreateRenderer is called).
-    // We never call SDL_CreateRenderer, so this is the first and only GXM init.
-    // 0x800000 (8 MB) vertex/fragment pool; no MSAA at 960×544.
-    if (!vglInitExtended(0, 960, 544, 0x800000, SCE_GXM_MULTISAMPLE_NONE)) {
-        ERRORLOG("RendererVita: vglInitExtended failed — falling back is not possible");
+    if (!s_vitagl_ready) {
+        ERRORLOG("RendererVita: vitaGL not pre-initialized (vita_vitagl_preinit failed before SDL_Init)");
         return false;
     }
 
-    // Index texture: 640×480 GL_LUMINANCE — stores raw 8-bit palette indices.
+    // vitaGL context is already up (claimed in vita_vitagl_preinit).
+    // Set up GL resources: index texture, palette texture, palette shader.
     glGenTextures(1, &m_index_tex);
     glBindTexture(GL_TEXTURE_2D, m_index_tex);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
