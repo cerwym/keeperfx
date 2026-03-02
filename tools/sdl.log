@@ -1,0 +1,7 @@
+KeeperFX: LbBullfrogMain started, log at ux0:data/keeperfx/keeperfx.log
+KeeperFX: LbTimerInit...
+KeeperFX: LbScreenInitialize... (retval so far=1)
+KeeperFX: screen init done retval=1
+KeeperFX: setup_game...
+gxm init failed: -2141519871
+gxm init failed: -2141519871

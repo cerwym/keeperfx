@@ -28,7 +28,7 @@
 extern "C" {
 #endif
 /******************************************************************************/
-struct Game game;
+struct Game *gpGame = NULL;
 
 GameTurn get_gameturn()
 {

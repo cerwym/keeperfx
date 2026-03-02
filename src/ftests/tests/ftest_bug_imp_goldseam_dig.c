@@ -62,7 +62,7 @@ FTestActionResult ftest_bug_imp_goldseam_dig_action001__map_setup(struct FTestAc
     ftest_util_replace_slabs(36, 42, 38, 44, SlbT_TREASURE, PLAYER0);
 
     // store/broadcast the gold stored in a single tile
-    vars->game_gold_amount = game.conf.rules.game.gold_per_gold_block;
+    vars->game_gold_amount = game.conf.rules.gameplay.gold_per_gold_block;
     message_add_fmt(MsgType_Player, PLAYER0, "Game gold per gold block: %ld", vars->game_gold_amount);
 
     return FTRs_Go_To_Next_Action;

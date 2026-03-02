@@ -104,6 +104,7 @@ obj/ariadne_tringls.o \
 obj/ariadne_wallhug.o \
 obj/bflib_base_tcp.o \
 obj/bflib_basics.o \
+obj/kfx_memory.o \
 obj/bflib_coroutine.o \
 obj/bflib_client_tcp.o \
 obj/bflib_cpu.o \

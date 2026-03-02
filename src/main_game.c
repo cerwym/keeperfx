@@ -455,7 +455,10 @@ void faststartup_saved_packet_game(void)
  */
 void clear_complete_game(void)
 {
-    memset(&game, 0, sizeof(struct Game));
+    if (gpGame == NULL)
+        gpGame = (struct Game *)KfxCalloc(1, sizeof(struct Game));
+    else
+        memset(gpGame, 0, sizeof(struct Game));
     memset(&intralvl, 0, sizeof(struct IntralevelData));
     game.turns_packetoff = -1;
     game.local_plyr_idx = default_loc_player;

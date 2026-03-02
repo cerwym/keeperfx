@@ -183,6 +183,17 @@ endif()
 # the FFmpeg libraries live in the PLATFORM_VITA external-libraries block further below.
 if(PLATFORM_VITA)
     list(APPEND KEEPERFX_SOURCES_CXX "src/bflib_fmvids.cpp")
+    # psvDebugScreen: minimal framebuffer text renderer (from vitaSDK samples).
+    # Used for pre-vitaGL fatal error messages so the user sees an on-screen
+    # message rather than a silent crash or a log file entry.
+    # debugScreenFont.c is #include'd by debugScreen.c; exclude the font file
+    # from the glob to prevent a double-compilation, and suppress warnings that
+    # originate in this third-party code.
+    list(FILTER KEEPERFX_SOURCES_C EXCLUDE REGEX ".*/debugscreen/debugScreenFont\\.c$")
+    list(FILTER KEEPERFX_SOURCES_C EXCLUDE REGEX ".*/debugscreen/debugScreen\\.c$")
+    list(APPEND KEEPERFX_SOURCES_C "src/platform/debugscreen/debugScreen.c")
+    set_source_files_properties("src/platform/debugscreen/debugScreen.c"
+        PROPERTIES COMPILE_FLAGS "-Wno-shadow")
 endif()
 
 # Global definitions for all targets.
@@ -316,7 +327,6 @@ if(PLATFORM_VITA)
             add_compile_definitions(VITA_HAVE_VITAGL=1)
             target_link_libraries(keeperfx       PRIVATE ${VITAGL_LIB} ${VITASHARK_LIB} ${MATHNEON_LIB})
             target_link_libraries(keeperfx_hvlog PRIVATE ${VITAGL_LIB} ${VITASHARK_LIB} ${MATHNEON_LIB})
-
             # .gxp shader binaries are pre-compiled manually with tools/psp2cgc.exe and committed.
             # To recompile: tools\psp2cgc.exe -profile sce_vp_psp2 -Wperf -O2 shaders\vita_blit_v.cg -o shaders\vita_blit_v.gxp
             #               tools\psp2cgc.exe -profile sce_fp_psp2 -Wperf -O2 shaders\vita_blit_f.cg -o shaders\vita_blit_f.gxp
@@ -343,6 +353,16 @@ if(PLATFORM_VITA)
     find_library(SCESHACCCGEXT_STUB SceShaccCgExt_stub HINTS "$ENV{VITASDK}/arm-vita-eabi/lib")
     target_link_libraries(keeperfx       PRIVATE SceGxm_stub SceDisplay_stub SceCtrl_stub SceTouch_stub ScePower_stub SceAudio_stub SceShaccCg_stub SceKernelDmacMgr_stub)
     target_link_libraries(keeperfx_hvlog PRIVATE SceGxm_stub SceDisplay_stub SceCtrl_stub SceTouch_stub ScePower_stub SceAudio_stub SceShaccCg_stub SceKernelDmacMgr_stub)
+    # VITA_SCE_DIAG: compile-in taiHEN import hooks for SCE subsystem tracing.
+    # Enabled by the vita-debug preset; compiles to nothing in reldebug/release.
+    option(VITA_SCE_DIAG "Enable taiHEN SCE subsystem diagnostic hooks (vita-debug only)" OFF)
+    if(VITA_SCE_DIAG)
+        target_compile_definitions(keeperfx       PRIVATE VITA_SCE_DIAG=1)
+        target_compile_definitions(keeperfx_hvlog PRIVATE VITA_SCE_DIAG=1)
+        target_link_libraries(keeperfx       PRIVATE taihen_stub)
+        target_link_libraries(keeperfx_hvlog PRIVATE taihen_stub)
+        message(STATUS "VITA_SCE_DIAG enabled — taiHEN SCE hooks active in this build")
+    endif()
     if(SCESHACCCGEXT_STUB)
         target_link_libraries(keeperfx       PRIVATE ${SCESHACCCGEXT_STUB})
         target_link_libraries(keeperfx_hvlog PRIVATE ${SCESHACCCGEXT_STUB})

@@ -203,6 +203,7 @@
                 "PLATFORM_VITA": "ON",
                 "VITA_PERF_LOG": "ON",
                 "VITA_ENABLE_VITAGL": "ON",
+                "VITA_SCE_DIAG": "ON",
                 "CMAKE_EXPORT_COMPILE_COMMANDS": "on"
             }
         },

@@ -48,34 +48,41 @@ const struct ConfigFileData keeper_effects_file_data = {
 };
 
 
+#pragma push_macro("game")
+#undef game
 const struct NamedField effects_effectgenerator_named_fields[] = {
-    {"NAME",                   0, field(game.conf.effects_conf.effectgen_cfgstats[0].code_name),            0,    INT32_MIN, UINT32_MAX, effectgen_desc,  value_name,      assign_null},
-    {"GENERATIONDELAYMIN",     0, field(game.conf.effects_conf.effectgen_cfgstats[0].generation_delay_min), 0,    INT32_MIN, UINT32_MAX, NULL,            value_default,   assign_default},
-    {"GENERATIONDELAYMAX",     0, field(game.conf.effects_conf.effectgen_cfgstats[0].generation_delay_max), 0,    INT32_MIN, UINT32_MAX, NULL,            value_default,   assign_default},
-    {"GENERATIONAMOUNT",       0, field(game.conf.effects_conf.effectgen_cfgstats[0].generation_amount),    0,    INT32_MIN, UINT32_MAX, NULL,            value_default,   assign_default},
-    {"EFFECTMODEL",            0, field(game.conf.effects_conf.effectgen_cfgstats[0].effect_model),         0,    INT32_MIN, UINT32_MAX, NULL,            value_effOrEffEl,assign_default},
-    {"IGNORETERRAIN",          0, field(game.conf.effects_conf.effectgen_cfgstats[0].ignore_terrain),       0,    INT32_MIN, UINT32_MAX, NULL,            value_default,   assign_default},
-    {"SPAWNHEIGHT",            0, field(game.conf.effects_conf.effectgen_cfgstats[0].spawn_height),         1,    INT32_MIN, UINT32_MAX, NULL,            value_default,   assign_default},
-    {"ACCELERATIONMIN",        0, field(game.conf.effects_conf.effectgen_cfgstats[0].acc_x_min),            0,    INT32_MIN, UINT32_MAX, NULL,            value_default,   assign_default},
-    {"ACCELERATIONMIN",        1, field(game.conf.effects_conf.effectgen_cfgstats[0].acc_y_min),            0,    INT32_MIN, UINT32_MAX, NULL,            value_default,   assign_default},
-    {"ACCELERATIONMIN",        2, field(game.conf.effects_conf.effectgen_cfgstats[0].acc_z_min),            0,    INT32_MIN, UINT32_MAX, NULL,            value_default,   assign_default},
-    {"ACCELERATIONMAX",        0, field(game.conf.effects_conf.effectgen_cfgstats[0].acc_x_max),            0,    INT32_MIN, UINT32_MAX, NULL,            value_default,   assign_default},
-    {"ACCELERATIONMAX",        1, field(game.conf.effects_conf.effectgen_cfgstats[0].acc_y_max),            0,    INT32_MIN, UINT32_MAX, NULL,            value_default,   assign_default},
-    {"ACCELERATIONMAX",        2, field(game.conf.effects_conf.effectgen_cfgstats[0].acc_z_max),            0,    INT32_MIN, UINT32_MAX, NULL,            value_default,   assign_default},
-    {"SOUND",                  0, field(game.conf.effects_conf.effectgen_cfgstats[0].sound_sample_idx),     0,    INT32_MIN, UINT32_MAX, NULL,            value_default,   assign_default},
-    {"SOUND",                  1, field(game.conf.effects_conf.effectgen_cfgstats[0].sound_sample_rng),     0,    INT32_MIN, UINT32_MAX, NULL,            value_default,   assign_default},
+    {"NAME",                   0, field(gpGame->conf.effects_conf.effectgen_cfgstats[0], code_name),            0,    INT32_MIN, UINT32_MAX, effectgen_desc,  value_name,      assign_null},
+    {"GENERATIONDELAYMIN",     0, field(gpGame->conf.effects_conf.effectgen_cfgstats[0], generation_delay_min), 0,    INT32_MIN, UINT32_MAX, NULL,            value_default,   assign_default},
+    {"GENERATIONDELAYMAX",     0, field(gpGame->conf.effects_conf.effectgen_cfgstats[0], generation_delay_max), 0,    INT32_MIN, UINT32_MAX, NULL,            value_default,   assign_default},
+    {"GENERATIONAMOUNT",       0, field(gpGame->conf.effects_conf.effectgen_cfgstats[0], generation_amount),    0,    INT32_MIN, UINT32_MAX, NULL,            value_default,   assign_default},
+    {"EFFECTMODEL",            0, field(gpGame->conf.effects_conf.effectgen_cfgstats[0], effect_model),         0,    INT32_MIN, UINT32_MAX, NULL,            value_effOrEffEl,assign_default},
+    {"IGNORETERRAIN",          0, field(gpGame->conf.effects_conf.effectgen_cfgstats[0], ignore_terrain),       0,    INT32_MIN, UINT32_MAX, NULL,            value_default,   assign_default},
+    {"SPAWNHEIGHT",            0, field(gpGame->conf.effects_conf.effectgen_cfgstats[0], spawn_height),         1,    INT32_MIN, UINT32_MAX, NULL,            value_default,   assign_default},
+    {"ACCELERATIONMIN",        0, field(gpGame->conf.effects_conf.effectgen_cfgstats[0], acc_x_min),            0,    INT32_MIN, UINT32_MAX, NULL,            value_default,   assign_default},
+    {"ACCELERATIONMIN",        1, field(gpGame->conf.effects_conf.effectgen_cfgstats[0], acc_y_min),            0,    INT32_MIN, UINT32_MAX, NULL,            value_default,   assign_default},
+    {"ACCELERATIONMIN",        2, field(gpGame->conf.effects_conf.effectgen_cfgstats[0], acc_z_min),            0,    INT32_MIN, UINT32_MAX, NULL,            value_default,   assign_default},
+    {"ACCELERATIONMAX",        0, field(gpGame->conf.effects_conf.effectgen_cfgstats[0], acc_x_max),            0,    INT32_MIN, UINT32_MAX, NULL,            value_default,   assign_default},
+    {"ACCELERATIONMAX",        1, field(gpGame->conf.effects_conf.effectgen_cfgstats[0], acc_y_max),            0,    INT32_MIN, UINT32_MAX, NULL,            value_default,   assign_default},
+    {"ACCELERATIONMAX",        2, field(gpGame->conf.effects_conf.effectgen_cfgstats[0], acc_z_max),            0,    INT32_MIN, UINT32_MAX, NULL,            value_default,   assign_default},
+    {"SOUND",                  0, field(gpGame->conf.effects_conf.effectgen_cfgstats[0], sound_sample_idx),     0,    INT32_MIN, UINT32_MAX, NULL,            value_default,   assign_default},
+    {"SOUND",                  1, field(gpGame->conf.effects_conf.effectgen_cfgstats[0], sound_sample_rng),     0,    INT32_MIN, UINT32_MAX, NULL,            value_default,   assign_default},
     {NULL},
 };
+#pragma pop_macro("game")
+
+static int32_t* get_effectgen_count(void) { return &game.conf.effects_conf.effectgen_cfgstats_count; }
+static void* get_effectgen_base(void) { return game.conf.effects_conf.effectgen_cfgstats; }
+
 
 
 const struct NamedFieldSet effects_effectgenerator_named_fields_set = {
-    &game.conf.effects_conf.effectgen_cfgstats_count,
+    get_effectgen_count,
     "effectGenerator",
     effects_effectgenerator_named_fields,
     effectgen_desc,
     EFFECTSGEN_TYPES_MAX,
-    sizeof(game.conf.effects_conf.effectgen_cfgstats[0]),
-    game.conf.effects_conf.effectgen_cfgstats,
+    sizeof(gpGame->conf.effects_conf.effectgen_cfgstats[0]),
+    get_effectgen_base,
 };
 
 int32_t const imp_spangle_effects[] = {

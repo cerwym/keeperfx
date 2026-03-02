@@ -55,31 +55,34 @@ static int64_t value_overlay(const struct NamedField* named_field, const char* v
 
 const struct NamedField lenses_data_named_fields[] = {
     //name           //pos    //field                                           //default //min     //max    //NamedCommand
-    {"NAME",              0, field(lenses_conf.lenses[0].code_name),                0,        0,        0, lenses_desc,  value_name,      assign_null},
-    {"MIST",              0, field(lenses_conf.lenses[0].mist_file),                0,        0,        0, NULL,         value_mist,      assign_null},
-    {"MIST",              1, field(lenses_conf.lenses[0].mist_lightness),           0,        0,       63, NULL,         value_default,   assign_default},
-    {"MIST",              2, field(lenses_conf.lenses[0].mist_ghost),               0,        0,      255, NULL,         value_default,   assign_default},
-    {"MIST",              3, field(lenses_conf.lenses[0].mist_pos_x_step),          2,        0,      255, NULL,         value_default,   assign_default},
-    {"MIST",              4, field(lenses_conf.lenses[0].mist_pos_y_step),          1,        0,      255, NULL,         value_default,   assign_default},
-    {"MIST",              5, field(lenses_conf.lenses[0].mist_sec_x_step),        253,        0,      255, NULL,         value_default,   assign_default},
-    {"MIST",              6, field(lenses_conf.lenses[0].mist_sec_y_step),          3,        0,      255, NULL,         value_default,   assign_default},
-    {"DISPLACEMENT",      0, field(lenses_conf.lenses[0].displace_kind),            0,        0,      255, NULL,         value_default,   assign_default},
-    {"DISPLACEMENT",      1, field(lenses_conf.lenses[0].displace_magnitude),       0,        0,      511, NULL,         value_default,   assign_default},
-    {"DISPLACEMENT",      2, field(lenses_conf.lenses[0].displace_period),          1,        0,      511, NULL,         value_displace,  assign_default},
-    {"PALETTE",           0, field(lenses_conf.lenses[0].palette),                  0,        0,        0, NULL,         value_pallete,   assign_null},
-    {"OVERLAY",           0, field(lenses_conf.lenses[0].overlay_file),             0,        0,        0, NULL,         value_overlay,   assign_null},
-    {"OVERLAY",           1, field(lenses_conf.lenses[0].overlay_alpha),          128,        0,      255, NULL,         value_default,   assign_default},
+    {"NAME",              0, field(lenses_conf.lenses[0], code_name),                0,        0,        0, lenses_desc,  value_name,      assign_null},
+    {"MIST",              0, field(lenses_conf.lenses[0], mist_file),                0,        0,        0, NULL,         value_mist,      assign_null},
+    {"MIST",              1, field(lenses_conf.lenses[0], mist_lightness),           0,        0,       63, NULL,         value_default,   assign_default},
+    {"MIST",              2, field(lenses_conf.lenses[0], mist_ghost),               0,        0,      255, NULL,         value_default,   assign_default},
+    {"MIST",              3, field(lenses_conf.lenses[0], mist_pos_x_step),          2,        0,      255, NULL,         value_default,   assign_default},
+    {"MIST",              4, field(lenses_conf.lenses[0], mist_pos_y_step),          1,        0,      255, NULL,         value_default,   assign_default},
+    {"MIST",              5, field(lenses_conf.lenses[0], mist_sec_x_step),        253,        0,      255, NULL,         value_default,   assign_default},
+    {"MIST",              6, field(lenses_conf.lenses[0], mist_sec_y_step),          3,        0,      255, NULL,         value_default,   assign_default},
+    {"DISPLACEMENT",      0, field(lenses_conf.lenses[0], displace_kind),            0,        0,      255, NULL,         value_default,   assign_default},
+    {"DISPLACEMENT",      1, field(lenses_conf.lenses[0], displace_magnitude),       0,        0,      511, NULL,         value_default,   assign_default},
+    {"DISPLACEMENT",      2, field(lenses_conf.lenses[0], displace_period),          1,        0,      511, NULL,         value_displace,  assign_default},
+    {"PALETTE",           0, field(lenses_conf.lenses[0], palette),                  0,        0,        0, NULL,         value_pallete,   assign_null},
+    {"OVERLAY",           0, field(lenses_conf.lenses[0], overlay_file),             0,        0,        0, NULL,         value_overlay,   assign_null},
+    {"OVERLAY",           1, field(lenses_conf.lenses[0], overlay_alpha),          128,        0,      255, NULL,         value_default,   assign_default},
     {NULL},
 };
 
+static int32_t* get_lenses_count(void) { return &lenses_conf.lenses_count; }
+static void* get_lenses_base(void) { return lenses_conf.lenses; }
+
 const struct NamedFieldSet lenses_data_named_fields_set = {
-    &lenses_conf.lenses_count,
+    get_lenses_count,
     "lens",
     lenses_data_named_fields,
     lenses_desc,
     LENS_ITEMS_MAX,
     sizeof(lenses_conf.lenses[0]),
-    lenses_conf.lenses,
+    get_lenses_base,
 };
 
 /******************************************************************************/
@@ -108,7 +111,7 @@ static int64_t value_pallete(const struct NamedField* named_field, const char* v
 {
     lenses_conf.lenses[idx].flags |= LCF_HasPalette;
     char* fname = prepare_file_path(FGrp_StdData, value_text);
-    if (LbFileLoadAt(fname, (char*)(named_field->field) + named_fields_set->struct_size * idx) != PALETTE_SIZE)
+    if (LbFileLoadAt(fname, (char*)named_fields_set->get_struct_base() + named_fields_set->struct_size * idx + (ptrdiff_t)named_field->field) != PALETTE_SIZE)
     {
         CONFWRNLOG("Couldn't load \"%s\" file for \"%s\" parameter in [%s%d] block of lens.cfg file.",
             value_text, named_field->name, named_fields_set->block_basename, idx);

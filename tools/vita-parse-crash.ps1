@@ -24,21 +24,26 @@ param(
 $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path $PSScriptRoot -Parent
 
-# --- Resolve ELF: prefer reldebug (has symbols), fall back to release ---
-$ElfPaths = @(
+# --- Resolve ELF: pick the most recently modified ELF across all Vita build dirs ---
+# vita-debug has the most symbols; reldebug has good symbols; release is stripped.
+# Newest mtime wins so we always symbolize against the build we actually deployed.
+$ElfCandidates = @(
+    "out/build/vita-debug/keeperfx",
     "out/build/vita-reldebug/keeperfx",
     "out/build/vita-release/keeperfx"
-)
+) | ForEach-Object {
+    $full = Join-Path $RepoRoot $_
+    if (Test-Path $full) { Get-Item $full }
+} | Where-Object { $_ -ne $null } |
+    Sort-Object LastWriteTime -Descending
+
 $ElfFile = $null
-foreach ($p in $ElfPaths) {
-    $full = Join-Path $RepoRoot $p
-    if (Test-Path $full) { $ElfFile = $full; break }
-}
+if ($ElfCandidates) { $ElfFile = $ElfCandidates[0].FullName }
 if (-not $ElfFile) {
-    Write-Error "No Vita ELF found. Build vita-reldebug or vita-release first."
+    Write-Error "No Vita ELF found. Build vita-debug, vita-reldebug, or vita-release first."
     exit 1
 }
-Write-Host "Using ELF: $ElfFile" -ForegroundColor Cyan
+Write-Host "Using ELF: $ElfFile  (modified $($ElfCandidates[0].LastWriteTime))" -ForegroundColor Cyan
 
 # --- List dumps on Vita ---
 Write-Host "Fetching dump list from ftp://$VitaFTP/ux0:/data/ ..." -ForegroundColor Cyan

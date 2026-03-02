@@ -1,0 +1,19 @@
+Dungeon Keeper FX ver 1.3.1.0  (standard release) git:
+LOG CREATED  @ 06:53:06  02-03-2026
+
+Sync: [0] LbMouseChangeMoveRatio: New ratio 256x256
+Sync: CPU AnonymousCPU type 0 family 4 model 0 stepping 0 features 00000000
+Sync: Build image base: 0x0
+Sync: Operating System: PS Vita
+Warning: Mods order file "mods/load_order.cfg" doesn't exist or is too small.
+[0] setup_game: [perf] load_configuration                step   22ms  total   22ms
+Sync: [0] init_controller_input: GameController connected: PSVita Controller
+[0] setup_game: [perf] LbDataLoadAll(legal_load_files)   step  229ms  total  251ms
+Sync: [0] LbScreenSetup: Mode 640x480x8 setup succeeded
+[0] setup_game: [perf] setup_screen_mode_zero (legal)    step   12ms  total  263ms
+Error: [0] Init: RendererVita: vitaGL not pre-initialized (vita_vitagl_preinit failed before SDL_Init)
+Error: [0] RendererInit: RendererInit: backend 'Vita (vitaGL palette shader)' failed to initialise
+Error: [0] setup_game: Failed to initialise renderer; falling back to software
+Error: [0] Init: RendererSoftware: SDL_GetWindowSurface failed: Window framebuffer support not available
+Error: [0] RendererInit: RendererInit: backend 'Software' failed to initialise
+Error: [0] setup_game: All renderers failed to initialise — cannot continue

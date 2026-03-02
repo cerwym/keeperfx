@@ -1,0 +1,3 @@
+starting vita_vitagl_preinit
+calling vglInitExtended(0, 960, 544, 16MB, NONE)
+vglInitExtended FAILED

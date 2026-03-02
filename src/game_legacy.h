@@ -380,7 +380,8 @@ struct Game {
 
 #pragma pack()
 /******************************************************************************/
-extern struct Game game;
+extern struct Game *gpGame;
+#define game (*gpGame)
 extern int32_t game_num_fps;
 
 extern int32_t game_num_fps_draw_current;

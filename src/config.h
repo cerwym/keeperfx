@@ -175,8 +175,9 @@ enum dataTypes
                     char: dt_char, \
                     default: dt_default)))
 
-#define field(field)\
-    &field, var_type(field)
+#define field(elem0_expr, member_path) \
+    (void*)(ptrdiff_t)__builtin_offsetof(__typeof__(elem0_expr), member_path), \
+    var_type(((elem0_expr).member_path))
 
 /******************************************************************************/
 struct CommandWord {
@@ -209,13 +210,13 @@ struct NamedField {
 };
 
 struct NamedFieldSet {
-    int32_t *const count_field;
+    int32_t* (*get_count)(void);
     const char* block_basename;
     const struct NamedField* named_fields;
     struct NamedCommand* names;
     const int max_count;
     const size_t struct_size;
-    const void* struct_base;
+    void* (*get_struct_base)(void);
 };
 
 #define NAMFIELDWRNLOG(format, ...) LbWarnLog("%s(line %lu): " format "\n", src_str , text_line_number, ##__VA_ARGS__)
