@@ -37,7 +37,12 @@ extern "C" {
 /******************************************************************************/
 
 long free_Triangles = 0;
-struct Triangle Triangles[TRIANLGLES_COUNT];
+/* Worst-case capacity for the Constrained Delaunay Triangulation scratch arrays.
+ * These are runtime-computed per map load -- not predefined data. The static arrays
+ * were moved to the heap to reduce BSS. A future optimization could replace the CDT
+ * algorithm entirely (e.g. navigation mesh or flow-field pathing) at which point
+ * these arrays and their fixed upper bounds can be removed. */
+struct Triangle *Triangles = NULL;
 long count_Triangles = 0;
 long ix_Triangles = 0;
 

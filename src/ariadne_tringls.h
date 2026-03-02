@@ -44,7 +44,7 @@ struct Triangle {
 #define NAV_COL_UNSET USHRT_MAX
 
 /******************************************************************************/
-extern struct Triangle Triangles[TRIANLGLES_COUNT];
+extern struct Triangle *Triangles;
 extern long count_Triangles;
 extern long ix_Triangles;
 

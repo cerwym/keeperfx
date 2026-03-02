@@ -34,7 +34,8 @@ static long count_Points;
 static long ix_Points;
 static long free_Points;
 
-struct Point ari_Points[POINTS_COUNT];
+/* See comment on Triangles[] in ariadne_tringls.c */
+struct Point *ari_Points = NULL;
 /******************************************************************************/
 
 AridPointId point_new(void)
