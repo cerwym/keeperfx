@@ -28,6 +28,7 @@
 #include <vitashark.h>
 #include <psp2/gxm.h>
 #include <psp2/kernel/clib.h>
+#include <psp2/io/fcntl.h>
 #endif
 
 #include "post_inc.h"
@@ -40,20 +41,48 @@
 #ifdef VITA_HAVE_VITAGL
 
 static bool s_vitagl_ready = false;
+static int  s_shark_ret    = 0;  // captured for deferred logging
 
 extern "C" void vita_vitagl_preinit(void)
 {
     if (s_vitagl_ready) return;
-    sceClibPrintf("KeeperFX: vita_vitagl_preinit: calling shark_init\n");
-    shark_init(NULL);
-    sceClibPrintf("KeeperFX: vita_vitagl_preinit: calling vglInitExtended\n");
-    GLboolean ok = vglInitExtended(0, 960, 544, 0x800000, SCE_GXM_MULTISAMPLE_NONE);
-    if (!ok) {
-        sceClibPrintf("KeeperFX: vita_vitagl_preinit: vglInitExtended FAILED\n");
-        return;
+
+    // Write a step-by-step log we can FTP even if the game crashes before
+    // the main logger starts.  Uses raw sceIo so it works at any init stage.
+    SceUID logfd = sceIoOpen("ux0:data/keeperfx/vitagl_preinit.log",
+                              SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
+#define PREINIT_LOG(msg) do { \
+    sceClibPrintf("KeeperFX vitagl: " msg "\n"); \
+    if (logfd >= 0) { sceIoWrite(logfd, msg "\n", sizeof(msg)); } } while(0)
+
+    PREINIT_LOG("starting vita_vitagl_preinit");
+
+    s_shark_ret = shark_init(NULL);
+    {
+        char buf[64];
+        sceClibSnprintf(buf, sizeof(buf), "shark_init returned: %d (0x%08X)\n",
+                        s_shark_ret, (unsigned)s_shark_ret);
+        sceClibPrintf("KeeperFX vitagl: %s", buf);
+        if (logfd >= 0) sceIoWrite(logfd, buf, sceClibStrnlen(buf, sizeof(buf)));
     }
-    sceClibPrintf("KeeperFX: vita_vitagl_preinit: vitaGL ready\n");
-    s_vitagl_ready = true;
+    // Negative means shark failed; still attempt vglInitExtended — vitaGL can
+    // run without Cg compilation (shader compile will fail later if needed).
+
+    PREINIT_LOG("calling vglInitExtended(0, 960, 544, 8MB, NONE)");
+    if (logfd >= 0) sceIoClose(logfd);  // flush before potentially crashing
+
+    GLboolean ok = vglInitExtended(0, 960, 544, 0x800000, SCE_GXM_MULTISAMPLE_NONE);
+
+    logfd = sceIoOpen("ux0:data/keeperfx/vitagl_preinit.log",
+                      SCE_O_WRONLY | SCE_O_APPEND, 0777);
+    if (ok) {
+        PREINIT_LOG("vglInitExtended OK — vitaGL ready");
+        s_vitagl_ready = true;
+    } else {
+        PREINIT_LOG("vglInitExtended FAILED");
+    }
+    if (logfd >= 0) sceIoClose(logfd);
+#undef PREINIT_LOG
 }
 
 // ---------------------------------------------------------------------------
@@ -119,6 +148,7 @@ bool RendererVita::Init()
 
 #ifdef VITA_HAVE_VITAGL
     if (s_vitagl_ready) {
+        SYNCLOG("RendererVita: vitaGL preinit OK (shark_init=%d)", s_shark_ret);
         // vitaGL context is up — set up GL resources.
         glGenTextures(1, &m_index_tex);
         glBindTexture(GL_TEXTURE_2D, m_index_tex);
@@ -173,7 +203,7 @@ bool RendererVita::Init()
         SYNCLOG("RendererVita: vitaGL palette shader initialised (%dx%d -> 960x544)", k_gameW, k_gameH);
         return true;
     }
-    WARNLOG("RendererVita: vitaGL preinit failed — falling back to SDL2 blit");
+    WARNLOG("RendererVita: vitaGL preinit failed (shark_init=%d) — falling back to SDL2 blit", s_shark_ret);
 #endif // VITA_HAVE_VITAGL
 
     // SDL2 blit path (fallback or non-vitaGL build).
