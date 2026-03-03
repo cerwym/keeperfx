@@ -1,5 +1,15 @@
 {
 	"recommendations": [
+		// C/C++ IntelliSense and debugging
 		"ms-vscode.cpptools",
+		// Docker container management UI
+		"ms-azuretools.vscode-docker",
+		// Task sidebar — shows tasks.json entries in the Explorer panel
+		"spmeesseman.vscode-taskexplorer"
 	],
+	// All builds run inside Docker; these extensions would fight with that setup
+	"unwantedRecommendations": [
+		"ms-vscode.cmake-tools",
+		"ms-vscode.makefile-tools"
+	]
 }

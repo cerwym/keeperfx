@@ -1,5 +1,9 @@
 {
 	"C_Cpp.intelliSenseEngine": "default",
+	// Suppress cmake-tools from auto-configuring — all builds run in Docker
+	"cmake.configureOnOpen": false,
+	"cmake.autoSelectActiveFolder": false,
+	"cmake.showOptionsMovedNotification": false,
 	"files.associations": {
 		"defaultlaunch": "jsonc",
 		"defaultsettings": "jsonc",

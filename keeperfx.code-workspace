@@ -8,6 +8,10 @@
 		}
 	],
     "settings": {
+        // Suppress cmake-tools from auto-configuring — all builds run in Docker
+        "cmake.configureOnOpen": false,
+        "cmake.autoSelectActiveFolder": false,
+        "cmake.showOptionsMovedNotification": false,
         "files.associations": {
             "game_legacy.h": "c",
             "globals.h": "c",
