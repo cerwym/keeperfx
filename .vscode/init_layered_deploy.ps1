@@ -43,7 +43,7 @@ function Write-C([string]$Msg, [string]$Color = 'Reset') {
 
 $DEPLOY      = Join-Path $WorkspaceFolder ".deploy"
 $DK_IMAGE    = "keeperfx-dk-originals:local"
-$MINGW_IMAGE = "ghcr.io/dkfans/keeperfx-build-mingw32:latest"
+$MINGW_IMAGE = "ghcr.io/cerwym/keeperfx-build-mingw32:latest"
 
 # Read DOCKER_ORG from env if set (matches compose.yml)
 if ($env:DOCKER_ORG) { $MINGW_IMAGE = "ghcr.io/$($env:DOCKER_ORG)/keeperfx-build-mingw32:latest" }

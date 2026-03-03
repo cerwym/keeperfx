@@ -8,9 +8,12 @@
 #   docker compose run wasm    bash -c "cmake --preset wasm-release         && cmake --build --preset wasm-release"
 #   docker compose pull                          # Update all images
 #
-# Packaging (mingw32 only — packaging tools are Linux-based):
+# Packaging (linux only — packaging tools are Linux-based):
 #   docker compose run linux bash -c "make pkg-gfx"
 #   docker compose run linux bash -c "make pkg-lang"
+#
+# Vita crash parsing:
+#   docker compose run vitasdk bash -c "arm-vita-eabi-addr2line -e out/build/vita-debug/keeperfx -fCa 0x81XXXXXX"
 
 name: keeperfx
 
@@ -27,16 +30,20 @@ services:
 
   mingw32:
     <<: *build-base
-    image: ghcr.io/${DOCKER_ORG:-dkfans}/keeperfx-build-mingw32:latest
+    image: ghcr.io/${DOCKER_ORG:-cerwym}/keeperfx-build-mingw32:latest
 
   mingw64:
     <<: *build-base
-    image: ghcr.io/${DOCKER_ORG:-dkfans}/keeperfx-build-mingw64:latest
+    image: ghcr.io/${DOCKER_ORG:-cerwym}/keeperfx-build-mingw64:latest
 
   linux:
     <<: *build-base
-    image: ghcr.io/${DOCKER_ORG:-dkfans}/keeperfx-build-linux:latest
+    image: ghcr.io/${DOCKER_ORG:-cerwym}/keeperfx-build-linux:latest
 
   wasm:
     <<: *build-base
-    image: ghcr.io/${DOCKER_ORG:-dkfans}/keeperfx-build-wasm:latest
+    image: ghcr.io/${DOCKER_ORG:-cerwym}/keeperfx-build-wasm:latest
+
+  vitasdk:
+    <<: *build-base
+    image: ghcr.io/${DOCKER_ORG:-cerwym}/keeperfx-build-vitasdk:latest

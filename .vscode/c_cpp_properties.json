@@ -1,7 +1,7 @@
 {
     "configurations": [
         {
-            "name": "WSL MinGW",
+            "name": "Docker MinGW",
             "includePath": [
                 "${workspaceFolder}/src",
                 "${workspaceFolder}/deps/zlib/include",

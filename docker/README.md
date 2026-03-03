@@ -32,33 +32,7 @@ There is also one local-only image that is **never pushed to any registry**:
   ```pwsh
   git clone --recurse-submodules https://github.com/<org>/keeperfx
   ```
-- **Nothing else.** No MinGW, no CMake, no SDL2 dev libs, no WSL toolchain.
-
----
-
-## WSL cleanup
-
-If you have an existing WSL Ubuntu distro with build tools installed, it is now
-fully redundant.  Before deleting it, check if there is anything to save:
-
-```pwsh
-# Copy SSH keys to Windows if they aren't already there
-wsl bash -c "cp -r ~/.ssh /mnt/c/Users/$env:USERNAME/.ssh"
-
-# Copy git config to Windows if needed
-wsl bash -c "cp ~/.gitconfig /mnt/c/Users/$env:USERNAME/.gitconfig"
-```
-
-Confirm Docker Desktop WSL integration is enabled:
-**Docker Desktop → Settings → Resources → WSL Integration → Enable integration with your default WSL distro**
-
-Then delete the distro:
-```pwsh
-wsl --list            # Find the name (usually "Ubuntu" or "Ubuntu-24.04")
-wsl --unregister Ubuntu
-```
-
-After this `docker` works directly from PowerShell via Docker Desktop.
+- **Nothing else.** No MinGW, no CMake, no SDL2 dev libs, no WSL, no local toolchain of any kind.
 
 ---
 
@@ -74,7 +48,7 @@ is mounted as `/src` inside the container; build output lands in
 docker compose -f docker/compose.yml pull
 ```
 
-Set `DOCKER_ORG` if you are not using the default `dkfans` organisation:
+Override `DOCKER_ORG` only if using a fork with its own published images:
 ```pwsh
 $env:DOCKER_ORG = "myorg"
 docker compose -f docker/compose.yml pull
@@ -191,7 +165,7 @@ Run from the repository root.  The source tree is mounted read-write at `/src`
 inside the container so build output lands in `out/build/<preset>/` on your
 host machine.
 
-### Windows x86 (cross-compile from Linux/macOS/WSL)
+### Windows x86 (cross-compile via Docker)
 
 ```sh
 docker pull ghcr.io/<org>/keeperfx-build-mingw32:latest
@@ -202,7 +176,7 @@ docker run --rm \
   bash -c "cmake --preset windows-x86-release && cmake --build --preset windows-x86-release"
 ```
 
-### Windows x64 (cross-compile from Linux/macOS/WSL)
+### Windows x64 (cross-compile via Docker)
 
 ```sh
 docker pull ghcr.io/<org>/keeperfx-build-mingw64:latest

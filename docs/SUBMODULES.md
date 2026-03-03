@@ -42,7 +42,7 @@ cd ..
    ```
 
 2. **Watch auto-compile** (if watcher running):
-   - File saved → watcher detects → runs `wsl make pkg-gfx` → outputs DAT files
+   - File saved → watcher detects → runs `docker compose -f docker/compose.yml run --rm linux bash -c "make pkg-gfx"` → outputs DAT files
 
 3. **Commit changes** in submodule:
    ```powershell
@@ -206,16 +206,16 @@ After editing assets in submodules, compile them:
 
 ```powershell
 # Graphics (processes gfx/ and custom/)
-wsl make pkg-gfx
+docker compose -f docker/compose.yml run --rm linux bash -c "make pkg-gfx"
 
 # Sounds (processes sfx/)
-wsl make pkg-sfx
+docker compose -f docker/compose.yml run --rm linux bash -c "make pkg-sfx"
 
 # Localization (processes lang/)
-wsl make pkg-lang
+docker compose -f docker/compose.yml run --rm linux bash -c "make pkg-lang"
 
 # All assets
-wsl make pkg-all
+docker compose -f docker/compose.yml run --rm linux bash -c "make pkg-all"
 ```
 
 **With file watcher**: Compilation happens automatically on save!
@@ -226,7 +226,7 @@ wsl make pkg-all
 
 # Edit gfx/menufx/test.png
 # → Watcher detects change
-# → Runs wsl make pkg-gfx
+# → Runs docker compose run linux bash -c "make pkg-gfx"
 # → Outputs pkg/data/gui2-64.dat
 ```
 
@@ -369,8 +369,7 @@ For automated builds (GitHub Actions, etc.):
 
 - name: Build assets
   run: |
-    wsl make pkg-gfx
-    wsl make pkg-sfx
+    docker compose -f docker/compose.yml run --rm linux bash -c "make pkg-gfx && make pkg-sfx"
 ```
 
 ---
