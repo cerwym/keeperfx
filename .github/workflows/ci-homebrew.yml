@@ -63,7 +63,7 @@ jobs:
             /usr/local/vitasdk/arm-vita-eabi/include/libavcodec
             /usr/local/vitasdk/arm-vita-eabi/include/libavutil
             /usr/local/vitasdk/arm-vita-eabi/include/libswresample
-          key: ffmpeg-vita-fish47-v2
+          key: ffmpeg-vita-fish47-v3
 
       - name: Build FFmpeg-vita
         if: matrix.preset == 'vita-release' && steps.cache-ffmpeg-vita.outputs.cache-hit != 'true'
@@ -93,7 +93,8 @@ jobs:
             --enable-muxer=null \
             --enable-parser=aac,mpegaudio,vorbis,opus \
             --enable-protocol=file \
-            --disable-network
+            --disable-network \
+            --disable-bzlib
           make -j$(nproc)
           make install
 

@@ -384,7 +384,8 @@ if(PLATFORM_VITA)
         # so the game heap and GPU memory pool are unified (single pool, no
         # cross-allocator fragmentation).  Uses GCC --wrap at link time so no
         # existing source needs changing.  Technique from d3es-vita.
-        list(APPEND KEEPERFX_SOURCES_C "src/platform/vita_malloc_wrap.c")
+        target_sources(keeperfx       PRIVATE "src/platform/vita_malloc_wrap.c")
+        target_sources(keeperfx_hvlog PRIVATE "src/platform/vita_malloc_wrap.c")
         target_link_options(keeperfx       PRIVATE
             -Wl,--wrap,malloc -Wl,--wrap,free -Wl,--wrap,calloc
             -Wl,--wrap,realloc -Wl,--wrap,memalign)
