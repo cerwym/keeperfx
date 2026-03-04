@@ -111,7 +111,7 @@ if (-not $currentHash) {
     $reason = if (-not (Test-Path $pkgData)) { "no cached output" } else { "submodule changed ($($currentHash.Substring(0,8)))" }
     Write-C "  Building pkg-gfx ($reason)..." 'Yellow'
     docker compose -f (Join-Path $WorkspaceFolder "docker\compose.yml") `
-        run --rm linux bash -c "make pkg-gfx"
+        run --rm linux bash -c "make pkg-gfx -j\$(nproc)"
     if ($LASTEXITCODE -eq 0) {
         New-Item -ItemType Directory -Path (Split-Path $hashFile) -Force | Out-Null
         Set-Content $hashFile $currentHash

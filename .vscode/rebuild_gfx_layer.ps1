@@ -52,11 +52,20 @@ if (-not (Test-Path $DEPLOY)) {
 $subStatus = (git -C $WorkspaceFolder submodule status gfx 2>&1)
 if ($subStatus -match '^-') {
     Write-C "Initializing gfx submodule..." 'Yellow'
-    git -C $WorkspaceFolder submodule update --init gfx
+    git -C $WorkspaceFolder submodule update --init gfx 2>$null
     if ($LASTEXITCODE -ne 0) {
-        Write-C "ERROR: gfx submodule init failed. SSH key required?" 'Red'
-        Write-C "  URL: $(git -C $WorkspaceFolder config submodule.gfx.url)" 'Yellow'
-        exit 1
+        # git worktree quirk: submodule update --init can fail with "No such ref: HEAD"
+        # Fall back to cloning directly from the HTTPS URL
+        $gfxUrl = (git -C $WorkspaceFolder config submodule.gfx.url 2>$null)
+        if (-not $gfxUrl) { $gfxUrl = "https://github.com/Cerwym/FXGraphics.git" }
+        Write-C "  submodule init failed; cloning directly from $gfxUrl" 'Yellow'
+        $gfxBranch = (git -C $WorkspaceFolder config submodule.gfx.branch 2>$null)
+        if (-not $gfxBranch) { $gfxBranch = "develop" }
+        git clone $gfxUrl (Join-Path $WorkspaceFolder "gfx") --branch $gfxBranch --single-branch --depth 1
+        if ($LASTEXITCODE -ne 0) {
+            Write-C "ERROR: gfx clone failed." 'Red'
+            exit 1
+        }
     }
     $subStatus = (git -C $WorkspaceFolder submodule status gfx 2>&1)
 }
@@ -79,7 +88,7 @@ if (-not $Force -and (Test-Path $pkgData) -and ($currentHash -eq $cachedHash)) {
     Write-Host ""
 
     docker compose -f (Join-Path $WorkspaceFolder "docker\compose.yml") `
-        run --rm linux bash -c "make pkg-gfx"
+        run --rm linux bash -c "make pkg-gfx -j\$(nproc)"
 
     if ($LASTEXITCODE -ne 0) {
         Write-C "ERROR: make pkg-gfx failed." 'Red'

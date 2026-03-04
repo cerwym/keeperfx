@@ -38,8 +38,15 @@ echo
 SUB_STATUS=$(git -C "$WF" submodule status gfx 2>&1 || true)
 if [[ "$SUB_STATUS" == -* ]]; then
     echo -e "  ${C_YELLOW}Initializing gfx submodule...${C_RESET}"
-    git -C "$WF" submodule update --init gfx || \
-        err "gfx submodule init failed. SSH key required?\n  URL: $(git -C "$WF" config submodule.gfx.url)"
+    git -C "$WF" submodule update --init gfx 2>/dev/null || {
+        # git worktree quirk: submodule update --init can fail with "No such ref: HEAD"
+        # Fall back to cloning directly from the HTTPS URL
+        GFX_URL=$(git -C "$WF" config submodule.gfx.url 2>/dev/null || echo "https://github.com/Cerwym/FXGraphics.git")
+        GFX_BRANCH=$(git -C "$WF" config submodule.gfx.branch 2>/dev/null || echo "develop")
+        echo -e "  ${C_YELLOW}submodule init failed; cloning directly from $GFX_URL${C_RESET}"
+        git clone "$GFX_URL" "$WF/gfx" --branch "$GFX_BRANCH" --single-branch --depth 1 || \
+            err "gfx clone failed."
+    }
     SUB_STATUS=$(git -C "$WF" submodule status gfx 2>&1)
 fi
 
@@ -61,7 +68,7 @@ else
     echo -e "  ${C_YELLOW}Building pkg-gfx ($REASON, hash $SHORT)...${C_RESET}"
     echo
 
-    docker compose -f "$WF/docker/compose.yml" run --rm linux bash -c "make pkg-gfx"
+    docker compose -f "$WF/docker/compose.yml" run --rm linux bash -c "make pkg-gfx -j\$(nproc)"
 
     mkdir -p "$(dirname "$HASH_FILE")"
     echo "$CURRENT_HASH" > "$HASH_FILE"
