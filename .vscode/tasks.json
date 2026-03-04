@@ -122,6 +122,12 @@
 "windows": {
 "command": "powershell -ExecutionPolicy Bypass -File '${workspaceFolder}\\.vscode\\rebuild_gfx_layer.ps1' -WorkspaceFolder '${workspaceFolder}'"
 },
+"osx": {
+"command": "bash '${workspaceFolder}/.vscode/rebuild_gfx_layer.sh'"
+},
+"linux": {
+"command": "bash '${workspaceFolder}/.vscode/rebuild_gfx_layer.sh'"
+},
 "problemMatcher": [],
 "group": "build",
 "presentation": { "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
