@@ -165,7 +165,8 @@
             "inherits": [ "cross-base", "Debug" ],
             "cacheVariables": {
                 "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/mingw32.cmake",
-                "CMAKE_EXPORT_COMPILE_COMMANDS": "on"
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "on",
+                "KEEPERFX_NETWORKING": "OFF"
             }
         },
 

@@ -81,6 +81,13 @@ file(GLOB_RECURSE KEEPERFX_SOURCES_CXX "src/*.cpp")
 # Exclude stub files from the glob — they are added back explicitly when needed
 list(FILTER KEEPERFX_SOURCES_C EXCLUDE REGEX ".*/bflib_cpu_stub\\.c$")
 list(FILTER KEEPERFX_SOURCES_C EXCLUDE REGEX ".*/bflib_network_stub\\.c$")
+# debugscreen is Vita-only; always exclude from glob (added back explicitly in PLATFORM_VITA block)
+list(FILTER KEEPERFX_SOURCES_C EXCLUDE REGEX ".*/debugscreen/.*\\.c$")
+# RendererOpenGL requires glad; exclude when not available
+if(NOT KEEPERFX_RENDERER_OPENGL)
+    list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/renderer/RendererOpenGL\\.cpp$")
+    list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/platform_gl_sdl2\\.cpp$")
+endif()
 
 # Networking: disable for homebrew platforms by default; can also be disabled on desktop.
 option(KEEPERFX_NETWORKING "Build with multiplayer networking support" ON)
@@ -89,8 +96,7 @@ if(PLATFORM_VITA OR PLATFORM_3DS OR PLATFORM_SWITCH)
 endif()
 
 if(NOT KEEPERFX_NETWORKING)
-    # Exclude real networking source files
-    list(FILTER KEEPERFX_SOURCES_C EXCLUDE REGEX ".*/api\\.c$")
+    # Exclude real networking source files (api.c kept — provides api_event used by game code)
     list(FILTER KEEPERFX_SOURCES_C EXCLUDE REGEX ".*/bflib_tcpsp\\.c$")
     list(FILTER KEEPERFX_SOURCES_C EXCLUDE REGEX ".*/bflib_base_tcp\\.c$")
     list(FILTER KEEPERFX_SOURCES_C EXCLUDE REGEX ".*/bflib_client_tcp\\.c$")
@@ -150,8 +156,6 @@ if(PLATFORM_VITA OR PLATFORM_3DS OR PLATFORM_SWITCH)
     list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/cdrom\\.cpp$")
     list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/linux\\.cpp$")
     list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/steam_api\\.cpp$")
-    list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/renderer/RendererOpenGL\\.cpp$")
-    list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/platform_gl_sdl2\\.cpp$")
     list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/windows\\.cpp$")
     # Exclude desktop-only IPlatform implementations
     list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/platform/PlatformLinux\\.cpp$")
@@ -210,6 +214,22 @@ if(PLATFORM_VITA OR PLATFORM_3DS OR PLATFORM_SWITCH)
     add_library(centitoml OBJECT deps/centitoml/toml_api.c)
     target_include_directories(centitoml INTERFACE deps/centitoml)
     target_link_libraries(centitoml PUBLIC centijson_static)
+endif()
+
+# Platform-specific IPlatform implementation filtering for desktop builds
+if(WIN32 OR MINGW)
+    list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/platform/PlatformLinux\\.cpp$")
+    # linux.cpp provides Linux-only stubs that conflict with Windows-native cdrom.cpp + steam_api.cpp
+    list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/src/linux\\.cpp$")
+elseif(UNIX AND NOT APPLE)
+    list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/platform/PlatformWindows\\.cpp$")
+    # windows.cpp provides Windows-only stubs; exclude on Linux
+    list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/src/windows\\.cpp$")
+elseif(APPLE)
+    list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/platform/PlatformLinux\\.cpp$")
+    list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/platform/PlatformWindows\\.cpp$")
+    list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/src/linux\\.cpp$")
+    list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/src/windows\\.cpp$")
 endif()
 
 # Add two executable targets: keeperfx and keeperfx_hvlog.

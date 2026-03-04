@@ -418,7 +418,7 @@ int LbLog(struct TbLog *log, const char *fmt_str, va_list arg)
       const char *actn;
       if (header == CREATE)
       {
-        snprintf(wbuf, sizeof(wbuf), PROGRAM_NAME" ver "VER_STRING" (%s release) git:%s\n", (BFDEBUG_LEVEL>7)?"heavylog":"standard", GIT_REVISION);
+        snprintf(wbuf, sizeof(wbuf), PROGRAM_NAME" ver "VER_STRING" (%s release)\n", (BFDEBUG_LEVEL>7)?"heavylog":"standard");
         LbFileWrite(file, wbuf, strlen(wbuf));
         actn = "CREATED";
       } else

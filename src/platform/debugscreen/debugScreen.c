@@ -113,7 +113,7 @@
 #define CONVERT_RGB_BGR(rgb) rgb = ( (((rgb)&0x0000FF)<<16) | ((rgb)&0x00FF00) | (((rgb)&0xFF0000)>>16) )
 
 #define CLEARSCRNBLOCK(H,toH,W,toW,color) for (int h = (H); h < (toH); h++) for (int w = (W); w < (toW); w++) ((uint32_t*)base)[h*(SCREEN_FB_WIDTH) + w] = (color);
-#define CLEARSCRNLINES(H,toH,color) { uint32_t *pixel = (uint32_t *)base + ((H) * (SCREEN_FB_WIDTH)); int i = (((toH) - (H)) * (SCREEN_FB_WIDTH)); for (; i > 0; i--) *pixel++ = (color); }
+#define CLEARSCRNLINES(H,toH,color) { uint32_t *pixel = (uint32_t *)base + ((H) * (SCREEN_FB_WIDTH)); int _nlines_ = (((toH) - (H)) * (SCREEN_FB_WIDTH)); for (; _nlines_ > 0; _nlines_--) *pixel++ = (color); }
 
 #define SAVE_STORAGES 16
 

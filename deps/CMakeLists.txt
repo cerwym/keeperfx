@@ -23,6 +23,11 @@ if( NOT EXISTS ${CMAKE_SOURCE_DIR}/deps/enet )
 	kfx_fetch_tarball(enet-mingw32.tar.gz https://github.com/dkfans/kfx-deps/releases/download/initial/enet-mingw32.tar.gz)
 	execute_process(COMMAND ${CMAKE_COMMAND} -E tar xzf ${CMAKE_SOURCE_DIR}/deps/enet-mingw32.tar.gz WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/enet)
 endif()
+# bflib_enet.cpp includes <enet6/enet.h>; our bundled enet uses the identical API under <enet/>.
+# Create an alias directory so the include resolves correctly on all platforms.
+if( NOT EXISTS ${CMAKE_SOURCE_DIR}/deps/enet/include/enet6 )
+	execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink enet ${CMAKE_SOURCE_DIR}/deps/enet/include/enet6)
+endif()
 
 if( NOT EXISTS ${CMAKE_SOURCE_DIR}/deps/zlib )
 	file(MAKE_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/zlib)
@@ -153,17 +158,24 @@ add_library(libswresample_static STATIC IMPORTED)
 set_target_properties(libswresample_static PROPERTIES IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/ffmpeg/libswresample/libswresample.a)
 set_target_properties(libswresample_static PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}/ffmpeg)
 
-target_link_libraries(keeperfx PUBLIC bcrypt libavcodec_static libavformat_static libavutil_static libswresample_static)
-target_link_libraries(keeperfx_hvlog PUBLIC bcrypt libavcodec_static libavformat_static libavutil_static libswresample_static)
-target_link_libraries(tests PUBLIC bcrypt libavcodec_static libavformat_static libavutil_static libswresample_static)
+target_link_libraries(keeperfx PUBLIC -Wl,--start-group libavformat_static libavcodec_static libswresample_static libavutil_static bcrypt -Wl,--end-group)
+target_link_libraries(keeperfx_hvlog PUBLIC -Wl,--start-group libavformat_static libavcodec_static libswresample_static libavutil_static bcrypt -Wl,--end-group)
+target_link_libraries(tests PUBLIC -Wl,--start-group libavformat_static libavcodec_static libswresample_static libavutil_static bcrypt -Wl,--end-group)
 
 ## OpenAL
 add_library(openal_static STATIC IMPORTED)
 set_target_properties(openal_static PROPERTIES IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/openal/libOpenAL32.a)
 set_target_properties(openal_static PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}/openal/include)
-target_link_libraries(keeperfx PUBLIC openal_static)
-target_link_libraries(keeperfx_hvlog PUBLIC openal_static)
-target_link_libraries(tests PUBLIC openal_static)
+# libOpenAL32.a is a static archive — tell headers not to use __declspec(dllimport)
+target_compile_definitions(openal_static INTERFACE AL_LIBTYPE_STATIC=1)
+
+# libOpenAL32.a was built with GCC win32 threading; our posix-threading toolchain
+# doesn't provide __gthr_win32_* symbols. Provide shims via a small helper object.
+add_library(openal_gthr_shims STATIC ${CMAKE_CURRENT_SOURCE_DIR}/openal_gthr_shims.c)
+
+target_link_libraries(keeperfx PUBLIC openal_static openal_gthr_shims)
+target_link_libraries(keeperfx_hvlog PUBLIC openal_static openal_gthr_shims)
+target_link_libraries(tests PUBLIC openal_static openal_gthr_shims)
 
 ## LuaJIT
 add_library(luajit_static STATIC IMPORTED)
