@@ -155,8 +155,7 @@
             "cacheVariables": {
                 "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/mingw32.cmake",
                 "CMAKE_EXPORT_COMPILE_COMMANDS": "on",
-                "CMAKE_BUILD_TYPE": "Release",
-                "KEEPERFX_NETWORKING": "OFF"
+                "CMAKE_BUILD_TYPE": "Release"
             }
         },
 
@@ -167,8 +166,7 @@
             "inherits": [ "cross-base", "Debug" ],
             "cacheVariables": {
                 "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/mingw32.cmake",
-                "CMAKE_EXPORT_COMPILE_COMMANDS": "on",
-                "KEEPERFX_NETWORKING": "OFF"
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "on"
             }
         },
 
@@ -180,8 +178,7 @@
             "cacheVariables": {
                 "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/mingw64.cmake",
                 "CMAKE_EXPORT_COMPILE_COMMANDS": "on",
-                "CMAKE_BUILD_TYPE": "Release",
-                "KEEPERFX_NETWORKING": "OFF"
+                "CMAKE_BUILD_TYPE": "Release"
             }
         },
 

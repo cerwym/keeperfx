@@ -1,10 +1,25 @@
 cmake_minimum_required(VERSION 3.20)
 
-# KFX_DEPS_CACHE: directory with pre-downloaded kfx-deps tarballs (e.g. in a
-# Docker image).  Set via -DKFX_DEPS_CACHE=/path or the KFX_DEPS_CACHE env var.
-# When a matching tarball is found there it is copied instead of downloaded.
+# ---------------------------------------------------------------------------
+# Dependency downloader — all deps sourced from dkfans/kfx-deps releases.
+#
+# KFX_DEPS_CACHE: directory with pre-downloaded tarballs (e.g. in the Docker
+# image at /deps-cache).  Set via -DKFX_DEPS_CACHE=<path> or the env var.
+# ---------------------------------------------------------------------------
+
 if(NOT KFX_DEPS_CACHE)
     set(KFX_DEPS_CACHE "$ENV{KFX_DEPS_CACHE}")
+endif()
+
+# Canonical kfx-deps release tag.  All deps come from this single release.
+set(KFX_DEPS_RELEASE "20260213")
+set(KFX_DEPS_BASE "https://github.com/dkfans/kfx-deps/releases/download/${KFX_DEPS_RELEASE}")
+
+# Select arch suffix based on pointer size (matches mingw32 vs mingw64 toolchain)
+if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+    set(KFX_DEPS_ARCH "mingw32")
+else()
+    set(KFX_DEPS_ARCH "mingw64")
 endif()
 
 macro(kfx_fetch_tarball TARBALL URL)
@@ -13,80 +28,37 @@ macro(kfx_fetch_tarball TARBALL URL)
             message(STATUS "kfx-deps: copying ${TARBALL} from cache ${KFX_DEPS_CACHE}")
             file(COPY "${KFX_DEPS_CACHE}/${TARBALL}" DESTINATION "${CMAKE_SOURCE_DIR}/deps/")
         else()
+            message(STATUS "kfx-deps: downloading ${TARBALL}")
             file(DOWNLOAD "${URL}" "${CMAKE_SOURCE_DIR}/deps/${TARBALL}" SHOW_PROGRESS)
         endif()
     endif()
 endmacro()
 
-if( NOT EXISTS ${CMAKE_SOURCE_DIR}/deps/enet )
-	file(MAKE_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/enet)
-	kfx_fetch_tarball(enet-mingw32.tar.gz https://github.com/dkfans/kfx-deps/releases/download/initial/enet-mingw32.tar.gz)
-	execute_process(COMMAND ${CMAKE_COMMAND} -E tar xzf ${CMAKE_SOURCE_DIR}/deps/enet-mingw32.tar.gz WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/enet)
-endif()
-# bflib_enet.cpp includes <enet6/enet.h>; our bundled enet uses the identical API under <enet/>.
-# Create an alias directory so the include resolves correctly on all platforms.
-if( NOT EXISTS ${CMAKE_SOURCE_DIR}/deps/enet/include/enet6 )
-	execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink enet ${CMAKE_SOURCE_DIR}/deps/enet/include/enet6)
-endif()
+macro(kfx_fetch_dep DEP_NAME)
+    set(_tarball "${DEP_NAME}-${KFX_DEPS_ARCH}.tar.gz")
+    set(_dir "${CMAKE_SOURCE_DIR}/deps/${DEP_NAME}")
+    if(NOT EXISTS "${_dir}")
+        file(MAKE_DIRECTORY "${_dir}")
+        kfx_fetch_tarball("${_tarball}" "${KFX_DEPS_BASE}/${_tarball}")
+        execute_process(COMMAND ${CMAKE_COMMAND} -E tar xzf "${CMAKE_SOURCE_DIR}/deps/${_tarball}" WORKING_DIRECTORY "${_dir}")
+    endif()
+endmacro()
 
-if( NOT EXISTS ${CMAKE_SOURCE_DIR}/deps/zlib )
-	file(MAKE_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/zlib)
-	kfx_fetch_tarball(zlib-mingw32.tar.gz https://github.com/dkfans/kfx-deps/releases/download/initial/zlib-mingw32.tar.gz)
-	execute_process(COMMAND ${CMAKE_COMMAND} -E tar xzf ${CMAKE_SOURCE_DIR}/deps/zlib-mingw32.tar.gz WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/zlib)
-endif()
+kfx_fetch_dep(enet6)
+kfx_fetch_dep(zlib)
+kfx_fetch_dep(spng)
+kfx_fetch_dep(astronomy)
+kfx_fetch_dep(centijson)
+kfx_fetch_dep(ffmpeg)
+kfx_fetch_dep(openal)
+kfx_fetch_dep(luajit)
+kfx_fetch_dep(miniupnpc)
+kfx_fetch_dep(libnatpmp)
 
-if( NOT EXISTS ${CMAKE_SOURCE_DIR}/deps/spng )
-	file(MAKE_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/spng)
-	kfx_fetch_tarball(spng-mingw32.tar.gz https://github.com/dkfans/kfx-deps/releases/download/initial/spng-mingw32.tar.gz)
-	execute_process(COMMAND ${CMAKE_COMMAND} -E tar xzf ${CMAKE_SOURCE_DIR}/deps/spng-mingw32.tar.gz WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/spng)
-endif()
-
-if( NOT EXISTS ${CMAKE_SOURCE_DIR}/deps/astronomy )
-	file(MAKE_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/astronomy)
-	kfx_fetch_tarball(astronomy-mingw32.tar.gz https://github.com/dkfans/kfx-deps/releases/download/initial/astronomy-mingw32.tar.gz)
-	execute_process(COMMAND ${CMAKE_COMMAND} -E tar xzf ${CMAKE_SOURCE_DIR}/deps/astronomy-mingw32.tar.gz WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/astronomy)
-endif()
-
-if( NOT EXISTS ${CMAKE_SOURCE_DIR}/deps/centijson )
-	file(MAKE_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/centijson)
-	kfx_fetch_tarball(centijson-mingw32.tar.gz https://github.com/dkfans/kfx-deps/releases/download/initial/centijson-mingw32.tar.gz)
-	execute_process(COMMAND ${CMAKE_COMMAND} -E tar xzf ${CMAKE_SOURCE_DIR}/deps/centijson-mingw32.tar.gz WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/centijson)
-endif()
-
-if(NOT EXISTS ${CMAKE_SOURCE_DIR}/deps/ffmpeg)
-	file(MAKE_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/ffmpeg)
-	kfx_fetch_tarball(ffmpeg-mingw32.tar.gz https://github.com/dkfans/kfx-deps/releases/download/initial/ffmpeg-mingw32.tar.gz)
-	execute_process(COMMAND ${CMAKE_COMMAND} -E tar xzf ${CMAKE_SOURCE_DIR}/deps/ffmpeg-mingw32.tar.gz WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/ffmpeg)
-endif()
-
-if(NOT EXISTS ${CMAKE_SOURCE_DIR}/deps/openal)
-	file(MAKE_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/openal)
-	kfx_fetch_tarball(openal-mingw32.tar.gz https://github.com/dkfans/kfx-deps/releases/download/2024-11-14/openal-mingw32.tar.gz)
-	execute_process(COMMAND ${CMAKE_COMMAND} -E tar xzf ${CMAKE_SOURCE_DIR}/deps/openal-mingw32.tar.gz WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/openal)
-endif()
-
-if(NOT EXISTS ${CMAKE_SOURCE_DIR}/deps/luajit)
-	file(MAKE_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/luajit)
-	kfx_fetch_tarball(luajit-mingw32.tar.gz https://github.com/dkfans/kfx-deps/releases/download/20250418/luajit-mingw32.tar.gz)
-	execute_process(COMMAND ${CMAKE_COMMAND} -E tar xzf ${CMAKE_SOURCE_DIR}/deps/luajit-mingw32.tar.gz WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/luajit)
-endif()
-
-if(NOT EXISTS ${CMAKE_SOURCE_DIR}/deps/miniupnpc)
-	file(MAKE_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/miniupnpc)
-	kfx_fetch_tarball(miniupnpc-mingw32.tar.gz https://github.com/dkfans/kfx-deps/releases/download/20260102/miniupnpc-mingw32.tar.gz)
-	execute_process(COMMAND ${CMAKE_COMMAND} -E tar xzf ${CMAKE_SOURCE_DIR}/deps/miniupnpc-mingw32.tar.gz WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/miniupnpc)
-endif()
-
-if(NOT EXISTS ${CMAKE_SOURCE_DIR}/deps/libnatpmp)
-	file(MAKE_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/libnatpmp)
-	kfx_fetch_tarball(libnatpmp-mingw32.tar.gz https://github.com/dkfans/kfx-deps/releases/download/20260102/libnatpmp-mingw32.tar.gz)
-	execute_process(COMMAND ${CMAKE_COMMAND} -E tar xzf ${CMAKE_SOURCE_DIR}/deps/libnatpmp-mingw32.tar.gz WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/libnatpmp)
-endif()
-
-## enet
+## enet6
 add_library(enet_static STATIC IMPORTED)
-set_target_properties(enet_static PROPERTIES IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/enet/libenet.a)
-set_target_properties(enet_static PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}/enet/include)
+set_target_properties(enet_static PROPERTIES IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/enet6/lib/libenet6.a)
+set_target_properties(enet_static PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}/enet6/include)
 target_link_libraries(enet_static INTERFACE ws2_32 winmm)
 target_link_libraries(keeperfx PUBLIC enet_static)
 target_link_libraries(keeperfx_hvlog PUBLIC enet_static)

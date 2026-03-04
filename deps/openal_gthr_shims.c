@@ -2,15 +2,15 @@
  * Shims providing GCC win32 threading stubs required by libOpenAL32.a.
  *
  * libOpenAL32.a in kfx-deps was compiled with GCC's win32 threading model.
- * Our toolchain uses posix threading; the six __gthr_win32_* functions are not
+ * Our toolchain uses posix threading; the __gthr_win32_* functions are not
  * provided by libgcc when using posix threads. This file provides them using
- * the Windows CRITICAL_SECTION API that the win32 threading model expects.
+ * the Windows CRITICAL_SECTION / CONDITION_VARIABLE APIs.
  */
 
 #include <windows.h>
 
-/* GCC win32 threading uses CRITICAL_SECTION for mutexes */
 typedef CRITICAL_SECTION __gthread_win32_mutex_t;
+typedef CONDITION_VARIABLE __gthread_win32_cond_t;
 
 int __gthr_win32_once(int *once, void (*func)(void))
 {
@@ -58,4 +58,22 @@ int __gthr_win32_mutex_unlock(__gthread_win32_mutex_t *mutex)
 void __gthr_win32_yield(void)
 {
     Sleep(0);
+}
+
+int __gthr_win32_cond_init_function(__gthread_win32_cond_t *cond)
+{
+    InitializeConditionVariable(cond);
+    return 0;
+}
+
+int __gthr_win32_cond_broadcast(__gthread_win32_cond_t *cond)
+{
+    WakeAllConditionVariable(cond);
+    return 0;
+}
+
+int __gthr_win32_cond_wait(__gthread_win32_cond_t *cond, __gthread_win32_mutex_t *mutex)
+{
+    SleepConditionVariableCS(cond, mutex, INFINITE);
+    return 0;
 }
