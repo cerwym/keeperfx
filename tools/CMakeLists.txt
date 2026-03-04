@@ -55,8 +55,10 @@ elseif( ${CMAKE_HOST_SYSTEM_NAME} STREQUAL "Linux" )
 endif()
 
 # Helper macro to download and extract tool
-macro(download_tool TOOL_NAME TOOL_DOWNLOAD TOOL_FILE TOOL_DIR)
-	if( NOT EXISTS ${CMAKE_SOURCE_DIR}/tools/${TOOL_DIR}/bin )
+# Checks for the actual executable (not just the bin dir) so broken symlinks
+# left on Windows NTFS by a previous Docker extraction trigger a fresh extract.
+macro(download_tool TOOL_NAME TOOL_DOWNLOAD TOOL_FILE TOOL_DIR TOOL_EXE)
+	if( NOT EXISTS ${CMAKE_SOURCE_DIR}/tools/${TOOL_DIR}/bin/${TOOL_EXE} )
 		file( MAKE_DIRECTORY ${CMAKE_SOURCE_DIR}/tools/${TOOL_DIR} )
 		if( NOT EXISTS ${CMAKE_SOURCE_DIR}/tools/${TOOL_DIR}/${TOOL_FILE} )
 			message(STATUS "Downloading ${TOOL_NAME}...")
@@ -68,12 +70,12 @@ macro(download_tool TOOL_NAME TOOL_DOWNLOAD TOOL_FILE TOOL_DIR)
 endmacro()
 
 # Download all tools
-download_tool("png2ico" "${PNGTOICO_DOWNLOAD}" "${PNGTOICO_FILE}" "png2ico")
-download_tool("pngpal2raw" "${PNGTORAW_DOWNLOAD}" "${PNGTORAW_FILE}" "pngpal2raw")
-download_tool("png2bestpal" "${PNGTOBSPAL_DOWNLOAD}" "${PNGTOBSPAL_FILE}" "png2bestpal")
-download_tool("po2ngdat" "${POTONGDAT_DOWNLOAD}" "${POTONGDAT_FILE}" "po2ngdat")
-download_tool("sndbanker" "${SNDBANKER_DOWNLOAD}" "${SNDBANKER_FILE}" "sndbanker")
-download_tool("rnctools" "${RNCTOOLS_DOWNLOAD}" "${RNCTOOLS_FILE}" "rnctools")
+download_tool("png2ico"    "${PNGTOICO_DOWNLOAD}"  "${PNGTOICO_FILE}"  "png2ico"    "${PNGTOICO_EXE}")
+download_tool("pngpal2raw" "${PNGTORAW_DOWNLOAD}"  "${PNGTORAW_FILE}"  "pngpal2raw" "${PNGTORAW_EXE}")
+download_tool("png2bestpal""${PNGTOBSPAL_DOWNLOAD}" "${PNGTOBSPAL_FILE}" "png2bestpal" "${PNGTOBSPAL_EXE}")
+download_tool("po2ngdat"   "${POTONGDAT_DOWNLOAD}"  "${POTONGDAT_FILE}" "po2ngdat"   "${POTONGDAT_EXE}")
+download_tool("sndbanker"  "${SNDBANKER_DOWNLOAD}"  "${SNDBANKER_FILE}" "sndbanker"  "${SNDBANKER_EXE}")
+download_tool("rnctools"   "${RNCTOOLS_DOWNLOAD}"   "${RNCTOOLS_FILE}"  "rnctools"   "${RNC_EXE}")
 
 # Set tool paths for use in other CMake files
 set(PNGTOICO_PATH ${CMAKE_SOURCE_DIR}/tools/png2ico/bin/${PNGTOICO_EXE} PARENT_SCOPE)
