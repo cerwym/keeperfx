@@ -1,16 +1,16 @@
 [submodule "gfx"]
 	path = gfx
-	url = git@github.com:Cerwym/FXGraphics.git
+	url = https://github.com/Cerwym/FXGraphics.git
 	branch = develop
 [submodule "sfx"]
 	path = sfx
-	url = git@github.com:Cerwym/FXsounds.git
+	url = https://github.com/Cerwym/FXsounds.git
 	branch = develop
 [submodule "deps/kfx"]
 	path = deps/kfx
-	url = git@github.com:Cerwym/kfx-deps.git
+	url = https://github.com/Cerwym/kfx-deps.git
 	branch = develop
 [submodule "custom"]
 	path = custom
-	url = git@github.com:Cerwym/customsprites.git
+	url = https://github.com/Cerwym/customsprites.git
 	branch = develop
