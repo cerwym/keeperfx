@@ -43,10 +43,6 @@ function Write-C([string]$Msg, [string]$Color = 'Reset') {
 
 $DEPLOY      = Join-Path $WorkspaceFolder ".deploy"
 $DK_IMAGE    = "keeperfx-dk-originals:local"
-$MINGW_IMAGE = "ghcr.io/cerwym/keeperfx-build-mingw32:latest"
-
-# Read DOCKER_ORG from env if set (matches compose.yml)
-if ($env:DOCKER_ORG) { $MINGW_IMAGE = "ghcr.io/$($env:DOCKER_ORG)/keeperfx-build-mingw32:latest" }
 
 Write-C "=== KeeperFX Layered Deploy Init ===" 'Cyan'
 Write-Host ""
@@ -76,25 +72,16 @@ if ($LASTEXITCODE -ne 0) {
     if ($LASTEXITCODE -ne 0) { Write-C "ERROR: DK layer setup failed." 'Red'; exit 1 }
 }
 
-$cid = docker create $DK_IMAGE 2>&1
+$cid = docker create $DK_IMAGE /no-op 2>&1
 docker cp "${cid}:/dk/data/."  (Join-Path $DEPLOY "data")  | Out-Null
 docker cp "${cid}:/dk/sound/." (Join-Path $DEPLOY "sound") | Out-Null
 docker rm $cid | Out-Null
 Write-C "  ✓ 16 original DK files extracted" 'Green'
 
-# ── Layer 1: SDL2 DLLs ────────────────────────────────────────────────────────
-Write-C "`nLayer 1: SDL2 DLLs" 'Green'
-
-Write-C "  Pulling $MINGW_IMAGE ..." 'Gray'
-docker pull $MINGW_IMAGE | Out-Null
-
-$cid = docker create $MINGW_IMAGE 2>&1
-docker cp "${cid}:/usr/i686-w64-mingw32/bin/SDL2.dll"       (Join-Path $DEPLOY "SDL2.dll")       | Out-Null
-docker cp "${cid}:/usr/i686-w64-mingw32/bin/SDL2_mixer.dll"  (Join-Path $DEPLOY "SDL2_mixer.dll")  | Out-Null
-docker cp "${cid}:/usr/i686-w64-mingw32/bin/SDL2_image.dll"  (Join-Path $DEPLOY "SDL2_image.dll")  | Out-Null
-docker cp "${cid}:/usr/i686-w64-mingw32/bin/SDL2_net.dll"    (Join-Path $DEPLOY "SDL2_net.dll")    | Out-Null
-docker rm $cid | Out-Null
-Write-C "  ✓ SDL2*.dll extracted" 'Green'
+# ── Layer 1: SDL2 DLLs (skipped — SDL2 is statically linked) ─────────────────
+# All SDL2 libraries are linked statically into keeperfx.exe.
+# No SDL2*.dll files are needed at runtime.
+Write-C "`nLayer 1: SDL2 DLLs — skipped (statically linked)" 'Gray'
 
 # ── Layer 2: KFX generated gfx data ──────────────────────────────────────────
 Write-C "`nLayer 2: KFX generated graphics data" 'Green'

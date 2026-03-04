@@ -104,15 +104,31 @@ Write-Host ""
 Write-C "All 16 files found. Building Docker image..." 'Green'
 Write-Host ""
 
-# Build the local Docker image
-# --build-context dk=<path> makes the DK directory available as 'dk' in the Dockerfile
+# Stage files into a temp directory with lowercase names.
+# This avoids Steam file handles and NTFS/BuildKit case-sensitivity issues
+# when Docker's Linux daemon resolves the build context.
+$STAGING = Join-Path $env:TEMP "kfx-dk-staging-$([System.IO.Path]::GetRandomFileName())"
+New-Item -ItemType Directory -Path (Join-Path $STAGING "data")  -Force | Out-Null
+New-Item -ItemType Directory -Path (Join-Path $STAGING "sound") -Force | Out-Null
+
+foreach ($rel in $REQUIRED) {
+    $src  = Join-Path $DkPath $rel
+    $dest = Join-Path $STAGING ($rel.ToLower())
+    Copy-Item $src $dest -Force
+}
+Write-C "  Staged 16 files to temp directory." 'Gray'
+
+# Build the local Docker image using the staging directory as the 'dk' context
 docker build `
-    --build-context "dk=$DkPath" `
+    --build-context "dk=$STAGING" `
     -f $DOCKERFILE `
     -t $IMAGE `
     $WorkspaceFolder
 
-if ($LASTEXITCODE -ne 0) {
+$exitCode = $LASTEXITCODE
+Remove-Item $STAGING -Recurse -Force -ErrorAction SilentlyContinue
+
+if ($exitCode -ne 0) {
     Write-C "ERROR: Docker build failed." 'Red'
     exit 1
 }
