@@ -159,6 +159,17 @@
         },
 
         {
+            "name": "windows-x86-debug",
+            "displayName": "Windows x86 Debug (Docker/Linux cross-compile)",
+            "description": "Cross-compile for Windows x86 from Linux using i686-w64-mingw32, with full debug symbols. For use inside the keeperfx-build-mingw32 Docker image.",
+            "inherits": [ "cross-base", "Debug" ],
+            "cacheVariables": {
+                "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/mingw32.cmake",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "on"
+            }
+        },
+
+        {
             "name": "windows-x64-release",
             "displayName": "Windows x64 Release (Docker/Linux cross-compile)",
             "description": "Cross-compile for Windows x64 from Linux using x86_64-w64-mingw32. Designed for use inside the keeperfx-build-mingw64 Docker image.",
@@ -361,6 +372,13 @@
             "displayName": "Windows x86 Release",
             "inherits": "StandardLog",
             "configurePreset": "windows-x86-release"
+        },
+
+        {
+            "name": "windows-x86-debug",
+            "displayName": "Windows x86 Debug",
+            "inherits": "StandardLog",
+            "configurePreset": "windows-x86-debug"
         },
 
         {

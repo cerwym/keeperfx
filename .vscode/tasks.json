@@ -1,182 +1,166 @@
 {
-	"version": "2.0.0",
-	"inputs": [
-		{
-			"id": "debugChoice",
-			"type": "pickString",
-			"description": "Choose the debug option:",
-			"options": [
-				"DEBUG=1\t\t\t(debug symbols ON)",
-				"DEBUG=0\t[default]\t(debug symbols OFF)",
-				"FTEST_DEBUG=1\t\t(debug symbols ON, functional tests ON)",
-				"FTEST_DEBUG=0\t\t(debug symbols OFF, functional tests ON)"
-			],
-			"default": "DEBUG=0"
-		}
-	],
-	"tasks": [
-		{
-			"label": "Default task",
-			"type": "shell",
-			"windows": {
-				"command": [
-					"$script = '{0}' -f '${workspaceFolder}\\.vscode\\default_task.ps1';",
-					"$compileSettingsFile = '{0}' -f '${workspaceFolder}\\.vscode\\compile_settings.cfg';",
-					"powershell -ExecutionPolicy Bypass -File \\\"${script}\\\" -workspaceFolder \\\"${workspaceFolder}\\\" -compileSettingsFile \\\"${compileSettingsFile}\\\" -debugChoice \\\"${input:debugChoice}\\\";",
-				]
-			},
-			"linux": {
-				"command": [
-					"chmod +x '${workspaceFolder}/.vscode/linuxscript.sh';",
-					"'${workspaceFolder}/.vscode/linuxscript.sh' '${workspaceFolder}'"
-				]
-			},
-			"problemMatcher": "$gcc",
-			"group": {"kind": "build","isDefault": true},
-			"presentation": {
-				"clear": true,
-				"echo": false,
-				"reveal": "always",
-				"focus": true,
-				"panel": "shared",
-				"showReuseMessage": false
-			}
-		},
-		{
-			// Called by launch.json
-			"label": "Compile, Copy Files",
-			"type": "shell",
-			"windows": {
-				"command": [
-					"$script = '{0}' -f '${workspaceFolder}\\.vscode\\compile_and_copy_files.ps1';",
-					"$launchJsonFile = '{0}' -f '${workspaceFolder}\\.vscode\\launch.json';",
-					"$compileSettingsFile = '{0}' -f '${workspaceFolder}\\.vscode\\compile_settings.cfg';",
-					"powershell -ExecutionPolicy Bypass -File \\\"${script}\\\" -workspaceFolder \\\"${workspaceFolder}\\\" -launchJsonFile \\\"${launchJsonFile}\\\" -compileSettingsFile \\\"${compileSettingsFile}\\\";",
-				],
-			},
-			"linux": {"command": []},
-			"problemMatcher": "$gcc",
-			"group": "build",
-			"presentation": {
-				"clear": true,
-				"echo": false,
-				"reveal": "always",
-				"focus": true,
-				"panel": "shared",
-				"showReuseMessage": false
-			}
-		},
-		{
-			// After the project is first opened, settings.json and launch.json will be created
-			"label": "Create settings.json and launch.json",
-			"type": "shell",
-			"windows": {
-				"command": [
-					"$script = '{0}' -f '${workspaceFolder}\\.vscode\\create_settings_and_launch_files.ps1';",
-					"$templateSettingsFile = '{0}' -f '${workspaceFolder}\\.vscode\\defaultsettings';",
-					"$templateLaunchFile = '{0}' -f '${workspaceFolder}\\.vscode\\defaultlaunch';",
-					"$settingsJsonFile = '{0}' -f '${workspaceFolder}\\.vscode\\settings.json';",
-					"$launchJsonFile = '{0}' -f '${workspaceFolder}\\.vscode\\launch.json';",
-					"powershell -ExecutionPolicy Bypass -File \\\"${script}\\\" -workspaceFolder \\\"${workspaceFolder}\\\" -templateSettingsFile \\\"${templateSettingsFile}\\\" -templateLaunchFile \\\"${templateLaunchFile}\\\" -settingsJsonFile \\\"${settingsJsonFile}\\\" -launchJsonFile \\\"${launchJsonFile}\\\" ;",
-				]
-			},
-			"linux": {
-				"command": [
-					"if [ ! -f \"${workspaceFolder}/.vscode/settings.json\" ]; then",
-					"    cp \"${workspaceFolder}/.vscode/defaultsettings\" \"${workspaceFolder}/.vscode/settings.json\";",
-					"    echo \"/.vscode/settings.json was created.\";",
-					"fi;",
-					"if [ ! -f \"${workspaceFolder}/.vscode/launch.json\" ]; then",
-					"    cp \"${workspaceFolder}/.vscode/defaultlaunch\" \"${workspaceFolder}/.vscode/launch.json\";",
-					"    echo \"/.vscode/launch.json was created, but it won't work on linux. Use Ctrl+Shift+B instead.\";",
-					"fi;",
-					"if [ ! -f \"${workspaceFolder}/.vscode/linuxscript.sh\" ]; then",
-					"    cp \"${workspaceFolder}/.vscode/defaultlinuxscript\" \"${workspaceFolder}/.vscode/linuxscript.sh\";",
-					"    echo \"/.vscode/linuxscript.sh was created, please edit it and fill in your game directories.\";",
-					"fi"
-				]
-			},
-			"problemMatcher": "$gcc",
-			"runOptions": {"runOn": "folderOpen"},
-			"group": "build",
-			"presentation": {
-				"echo": false,
-				"focus": true,
-				"panel": "shared",
-				"showReuseMessage": false
-			}
-		},
-		{
-			"label": "Log",
-			"type": "shell",
-			"windows": {
-				"command": [
-					"$gameDir = (Get-Content -Raw '${workspaceFolder}\\.vscode\\launch.json' | Select-String -Pattern '\\\"cwd\\\"\\s*:\\s*\\\"(.*?)\\\"').Matches[0].Groups[1].Value.Replace('\\', '/');",
-					"$branch = git rev-parse --abbrev-ref HEAD;",
-					"$logFile = \"keeperfx-$branch.log\";",
-					"cd $gameDir;",
-					"Clear-Content $logFile;",
-					"Get-Content $logFile -Wait"
-				]
-			},
-			"linux": {},
-			"problemMatcher": "$gcc",
-			"dependsOn": "Check For Game Directory",
-			"group": "build"
-		},
-		{
-			"label": "Clean",
-			"type": "shell",
-			"windows": {
-				"command": "docker compose -f '${workspaceFolder}\\docker\\compose.yml' run --rm mingw32 bash -c 'cmake --build --preset windows-x86-release --target clean'"
-			},
-			"linux": {
-				"command": "cmake --build --preset linux-x64-release --target clean"
-			},
-			"problemMatcher": "$gcc",
-			"group": "build"
-		},
-		{
-			"label": "Generate compile_commands.json",
-			"type": "shell",
-			"windows": {
-				"command": "docker compose -f '${workspaceFolder}\\docker\\compose.yml' run --rm mingw32 bash -c 'cmake --preset windows-x86-release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON && cmake --build --preset windows-x86-release'"
-			},
-			"linux": {
-				"command": "cmake --preset linux-x64-release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON && cmake --build --preset linux-x64-release"
-			},
-			"problemMatcher": "$gcc",
-			"group": "build",
-		},
-		{
-			"label": "Build Vita Release (VPK)",
-			"type": "shell",
-			"command": "docker compose -f '${workspaceFolder}\\docker\\compose.yml' run --rm vitasdk bash -c 'cmake --preset vita-release && cmake --build --preset vita-release'",
-			"problemMatcher": "$gcc",
-			"group": "build",
-			"presentation": {
-				"clear": true, "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false
-			}
-		},
-		{
-			"label": "Build Vita RelDebug (VPK)",
-			"type": "shell",
-			"command": "docker compose -f '${workspaceFolder}\\docker\\compose.yml' run --rm vitasdk bash -c 'cmake --preset vita-reldebug && cmake --build --preset vita-reldebug'",
-			"problemMatcher": "$gcc",
-			"group": "build",
-			"presentation": {
-				"clear": true, "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false
-			}
-		},
-		{
-			"label": "Build Vita Debug/vitaGL (VPK)",
-			"type": "shell",
-			"command": "docker compose -f '${workspaceFolder}\\docker\\compose.yml' run --rm vitasdk bash -c 'cmake --preset vita-debug && cmake --build --preset vita-debug'",
-			"problemMatcher": "$gcc",
-			"group": "build",
-			"presentation": {
-				"clear": true, "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false
-			}
-		},
-	],
+"version": "2.0.0",
+"tasks": [
+
+// ── Windows Desktop (Docker cross-compile via mingw32) ────────────────
+//
+// "Build & Deploy Windows Debug" is the default Ctrl+Shift+B task and
+// the preLaunchTask for F5 debugging. It builds with full debug symbols
+// and copies the exe into .deploy/ so GDB can launch it with game data.
+// Run "Init .deploy/" once before first use to populate game data layers.
+
+{
+"label": "Build & Deploy Windows Debug",
+"type": "shell",
+"windows": {
+"command": [
+"docker compose -f '${workspaceFolder}\\docker\\compose.yml' run --rm mingw32 bash -c 'cmake --preset windows-x86-debug && cmake --build --preset windows-x86-debug';",
+"if ($LASTEXITCODE -ne 0) { exit 1 };",
+"$exe = '${workspaceFolder}\\out\\build\\windows-x86-debug\\keeperfx.exe';",
+"if (Test-Path $exe) { Copy-Item $exe '${workspaceFolder}\\.deploy\\keeperfx.exe' -Force; Write-Host 'keeperfx.exe deployed to .deploy/' -ForegroundColor Green } else { Write-Host 'Build succeeded but exe not found.' -ForegroundColor Red; exit 1 };"
+]
+},
+"problemMatcher": "$gcc",
+"group": { "kind": "build", "isDefault": true },
+"presentation": { "clear": true, "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
+},
+
+{
+"label": "Build Windows x86 Release",
+"type": "shell",
+"windows": {
+"command": "docker compose -f '${workspaceFolder}\\docker\\compose.yml' run --rm mingw32 bash -c 'cmake --preset windows-x86-release && cmake --build --preset windows-x86-release'"
+},
+"problemMatcher": "$gcc",
+"group": "build",
+"presentation": { "clear": true, "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
+},
+
+// ── Linux (Docker) ───────────────────────────────────────────────────
+
+{
+"label": "Build Linux x64",
+"type": "shell",
+"windows": {
+"command": "docker compose -f '${workspaceFolder}\\docker\\compose.yml' run --rm linux bash -c 'cmake --preset linux-x64-release && cmake --build --preset linux-x64-release'"
+},
+"linux": {
+"command": "docker compose -f '${workspaceFolder}/docker/compose.yml' run --rm linux bash -c 'cmake --preset linux-x64-release && cmake --build --preset linux-x64-release'"
+},
+"problemMatcher": "$gcc",
+"group": "build",
+"presentation": { "clear": true, "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
+},
+
+// ── PS Vita (Docker vitasdk) ─────────────────────────────────────────
+//
+// All three Vita presets use vitaGL. Output VPK: out/build/<preset>/keeperfx.vpk
+
+{
+"label": "Build Vita Release",
+"type": "shell",
+"windows": {
+"command": "docker compose -f '${workspaceFolder}\\docker\\compose.yml' run --rm vitasdk bash -c 'cmake --preset vita-release && cmake --build --preset vita-release'"
+},
+"linux": {
+"command": "docker compose -f '${workspaceFolder}/docker/compose.yml' run --rm vitasdk bash -c 'cmake --preset vita-release && cmake --build --preset vita-release'"
+},
+"problemMatcher": "$gcc",
+"group": "build",
+"presentation": { "clear": true, "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
+},
+
+{
+"label": "Build Vita RelDebug",
+"type": "shell",
+"windows": {
+"command": "docker compose -f '${workspaceFolder}\\docker\\compose.yml' run --rm vitasdk bash -c 'cmake --preset vita-reldebug && cmake --build --preset vita-reldebug'"
+},
+"linux": {
+"command": "docker compose -f '${workspaceFolder}/docker/compose.yml' run --rm vitasdk bash -c 'cmake --preset vita-reldebug && cmake --build --preset vita-reldebug'"
+},
+"problemMatcher": "$gcc",
+"group": "build",
+"presentation": { "clear": true, "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
+},
+
+{
+"label": "Build Vita Debug",
+"type": "shell",
+"windows": {
+"command": "docker compose -f '${workspaceFolder}\\docker\\compose.yml' run --rm vitasdk bash -c 'cmake --preset vita-debug && cmake --build --preset vita-debug'"
+},
+"linux": {
+"command": "docker compose -f '${workspaceFolder}/docker/compose.yml' run --rm vitasdk bash -c 'cmake --preset vita-debug && cmake --build --preset vita-debug'"
+},
+"problemMatcher": "$gcc",
+"group": "build",
+"presentation": { "clear": true, "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
+},
+
+// ── Local deployment ─────────────────────────────────────────────────
+
+{
+// One-time setup: builds game data layers and populates .deploy/.
+// Requires the DK original game files to be present on this machine.
+"label": "Init .deploy/",
+"type": "shell",
+"windows": {
+"command": "powershell -ExecutionPolicy Bypass -File '${workspaceFolder}\\.vscode\\init_layered_deploy.ps1' -WorkspaceFolder '${workspaceFolder}'"
+},
+"problemMatcher": [],
+"group": "build",
+"presentation": { "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
+},
+
+{
+"label": "View Game Log",
+"type": "shell",
+"windows": {
+"command": "Get-Content '${workspaceFolder}\\.deploy\\keeperfx.log' -Wait -Tail 50"
+},
+"problemMatcher": [],
+"presentation": { "reveal": "always", "focus": false, "panel": "dedicated", "showReuseMessage": false }
+},
+
+// ── IntelliSense / tooling ───────────────────────────────────────────
+
+{
+// Regenerates compile_commands.json for cpptools IntelliSense.
+// Uses the debug preset so headers and macros match the active code.
+"label": "Generate compile_commands.json",
+"type": "shell",
+"windows": {
+"command": "docker compose -f '${workspaceFolder}\\docker\\compose.yml' run --rm mingw32 bash -c 'cmake --preset windows-x86-debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON'"
+},
+"linux": {
+"command": "cmake --preset linux-x64-release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
+},
+"problemMatcher": "$gcc",
+"group": "build"
+},
+
+// ── Clean ────────────────────────────────────────────────────────────
+
+{
+"label": "Clean Windows Debug",
+"type": "shell",
+"windows": {
+"command": "docker compose -f '${workspaceFolder}\\docker\\compose.yml' run --rm mingw32 bash -c 'cmake --build --preset windows-x86-debug --target clean'"
+},
+"problemMatcher": "$gcc",
+"group": "build"
+},
+
+{
+"label": "Clean Windows Release",
+"type": "shell",
+"windows": {
+"command": "docker compose -f '${workspaceFolder}\\docker\\compose.yml' run --rm mingw32 bash -c 'cmake --build --preset windows-x86-release --target clean'"
+},
+"problemMatcher": "$gcc",
+"group": "build"
+}
+
+]
 }

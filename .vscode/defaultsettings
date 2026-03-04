@@ -4,16 +4,6 @@
 	"cmake.configureOnOpen": false,
 	"cmake.autoSelectActiveFolder": false,
 	"cmake.showOptionsMovedNotification": false,
-	"files.associations": {
-		"defaultlaunch": "jsonc",
-		"defaultsettings": "jsonc",
-		"defaultlinuxscript": "bash"
-	},
-	"files.exclude": {
-        "**/.vscode/defaultlaunch": true,
-		"**/.vscode/defaultsettings": true,
-		"**/.vscode/defaultlinuxscript": false
-    },
 	"search.exclude": {
 		"**/.git": true,
 		"**/.gitmodules": true,
@@ -24,3 +14,4 @@
 		"**/tests": true
 	}
 }
+
