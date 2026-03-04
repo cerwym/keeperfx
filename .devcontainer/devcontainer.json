@@ -1,0 +1,47 @@
+// KeeperFX Dev Container
+//
+// Opens the repository inside the keeperfx-build-mingw32 Docker image —
+// the same environment used by CI and local Docker tasks. Provides:
+//   - Fully working i686-w64-mingw32 toolchain and all build dependencies
+//   - Native cpptools IntelliSense against the real compiler and headers
+//   - cmake + ninja available directly in the terminal
+//
+// Usage:
+//   1. Install the "Dev Containers" extension (ms-vscode-remote.remote-containers)
+//   2. Open Command Palette → "Dev Containers: Reopen in Container"
+//
+// Inside the container, build commands use cmake directly — no docker compose wrapper:
+//   cmake --preset windows-x86-debug && cmake --build --preset windows-x86-debug
+//
+// Note: Windows .exe artifacts are cross-compiled and cannot be run inside the
+// container. For F5 debugging, reopen in the host window and use the GDB tasks.
+{
+	"name": "KeeperFX (mingw32 build environment)",
+	"image": "ghcr.io/cerwym/keeperfx-build-mingw32:latest",
+	"workspaceMount": "source=${localWorkspaceFolder},target=/src,type=bind",
+	"workspaceFolder": "/src",
+
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"ms-vscode.cpptools",
+				"eamodio.gitlens",
+				"spmeesseman.vscode-taskexplorer"
+			],
+			"settings": {
+				"cmake.configureOnOpen": false,
+				"cmake.autoSelectActiveFolder": false,
+				// Point IntelliSense at the compile_commands.json the debug preset generates
+				"C_Cpp.default.compileCommands": "/src/out/build/windows-x86-debug/compile_commands.json",
+				"C_Cpp.default.compilerPath": "/usr/bin/i686-w64-mingw32-gcc-posix",
+				"C_Cpp.default.intelliSenseMode": "linux-gcc-x86",
+				"C_Cpp.default.cStandard": "gnu11",
+				"C_Cpp.default.cppStandard": "gnu++17"
+			}
+		}
+	},
+
+	// On first container start, generate compile_commands.json so IntelliSense
+	// is ready immediately without needing a manual task run.
+	"postStartCommand": "cmake --preset windows-x86-debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON 2>&1 | tail -5 && echo 'IntelliSense ready.'"
+}

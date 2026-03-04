@@ -4,5 +4,4 @@
 #define VER_BUILD       ${VER_BUILD}
 #define VER_STRING      "${VER_STRING}"
 #define PACKAGE_SUFFIX  "${PACKAGE_SUFFIX}"
-#define GIT_REVISION    "${GIT_REVISION}"
-#define GIT_BRANCH      "${GIT_BRANCH}"
+

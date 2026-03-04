@@ -10,21 +10,12 @@ project(keeperfx C CXX)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 20)
 
-# Get the abbreviated commit Id of the head.
-find_package(Git REQUIRED)
-execute_process(COMMAND "${GIT_EXECUTABLE}" describe --always OUTPUT_VARIABLE COMMIT_ID OUTPUT_STRIP_TRAILING_WHITESPACE)
-execute_process(COMMAND "${GIT_EXECUTABLE}" rev-parse --abbrev-ref HEAD OUTPUT_VARIABLE GIT_BRANCH OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
-if(NOT GIT_BRANCH)
-    set(GIT_BRANCH "unknown")
-endif()
-
 set(VER_MAJOR       1)
 set(VER_MINOR       3)
 set(VER_RELEASE     1)
 set(VER_BUILD       0)
 set(VER_STRING      "${VER_MAJOR}.${VER_MINOR}.${VER_RELEASE}.${VER_BUILD} ${PACKAGE_SUFFIX}")
 set(PACKAGE_SUFFIX  "")
-set(GIT_REVISION    "${COMMIT_ID}")
 
 # CMAKE_BINARY_DIR is defined in CMakePresets.json.
 set(KEEPERFX_VER_DEFS_H_IN ${CMAKE_SOURCE_DIR}/ver_defs.h.in)

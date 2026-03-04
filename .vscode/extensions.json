@@ -4,10 +4,19 @@
 		"ms-vscode.cpptools",
 		// Docker container management UI
 		"ms-azuretools.vscode-docker",
-		// Task sidebar — shows tasks.json entries in the Explorer panel
-		"spmeesseman.vscode-taskexplorer"
+		// Dev Containers — open repo directly inside a Docker build container.
+		// Provides native IntelliSense, working terminal, and full toolchain
+		// without installing anything locally. Works on Windows, Mac, and Linux.
+		"ms-vscode-remote.remote-containers",
+		// Task sidebar — shows all tasks.json entries as a clickable tree
+		"spmeesseman.vscode-taskexplorer",
+		// GitLens — inline blame, history, and PR context
+		"eamodio.gitlens",
+		// GitHub Pull Requests — review and manage PRs inside VS Code
+		"github.vscode-pull-request-github"
 	],
-	// All builds run inside Docker; these extensions would fight with that setup
+	// These extensions try to own the build system locally — all builds run
+	// inside Docker so they serve no purpose and generate confusing popups
 	"unwantedRecommendations": [
 		"ms-vscode.cmake-tools",
 		"ms-vscode.makefile-tools"

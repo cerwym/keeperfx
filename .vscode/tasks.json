@@ -12,12 +12,13 @@
 {
 "label": "Build & Deploy Windows Debug",
 "type": "shell",
+"command": "docker compose -f '${workspaceFolder}/docker/compose.yml' run --rm mingw32 bash -c 'cmake --preset windows-x86-debug && cmake --build --preset windows-x86-debug' && cp out/build/windows-x86-debug/keeperfx.exe .deploy/keeperfx.exe && echo 'Deployed.'",
 "windows": {
 "command": [
 "docker compose -f '${workspaceFolder}\\docker\\compose.yml' run --rm mingw32 bash -c 'cmake --preset windows-x86-debug && cmake --build --preset windows-x86-debug';",
 "if ($LASTEXITCODE -ne 0) { exit 1 };",
-"$exe = '${workspaceFolder}\\out\\build\\windows-x86-debug\\keeperfx.exe';",
-"if (Test-Path $exe) { Copy-Item $exe '${workspaceFolder}\\.deploy\\keeperfx.exe' -Force; Write-Host 'keeperfx.exe deployed to .deploy/' -ForegroundColor Green } else { Write-Host 'Build succeeded but exe not found.' -ForegroundColor Red; exit 1 };"
+"Copy-Item '${workspaceFolder}\\out\\build\\windows-x86-debug\\keeperfx.exe' '${workspaceFolder}\\.deploy\\keeperfx.exe' -Force;",
+"Write-Host 'keeperfx.exe deployed to .deploy/' -ForegroundColor Green;"
 ]
 },
 "problemMatcher": "$gcc",
@@ -28,6 +29,7 @@
 {
 "label": "Build Windows x86 Release",
 "type": "shell",
+"command": "docker compose -f '${workspaceFolder}/docker/compose.yml' run --rm mingw32 bash -c 'cmake --preset windows-x86-release && cmake --build --preset windows-x86-release'",
 "windows": {
 "command": "docker compose -f '${workspaceFolder}\\docker\\compose.yml' run --rm mingw32 bash -c 'cmake --preset windows-x86-release && cmake --build --preset windows-x86-release'"
 },
@@ -41,11 +43,9 @@
 {
 "label": "Build Linux x64",
 "type": "shell",
+"command": "docker compose -f '${workspaceFolder}/docker/compose.yml' run --rm linux bash -c 'cmake --preset linux-x64-release && cmake --build --preset linux-x64-release'",
 "windows": {
 "command": "docker compose -f '${workspaceFolder}\\docker\\compose.yml' run --rm linux bash -c 'cmake --preset linux-x64-release && cmake --build --preset linux-x64-release'"
-},
-"linux": {
-"command": "docker compose -f '${workspaceFolder}/docker/compose.yml' run --rm linux bash -c 'cmake --preset linux-x64-release && cmake --build --preset linux-x64-release'"
 },
 "problemMatcher": "$gcc",
 "group": "build",
@@ -59,11 +59,9 @@
 {
 "label": "Build Vita Release",
 "type": "shell",
+"command": "docker compose -f '${workspaceFolder}/docker/compose.yml' run --rm vitasdk bash -c 'cmake --preset vita-release && cmake --build --preset vita-release'",
 "windows": {
 "command": "docker compose -f '${workspaceFolder}\\docker\\compose.yml' run --rm vitasdk bash -c 'cmake --preset vita-release && cmake --build --preset vita-release'"
-},
-"linux": {
-"command": "docker compose -f '${workspaceFolder}/docker/compose.yml' run --rm vitasdk bash -c 'cmake --preset vita-release && cmake --build --preset vita-release'"
 },
 "problemMatcher": "$gcc",
 "group": "build",
@@ -73,11 +71,9 @@
 {
 "label": "Build Vita RelDebug",
 "type": "shell",
+"command": "docker compose -f '${workspaceFolder}/docker/compose.yml' run --rm vitasdk bash -c 'cmake --preset vita-reldebug && cmake --build --preset vita-reldebug'",
 "windows": {
 "command": "docker compose -f '${workspaceFolder}\\docker\\compose.yml' run --rm vitasdk bash -c 'cmake --preset vita-reldebug && cmake --build --preset vita-reldebug'"
-},
-"linux": {
-"command": "docker compose -f '${workspaceFolder}/docker/compose.yml' run --rm vitasdk bash -c 'cmake --preset vita-reldebug && cmake --build --preset vita-reldebug'"
 },
 "problemMatcher": "$gcc",
 "group": "build",
@@ -87,11 +83,9 @@
 {
 "label": "Build Vita Debug",
 "type": "shell",
+"command": "docker compose -f '${workspaceFolder}/docker/compose.yml' run --rm vitasdk bash -c 'cmake --preset vita-debug && cmake --build --preset vita-debug'",
 "windows": {
 "command": "docker compose -f '${workspaceFolder}\\docker\\compose.yml' run --rm vitasdk bash -c 'cmake --preset vita-debug && cmake --build --preset vita-debug'"
-},
-"linux": {
-"command": "docker compose -f '${workspaceFolder}/docker/compose.yml' run --rm vitasdk bash -c 'cmake --preset vita-debug && cmake --build --preset vita-debug'"
 },
 "problemMatcher": "$gcc",
 "group": "build",
@@ -108,6 +102,12 @@
 "windows": {
 "command": "powershell -ExecutionPolicy Bypass -File '${workspaceFolder}\\.vscode\\init_layered_deploy.ps1' -WorkspaceFolder '${workspaceFolder}'"
 },
+"osx": {
+"command": "echo 'Init .deploy/ is Windows-only. Copy DK originals to .deploy/ manually on Mac.'"
+},
+"linux": {
+"command": "echo 'Init .deploy/ is Windows-only. Copy DK originals to .deploy/ manually on Linux.'"
+},
 "problemMatcher": [],
 "group": "build",
 "presentation": { "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
@@ -116,6 +116,7 @@
 {
 "label": "View Game Log",
 "type": "shell",
+"command": "tail -f '${workspaceFolder}/.deploy/keeperfx.log'",
 "windows": {
 "command": "Get-Content '${workspaceFolder}\\.deploy\\keeperfx.log' -Wait -Tail 50"
 },
@@ -130,11 +131,9 @@
 // Uses the debug preset so headers and macros match the active code.
 "label": "Generate compile_commands.json",
 "type": "shell",
+"command": "docker compose -f '${workspaceFolder}/docker/compose.yml' run --rm mingw32 bash -c 'cmake --preset windows-x86-debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON'",
 "windows": {
 "command": "docker compose -f '${workspaceFolder}\\docker\\compose.yml' run --rm mingw32 bash -c 'cmake --preset windows-x86-debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON'"
-},
-"linux": {
-"command": "cmake --preset linux-x64-release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
 },
 "problemMatcher": "$gcc",
 "group": "build"
@@ -145,6 +144,7 @@
 {
 "label": "Clean Windows Debug",
 "type": "shell",
+"command": "docker compose -f '${workspaceFolder}/docker/compose.yml' run --rm mingw32 bash -c 'cmake --build --preset windows-x86-debug --target clean'",
 "windows": {
 "command": "docker compose -f '${workspaceFolder}\\docker\\compose.yml' run --rm mingw32 bash -c 'cmake --build --preset windows-x86-debug --target clean'"
 },
@@ -155,6 +155,7 @@
 {
 "label": "Clean Windows Release",
 "type": "shell",
+"command": "docker compose -f '${workspaceFolder}/docker/compose.yml' run --rm mingw32 bash -c 'cmake --build --preset windows-x86-release --target clean'",
 "windows": {
 "command": "docker compose -f '${workspaceFolder}\\docker\\compose.yml' run --rm mingw32 bash -c 'cmake --build --preset windows-x86-release --target clean'"
 },
