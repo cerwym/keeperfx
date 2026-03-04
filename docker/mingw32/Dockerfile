@@ -68,7 +68,57 @@ RUN set -eux; \
     cp -r "${TMP}/SDL2_net-${SDL2_NET_VER}/${ARCH}/lib/."     "${PREFIX}/lib/"; \
     rm -rf "${TMP}"
 
-# ── kfx-deps tarballs cache → /opt/kfx-deps ─────────────────────────────────
+# ── KFX build tools → /usr/local/bin ────────────────────────────────────────
+# These Linux-native tools are required at CMake configure/build time to
+# generate .ico, palette, .ngdat, sound bank, and RNC files.
+# Baking them in avoids a per-configure download and eliminates Windows NTFS
+# symlink issues that occur when cmake -E tar extracts to a bind-mounted volume.
+ARG PNG2ICO_VER=2024-10-28
+ARG PNGPAL2RAW_VER=1.0.2
+ARG PNG2BESTPAL_VER=1.0.3
+ARG PO2NGDAT_VER=1.0.2.31-c
+ARG SNDBANKER_VER=1.0.1
+ARG RNCTOOLS_VER=1.0.2
+
+RUN set -eux; \
+    TMP=$(mktemp -d); \
+    # png2ico
+    curl -fsSL "https://github.com/dkfans/png2ico/releases/download/${PNG2ICO_VER}/png2ico-lin-${PNG2ICO_VER}.tar.gz" \
+        | tar -xz -C "${TMP}"; \
+    find "${TMP}" -type f -name "png2ico" -exec install -m755 {} /usr/local/bin/png2ico \;; \
+    rm -rf "${TMP}"; \
+    # pngpal2raw
+    TMP=$(mktemp -d); \
+    curl -fsSL "https://github.com/dkfans/pngpal2raw/releases/download/v${PNGPAL2RAW_VER}/pngpal2raw-1_0_2_35-devel-lin.tar.gz" \
+        | tar -xz -C "${TMP}"; \
+    find "${TMP}" -type f -name "pngpal2raw" -exec install -m755 {} /usr/local/bin/pngpal2raw \;; \
+    rm -rf "${TMP}"; \
+    # png2bestpal
+    TMP=$(mktemp -d); \
+    curl -fsSL "https://github.com/dkfans/png2bestpal/releases/download/v${PNG2BESTPAL_VER}/png2bestpal-1_0_3_21-devel-lin.tar.gz" \
+        | tar -xz -C "${TMP}"; \
+    find "${TMP}" -type f -name "png2bestpal" -exec install -m755 {} /usr/local/bin/png2bestpal \;; \
+    rm -rf "${TMP}"; \
+    # po2ngdat
+    TMP=$(mktemp -d); \
+    curl -fsSL "https://github.com/dkfans/po2ngdat/releases/download/v${PO2NGDAT_VER}/po2ngdat-1_0_2_31-devel-lin.tar.gz" \
+        | tar -xz -C "${TMP}"; \
+    find "${TMP}" -type f -name "po2ngdat" -exec install -m755 {} /usr/local/bin/po2ngdat \;; \
+    rm -rf "${TMP}"; \
+    # sndbanker
+    TMP=$(mktemp -d); \
+    curl -fsSL "https://github.com/dkfans/sndbanker/releases/download/v${SNDBANKER_VER}/sndbanker-1_0_1_13-devel-lin.tar.gz" \
+        | tar -xz -C "${TMP}"; \
+    find "${TMP}" -type f -name "sndbanker" -exec install -m755 {} /usr/local/bin/sndbanker \;; \
+    rm -rf "${TMP}"; \
+    # rnctools (provides rnc + dernc)
+    TMP=$(mktemp -d); \
+    curl -fsSL "https://github.com/dkfans/rnctools/releases/download/v${RNCTOOLS_VER}/rnctools-1_0_2_5-devel-lin.tar.gz" \
+        | tar -xz -C "${TMP}"; \
+    find "${TMP}" -type f \( -name "rnc" -o -name "dernc" \) -exec install -m755 {} /usr/local/bin/ \;; \
+    rm -rf "${TMP}"
+
+
 # deps/CMakeLists.txt reads KFX_DEPS_CACHE before downloading from GitHub.
 RUN mkdir -p /opt/kfx-deps && cd /opt/kfx-deps && \
     curl -fsSLo enet-mingw32.tar.gz       "https://github.com/dkfans/kfx-deps/releases/download/initial/enet-mingw32.tar.gz" && \
