@@ -6683,6 +6683,16 @@ msgstr ""
 "La sala del destino es inalcanzable: Abre el mensaje con BIR. Borra con BDR."
 
 #: guitext:949
+msgctxt "Game event name"
+msgid "Casino Jackpot!"
+msgstr ""
+
+#: guitext:950
+msgctxt "Game event description"
+msgid "A creature has won the jackpot! LMB toggle. RMB delete."
+msgstr ""
+
+#: guitext:951
 msgctxt "In-game interface description"
 msgid ""
 "Armour: Part of the damage which won't affect creature health. The higher "
@@ -6703,7 +6713,7 @@ msgctxt "In-game interface description"
 msgid "Loyalty: How resistant the creature is against scavenging by the enemy."
 msgstr "Lealtad: La resistencia de la criatura a ser depredada por el enemigo."
 
-#: guitext:952
+#: guitext:954
 msgctxt "In-game interface description"
 msgid ""
 "Research Skill: How fast the creature works in Library. The higher the skill "
@@ -6712,7 +6722,7 @@ msgstr ""
 "Habilidad de Entrenamiento: El talento de una criatura para entrenar. Cuanto "
 "más alto es el nivel de la habilidad, mejor es el rendimiento de la criatura."
 
-#: guitext:953
+#: guitext:955
 msgctxt "In-game interface description"
 msgid ""
 "Manufacture Skill: How fast the creature works in Workshop. The higher the "
@@ -6722,7 +6732,7 @@ msgstr ""
 "en el taller. Cuanto más alto es el nivel de la habilidad, mejor es el "
 "rendimiento de la criatura."
 
-#: guitext:954
+#: guitext:956
 msgctxt "In-game interface description"
 msgid ""
 "Training Skill: How fast the creature works on training. The higher the "
@@ -6731,7 +6741,7 @@ msgstr ""
 "Habilidad de Entrenamiento: El talento de una criatura para entrenar. Cuanto "
 "más alto es el nivel de la habilidad, mejor es el rendimiento de la criatura."
 
-#: guitext:955
+#: guitext:957
 msgctxt "In-game interface description"
 msgid ""
 "Scavenge Skill: How fast the creature works on scavenging. The higher the "
@@ -6741,20 +6751,20 @@ msgstr ""
 "depredando. Cuanto más alto es el nivel de la habilidad, mejor es el "
 "rendimiento de la criatura."
 
-#: guitext:956
+#: guitext:958
 msgctxt "In-game interface description"
 msgid "Training Cost: Gold used for training the creature."
 msgstr ""
 "Coste de Entrenamiento: El oro que te cuesta cada vez que entrena la "
 "criatura."
 
-#: guitext:957
+#: guitext:959
 msgctxt "In-game interface description"
 msgid "Scavenge Cost: Gold used for scavenging by the creature."
 msgstr ""
 "Coste de Depredación: El oro que te cuesta que la criatura esté depredando."
 
-#: guitext:958
+#: guitext:960
 msgctxt "In-game interface description"
 msgid ""
 "Best Damage: How much harm can be done by the strongest attack the creature "
@@ -6763,7 +6773,7 @@ msgstr ""
 "Mejor daño: Cuánto daño puede realizar el ataque más fuerte que posee la "
 "criatura."
 
-#: guitext:959
+#: guitext:961
 msgctxt "In-game interface description"
 msgid ""
 "Weight: Mass of the creature. Some people say that being overweight can lead "
@@ -6772,7 +6782,7 @@ msgstr ""
 "Peso: Masa de la criatura. Algunas personas dicen que el sobrepeso puede "
 "conducir a un ataque al corazón."
 
-#: guitext:960
+#: guitext:962
 msgctxt "In-game interface description"
 msgid ""
 "Score: Estimate of an overall creature value. Added to player score when "
@@ -6781,17 +6791,17 @@ msgstr ""
 "Puntuación: Estimación del valor total de una criatura. Se añade a la "
 "puntuación del jugador al completar un nivel."
 
-#: guitext:961
+#: guitext:963
 msgctxt "Keeper spell name"
 msgid "Hand Of Evil"
 msgstr "Mano Del Mal"
 
-#: guitext:962
+#: guitext:964
 msgctxt "Keeper spell name"
 msgid "Slap"
 msgstr "Azote"
 
-#: guitext:963
+#: guitext:965
 msgctxt "Keeper spell description"
 msgid ""
 "Hand Of Evil: Ability to pick up your creatures and hold them in your hand. "
@@ -6800,7 +6810,7 @@ msgstr ""
 "Mano del Mal: Habilidad para recoger tus criaturas y mantenerlas en tu mano. "
 "Eso sí, no las mantengas para siempre o pueden irritarse."
 
-#: guitext:964
+#: guitext:966
 msgctxt "Keeper spell description"
 msgid ""
 "Slap: Makes your creatures work harder, for some time. Your creatures take "
@@ -6809,199 +6819,199 @@ msgstr ""
 "Azotar: Hace que tus criaturas trabajen más duro durante algún tiempo. Tus "
 "criaturas recibirán algo de daño por cada bofetada que reciban."
 
-#: guitext:965
+#: guitext:967
 msgctxt "In-game interface description"
 msgid "Health: How many health points the creature has left to lose."
 msgstr "Cuantos puntos de salud le quedan por perder a la criatura."
 
-#: guitext:966
+#: guitext:968
 msgctxt "In-game interface description"
 msgid "Health: The maximum number of health points for this creature."
 msgstr "La máxima cantidad de puntos de vida de esta criatura."
 
-#: guitext:967
+#: guitext:969
 msgctxt "Menu interface item"
 msgid "Toggle Message"
 msgstr "Cambiar mensaje"
 
-#: guitext:968
+#: guitext:970
 msgctxt "Menu interface item"
 msgid "Return to Free Play levels"
 msgstr "Volver a niveles sueltos"
 
-#: guitext:969
+#: guitext:971
 msgctxt "Menu interface item"
 msgid "Map packs"
 msgstr "Paquetes de mapas"
 
-#: guitext:970
+#: guitext:972
 msgctxt "Menu interface item"
 msgid "The Deeper Dungeons"
 msgstr "Deeper Dungeons"
 
-#: guitext:971
+#: guitext:973
 msgctxt "Menu interface item"
 msgid "Standard Levels"
 msgstr "Niveles Normales"
 
-#: guitext:972
+#: guitext:974
 msgctxt "Menu interface item"
 msgid "Classic Levels"
 msgstr "Niveles Clasicos"
 
-#: guitext:973
+#: guitext:975
 msgctxt "Menu interface item"
 msgid "Legacy Levels"
 msgstr "Niveles Legados"
 
-#: guitext:974
+#: guitext:976
 msgctxt "Menu interface item"
 msgid "Personal Levels"
 msgstr "Niveles Personalizados"
 
-#: guitext:975
+#: guitext:977
 msgctxt "Menu interface item"
 msgid "Lost Levels"
 msgstr "Niveles Perdidos"
 
-#: guitext:976 guitext:977 guitext:978 guitext:979 guitext:980
+#: guitext:978 guitext:977 guitext:978 guitext:979 guitext:980
 msgctxt "Unused"
 msgid "Moo3"
 msgstr "Moo3"
 
-#: guitext:981
+#: guitext:983
 msgctxt "Trap names"
 msgid "Special Trap"
 msgstr "Trampa Especial"
 
-#: guitext:982
+#: guitext:984
 msgctxt "Trap names"
 msgid "Freeze Trap"
 msgstr "Trampa Congelación"
 
-#: guitext:983
+#: guitext:985
 msgctxt "Trap names"
 msgid "Fear Trap"
 msgstr "Trampa Susto"
 
-#: guitext:984
+#: guitext:986
 msgctxt "Trap names"
 msgid "Sentry Trap"
 msgstr "Trampa Centinela"
 
-#: guitext:985
+#: guitext:987
 msgctxt "Trap names"
 msgid "Mimic Trap"
 msgstr "Trampa Mímica"
 
-#: guitext:986
+#: guitext:988
 msgctxt "Trap names"
 msgid "Spawn Trap"
 msgstr "Trampa Engendrar"
 
-#: guitext:987
+#: guitext:989
 msgctxt "Trap names"
 msgid "Wind Trap"
 msgstr "Trampa Viento"
 
-#: guitext:988
+#: guitext:990
 msgctxt "Trap names"
 msgid "Spitfire Trap"
 msgstr "Trampa Fuego Rápido"
 
-#: guitext:989
+#: guitext:991
 msgctxt "Trap names"
 msgid "Chicken Trap"
 msgstr "Trampa Pollos"
 
-#: guitext:990
+#: guitext:992
 msgctxt "Trap names"
 msgid "Disease Trap"
 msgstr "Trampa Enfermedad"
 
-#: guitext:991
+#: guitext:993
 msgctxt "Trap names"
 msgid "Power Trap"
 msgstr "Trampas Poder1"
 
-#: guitext:992
+#: guitext:994
 msgctxt "Trap names"
 msgid "Switch"
 msgstr "Cambiar"
 
-#: guitext:993
+#: guitext:995
 msgctxt "Trap names"
 msgid "Hidden Switch"
 msgstr "Interruptor Oculto"
 
-#: guitext:994
+#: guitext:996
 msgctxt "Door name"
 msgid "Special Door"
 msgstr "Puerta Especial"
 
-#: guitext:995
+#: guitext:997
 msgctxt "Door name"
 msgid "Hidden Door"
 msgstr "Puerta Oculta"
 
-#: guitext:996
+#: guitext:998
 msgctxt "Mouse"
 msgid "Scroll Wheel Up"
 msgstr "Rueda de Ratón"
 
-#: guitext:997
+#: guitext:999
 msgctxt "Mouse"
 msgid "Scroll Wheel Down"
 msgstr "Rueda del Ratón"
 
-#: guitext:998
+#: guitext:1000
 msgctxt "Mouse"
 msgid "Mouse Button"
 msgstr "Botón del Ratón"
 
-#: guitext:999
+#: guitext:1001
 msgctxt "Game controls"
 msgid "Build Square Room"
 msgstr "Construir una habitación cuadrada"
 
-#: guitext:1000
+#: guitext:1002
 msgctxt "Game controls"
 msgid "Detect Room"
 msgstr "Detectar habitación"
 
-#: guitext:1001
+#: guitext:1003
 msgctxt "Game controls"
 msgid "Increase Room Size"
 msgstr "Aumentar tamaño de la Sala"
 
-#: guitext:1002
+#: guitext:1004
 msgctxt "Game controls"
 msgid "Decrease Room Size"
 msgstr "Disminuir tamaño de la Sala"
 
-#: guitext:1003
+#: guitext:1005
 msgctxt "Game controls"
 msgid "Precision Sell"
 msgstr "Venta precisa"
 
-#: guitext:1004
+#: guitext:1006
 msgctxt "Game controls"
 msgid "Snap Camera"
 msgstr "Cámara instantánea"
 
-#: guitext:1005
+#: guitext:1007
 msgctxt "Dungeon special description"
 msgid "Mysterious Box: There's no telling what this will do."
 msgstr "Caja Misteriosa: No se sabe que es lo que hará."
 
-#: guitext:1006
+#: guitext:1008
 msgctxt "Network game message"
 msgid "Joined player has different map version from host."
 msgstr ""
 "El jugador que se acaba de unir, tiene instalada una versión diferente del "
 "nivel."
 
-#: guitext:1007
+#: guitext:1009
 msgctxt "In-game interface description"
 msgid ""
 "Display Resolution: Switch to the next configured display resolution. LMB "
@@ -7010,376 +7020,376 @@ msgstr ""
 "Resolución de pantalla: Cambia a la siguiente resolución de pantalla "
 "configurada. BIR cambia de resolución. BDR muestra la resolución actual."
 
-#: guitext:1008
+#: guitext:1010
 msgctxt "In-game interface item"
 msgid "Voice"
 msgstr "Voz"
 
-#: guitext:1009
+#: guitext:1011
 msgctxt "In-game interface item"
 msgid "Ambience"
 msgstr "Ambiente"
 
-#: guitext:1010
+#: guitext:1012
 msgctxt "Unused"
 msgid "Moo4"
 msgstr "Moo4"
 
-#: guitext:1011
+#: guitext:1013
 msgctxt "Menu interface item"
 msgid "Dungeon Keeper - Original Campaign"
 msgstr "Dungeon Keeper - Campaña Original"
 
-#: guitext:1012
+#: guitext:1014
 msgctxt "Menu interface item"
 msgid "Assmist Isle"
 msgstr "La Isla Asistida"
 
-#: guitext:1013
+#: guitext:1015
 msgctxt "Menu interface item"
 msgid "Ancient Keeper"
 msgstr "El Guardián Antiguo"
 
-#: guitext:1014
+#: guitext:1016
 msgctxt "Menu interface item"
 msgid "Burdened Imps"
 msgstr "Los Diablillos agobiados, paquete de niveles"
 
-#: guitext:1015
+#: guitext:1017
 msgctxt "Menu interface item"
 msgid "Conquest of the Arctic"
 msgstr "La Conquista del Ártico"
 
-#: guitext:1016
+#: guitext:1018
 msgctxt "Menu interface item"
 msgid "The Destiny of Ninja"
 msgstr "El Destino del Ninja"
 
-#: guitext:1017
+#: guitext:1019
 msgctxt "Menu interface item"
 msgid "DzjeeAr's 6-level campaign"
 msgstr "DzjeeAr's : Nivel 6"
 
-#: guitext:1018
+#: guitext:1020
 msgctxt "Menu interface item"
 msgid "DzjeeAr's 10-level campaign"
 msgstr "DzjeeAr's : Nivel 10"
 
-#: guitext:1019
+#: guitext:1021
 msgctxt "Menu interface item"
 msgid "DzjeeAr's 25-level campaign"
 msgstr "DzjeeAr's : Nivel 25"
 
-#: guitext:1020
+#: guitext:1022
 msgctxt "Menu interface item"
 msgid "Evil Keeper"
 msgstr "El Guardián Malvado"
 
-#: guitext:1021
+#: guitext:1023
 msgctxt "Menu interface item"
 msgid "Grinics' KReign campaign"
 msgstr "Las Crónicas de Grinics Kreign"
 
-#: guitext:1022
+#: guitext:1024
 msgctxt "Menu interface item"
 msgid "Japanese DKMaps8 pack"
 msgstr "Paquete Japonés de 8 Mapas"
 
-#: guitext:1023
+#: guitext:1025
 msgctxt "Menu interface item"
 msgid "KDK Levels"
 msgstr "Niveles KDK"
 
-#: guitext:1024
+#: guitext:1026
 msgctxt "Menu interface item"
 msgid "Good Campaign"
 msgstr "Buenos"
 
-#: guitext:1025
+#: guitext:1027
 msgctxt "Menu interface item"
 msgid "Lord Vexer"
 msgstr "Lord Vexer"
 
-#: guitext:1026
+#: guitext:1028
 msgctxt "Menu interface item"
 msgid "Nikolai's Castles"
 msgstr "El Castillo de Nikolai"
 
-#: guitext:1027
+#: guitext:1029
 msgctxt "Menu interface item"
 msgid "Dungeon Keeper - NG+"
 msgstr "Dungeon Keeper - Nuevo Juego+"
 
-#: guitext:1028
+#: guitext:1030
 msgctxt "Menu interface item"
 msgid "Post Ancient Keeper"
 msgstr "El Guardián Antiguo"
 
-#: guitext:1029
+#: guitext:1031
 msgctxt "Menu interface item"
 msgid "Post Undead Keeper"
 msgstr "El Muerto Viviente"
 
-#: guitext:1030
+#: guitext:1032
 msgctxt "Menu interface item"
 msgid "Quest for the Hero"
 msgstr "La Búsqueda del Héroe"
 
-#: guitext:1031
+#: guitext:1033
 msgctxt "Menu interface item"
 msgid "Revenge of the Lord"
 msgstr "La Venganza del Caballero"
 
-#: guitext:1032
+#: guitext:1034
 msgctxt "Menu interface item"
 msgid "Twin Keepers"
 msgstr "Los Guardianes Gemelos"
 
-#: guitext:1033
+#: guitext:1035
 msgctxt "Menu interface item"
 msgid "Undead Keeper"
 msgstr "El Guardián Muerto Viviente"
 
-#: guitext:1034 guitext:1035
+#: guitext:1036 guitext:1035
 msgctxt "Unused"
 msgid "Moo5"
 msgstr ""
 
-#: guitext:1036
+#: guitext:1038
 msgctxt "Trap names"
 msgid "Demolition Trap"
 msgstr "Trampa Demolición"
 
-#: guitext:1037
+#: guitext:1039
 msgctxt "Trap description"
 msgid "Demolition Trap: An explosive with unrivalled destructive power."
 msgstr "Trampa Demolición: Un explosivo con un poder destructivo inigualable."
 
-#: guitext:1038
+#: guitext:1040
 msgctxt "Trap description"
 msgid "Sentry Trap: Stands guard and shoots at enemies in sight."
 msgstr "Trampa Centinela: Vigila y dispara a los enemigos que ve."
 
-#: guitext:1039
+#: guitext:1041
 msgctxt "Trap names"
 msgid "Ballista Trap"
 msgstr "Trampa de Balista"
 
-#: guitext:1040
+#: guitext:1042
 msgctxt "Trap description"
 msgid "Ballista Trap: Stands guard and shoots at enemies in sight."
 msgstr "Trampa de Balista: Vigila y dispara a los enemigos que ve."
 
-#: guitext:1041
+#: guitext:1043
 msgctxt "Creature name"
 msgid "Spirit"
 msgstr "Espíritu"
 
-#: guitext:1042
+#: guitext:1044
 msgctxt "Creature name"
 msgid "Druid"
 msgstr "Druida"
 
-#: guitext:1043
+#: guitext:1045
 msgctxt "Creature name"
 msgid "Time Mage"
 msgstr "Mago del Tiempo"
 
-#: guitext:1044
+#: guitext:1046
 msgctxt "Creature name"
 msgid "Bird"
 msgstr "Pájaro"
 
-#: guitext:1045
+#: guitext:1047
 msgctxt "Creature name"
 msgid "Maiden"
 msgstr "Dama"
 
-#: guitext:1046
+#: guitext:1048
 msgctxt "Creature name"
 msgid "Spiderling"
 msgstr "Arachnecito"
 
-#: guitext:1047
+#: guitext:1049
 msgctxt "Creature name"
 msgid "Goblin"
 msgstr "Trasgo"
 
-#: guitext:1048
+#: guitext:1050
 msgctxt "Creature name"
 msgid "Fallen Angel"
 msgstr ""
 
-#: guitext:1049
+#: guitext:1051
 msgctxt "Unused"
 msgid "Moo7"
 msgstr ""
 
-#: guitext:1050
+#: guitext:1052
 msgctxt "Slab description"
 msgid "Rock Formation."
 msgstr "Formación rocosa."
 
-#: guitext:1051
+#: guitext:1053
 msgctxt "Slab description"
 msgid "Bedrock: Unclaimed rock floor. You cannot claim it or build on it."
 msgstr ""
 "Roca madre: Suelo de roca no reclamado. No puedes reclamarlo ni construir "
 "sobre él."
 
-#: guitext:1052
+#: guitext:1054
 msgctxt "Slab description"
 msgid "Dense Gold Seam: Holds a lot of wealth for your Imps to extract."
 msgstr ""
 "Veta de oro densa: Contiene mucha riqueza para que tus Duendes la extraigan."
 
-#: guitext:1053
+#: guitext:1055
 #, fuzzy
 msgctxt "Keeper spell name"
 msgid "Magic Shield"
 msgstr "Rebote"
 
-#: guitext:1054
+#: guitext:1056
 msgctxt "Keeper spell name"
 msgid "Freeze"
 msgstr "Congelar"
 
-#: guitext:1055
+#: guitext:1057
 msgctxt "Keeper spell name"
 msgid "Slow"
 msgstr "Lentitud"
 
-#: guitext:1056
+#: guitext:1058
 msgctxt "Keeper spell name"
 msgid "Levitate"
 msgstr "Vuelo"
 
-#: guitext:1057
+#: guitext:1059
 msgctxt "Keeper spell name"
 msgid "Illumination"
 msgstr "Iluminación"
 
-#: guitext:1058
+#: guitext:1060
 msgctxt "Keeper spell name"
 msgid "Sight"
 msgstr "Visión"
 
-#: guitext:1059
+#: guitext:1061
 msgctxt "Dungeon special decription"
 msgid "Heal All: Restore full health to all your creatures."
 msgstr "Curar Todos: Todas tus criaturas son curadas."
 
-#: guitext:1060
+#: guitext:1062
 msgctxt "Dungeon special decription"
 msgid "Increase Gold: Generates gold in your treasury."
 msgstr "Aumentar Oro: Genera oro en tu tesoro."
 
-#: guitext:1061
+#: guitext:1063
 msgctxt "Dungeon special decription"
 msgid "Make Unhappy: All creatures of the enemy become upset."
 msgstr "Hacer Infelices: Todas las criaturas del enemigo se vuelven infelices."
 
-#: guitext:1062
+#: guitext:1064
 msgctxt "Dungeon special decription"
 msgid "Weaken Walls: Destroys the fortifications of enemy walls."
 msgstr ""
 "Debilitar Murallas: Destruye las fortificaciones de las murallas enemigas."
 
-#: guitext:1063
+#: guitext:1065
 msgctxt "Game controls"
 msgid "Tilt Up"
 msgstr "Inclinar Arriba"
 
-#: guitext:1064
+#: guitext:1066
 msgctxt "Game controls"
 msgid "Tilt Down"
 msgstr "Inclinar Abajo"
 
-#: guitext:1065
+#: guitext:1067
 msgctxt "Game controls"
 msgid "Reset Tilt"
 msgstr "Reiniciar Inclinación"
 
-#: guitext:1066
+#: guitext:1068
 msgctxt "Creature spell"
 msgid "Heal Monster: The target creature is massively healed."
 msgstr ""
 
-#: guitext:1067
+#: guitext:1069
 msgctxt "Creature spell"
 msgid "Cleanse: Cures all negative effects inflicted on the creature."
 msgstr "Purificar: Cura todos los efectos negativos infligidos a la criatura."
 
-#: guitext:1068
+#: guitext:1070
 msgctxt "Creature spell"
 msgid ""
 "Cleanse Monster: Cures all negative effects inflicted on target creature."
 msgstr ""
 
-#: guitext:1069
+#: guitext:1071
 msgctxt "Keeper spell description"
 msgid ""
 "Magic Shield: Causes spells fired at the target to bounce back at the "
 "attacker."
 msgstr ""
 
-#: guitext:1070
+#: guitext:1072
 msgctxt "Keeper spell description"
 msgid ""
 "Levitate: Causes the target creature to take off from the ground and attack "
 "creatures from the air or cross lava unharmed."
 msgstr ""
 
-#: guitext:1071
+#: guitext:1073
 msgctxt "Keeper spell description"
 msgid ""
 "Sight: Allows the target creature to temporarily increase its awareness and "
 "notice the invisible."
 msgstr ""
 
-#: guitext:1072
+#: guitext:1074
 msgctxt "Keeper spell name"
 msgid "Recruit Tunneller"
 msgstr ""
 
-#: guitext:1073
+#: guitext:1075
 msgctxt "Keeper spell description"
 msgid "Recruit Tunneller: Summon a new Tunneller anywhere in your dungeon."
 msgstr ""
 
-#: guitext:1074 guitext:1075
+#: guitext:1076 guitext:1075
 msgctxt "Unused"
 msgid "Moo8"
 msgstr ""
 
-#: guitext:1076
+#: guitext:1078
 msgctxt "Door name"
 msgid "Midas Door"
 msgstr ""
 
-#: guitext:1077
+#: guitext:1079
 msgctxt "Door description"
 msgid ""
 "Midas Door: This door consumes gold from the owner to stay completely "
 "indestructible. RMB zoom."
 msgstr ""
 
-#: guitext:1078
+#: guitext:1080
 msgctxt "Game controls"
 msgid "Ascend"
 msgstr ""
 
-#: guitext:1079
+#: guitext:1081
 msgctxt "Game controls"
 msgid "Descend"
 msgstr ""
 
-#: guitext:1080
+#: guitext:1082
 msgctxt "Creature spell"
 msgid "Familiar: Summons a companion to guard and assist the creature."
 msgstr ""
 
-#: guitext:1081
+#: guitext:1083
 msgctxt "Creature spell"
 msgid "Summon: Call upon temporary guardians to assist the creature in combat."
 msgstr ""

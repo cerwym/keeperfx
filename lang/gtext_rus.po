@@ -5870,6 +5870,16 @@ msgid "Storage room unreachable: LMB toggle. RMB delete."
 msgstr "Склад недоступен: ЛКМ - развернуть, ПКМ - удалить."
 
 #: guitext:949
+msgctxt "Game event name"
+msgid "Casino Jackpot!"
+msgstr ""
+
+#: guitext:950
+msgctxt "Game event description"
+msgid "A creature has won the jackpot! LMB toggle. RMB delete."
+msgstr ""
+
+#: guitext:951
 msgctxt "In-game interface description"
 msgid ""
 "Armour: Part of the damage which won't affect creature health. The higher the number, the larger part of damage is "
@@ -5877,17 +5887,17 @@ msgid ""
 msgstr ""
 "Броня: Вычитается из урона созданию, снижая его величину. Чем выше значение, тем ниже наносимый созданию урон."
 
-#: guitext:950
+#: guitext:952
 msgctxt "In-game interface description"
 msgid "Speed: How fast the creature moves and perform its dungeon tasks."
 msgstr "Скорость: Скорость перемещения создания и выполнения им заданий в подземелье."
 
-#: guitext:951
+#: guitext:953
 msgctxt "In-game interface description"
 msgid "Loyalty: How resistant the creature is against scavenging by the enemy."
 msgstr "Лояльность: Устойчивость создания к попыткам растления со стороны врага."
 
-#: guitext:952
+#: guitext:954
 msgctxt "In-game interface description"
 msgid ""
 "Research Skill: How fast the creature works in Library. The higher the skill level, the better the creature's "
@@ -5896,7 +5906,7 @@ msgstr ""
 "Исследование: Характеризует эффективность создания в работе с библиотечными материалами. Чем выше навык, тем выше "
 "эффективность создания."
 
-#: guitext:953
+#: guitext:955
 msgctxt "In-game interface description"
 msgid ""
 "Manufacture Skill: How fast the creature works in Workshop. The higher the skill level, the better the creature's "
@@ -5905,14 +5915,14 @@ msgstr ""
 "Изготовление: Характеризует эффективность работы создания в мастерской. Чем выше навык, тем выше эффективность "
 "создания."
 
-#: guitext:954
+#: guitext:956
 msgctxt "In-game interface description"
 msgid ""
 "Training Skill: How fast the creature works on training. The higher the skill level, the better the creature's "
 "performance."
 msgstr "Тренировка: Характеризует скорость тренировки создания. Чем выше навык, тем выше эффективность создания."
 
-#: guitext:955
+#: guitext:957
 msgctxt "In-game interface description"
 msgid ""
 "Scavenge Skill: How fast the creature works on scavenging. The higher the skill level, the better the creature's "
@@ -5920,43 +5930,43 @@ msgid ""
 msgstr ""
 "Растлитель: Характеризует эффективность создания в растлении. Чем выше навык, тем выше эффективность создания."
 
-#: guitext:956
+#: guitext:958
 msgctxt "In-game interface description"
 msgid "Training Cost: Gold used for training the creature."
 msgstr "Плата за тренировку: Количество золота, затрачиваемое на тренировку создания."
 
-#: guitext:957
+#: guitext:959
 msgctxt "In-game interface description"
 msgid "Scavenge Cost: Gold used for scavenging by the creature."
 msgstr "Плата за растление: Количество золота, которое берет создание за растление других созданий."
 
-#: guitext:958
+#: guitext:960
 msgctxt "In-game interface description"
 msgid "Best Damage: How much harm can be done by the strongest attack the creature has."
 msgstr "Максимальный урон: Количество урона, который может нанести сильнейшая атака создания."
 
-#: guitext:959
+#: guitext:961
 msgctxt "In-game interface description"
 msgid "Weight: Mass of the creature. Some people say that being overweight can lead to heart attacks."
 msgstr "Вес: Масса создания. Говорят, лишний вес ведет к проблемам с сердцем..."
 
-#: guitext:960
+#: guitext:962
 msgctxt "In-game interface description"
 msgid "Score: Estimate of an overall creature value. Added to player score when finishing the level."
 msgstr ""
 "Очки: Примерная оценка ценности создания. Прибавляется к итоговой сумме очков игрока после прохождения уровня."
 
-#: guitext:961
+#: guitext:963
 msgctxt "Keeper spell name"
 msgid "Hand Of Evil"
 msgstr "Рука зла"
 
-#: guitext:962
+#: guitext:964
 msgctxt "Keeper spell name"
 msgid "Slap"
 msgstr "Пощечина"
 
-#: guitext:963
+#: guitext:965
 msgctxt "Keeper spell description"
 msgid ""
 "Hand Of Evil: Ability to pick up your creatures and hold them in your hand. Just don't hold them forever, or they "
@@ -5964,7 +5974,7 @@ msgid ""
 msgstr ""
 "Рука зла: Возможность хватать созданий и удерживать их Своей рукой. Главное - не увлекайтесь. Это их раздражает."
 
-#: guitext:964
+#: guitext:966
 msgctxt "Keeper spell description"
 msgid ""
 "Slap: Makes your creatures work harder, for some time. Your creatures take some damage from each slap they receive."
@@ -5972,197 +5982,197 @@ msgstr ""
 "Пощечина: На некоторое время заставляет Ваших созданий работать более усердно. Каждая пощечина причиняет им легкую "
 "травму."
 
-#: guitext:965
+#: guitext:967
 msgctxt "In-game interface description"
 msgid "Health: How many health points the creature has left to lose."
 msgstr "Очки здоровья: Количество оставшихся у создания очков здоровья."
 
-#: guitext:966
+#: guitext:968
 msgctxt "In-game interface description"
 msgid "Health: The maximum number of health points for this creature."
 msgstr "Здоровье: Максимально возможное количество очков здоровья у этого создания."
 
-#: guitext:967
+#: guitext:969
 msgctxt "Menu interface item"
 msgid "Toggle Message"
 msgstr "Показать/скрыть сообщение"
 
-#: guitext:968
+#: guitext:970
 msgctxt "Menu interface item"
 msgid "Return to Free Play levels"
 msgstr "Вернуться к списку карт"
 
-#: guitext:969
+#: guitext:971
 msgctxt "Menu interface item"
 msgid "Map packs"
 msgstr "Наборы карт"
 
-#: guitext:970
+#: guitext:972
 msgctxt "Menu interface item"
 msgid "The Deeper Dungeons"
 msgstr "Глубокие подземелья"
 
-#: guitext:971
+#: guitext:973
 msgctxt "Menu interface item"
 msgid "Standard Levels"
 msgstr "Обычные карты"
 
-#: guitext:972
+#: guitext:974
 msgctxt "Menu interface item"
 msgid "Classic Levels"
 msgstr "Классические карты"
 
-#: guitext:973
+#: guitext:975
 msgctxt "Menu interface item"
 msgid "Legacy Levels"
 msgstr "Устаревшие карты"
 
-#: guitext:974
+#: guitext:976
 msgctxt "Menu interface item"
 msgid "Personal Levels"
 msgstr "Карты игрока"
 
-#: guitext:975
+#: guitext:977
 msgctxt "Menu interface item"
 msgid "Lost Levels"
 msgstr "Вырезанные карты"
 
-#: guitext:976 guitext:977 guitext:978 guitext:979 guitext:980
+#: guitext:978 guitext:977 guitext:978 guitext:979 guitext:980
 msgctxt "Unused"
 msgid "Moo3"
 msgstr "Му3"
 
-#: guitext:981
+#: guitext:983
 msgctxt "Trap names"
 msgid "Special Trap"
 msgstr "Особая ловушка"
 
-#: guitext:982
+#: guitext:984
 msgctxt "Trap names"
 msgid "Freeze Trap"
 msgstr "Замораживающая ловушка"
 
-#: guitext:983
+#: guitext:985
 msgctxt "Trap names"
 msgid "Fear Trap"
 msgstr "Ловушка-пугало"
 
-#: guitext:984
+#: guitext:986
 msgctxt "Trap names"
 msgid "Sentry Trap"
 msgstr "Ловушка-страж"
 
-#: guitext:985
+#: guitext:987
 msgctxt "Trap names"
 msgid "Mimic Trap"
 msgstr "Имитирующая ловушка"
 
-#: guitext:986
+#: guitext:988
 msgctxt "Trap names"
 msgid "Spawn Trap"
 msgstr "Призывающая ловушка"
 
-#: guitext:987
+#: guitext:989
 msgctxt "Trap names"
 msgid "Wind Trap"
 msgstr "Ловушка с ветром"
 
-#: guitext:988
+#: guitext:990
 msgctxt "Trap names"
 msgid "Spitfire Trap"
 msgstr "Ловушка-огнемет"
 
-#: guitext:989
+#: guitext:991
 msgctxt "Trap names"
 msgid "Chicken Trap"
 msgstr "Превращающая ловушка"
 
-#: guitext:990
+#: guitext:992
 msgctxt "Trap names"
 msgid "Disease Trap"
 msgstr "Заражающая ловушка"
 
-#: guitext:991
+#: guitext:993
 msgctxt "Trap names"
 msgid "Power Trap"
 msgstr "Истощающая ловушка"
 
-#: guitext:992
+#: guitext:994
 msgctxt "Trap names"
 msgid "Switch"
 msgstr "Рычаг"
 
-#: guitext:993
+#: guitext:995
 msgctxt "Trap names"
 msgid "Hidden Switch"
 msgstr "Потайной рычаг"
 
-#: guitext:994
+#: guitext:996
 msgctxt "Door name"
 msgid "Special Door"
 msgstr "Особая дверь"
 
-#: guitext:995
+#: guitext:997
 msgctxt "Door name"
 msgid "Hidden Door"
 msgstr "Потайная дверь"
 
-#: guitext:996
+#: guitext:998
 msgctxt "Mouse"
 msgid "Scroll Wheel Up"
 msgstr "Колесо мыши вверх"
 
-#: guitext:997
+#: guitext:999
 msgctxt "Mouse"
 msgid "Scroll Wheel Down"
 msgstr "Колесо мыши вниз"
 
-#: guitext:998
+#: guitext:1000
 msgctxt "Mouse"
 msgid "Mouse Button"
 msgstr "Кнопка мыши"
 
-#: guitext:999
+#: guitext:1001
 msgctxt "Game controls"
 msgid "Build Square Room"
 msgstr "Построить квадратную комнату"
 
-#: guitext:1000
+#: guitext:1002
 msgctxt "Game controls"
 msgid "Detect Room"
 msgstr "Выделить пространство комнаты"
 
-#: guitext:1001
+#: guitext:1003
 msgctxt "Game controls"
 msgid "Increase Room Size"
 msgstr "Увеличить размер помещения"
 
-#: guitext:1002
+#: guitext:1004
 msgctxt "Game controls"
 msgid "Decrease Room Size"
 msgstr "Уменьшить размер помещения"
 
-#: guitext:1003
+#: guitext:1005
 msgctxt "Game controls"
 msgid "Precision Sell"
 msgstr "Подсветка точки"
 
-#: guitext:1004
+#: guitext:1006
 msgctxt "Game controls"
 msgid "Snap Camera"
 msgstr "Поворот камеры на фикс. угол"
 
-#: guitext:1005
+#: guitext:1007
 msgctxt "Dungeon special description"
 msgid "Mysterious Box: There's no telling what this will do."
 msgstr "Таинственный ящик: Откроете ящик - узнаете содержимое. А пока мучайтесь в догадках, что там."
 
-#: guitext:1006
+#: guitext:1008
 msgctxt "Network game message"
 msgid "Joined player has different map version from host."
 msgstr "Версии карты у игроков различаются."
 
-#: guitext:1007
+#: guitext:1009
 msgctxt "In-game interface description"
 msgid ""
 "Display Resolution: Switch to the next configured display resolution. LMB toggle. RMB display current resolution."
@@ -6170,312 +6180,312 @@ msgstr ""
 "Разрешение монитора: Переключение на следующее установленное разрешение монитора. ЛКМ - переключение, ПКМ - "
 "отображение текущего разрешения."
 
-#: guitext:1008
+#: guitext:1010
 msgctxt "In-game interface item"
 msgid "Voice"
 msgstr "Голос"
 
-#: guitext:1009
+#: guitext:1011
 msgctxt "In-game interface item"
 msgid "Ambience"
 msgstr "Эффекты окружения"
 
-#: guitext:1010
+#: guitext:1012
 msgctxt "Unused"
 msgid "Moo4"
 msgstr "Му4"
 
-#: guitext:1011
+#: guitext:1013
 msgctxt "Menu interface item"
 msgid "Dungeon Keeper - Original Campaign"
 msgstr "Dungeon Keeper - Оригинальная кампания"
 
-#: guitext:1012
+#: guitext:1014
 msgctxt "Menu interface item"
 msgid "Assmist Isle"
 msgstr "Остров Эсмист"
 
-#: guitext:1013
+#: guitext:1015
 msgctxt "Menu interface item"
 msgid "Ancient Keeper"
 msgstr "Древний Хранитель"
 
-#: guitext:1014
+#: guitext:1016
 msgctxt "Menu interface item"
 msgid "Burdened Imps"
 msgstr "Навьюченные бесы"
 
-#: guitext:1015
+#: guitext:1017
 msgctxt "Menu interface item"
 msgid "Conquest of the Arctic"
 msgstr "Завоевание Арктики"
 
-#: guitext:1016
+#: guitext:1018
 msgctxt "Menu interface item"
 msgid "The Destiny of Ninja"
 msgstr "Предназначение ниндзя"
 
-#: guitext:1017
+#: guitext:1019
 msgctxt "Menu interface item"
 msgid "DzjeeAr's 6-level campaign"
 msgstr "6-уровневая кампания DzjeeAr'а"
 
-#: guitext:1018
+#: guitext:1020
 msgctxt "Menu interface item"
 msgid "DzjeeAr's 10-level campaign"
 msgstr "10-уровневая кампания DzjeeAr'а"
 
-#: guitext:1019
+#: guitext:1021
 msgctxt "Menu interface item"
 msgid "DzjeeAr's 25-level campaign"
 msgstr "25-уровневая кампания DzjeeAr'а"
 
-#: guitext:1020
+#: guitext:1022
 msgctxt "Menu interface item"
 msgid "Evil Keeper"
 msgstr "Злой Хранитель"
 
-#: guitext:1021
+#: guitext:1023
 msgctxt "Menu interface item"
 msgid "Grinics' KReign campaign"
 msgstr "Кампания Grinics'а KReign"
 
-#: guitext:1022
+#: guitext:1024
 msgctxt "Menu interface item"
 msgid "Japanese DKMaps8 pack"
 msgstr "Японский набор карт DKMaps8"
 
-#: guitext:1023
+#: guitext:1025
 msgctxt "Menu interface item"
 msgid "KDK Levels"
 msgstr "Уровни KDK"
 
-#: guitext:1024
+#: guitext:1026
 msgctxt "Menu interface item"
 msgid "Good Campaign"
 msgstr "Кампания героев"
 
-#: guitext:1025
+#: guitext:1027
 msgctxt "Menu interface item"
 msgid "Lord Vexer"
 msgstr "Лорд Вексер"
 
-#: guitext:1026
+#: guitext:1028
 msgctxt "Menu interface item"
 msgid "Nikolai's Castles"
 msgstr "Замки Николая"
 
-#: guitext:1027
+#: guitext:1029
 msgctxt "Menu interface item"
 msgid "Dungeon Keeper - NG+"
 msgstr "Dungeon Keeper - Новая игра+"
 
-#: guitext:1028
+#: guitext:1030
 msgctxt "Menu interface item"
 msgid "Post Ancient Keeper"
 msgstr "Древний Хранитель - Послесловие"
 
-#: guitext:1029
+#: guitext:1031
 msgctxt "Menu interface item"
 msgid "Post Undead Keeper"
 msgstr "Неупокоенный Хранитель - Продолжение"
 
-#: guitext:1030
+#: guitext:1032
 msgctxt "Menu interface item"
 msgid "Quest for the Hero"
 msgstr "В поисках героя"
 
-#: guitext:1031
+#: guitext:1033
 msgctxt "Menu interface item"
 msgid "Revenge of the Lord"
 msgstr "Месть лорда"
 
-#: guitext:1032
+#: guitext:1034
 msgctxt "Menu interface item"
 msgid "Twin Keepers"
 msgstr "Близнецы Хранители"
 
-#: guitext:1033
+#: guitext:1035
 msgctxt "Menu interface item"
 msgid "Undead Keeper"
 msgstr "Неупокоенный Хранитель"
 
-#: guitext:1034 guitext:1035
+#: guitext:1036 guitext:1035
 msgctxt "Unused"
 msgid "Moo5"
 msgstr "Му5"
 
-#: guitext:1036
+#: guitext:1038
 msgctxt "Trap names"
 msgid "Demolition Trap"
 msgstr "Заряд взрывчатки"
 
-#: guitext:1037
+#: guitext:1039
 msgctxt "Trap description"
 msgid "Demolition Trap: An explosive with unrivalled destructive power."
 msgstr "Заряд взрывчатки: Заряд невероятной разрушительной силы."
 
-#: guitext:1038
+#: guitext:1040
 msgctxt "Trap description"
 msgid "Sentry Trap: Stands guard and shoots at enemies in sight."
 msgstr "Ловушка-страж: Стоит на страже и метает огненные шары во врагов в поле зрения."
 
-#: guitext:1039
+#: guitext:1041
 msgctxt "Trap names"
 msgid "Ballista Trap"
 msgstr "Ловушка-баллиста"
 
-#: guitext:1040
+#: guitext:1042
 msgctxt "Trap description"
 msgid "Ballista Trap: Stands guard and shoots at enemies in sight."
 msgstr "Ловушка-баллиста: Стоит на страже и ведет огонь по врагам в поле зрения."
 
-#: guitext:1041
+#: guitext:1043
 msgctxt "Creature name"
 msgid "Spirit"
 msgstr "Дух"
 
-#: guitext:1042
+#: guitext:1044
 msgctxt "Creature name"
 msgid "Druid"
 msgstr "Друид"
 
-#: guitext:1043
+#: guitext:1045
 msgctxt "Creature name"
 msgid "Time Mage"
 msgstr "Маг времени"
 
-#: guitext:1044
+#: guitext:1046
 msgctxt "Creature name"
 msgid "Bird"
 msgstr "Птица"
 
-#: guitext:1045
+#: guitext:1047
 msgctxt "Creature name"
 msgid "Maiden"
 msgstr "Дева"
 
-#: guitext:1046
+#: guitext:1048
 msgctxt "Creature name"
 msgid "Spiderling"
 msgstr "Паучок"
 
-#: guitext:1047
+#: guitext:1049
 msgctxt "Creature name"
 msgid "Goblin"
 msgstr "Гоблин"
 
-#: guitext:1048
+#: guitext:1050
 msgctxt "Creature name"
 msgid "Fallen Angel"
 msgstr "Падший ангел"
 
-#: guitext:1049
+#: guitext:1051
 msgctxt "Unused"
 msgid "Moo7"
 msgstr "Му7"
 
-#: guitext:1050
+#: guitext:1052
 msgctxt "Slab description"
 msgid "Rock Formation."
 msgstr "Скальное образование."
 
-#: guitext:1051
+#: guitext:1053
 msgctxt "Slab description"
 msgid "Bedrock: Unclaimed rock floor. You cannot claim it or build on it."
 msgstr "Скальное основание: Незахваченная скальная порода. Вы не можете ни захватить её, ни строить на ней."
 
-#: guitext:1052
+#: guitext:1054
 msgctxt "Slab description"
 msgid "Dense Gold Seam: Holds a lot of wealth for your Imps to extract."
 msgstr "Богатая золотая жила: Источник золотых гор для разработки и переноса в сокровищницу Вашими бесами."
 
-#: guitext:1053
+#: guitext:1055
 msgctxt "Keeper spell name"
 msgid "Magic Shield"
 msgstr "Магический щит"
 
-#: guitext:1054
+#: guitext:1056
 msgctxt "Keeper spell name"
 msgid "Freeze"
 msgstr "Заморозить"
 
-#: guitext:1055
+#: guitext:1057
 msgctxt "Keeper spell name"
 msgid "Slow"
 msgstr "Замедлить"
 
-#: guitext:1056
+#: guitext:1058
 msgctxt "Keeper spell name"
 msgid "Levitate"
 msgstr "Левитировать"
 
-#: guitext:1057
+#: guitext:1059
 msgctxt "Keeper spell name"
 msgid "Illumination"
 msgstr "Осветить"
 
-#: guitext:1058
+#: guitext:1060
 msgctxt "Keeper spell name"
 msgid "Sight"
 msgstr "Сверхъестественное зрение"
 
-#: guitext:1059
+#: guitext:1061
 msgctxt "Dungeon special decription"
 msgid "Heal All: Restore full health to all your creatures."
 msgstr "Исцелить всех: Полностью восстанавливает здоровье всех Ваших созданий."
 
-#: guitext:1060
+#: guitext:1062
 msgctxt "Dungeon special decription"
 msgid "Increase Gold: Generates gold in your treasury."
 msgstr "Произвести золото: Добавляет золота в Вашу сокровищницу."
 
-#: guitext:1061
+#: guitext:1063
 msgctxt "Dungeon special decription"
 msgid "Make Unhappy: All creatures of the enemy become upset."
 msgstr "Сделать несчастными: Все существа врага становятся недовольными."
 
-#: guitext:1062
+#: guitext:1064
 msgctxt "Dungeon special decription"
 msgid "Weaken Walls: Destroys the fortifications of enemy walls."
 msgstr "Ослабить стены: Разукрепляет стены подземелья врага."
 
-#: guitext:1063
+#: guitext:1065
 msgctxt "Game controls"
 msgid "Tilt Up"
 msgstr "Увеличить наклон камеры"
 
-#: guitext:1064
+#: guitext:1066
 msgctxt "Game controls"
 msgid "Tilt Down"
 msgstr "Уменьшить наклон камеры"
 
-#: guitext:1065
+#: guitext:1067
 msgctxt "Game controls"
 msgid "Reset Tilt"
 msgstr "Сбросить наклон"
 
-#: guitext:1066
+#: guitext:1068
 msgctxt "Creature spell"
 msgid "Heal Monster: The target creature is massively healed."
 msgstr "Излечение чудища: Эффективно излечивает целевое создание."
 
-#: guitext:1067
+#: guitext:1069
 msgctxt "Creature spell"
 msgid "Cleanse: Cures all negative effects inflicted on the creature."
 msgstr "Очищение: Снимает все негативные воздействия, наложенные на создание."
 
-#: guitext:1068
+#: guitext:1070
 msgctxt "Creature spell"
 msgid "Cleanse Monster: Cures all negative effects inflicted on target creature."
 msgstr "Очищение чудища: Снимает все негативные воздействия, наложенные на целевое создание."
 
-#: guitext:1069
+#: guitext:1071
 msgctxt "Keeper spell description"
 msgid "Magic Shield: Causes spells fired at the target to bounce back at the attacker."
 msgstr "Магический щит: Заставляет заклинания, направленные в цель, отражаться обратно в применившего их."
 
-#: guitext:1070
+#: guitext:1072
 msgctxt "Keeper spell description"
 msgid ""
 "Levitate: Causes the target creature to take off from the ground and attack creatures from the air or cross lava "
@@ -6483,52 +6493,52 @@ msgid ""
 msgstr ""
 "Левитировать: Позволяет созданию оторваться от земли и напасть на врага с воздуха или преодолеть лаву невредимым."
 
-#: guitext:1071
+#: guitext:1073
 msgctxt "Keeper spell description"
 msgid "Sight: Allows the target creature to temporarily increase its awareness and notice the invisible."
 msgstr "Сверхъестественное зрение: На время усиливает внимание создания и позволяет ему видеть невидимое."
 
-#: guitext:1072
+#: guitext:1074
 msgctxt "Keeper spell name"
 msgid "Recruit Tunneller"
 msgstr "Нанять проходчика"
 
-#: guitext:1073
+#: guitext:1075
 msgctxt "Keeper spell description"
 msgid "Recruit Tunneller: Summon a new Tunneller anywhere in your dungeon."
 msgstr "Нанять проходчика: Вызывает нового проходчика в любой точке Вашего подземелья."
 
-#: guitext:1074 guitext:1075
+#: guitext:1076 guitext:1075
 msgctxt "Unused"
 msgid "Moo8"
 msgstr "Му8"
 
-#: guitext:1076
+#: guitext:1078
 msgctxt "Door name"
 msgid "Midas Door"
 msgstr "Дверь Мидаса"
 
-#: guitext:1077
+#: guitext:1079
 msgctxt "Door description"
 msgid "Midas Door: This door consumes gold from the owner to stay completely indestructible. RMB zoom."
 msgstr "Дверь Мидаса: Пожирает золото владельца, благодаря чему остается непробиваемой. ПКМ - отображение."
 
-#: guitext:1078
+#: guitext:1080
 msgctxt "Game controls"
 msgid "Ascend"
 msgstr "Взлететь"
 
-#: guitext:1079
+#: guitext:1081
 msgctxt "Game controls"
 msgid "Descend"
 msgstr "Опуститься"
 
-#: guitext:1080
+#: guitext:1082
 msgctxt "Creature spell"
 msgid "Familiar: Summons a companion to guard and assist the creature."
 msgstr "Призыв фамильяра: Призывает спутника, защищающего создание и помогающего ему."
 
-#: guitext:1081
+#: guitext:1083
 msgctxt "Creature spell"
 msgid "Summon: Call upon temporary guardians to assist the creature in combat."
 msgstr "Призыв создания: На время призывает хранителей, помогающих призвавшему их созданию в битве."
