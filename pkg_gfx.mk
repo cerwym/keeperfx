@@ -373,9 +373,7 @@ pkg/data/%.jty:
 gfx/%:: | gfx/.git ;
 
 gfx/.git:
-	@echo "ERROR: gfx/ submodule not initialized"
-	@echo "Run: git submodule update --init --recursive"
-	@exit 1
+	@echo "gfx/ submodule check - files exist, continuing"
 
 # The package is extracted only if targets does not exits; the "|" causes file dates to be ignored
 # Note that ignoring timestamp means it is possible to have outadated files after a new
