@@ -8,6 +8,7 @@ ENV PATH=$VITASDK/bin:$PATH
 ENV LAME_VERSION=3.100
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
+        ninja-build \
         wget \
     && rm -rf /var/lib/apt/lists/* \
     && wget -q "https://downloads.sourceforge.net/lame/lame-${LAME_VERSION}.tar.gz" \
