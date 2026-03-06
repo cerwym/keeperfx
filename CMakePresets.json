@@ -252,7 +252,7 @@
             "inherits": "base",
             "cacheVariables": {
                 "CMAKE_TOOLCHAIN_FILE": "$env{VITASDK}/share/vita.toolchain.cmake",
-                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "CMAKE_BUILD_TYPE": "Debug",
                 "PLATFORM_VITA": "ON",
                 "VITA_ENABLE_VITAGL": "ON",
                 "VITA_PERF_LOG": "ON",
