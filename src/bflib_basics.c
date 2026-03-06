@@ -340,8 +340,20 @@ int LbErrorLogClose(void)
 TbFileHandle file = NULL;
 
 void write_log_to_array_for_live_viewing(const char* fmt_str, va_list args, const char* add_log_prefix) {
+#if defined(PLATFORM_VITA) || defined(PLATFORM_3DS) || defined(PLATFORM_SWITCH)
+  (void)fmt_str;
+  (void)args;
+  (void)add_log_prefix;
+  return;
+#else
     if (consoleLogArray == NULL) {
-        consoleLogArray = (char (*)[MAX_TEXT_LENGTH])KfxCalloc(MAX_CONSOLE_LOG_COUNT, MAX_TEXT_LENGTH);
+    // This buffer is only for optional in-game live log viewing.
+    // If allocation fails on memory-constrained targets (e.g. Vita),
+    // keep running and just skip mirroring logs into this array.
+    consoleLogArray = (char (*)[MAX_TEXT_LENGTH])calloc(MAX_CONSOLE_LOG_COUNT, MAX_TEXT_LENGTH);
+    if (consoleLogArray == NULL) {
+      return;
+    }
     }
     if (consoleLogArraySize >= MAX_CONSOLE_LOG_COUNT) {
         // Array is full - so clear it. This is a bit of a stopgap solution, it will lose us the older entries.
@@ -350,10 +362,7 @@ void write_log_to_array_for_live_viewing(const char* fmt_str, va_list args, cons
     }
 
     char formattedString[MAX_TEXT_LENGTH];
-    va_list copy;
-    va_copy(copy, args);
-    vsnprintf(formattedString, sizeof(formattedString), fmt_str, copy);
-    va_end(copy);
+    vsnprintf(formattedString, sizeof(formattedString), fmt_str, args);
 
     char buffer[MAX_TEXT_LENGTH];
     snprintf(buffer, sizeof(buffer), "%s%s", add_log_prefix, formattedString); // merge prefix and formatted string
@@ -362,6 +371,7 @@ void write_log_to_array_for_live_viewing(const char* fmt_str, va_list args, cons
     strncpy(consoleLogArray[consoleLogArraySize], buffer, MAX_TEXT_LENGTH);
     consoleLogArray[consoleLogArraySize][MAX_TEXT_LENGTH - 1] = '\0';
     consoleLogArraySize++;
+  #endif
 }
 
 int LbLog(struct TbLog *log, const char *fmt_str, va_list arg)
