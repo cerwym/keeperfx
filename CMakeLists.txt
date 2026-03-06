@@ -374,24 +374,10 @@ if(PLATFORM_VITA)
             SOURCE_DIR      ${CMAKE_BINARY_DIR}/_deps/vitagl-src
             BUILD_IN_SOURCE TRUE
             CONFIGURE_COMMAND ""
+            PATCH_COMMAND   git reset --hard HEAD && git clean -fd
             # Remove any pre-installed vitaGL first to avoid version conflicts
-            BUILD_COMMAND
-                rm -f $ENV{VITASDK}/arm-vita-eabi/lib/libvitaGL.a $ENV{VITASDK}/arm-vita-eabi/include/vitaGL.h $ENV{VITASDK}/arm-vita-eabi/include/imgui_impl_vitagl.h &&
-                make
-                    LOG_ERRORS=2
-                    HAVE_PROFILING=0
-                    HAVE_DEBUGGER=1
-                    DEBUG_GLSL_TRANSLATOR=1
-                    DEBUG_GLSL_PREPROCESSOR=1
-                    HAVE_GLSL_SUPPORT=1
-            INSTALL_COMMAND
-                make install
-                    LOG_ERRORS=2
-                    HAVE_PROFILING=0
-                    HAVE_DEBUGGER=1
-                    DEBUG_GLSL_TRANSLATOR=1
-                    DEBUG_GLSL_PREPROCESSOR=1
-                    HAVE_GLSL_SUPPORT=1
+            BUILD_COMMAND   /bin/bash -c "rm -f $ENV{VITASDK}/arm-vita-eabi/lib/libvitaGL.a $ENV{VITASDK}/arm-vita-eabi/include/vitaGL.h $ENV{VITASDK}/arm-vita-eabi/include/imgui_impl_vitagl.h && make LOG_ERRORS=2 HAVE_PROFILING=0 HAVE_DEBUGGER=1 DEBUG_GLSL_TRANSLATOR=1 DEBUG_GLSL_PREPROCESSOR=1 HAVE_GLSL_SUPPORT=1"
+            INSTALL_COMMAND /bin/bash -c "make install LOG_ERRORS=2 HAVE_PROFILING=0 HAVE_DEBUGGER=1 DEBUG_GLSL_TRANSLATOR=1 DEBUG_GLSL_PREPROCESSOR=1 HAVE_GLSL_SUPPORT=1"
             BUILD_BYPRODUCTS "${VITAGL_INSTALL_LIB}"
         )
 

@@ -46,4 +46,7 @@ services:
 
   vitasdk:
     <<: *build-base
+    build:
+      context: ..
+      dockerfile: docker/vitasdk/Dockerfile
     image: ghcr.io/${DOCKER_ORG:-cerwym}/keeperfx-build-vitasdk:latest

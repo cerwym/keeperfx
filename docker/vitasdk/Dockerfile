@@ -32,3 +32,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && make install \
     && cd .. \
     && rm -rf "lame-${LAME_VERSION}" "lame-${LAME_VERSION}.tar.gz"
+
+# vitashark (GLSL→CG compiler) and mathneon (NEON math) are required by vitaGL
+# when built with HAVE_GLSL_SUPPORT=1.  CI installs these via vdpm; mirror that here
+# so local Docker builds are consistent with CI.
+RUN $VITASDK/bin/vdpm vitashark mathneon
