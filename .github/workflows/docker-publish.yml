@@ -50,7 +50,7 @@ jobs:
             dockerfile: docker/wasm/Dockerfile
 
           - name: vitasdk
-            image: keeperfx-build-vitasdk
+            image: build-vitasdk
             context: .
             dockerfile: docker/vitasdk/Dockerfile
 

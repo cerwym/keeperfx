@@ -49,4 +49,4 @@ services:
     build:
       context: ..
       dockerfile: docker/vitasdk/Dockerfile
-    image: ghcr.io/${DOCKER_ORG:-cerwym}/keeperfx-build-vitasdk:latest
+    image: ghcr.io/${DOCKER_ORG:-cerwym}/build-vitasdk:latest
