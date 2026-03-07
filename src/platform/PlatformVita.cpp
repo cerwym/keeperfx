@@ -7,8 +7,10 @@
 #include <psp2/io/stat.h>
 #include <psp2/kernel/processmgr.h>
 #include <psp2/kernel/clib.h>
-#include <psp2/power.h>
+#include <psp2/kernel/sysmem.h>
 #include <psp2/kernel/threadmgr.h>
+#include <psp2/power.h>
+#include <psp2/rtc.h>
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>
@@ -20,6 +22,7 @@
 #include "bflib_filelst.h"
 #include "config.h"
 #include "audio/audio_vita.h"
+#include "platform/kfx_breadcrumb.h"
 #endif
 #include "post_inc.h"
 
@@ -79,14 +82,113 @@ const char* PlatformVita::GetWineHost() const
 
 // ----- Crash / error parachute -----
 
+// Global breadcrumb ring buffer — written by KFX_BREADCRUMB() macro
+KfxBreadcrumbRing g_kfx_breadcrumbs = {};
+
+static const char* _sig_name(int sig)
+{
+    switch (sig) {
+        case SIGSEGV: return "SIGSEGV";
+        case SIGABRT: return "SIGABRT";
+        case SIGFPE:  return "SIGFPE";
+        case SIGILL:  return "SIGILL";
+        default:      return "UNKNOWN";
+    }
+}
+
 static void vita_crash_handler(int sig)
 {
+    // Prevent recursive crashes in the handler
+    signal(sig, SIG_DFL);
+
+    // Get timestamp
+    SceDateTime dt;
+    sceRtcGetCurrentClockLocalTime(&dt);
+
+    // Get thread info
+    SceKernelThreadInfo tinfo;
+    memset(&tinfo, 0, sizeof(tinfo));
+    tinfo.size = sizeof(tinfo);
+    SceUID tid = sceKernelGetThreadId();
+    sceKernelGetThreadInfo(tid, &tinfo);
+
+    // Capture ARM registers via inline assembly
+    // Note: these are the handler's registers, not the faulting context.
+    // The OS core dump (.psp2dmp) has the actual faulting registers.
+    // These are still useful as an approximation.
+    unsigned int regs[16];
+    __asm__ volatile(
+        "str r0,  [%0, #0]\n"
+        "str r1,  [%0, #4]\n"
+        "str r2,  [%0, #8]\n"
+        "str r3,  [%0, #12]\n"
+        "str r4,  [%0, #16]\n"
+        "str r5,  [%0, #20]\n"
+        "str r6,  [%0, #24]\n"
+        "str r7,  [%0, #28]\n"
+        "str r8,  [%0, #32]\n"
+        "str r9,  [%0, #36]\n"
+        "str r10, [%0, #40]\n"
+        "str r11, [%0, #44]\n"
+        "str r12, [%0, #48]\n"
+        "str sp,  [%0, #52]\n"
+        "str lr,  [%0, #56]\n"
+        "adr r1,  .         \n"
+        "str r1,  [%0, #60]\n"
+        : : "r"(regs) : "r1", "memory"
+    );
+
+    // Write structured crash log
     FILE* f = fopen("ux0:data/keeperfx/crash.log", "a");
     if (f) {
-        fprintf(f, "KeeperFX crashed: signal %d\n", sig);
+        fprintf(f, "[CRASH] %04d-%02d-%02dT%02d:%02d:%02d\n",
+                dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second);
+        fprintf(f, "signal=%d (%s)\n", sig, _sig_name(sig));
+        fprintf(f, "thread=%s tid=0x%08x\n", tinfo.name, tid);
+        fprintf(f, "handler_regs: sp=0x%08x lr=0x%08x pc=0x%08x\n",
+                regs[13], regs[14], regs[15]);
+        fprintf(f, "r0=0x%08x r1=0x%08x r2=0x%08x r3=0x%08x\n",
+                regs[0], regs[1], regs[2], regs[3]);
+        fprintf(f, "r4=0x%08x r5=0x%08x r6=0x%08x r7=0x%08x\n",
+                regs[4], regs[5], regs[6], regs[7]);
+        fprintf(f, "r8=0x%08x r9=0x%08x r10=0x%08x r11=0x%08x r12=0x%08x\n",
+                regs[8], regs[9], regs[10], regs[11], regs[12]);
+
+        // Memory stats
+        SceKernelFreeMemorySizeInfo meminfo;
+        memset(&meminfo, 0, sizeof(meminfo));
+        meminfo.size = sizeof(meminfo);
+        if (sceKernelGetFreeMemorySize(&meminfo) >= 0) {
+            fprintf(f, "free_mem: user=%u cdram=%u phycont=%u\n",
+                    meminfo.size_user, meminfo.size_cdram, meminfo.size_phycont);
+        }
+
+        // Battery / power info (useful for long debug sessions)
+        int battery = scePowerGetBatteryLifePercent();
+        fprintf(f, "battery=%d%%\n", battery);
+
+        // Breadcrumb trail
+        fprintf(f, "breadcrumbs=");
+        unsigned int bc_count = g_kfx_breadcrumbs.count;
+        unsigned int bc_head = g_kfx_breadcrumbs.head;
+        if (bc_count > 0) {
+            unsigned int n = (bc_count < KFX_BREADCRUMB_SLOTS) ? bc_count : KFX_BREADCRUMB_SLOTS;
+            // Print oldest to newest
+            unsigned int start = (bc_head >= n) ? (bc_head - n) : (KFX_BREADCRUMB_SLOTS - (n - bc_head));
+            for (unsigned int i = 0; i < n; i++) {
+                unsigned int idx = (start + i) % KFX_BREADCRUMB_SLOTS;
+                const char* label = g_kfx_breadcrumbs.labels[idx];
+                if (label) {
+                    if (i > 0) fprintf(f, ",");
+                    fprintf(f, "%s", label);
+                }
+            }
+        }
+        fprintf(f, "\n\n");
         fclose(f);
     }
-    sceClibPrintf("KeeperFX CRASH: signal %d\n", sig);
+
+    sceClibPrintf("KeeperFX CRASH: signal %d (%s) thread=%s\n", sig, _sig_name(sig), tinfo.name);
     sceKernelExitProcess(1);
 }
 

@@ -148,6 +148,7 @@
   #include "ftests/ftest.h"
 #endif
 
+#include "platform/kfx_breadcrumb.h"
 #include "post_inc.h"
 
 #ifdef _MSC_VER
@@ -3612,6 +3613,7 @@ void gameplay_loop_timestep()
 
 void keeper_gameplay_loop(void)
 {
+    KFX_BREADCRUMB("keeper_gameplay_loop");
     struct PlayerInfo *player;
     SYNCDBG(5,"Starting");
     player = get_my_player();
@@ -3978,6 +3980,7 @@ static TbBool wait_at_frontend(void)
 
 void game_loop(void)
 {
+    KFX_BREADCRUMB("game_loop");
     unsigned long total_play_turns;
     unsigned long playtime;
     playtime = 0;

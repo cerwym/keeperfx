@@ -33,6 +33,7 @@
 #include <SDL2/SDL.h>
 #include <math.h>
 #include "platform/PlatformManager.h"
+#include "platform/kfx_breadcrumb.h"
 #include "post_inc.h"
 
 #define SCREEN_MODES_COUNT 40
@@ -147,6 +148,7 @@ TbResult LbScreenUnlock(void)
 
 TbResult LbScreenSwap(void)
 {
+    KFX_BREADCRUMB("LbScreenSwap");
     SYNCDBG(12,"Starting");
     PlatformManager_FrameTick();
     TbResult ret = LbMouseOnBeginSwap();
@@ -553,6 +555,7 @@ TbResult LbScreenInitialize(void)
 TbResult LbScreenSetup(TbScreenMode mode, TbScreenCoord width, TbScreenCoord height,
     unsigned char *palette, short buffers_count, TbBool wscreen_vid)
 {
+    KFX_BREADCRUMB("LbScreenSetup");
     int32_t hot_x;
     int32_t hot_y;
     const struct TbSprite* msspr = NULL;

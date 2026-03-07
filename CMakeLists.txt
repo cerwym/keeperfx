@@ -334,6 +334,13 @@ if(PLATFORM_VITA)
     # mathneon is linked.  These flags are ARM/Vita-only and have no effect on desktop.
     target_compile_options(keeperfx       PRIVATE -mcpu=cortex-a9 -mfpu=neon -ffast-math)
     target_compile_options(keeperfx_hvlog PRIVATE -mcpu=cortex-a9 -mfpu=neon -ffast-math)
+    # Guarantee DWARF-4 debug info for crash analysis (vita_crash tool, pyelftools)
+    # and GDB remote debugging (kvdb/vdbtcp). CMake adds -g for Debug/RelWithDebInfo
+    # but does not specify the DWARF version — make it explicit.
+    if(NOT CMAKE_BUILD_TYPE STREQUAL "Release")
+        target_compile_options(keeperfx       PRIVATE -gdwarf-4)
+        target_compile_options(keeperfx_hvlog PRIVATE -gdwarf-4)
+    endif()
     # vitaGL palette shader renderer — disabled by default because SDL2's GXM
     # driver calls sceGxmInitialize at SDL_Init(VIDEO) time, which causes
     # vglInitExtended to fail (GXM_ERROR_ALREADY_INITIALIZED). To use vitaGL,

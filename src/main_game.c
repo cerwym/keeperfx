@@ -58,6 +58,7 @@
   #include "ftests/ftest.h"
 #endif
 
+#include "platform/kfx_breadcrumb.h"
 #include "post_inc.h"
 
 extern TbBool force_player_num;
@@ -153,6 +154,7 @@ void init_lookups(void)
 
 static void init_level(void)
 {
+    KFX_BREADCRUMB("init_level");
     SYNCDBG(6,"Starting");
     struct IntralevelData transfer_mem;
     //memcpy(&transfer_mem,&game.intralvl.transferred_creature,sizeof(struct CreatureStorage));
