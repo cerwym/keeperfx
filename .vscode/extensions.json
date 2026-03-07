@@ -8,8 +8,6 @@
 		// Provides native IntelliSense, working terminal, and full toolchain
 		// without installing anything locally. Works on Windows, Mac, and Linux.
 		"ms-vscode-remote.remote-containers",
-		// Task sidebar — shows all tasks.json entries as a clickable tree
-		"spmeesseman.vscode-taskexplorer",
 		// GitLens — inline blame, history, and PR context
 		"eamodio.gitlens",
 		// GitHub Pull Requests — review and manage PRs inside VS Code

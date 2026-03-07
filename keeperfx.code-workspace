@@ -2,9 +2,6 @@
 	"folders": [
 		{
 			"path": "."
-		},
-		{
-			"path": "lua"
 		}
 	],
     "settings": {
@@ -181,15 +178,5 @@
             "xstring": "c"
         },
         "powershell.cwd": "vita-hardware-acceleration"
-    },
-    "tasks": {
-        "version": "2.0.0",
-        "tasks": [
-            {
-                "label": "echo",
-                "type": "shell",
-                "command": "echo Hello"
-            }
-        ]
     }
 }
