@@ -5,6 +5,21 @@
 remote="$1"
 url="$2"
 
+# Hard block pushes to dkfans/keeperfx to avoid accidental upstream writes.
+# Override only when intentional: ALLOW_DKFANS_PUSH=1 git push ...
+if echo "$url" | grep -Eq "(github\.com[:/])dkfans/keeperfx(\.git)?$"; then
+    if [ "${ALLOW_DKFANS_PUSH}" != "1" ]; then
+        echo ""
+        echo "  BLOCKED: Push to dkfans/keeperfx is disabled in this checkout."
+        echo "  Workflow: push to cerwym, then open cherry-picked upstream PR branches."
+        echo ""
+        echo "  If you intentionally need this once, run:"
+        echo "    ALLOW_DKFANS_PUSH=1 git push ..."
+        echo ""
+        exit 1
+    fi
+fi
+
 while read local_ref local_sha remote_ref remote_sha; do
     # ── Protect master ──────────────────────────────────────────────────
     if [ "$remote_ref" = "refs/heads/master" ]; then
