@@ -47,7 +47,7 @@ try {
     Write-Host ""
     Write-Host "  Hooks active:" -ForegroundColor White
     Write-Host "    pre-commit    - blocks commits to master"
-    Write-Host "    pre-push      - blocks diverged master pushes & develop-to-upstream"
+    Write-Host "    pre-push      - blocks ALL pushes to dkfans/keeperfx (unless ALLOW_DKFANS_PUSH=1)"
     Write-Host "    post-checkout - reminds you when on master"
     Write-Host ""
     Write-Host "  Scripts:" -ForegroundColor White
