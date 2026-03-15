@@ -167,7 +167,7 @@ static char *prepare_letter_one_file_path_for_mod_list(unsigned long tmapidx, ch
         if (mod_item->state.mod_dir == 0)
             continue;
 
-        char *fname = prepare_letter_one_file_path_for_mod_one(tmapidx, letter, fgroup, lvnum, mod_item);
+        char *fname = prepare_letter_one_file_path_for_mod_one(tmapidx, letter, lvnum, fgroup, mod_item);
         if (fname != NULL)
             return fname;
     }
