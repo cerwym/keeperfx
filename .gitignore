@@ -24,7 +24,6 @@ docs/latex
 *.Tpo
 res/keeperfx_icon.ico
 .header_checksum
-/\.deploy/
 /deps/enet
 /deps/enet6
 /deps/zlib
@@ -41,12 +40,7 @@ res/keeperfx_icon.ico
 keeperfx.log
 crash_log.txt
 .local/
-
-# CLion — commit shared run configurations only, ignore everything else
-.idea/*
-!.idea/runConfigurations/
-.idea/runConfigurations/*
-!.idea/runConfigurations/*.xml
+.deploy/
 
 # Python cache
 __pycache__/
@@ -60,3 +54,4 @@ __pycache__/
 *_DEPENDENCIES_*.md
 *_SECURITY_AUDIT.md
 VITAGL_SECURITY_AUDIT.md
+.vscode/.sonar-token

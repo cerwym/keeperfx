@@ -860,7 +860,12 @@ void maintain_scroll_up(struct GuiButton *gbtn)
 {
     struct TextScrollWindow * scrollwnd;
     scrollwnd = (struct TextScrollWindow *)gbtn->content.ptr;
-    gbtn->flags ^= (gbtn->flags ^ LbBtnF_Enabled * (scrollwnd->start_y < 0)) & LbBtnF_Enabled;
+    // Old code bit-twiddles, changing this to if else so it's more readable, it'll be compiled away.
+    if (scrollwnd->start_y < 0)
+        gbtn->flags |= LbBtnF_Enabled; // Set enabled if we can scroll up
+    else
+        gbtn->flags &= ~LbBtnF_Enabled; // Clear enabled if we can't scroll up
+
     if (!check_current_gui_layer(GuiLayer_OneClick))
     {
         if (wheel_scrolled_up && (is_game_key_pressed(Gkey_RotateMod, NULL, true)))
@@ -1685,14 +1690,18 @@ void gui_scroll_text_up(struct GuiButton *gbtn)
 {
     struct TextScrollWindow *scroll_window;
     scroll_window = (struct TextScrollWindow *)gbtn->content.ptr;
-    scroll_window->action = 1;
+    if (scroll_window) {
+        scroll_window->action = 1;
+    }
 }
 
 void gui_scroll_text_down(struct GuiButton *gbtn)
 {
     struct TextScrollWindow *scroll_window;
     scroll_window = (struct TextScrollWindow *)gbtn->content.ptr;
-    scroll_window->action = 2;
+    if (scroll_window) {
+        scroll_window->action = 2;
+    }
 }
 
 /**

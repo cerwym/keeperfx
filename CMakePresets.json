@@ -120,9 +120,8 @@
                 "PATH": "C:/msys64/mingw32/bin;$penv{PATH}"
             },
             "cacheVariables": {
-                "CMAKE_C_COMPILER": "C:/msys64/mingw32/bin/gcc.exe",
-                "CMAKE_CXX_COMPILER": "C:/msys64/mingw32/bin/g++.exe",
-                "CMAKE_RC_COMPILER": "C:/msys64/mingw32/bin/windres.exe",
+                "CMAKE_C_COMPILER": "gcc.exe",
+                "CMAKE_CXX_COMPILER": "g++.exe",
                 "VCPKG_TARGET_TRIPLET": "x86-mingw-dynamic"
             },
             "vendor": {
@@ -148,7 +147,6 @@
                 "CMAKE_EXPORT_COMPILE_COMMANDS": "on"
             }
         },
-
         {
             "name": "windows-x86-release",
             "displayName": "Windows x86 Release (Docker/Linux cross-compile)",
@@ -382,7 +380,6 @@
             "inherits": "HeavyLog",
             "configurePreset": "x86-MinGW32-Release"
         },
-
         {
             "name": "windows-x86-release",
             "displayName": "Windows x86 Release",

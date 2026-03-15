@@ -49,40 +49,11 @@ else()
     message(STATUS "Building for desktop platform")
 endif()
 
-# CLion Docker toolchains can invoke MinGW cross compilers without a Windows
-# CMake system context (WIN32/MINGW remain false). Detect that case from
-# compiler executable names and treat it as a Windows desktop toolchain.
-set(KFX_WINDOWS_TOOLCHAIN OFF)
-if(WIN32 OR MINGW
-   OR CMAKE_C_COMPILER MATCHES "w64-mingw32"
-   OR CMAKE_CXX_COMPILER MATCHES "w64-mingw32")
-    set(KFX_WINDOWS_TOOLCHAIN ON)
-endif()
-
-# Networking: disable for homebrew platforms by default; can also be disabled on desktop.
-option(KEEPERFX_NETWORKING "Build with multiplayer networking support" ON)
-if(PLATFORM_VITA OR PLATFORM_3DS OR PLATFORM_SWITCH)
-    set(KEEPERFX_NETWORKING OFF CACHE BOOL "Networking disabled on homebrew" FORCE)
-endif()
-
 # Dependencies: platform SDKs provide their own; desktop uses vcpkg or find_package
 if(NOT PLATFORM_VITA AND NOT PLATFORM_3DS AND NOT PLATFORM_SWITCH)
-    # CLion Docker toolchains may invoke CMake directly with MinGW cross compilers
-    # but without the mingw toolchain file. Add the MinGW sysroot as a package
-    # prefix so find_package(SDL2 CONFIG REQUIRED) can resolve SDL2Config.cmake.
-    if(NOT DEFINED CMAKE_TOOLCHAIN_FILE OR CMAKE_TOOLCHAIN_FILE STREQUAL "")
-        if(CMAKE_C_COMPILER MATCHES "(^|.*/)i686-w64-mingw32-gcc(-win32)?(\\.exe)?$")
-            list(APPEND CMAKE_PREFIX_PATH "/usr/i686-w64-mingw32")
-            message(STATUS "Auto-added MinGW i686 package prefix: /usr/i686-w64-mingw32")
-        elseif(CMAKE_C_COMPILER MATCHES "(^|.*/)x86_64-w64-mingw32-gcc(-win32)?(\\.exe)?$")
-            list(APPEND CMAKE_PREFIX_PATH "/usr/x86_64-w64-mingw32")
-            message(STATUS "Auto-added MinGW x86_64 package prefix: /usr/x86_64-w64-mingw32")
-        endif()
-    endif()
-
     # When cross-compiling for Windows with MinGW, force static SDL2 libs so the
     # final exe doesn't require SDL2*.dll at runtime.
-    if(KFX_WINDOWS_TOOLCHAIN)
+    if(MINGW OR CMAKE_CROSSCOMPILING)
         set(SDL2_USE_STATIC_LIBS ON)
         set(SDL2IMAGE_STATIC ON)
         set(SDL2MIXER_STATIC ON)
@@ -126,6 +97,12 @@ list(FILTER KEEPERFX_SOURCES_C EXCLUDE REGEX ".*/debugscreen/.*\\.c$")
 if(NOT KEEPERFX_RENDERER_OPENGL)
     list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/renderer/RendererOpenGL\\.cpp$")
     list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/platform_gl_sdl2\\.cpp$")
+endif()
+
+# Networking: disable for homebrew platforms by default; can also be disabled on desktop.
+option(KEEPERFX_NETWORKING "Build with multiplayer networking support" ON)
+if(PLATFORM_VITA OR PLATFORM_3DS OR PLATFORM_SWITCH)
+    set(KEEPERFX_NETWORKING OFF CACHE BOOL "Networking disabled on homebrew" FORCE)
 endif()
 
 # Debug memory: per-callsite tracking + guard-zone canaries around every KfxAlloc.
@@ -238,7 +215,6 @@ endif()
 # Global definitions for all targets.
 add_compile_definitions("DEBUG=$<IF:$<CONFIG:Debug>,1,0>")
 add_compile_definitions("SPNG_STATIC=1")
-add_compile_definitions("AL_LIBTYPE_STATIC=1")
 if(NOT PLATFORM_VITA AND NOT PLATFORM_3DS AND NOT PLATFORM_SWITCH)
     add_compile_definitions("SDL_MIXER_AVAILABLE=1")
 endif()
@@ -262,7 +238,7 @@ if(PLATFORM_VITA OR PLATFORM_3DS OR PLATFORM_SWITCH)
 endif()
 
 # Platform-specific IPlatform implementation filtering for desktop builds
-if(KFX_WINDOWS_TOOLCHAIN)
+if(WIN32 OR MINGW)
     list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/platform/PlatformLinux\\.cpp$")
     # linux.cpp provides Linux-only stubs that conflict with Windows-native cdrom.cpp + steam_api.cpp
     list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/src/linux\\.cpp$")
@@ -277,31 +253,12 @@ elseif(APPLE)
     list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/src/windows\\.cpp$")
 endif()
 
-# Desktop builds must exclude homebrew-only platform backends and inputs.
-if(NOT PLATFORM_VITA AND NOT PLATFORM_3DS AND NOT PLATFORM_SWITCH)
-    list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/platform/PlatformVita\\.cpp$")
-    list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/platform/Platform3DS\\.cpp$")
-    list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/platform/PlatformSwitch\\.cpp$")
-    list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/platform/PlatformHomebrewMain\\.cpp$")
-    list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/platform/WindowSystemVita\\.cpp$")
-
-    list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/renderer/RendererVita\\.cpp$")
-    list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/renderer/Renderer3DS\\.cpp$")
-    list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/renderer/vita/.*\\.cpp$")
-
-    list(FILTER KEEPERFX_SOURCES_C EXCLUDE REGEX ".*/input/input_vita\\.c$")
-    list(FILTER KEEPERFX_SOURCES_C EXCLUDE REGEX ".*/input/input_3ds\\.c$")
-    list(FILTER KEEPERFX_SOURCES_C EXCLUDE REGEX ".*/input/input_switch\\.c$")
-    list(FILTER KEEPERFX_SOURCES_C EXCLUDE REGEX ".*/platform/vita_.*\\.c$")
-    list(FILTER KEEPERFX_SOURCES_C EXCLUDE REGEX ".*/platform/debugscreen/.*\\.c$")
-endif()
-
 # Add two executable targets: keeperfx and keeperfx_hvlog.
 add_executable(keeperfx ${KEEPERFX_SOURCES_C} ${KEEPERFX_SOURCES_CXX})
 target_include_directories(keeperfx PRIVATE src deps/centitoml deps/centijson/include)
 
 target_compile_definitions(keeperfx PUBLIC BFDEBUG_LEVEL=0)
-if(KFX_WINDOWS_TOOLCHAIN)
+if(WIN32)
     target_sources(keeperfx PRIVATE "res/keeperfx_stdres.rc")
 endif()
 
@@ -309,7 +266,7 @@ add_executable(keeperfx_hvlog ${KEEPERFX_SOURCES_C} ${KEEPERFX_SOURCES_CXX})
 target_include_directories(keeperfx_hvlog PRIVATE src deps/centitoml deps/centijson/include)
 
 target_compile_definitions(keeperfx_hvlog PUBLIC BFDEBUG_LEVEL=10)
-if(KFX_WINDOWS_TOOLCHAIN)
+if(WIN32)
     target_sources(keeperfx_hvlog PRIVATE "res/keeperfx_stdres.rc")
 endif()
 
@@ -333,9 +290,7 @@ endif()
 message(STATUS "We are using ${CMAKE_CXX_COMPILER_ID}")
 
 # The default bfd linker in MinGW is extremely slow. LLVM linker (LLD) is much much faster.
-# Only enable LLD when CMake is actually in a Windows/MinGW system context.
-# CLion Docker cross-compiler mode can run with Linux system semantics, where
-# forcing LINKER_TYPE LLD has shown fragile behavior with some static archives.
+# Only set on MinGW — native Linux GCC uses the system linker.
 if(WIN32 OR MINGW)
     set_property(TARGET keeperfx PROPERTY LINKER_TYPE LLD)
     set_property(TARGET keeperfx_hvlog PROPERTY LINKER_TYPE LLD)
@@ -356,15 +311,15 @@ else()
     target_compile_options(keeperfx_hvlog PRIVATE ${WARNFLAGS} ${GNU_COMPILER_FLAG})
     target_compile_options(tests PRIVATE ${WARNFLAGS} ${GNU_COMPILER_FLAG})
 
-    if(KFX_WINDOWS_TOOLCHAIN)
+    if(WIN32 OR MINGW)
         # MinGW-only: Windows subsystem flags and static libstdc++/winpthread
         set(GNU_LINK_FLAG -mwindows -Wl,--enable-auto-import)
         target_link_options(keeperfx PRIVATE ${GNU_LINK_FLAG} -Wl,-Map,keeperfx.map)
         target_link_options(keeperfx_hvlog PRIVATE ${GNU_LINK_FLAG} -Wl,-Map,keeperfx_hvlog.map)
         target_link_options(tests PRIVATE ${GNU_LINK_FLAG} -Wl,-Map,tests.map)
-        target_link_libraries(keeperfx PUBLIC -static stdc++ -dynamic)
-        target_link_libraries(keeperfx_hvlog PUBLIC -static stdc++ -dynamic)
-        target_link_libraries(tests PUBLIC -static stdc++ -dynamic)
+        target_link_libraries(keeperfx PUBLIC -static stdc++ winpthread -dynamic)
+        target_link_libraries(keeperfx_hvlog PUBLIC -static stdc++ winpthread -dynamic)
+        target_link_libraries(tests PUBLIC -static stdc++ winpthread -dynamic)
     else()
         # Native Linux: link map + pthreads
         target_link_options(keeperfx PRIVATE -Wl,-Map,keeperfx.map)
@@ -390,10 +345,10 @@ else()
 endif()
 
 # System libraries (Windows only).
-if(KFX_WINDOWS_TOOLCHAIN)
-    target_link_libraries(keeperfx PRIVATE imagehlp dbghelp ole32 uuid winmm ws2_32 avrt)
-    target_link_libraries(keeperfx_hvlog PRIVATE imagehlp dbghelp ole32 uuid winmm ws2_32 avrt)
-    target_link_libraries(tests PRIVATE imagehlp dbghelp ole32 uuid winmm ws2_32 avrt)
+if(WIN32)
+    target_link_libraries(keeperfx PRIVATE imagehlp dbghelp ole32 uuid winmm ws2_32)
+    target_link_libraries(keeperfx_hvlog PRIVATE imagehlp dbghelp ole32 uuid winmm ws2_32)
+    target_link_libraries(tests PRIVATE imagehlp dbghelp ole32 uuid winmm ws2_32)
 endif()
 
 # Go into submodules (desktop only — homebrew platforms use their own SDK deps).
@@ -648,7 +603,7 @@ elseif(PLATFORM_SWITCH)
 else()
     # When cross-compiling for Windows (MinGW), always use static SDL2 targets to
     # produce a self-contained exe that doesn't need SDL2*.dll at runtime.
-    if(KFX_WINDOWS_TOOLCHAIN)
+    if(MINGW OR CMAKE_CROSSCOMPILING)
         set(_SDL2_LINK SDL2::SDL2-static)
         set(_SDL2_IMAGE_LINK SDL2_image::SDL2_image-static)
         set(_SDL2_MIXER_LINK SDL2_mixer::SDL2_mixer-static)

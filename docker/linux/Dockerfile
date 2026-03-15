@@ -16,6 +16,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         g++ \
         cmake \
         ninja-build \
+    clang-format \
+    clang-tidy \
+    cppcheck \
         pkg-config \
         curl \
         git \
