@@ -11,7 +11,8 @@
             "installDir": "${sourceDir}/out/install/${presetName}",
             "cacheVariables": {
                 "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}",
-                "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+                "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/external/vcpkg/scripts/buildsystems/vcpkg.cmake",
+                "VCPKG_INSTALLED_DIR": "${sourceDir}/../vcpkg_installed"
             }
         },
 
@@ -98,6 +99,93 @@
                 "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}"
             }
         },
+        
+        {
+            "name": "x64",
+            "hidden": true,
+            "architecture": {
+                "value": "x64",
+                "strategy": "external"
+            }
+        },
+
+        {
+            "name": "MSVC-x86-Base",
+            "hidden": true,
+            "inherits": "base",
+            "binaryDir": "${sourceDir}/out/build/${presetName}",
+            "installDir": "${sourceDir}/out/install/${presetName}",
+            "architecture": {
+                "value": "x86",
+                "strategy": "external"
+            },
+            "cacheVariables": {
+                "CMAKE_C_COMPILER": "cl.exe",
+                "CMAKE_CXX_COMPILER": "cl.exe",
+                "VCPKG_TARGET_TRIPLET": "x86-windows-static",
+                "CMAKE_POLICY_VERSION_MINIMUM": "3.5",
+                "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+            }
+        },
+
+        {
+            "name": "MSVC-x64-Base",
+            "hidden": true,
+            "inherits": "base",
+            "binaryDir": "${sourceDir}/out/build/${presetName}",
+            "installDir": "${sourceDir}/out/install/${presetName}",
+            "architecture": {
+                "value": "x64",
+                "strategy": "external"
+            },
+            "cacheVariables": {
+                "CMAKE_C_COMPILER": "cl.exe",
+                "CMAKE_CXX_COMPILER": "cl.exe",
+                "VCPKG_TARGET_TRIPLET": "x64-windows-static",
+                "CMAKE_POLICY_VERSION_MINIMUM": "3.5",
+                "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+            }
+        },
+
+        {
+            "name": "x86-windows-static-debug",
+            "displayName": "MSVC x86 Debug (static)",
+            "description": "Windows x86 Debug build with MSVC, static runtime linking",
+            "inherits": [ "MSVC-x86-Base", "Debug" ],
+            "cacheVariables": {
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "on"
+            }
+        },
+
+        {
+            "name": "x86-windows-static-release",
+            "displayName": "MSVC x86 Release (static)",
+            "description": "Windows x86 Release build with MSVC, static runtime linking, optimized",
+            "inherits": [ "MSVC-x86-Base", "Release" ],
+            "cacheVariables": {
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "on"
+            }
+        },
+
+        {
+            "name": "x64-windows-static-debug",
+            "displayName": "MSVC x64 Debug (static)",
+            "description": "Windows x64 Debug build with MSVC, static runtime linking",
+            "inherits": [ "MSVC-x64-Base", "Debug" ],
+            "cacheVariables": {
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "on"
+            }
+        },
+
+        {
+            "name": "x64-windows-static-release",
+            "displayName": "MSVC x64 Release (static)",
+            "description": "Windows x64 Release build with MSVC, static runtime linking, optimized",
+            "inherits": [ "MSVC-x64-Base", "Release" ],
+            "cacheVariables": {
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "on"
+            }
+        },
 
         {
             "name": "cross-base",
@@ -134,6 +222,7 @@
         {
             "name": "x86-MinGW32-Debug",
             "displayName": "x86-MinGW32-Debug",
+            "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" },
             "inherits": [ "MingGW32-Base", "x86", "Debug" ],
             "cacheVariables": {
                 "CMAKE_EXPORT_COMPILE_COMMANDS": "on"
@@ -142,14 +231,17 @@
         {
             "name": "x86-MinGW32-Release",
             "displayName": "x86-MinGW32-Release",
+            "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" },
             "inherits": [ "MingGW32-Base", "x86", "Release" ],
             "cacheVariables": {
                 "CMAKE_EXPORT_COMPILE_COMMANDS": "on"
             }
         },
+
         {
             "name": "windows-x86-release",
             "displayName": "Windows x86 Release (Docker/Linux cross-compile)",
+            "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" },
             "description": "Cross-compile for Windows x86 from Linux using i686-w64-mingw32. Designed for use inside the keeperfx-build-mingw32 Docker image.",
             "inherits": [ "cross-base", "Release" ],
             "cacheVariables": {
@@ -162,6 +254,7 @@
         {
             "name": "windows-x86-debug",
             "displayName": "Windows x86 Debug (Docker/Linux cross-compile)",
+            "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" },
             "description": "Cross-compile for Windows x86 from Linux using i686-w64-mingw32, with full debug symbols. For use inside the keeperfx-build-mingw32 Docker image.",
             "inherits": [ "cross-base", "Debug" ],
             "cacheVariables": {
@@ -173,6 +266,7 @@
         {
             "name": "windows-x64-release",
             "displayName": "Windows x64 Release (Docker/Linux cross-compile)",
+            "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" },
             "description": "Cross-compile for Windows x64 from Linux using x86_64-w64-mingw32. Designed for use inside the keeperfx-build-mingw64 Docker image.",
             "inherits": [ "cross-base", "Release" ],
             "cacheVariables": {
@@ -185,6 +279,7 @@
         {
             "name": "linux-x64-release",
             "displayName": "Linux x64 Release",
+            "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" },
             "description": "Linux native build using system packages",
             "inherits": [ "linux-base", "Release" ],
             "cacheVariables": {
@@ -195,6 +290,7 @@
         {
             "name": "linux-x64-asan",
             "displayName": "Linux x64 ASAN",
+            "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" },
             "description": "Linux native build with AddressSanitizer + UndefinedBehaviorSanitizer",
             "inherits": "linux-base",
             "cacheVariables": {
@@ -207,6 +303,7 @@
         {
             "name": "wasm-release",
             "displayName": "WebAssembly Release",
+            "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" },
             "description": "Emscripten WebAssembly build",
             "inherits": "base",
             "cacheVariables": {
@@ -219,6 +316,7 @@
         {
             "name": "3ds-release",
             "displayName": "3DS Release",
+            "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" },
             "description": "Nintendo 3DS build using devkitARM",
             "inherits": "base",
             "cacheVariables": {
@@ -232,6 +330,7 @@
         {
             "name": "vita-release",
             "displayName": "PS Vita Release",
+            "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" },
             "description": "PlayStation Vita release build using vitaGL",
             "inherits": "base",
             "cacheVariables": {
@@ -245,6 +344,7 @@
         {
             "name": "vita-reldebug",
             "displayName": "PS Vita RelWithDebInfo",
+            "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" },
             "description": "PlayStation Vita build with debug symbols for crash analysis, using vitaGL",
             "inherits": "base",
             "cacheVariables": {
@@ -259,6 +359,7 @@
         {
             "name": "vita-debug",
             "displayName": "PS Vita Debug (perf logging)",
+            "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" },
             "description": "PlayStation Vita debug build with startup timing logs and SCE diagnostics, using vitaGL",
             "inherits": "base",
             "cacheVariables": {
@@ -275,6 +376,7 @@
         {
             "name": "switch-release",
             "displayName": "Nintendo Switch Release",
+            "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" },
             "description": "Nintendo Switch build using devkitA64",
             "inherits": "base",
             "cacheVariables": {
@@ -392,6 +494,31 @@
             "displayName": "Windows x86 Debug",
             "inherits": "StandardLog",
             "configurePreset": "windows-x86-debug"
+        },
+
+        {
+            "name": "x86-windows-static-debug",
+            "displayName": "MSVC x86 Debug (static)",
+            "inherits": "StandardLog",
+            "configurePreset": "x86-windows-static-debug"
+        },
+        {
+            "name": "x86-windows-static-release",
+            "displayName": "MSVC x86 Release (static)",
+            "inherits": "StandardLog",
+            "configurePreset": "x86-windows-static-release"
+        },
+        {
+            "name": "x64-windows-static-debug",
+            "displayName": "MSVC x64 Debug (static)",
+            "inherits": "StandardLog",
+            "configurePreset": "x64-windows-static-debug"
+        },
+        {
+            "name": "x64-windows-static-release",
+            "displayName": "MSVC x64 Release (static)",
+            "inherits": "StandardLog",
+            "configurePreset": "x64-windows-static-release"
         },
 
         {

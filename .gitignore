@@ -36,6 +36,11 @@ res/keeperfx_icon.ico
 /deps/libnatpmp
 /deps/*.tar.gz
 /cppcheck.cache
+
+# vcpkg installed packages — build output, never committed.
+# Placed one level up (../vcpkg_installed) so all worktrees share one copy.
+vcpkg_installed/
+
 /src/ver_defs.h
 keeperfx.log
 crash_log.txt
