@@ -699,7 +699,8 @@ void redraw_isometric_view(void)
     if ((game.operation_flags & GOF_ShowGui) != 0) {
         draw_whole_status_panel();
     }
-    draw_gui();
+    // Todo : Re-enable this.
+    // draw_gui();
     if ((game.operation_flags & GOF_ShowGui) != 0) {
         draw_overlay_compass(player->minimap_pos_x, player->minimap_pos_y);
     }

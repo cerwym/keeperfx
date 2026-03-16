@@ -16,7 +16,7 @@
 // bflib_inputctrl.h declares lbMouseGrabbed / lbMouseGrab / lbAppActive.
 // We keep them as the shared source of truth for now; the window system
 // reads/writes through them so existing callers see consistent state.
-extern volatile TbBool lbAppActive;   // also declared in bflib_inputctrl.h
+extern "C" volatile TbBool lbAppActive;   // defined with C linkage in bflib_inputctrl.cpp
 extern volatile TbBool lbMouseGrabbed;
 extern volatile TbBool lbMouseGrab;
 extern SDL_Window*   lbWindow;      // declared in bflib_video.h

@@ -175,9 +175,27 @@ enum dataTypes
                     char: dt_char, \
                     default: dt_default)))
 
+// field_t: portable, works on all C99+ compilers including MSVC.
+// Takes the struct type name explicitly — produces a compile-time constant offset.
+// Use for simple (non-array-subscript) member paths.
+#include <stddef.h>
+#define field_t(type_name, member_path) \
+    (void*)(ptrdiff_t)offsetof(type_name, member_path), \
+    var_type(((type_name*)0)->member_path)
+
+// field_a: like field_t but for array-element member paths array[idx].
+// offsetof(T, arr) + idx*sizeof(element) is compile-time constant on all compilers,
+// whereas offsetof(T, arr[n]) is a GCC extension rejected by MSVC.
+#define field_a(type_name, array_member, idx) \
+    (void*)(ptrdiff_t)(offsetof(type_name, array_member) + (idx) * sizeof(((type_name*)0)->array_member[0])), \
+    var_type(((type_name*)0)->array_member[idx])
+
+// field: GCC/Clang-only convenience alias that infers the type from an expression
+// using the typeof extension. Do not use in new code — prefer field_t()/field_a().
+#ifndef _MSC_VER
 #define field(elem0_expr, member_path) \
-    (void*)(ptrdiff_t)__builtin_offsetof(__typeof__(elem0_expr), member_path), \
-    var_type(((elem0_expr).member_path))
+    field_t(typeof(elem0_expr), member_path)
+#endif
 
 /******************************************************************************/
 struct CommandWord {

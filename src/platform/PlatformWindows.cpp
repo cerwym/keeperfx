@@ -5,10 +5,12 @@
 #include <windows.h>
 #include <SDL2/SDL.h>
 #include <excpt.h>
-#include <imagehlp.h>
+// imagehlp.h omitted: dbghelp.h supersedes it and defines the same types.
+// Including both causes C2011 type redefinition errors on MSVC.
 #include <dbghelp.h>
 #include <psapi.h>
 #include <direct.h>
+#include <io.h>
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>

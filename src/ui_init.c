@@ -88,10 +88,13 @@ static const int SPECTATOR_MENUS_COUNT =
  * No menus - UI is completely disabled
  */
 static const unsigned short HIDDEN_MENUS[] = {
-    // Empty - no menus for hidden role
+    // No menus for hidden role. Dummy sentinel keeps MSVC happy
+    // (empty array initializers are a GCC extension, not valid C11).
+    // HIDDEN_MENUS_COUNT is 0 so this element is never accessed.
+    0
 };
 
-/** Number of hidden menus */
+/** Number of spectator menus (always zero) */
 static const int HIDDEN_MENUS_COUNT = 0;
 
 /******************************************************************************/

@@ -24,11 +24,31 @@
 #include "bflib_basics.h"
 #include "post_inc.h"
 
+#ifdef _MSC_VER
+#include <intrin.h>
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 /******************************************************************************/
 
+#ifdef _MSC_VER
+/** Issue a single request to CPUID (MSVC). */
+static inline void cpuid(int code, uint32_t *a, uint32_t *d) {
+    int info[4];
+    __cpuid(info, code);
+    *a = (uint32_t)info[0];
+    *d = (uint32_t)info[3];
+}
+
+/** Issue a complete request, storing general registers output in an array (MSVC). */
+static inline void cpuid_string(int code, void *destination) {
+    int info[4];
+    __cpuid(info, code);
+    memcpy(destination, info, 16);
+}
+#else
 /** Issue a single request to CPUID. */
 static inline void cpuid(int code, uint32_t *a, uint32_t *d) {
     asm volatile("cpuid":"=a"(*a),"=d"(*d):"0"(code):"ecx","ebx");
@@ -40,6 +60,7 @@ static inline void cpuid_string(int code, void * destination) {
     asm volatile("cpuid":"=a"(*where),"=b"(*(where+1)),
         "=c"(*(where+2)),"=d"(*(where+3)):"0"(code));
 }
+#endif
 /******************************************************************************/
 
 void cpu_detect(struct CPU_INFO *cpu)
