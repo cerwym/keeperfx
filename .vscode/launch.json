@@ -2,8 +2,24 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Debug KeeperFX (Windows MSVC)",
+      // F5 — Native MSVC build (no Docker). Builds with cl.exe, copies exe to .deploy/, launches with VS debugger.
+      // Run "Init .deploy/" once first to populate game data layers.
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/.deploy/keeperfx.exe",
+      "cwd": "${workspaceFolder}/.deploy",
+      "args": ["-nointro"],
+      "visualizerFile": "${workspaceFolder}/.vscode/keeperfx.natvis",
+      "showDisplayString": true,
+      "preLaunchTask": "Build & Deploy Windows MSVC Debug",
+      "externalConsole": true,
+      "stopAtEntry": false,
+      "internalConsoleOptions": "openOnSessionStart"
+    },
+    {
       "name": "Debug KeeperFX (Windows Host)",
-      // F5 default. Builds in container, copies exe to .deploy/, then launches + debugs on Windows host.
+      // Builds in Docker/MinGW container, copies exe to .deploy/, then launches + debugs on Windows host.
       // Run \"Init .deploy/\" once first to populate game data layers.
       "type": "cppdbg",
       "request": "launch",

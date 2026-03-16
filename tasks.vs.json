@@ -1,0 +1,168 @@
+{
+    "version": "0.2.1",
+    "tasks": [
+
+        // ── Windows MSVC (native) ─────────────────────────────────────────────────
+        {
+            "taskLabel": "Build & Deploy Windows MSVC Debug",
+            "appliesTo": "/",
+            "type": "launch",
+            "command": "powershell.exe",
+            "args": [
+                "-ExecutionPolicy", "Bypass",
+                "-Command",
+                "cmake --build --preset x86-windows-static-debug; if ($LASTEXITCODE -ne 0) { exit 1 }; Copy-Item '${workspaceRoot}\\out\\build\\x86-windows-static-debug\\keeperfx.exe' '${workspaceRoot}\\.deploy\\keeperfx.exe' -Force; Write-Host 'keeperfx.exe deployed to .deploy/' -ForegroundColor Green"
+            ],
+            "workingDirectory": "${workspaceRoot}",
+            "output": "${workspaceRoot}\\out\\build\\x86-windows-static-debug"
+        },
+
+        // ── PS Vita (Docker vitasdk) ──────────────────────────────────────────────
+        {
+            "taskLabel": "Build Vita RelDebug",
+            "appliesTo": "/",
+            "type": "launch",
+            "command": "${env.COMSPEC}",
+            "args": [
+                "/c",
+                "docker compose -f docker\\compose.yml run --rm vitasdk bash -c \"cmake --preset vita-reldebug && cmake --build --preset vita-reldebug\""
+            ],
+            "workingDirectory": "${workspaceRoot}",
+            "output": "${workspaceRoot}\\out\\build\\vita-reldebug"
+        },
+        {
+            "taskLabel": "Build Vita Release",
+            "appliesTo": "/",
+            "type": "launch",
+            "command": "${env.COMSPEC}",
+            "args": [
+                "/c",
+                "docker compose -f docker\\compose.yml run --rm vitasdk bash -c \"cmake --preset vita-release && cmake --build --preset vita-release\""
+            ],
+            "workingDirectory": "${workspaceRoot}",
+            "output": "${workspaceRoot}\\out\\build\\vita-release"
+        },
+        {
+            "taskLabel": "Build Vita Debug",
+            "appliesTo": "/",
+            "type": "launch",
+            "command": "${env.COMSPEC}",
+            "args": [
+                "/c",
+                "docker compose -f docker\\compose.yml run --rm vitasdk bash -c \"cmake --preset vita-debug && cmake --build --preset vita-debug\""
+            ],
+            "workingDirectory": "${workspaceRoot}",
+            "output": "${workspaceRoot}\\out\\build\\vita-debug"
+        },
+        {
+            "taskLabel": "Deploy & Launch Vita",
+            "appliesTo": "/",
+            "type": "launch",
+            "command": "${env.COMSPEC}",
+            "args": [
+                "/c",
+                "bash tools/vita-companion.sh deploy-launch"
+            ],
+            "workingDirectory": "${workspaceRoot}"
+        },
+        {
+            "taskLabel": "Fetch Vita Logs",
+            "appliesTo": "/",
+            "type": "launch",
+            "command": "${env.COMSPEC}",
+            "args": [
+                "/c",
+                "bash tools/vita-companion.sh fetch-logs"
+            ],
+            "workingDirectory": "${workspaceRoot}"
+        },
+
+        // ── Windows MinGW cross-compile (Docker) ──────────────────────────────────
+        {
+            "taskLabel": "Build Windows x86 Debug (Docker/MinGW)",
+            "appliesTo": "/",
+            "type": "launch",
+            "command": "${env.COMSPEC}",
+            "args": [
+                "/c",
+                "docker compose -f docker\\compose.yml run --rm mingw32 bash -c \"cmake --preset windows-x86-debug && cmake --build --preset windows-x86-debug\""
+            ],
+            "workingDirectory": "${workspaceRoot}",
+            "output": "${workspaceRoot}\\out\\build\\windows-x86-debug"
+        },
+        {
+            "taskLabel": "Build Windows x86 Release (Docker/MinGW)",
+            "appliesTo": "/",
+            "type": "launch",
+            "command": "${env.COMSPEC}",
+            "args": [
+                "/c",
+                "docker compose -f docker\\compose.yml run --rm mingw32 bash -c \"cmake --preset windows-x86-release && cmake --build --preset windows-x86-release\""
+            ],
+            "workingDirectory": "${workspaceRoot}",
+            "output": "${workspaceRoot}\\out\\build\\windows-x86-release"
+        },
+
+        // ── Linux x64 (Docker) ────────────────────────────────────────────────────
+        {
+            "taskLabel": "Build Linux x64 (Docker)",
+            "appliesTo": "/",
+            "type": "launch",
+            "command": "${env.COMSPEC}",
+            "args": [
+                "/c",
+                "docker compose -f docker\\compose.yml run --rm linux bash -c \"cmake --preset linux-x64-release && cmake --build --preset linux-x64-release\""
+            ],
+            "workingDirectory": "${workspaceRoot}",
+            "output": "${workspaceRoot}\\out\\build\\linux-x64-release"
+        },
+
+        // ── Local setup & deployment ──────────────────────────────────────────────
+        {
+            "taskLabel": "Init .deploy/",
+            "appliesTo": "/",
+            "type": "launch",
+            "command": "powershell.exe",
+            "args": [
+                "-ExecutionPolicy", "Bypass",
+                "-File", "${workspaceRoot}\\.vscode\\init_layered_deploy.ps1",
+                "-WorkspaceFolder", "${workspaceRoot}"
+            ],
+            "workingDirectory": "${workspaceRoot}"
+        },
+        {
+            "taskLabel": "Rebuild GFX Layer",
+            "appliesTo": "/",
+            "type": "launch",
+            "command": "powershell.exe",
+            "args": [
+                "-ExecutionPolicy", "Bypass",
+                "-File", "${workspaceRoot}\\.vscode\\rebuild_gfx_layer.ps1",
+                "-WorkspaceFolder", "${workspaceRoot}"
+            ],
+            "workingDirectory": "${workspaceRoot}"
+        },
+        {
+            "taskLabel": "Reboot Vita",
+            "appliesTo": "/",
+            "type": "launch",
+            "command": "${env.COMSPEC}",
+            "args": [
+                "/c",
+                "bash tools/vita-companion.sh reboot"
+            ],
+            "workingDirectory": "${workspaceRoot}"
+        },
+        {
+            "taskLabel": "Sync Repos",
+            "appliesTo": "/",
+            "type": "launch",
+            "command": "powershell.exe",
+            "args": [
+                "-ExecutionPolicy", "Bypass",
+                "-File", "${workspaceRoot}\\tools\\sync-repos.ps1"
+            ],
+            "workingDirectory": "${workspaceRoot}"
+        }
+    ]
+}
