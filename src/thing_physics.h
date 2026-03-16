@@ -70,6 +70,9 @@ TbBool map_is_solid_at_height(MapSubtlCoord stl_x, MapSubtlCoord stl_y, MapCoord
 TbBool move_object_to_nearest_free_position(struct Thing *thing);
 void clear_thing_acceleration(struct Thing* thing);
 void clear_thing_velocity(struct Thing* thing);
+
+long apply_wallhug_force_to_boulder(struct Thing *thing);
+long process_boulder_collision(struct Thing *boulder, struct Coord3d *pos, int direction_x, int direction_y);
 /******************************************************************************/
 #ifdef __cplusplus
 }
