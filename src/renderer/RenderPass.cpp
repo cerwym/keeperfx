@@ -1,7 +1,9 @@
 #include "RenderPass.h"
 #include "backends/IBackend.h"
 #include "backends/SoftwareBackend.h"
+#if defined(__VITA__)
 #include "backends/VitaGPUBackend.h"
+#endif
 #include "RenderPassProfiler.h"
 #include "bflib_basics.h"
 #include <cstdio>
@@ -38,8 +40,13 @@ bool RenderPassSystem::Initialize(BackendType backend)
     // Select backend
     switch (backend) {
         case BACKEND_GPU_VITA:
+#if defined(__VITA__)
             m_backend = new VitaGPUBackend();
             break;
+#else
+            ERRORLOG("RenderPassSystem: GPU_VITA backend not available on this platform");
+            return false;
+#endif
             
         case BACKEND_SOFTWARE:
             m_backend = new SoftwareBackend();

@@ -575,11 +575,6 @@ void LbSetMouseGrab(TbBool grab_mouse)
     ws->SetCursorVisible(!lbAppActive);
 }
 
-void LbGrabMouseInit(void)
-{
-    LbGrabMouseCheck(MG_InitMouse);
-}
-
 void LbGrabMouseCheck(long grab_event)
 {
     // On platforms without an OS cursor (Vita, 3DS, Switch) there is nothing

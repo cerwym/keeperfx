@@ -81,7 +81,7 @@ TbResult LbMouseSetup(struct TbSprite *pointerSprite)
   lbMouseOffline = true;
   lbMouseInstalled = true;
   LbMouseSetWindow(0,0,LbGraphicsScreenWidth(),LbGraphicsScreenHeight());
-  LbGrabMouseInit();
+  LbGrabMouseCheck(MG_InitMouse);
   ret = Lb_SUCCESS;
   if (LbMouseChangeSprite(pointerSprite) != Lb_SUCCESS)
     ret = Lb_FAIL;

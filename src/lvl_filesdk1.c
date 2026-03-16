@@ -194,7 +194,7 @@ long level_lif_entry_parse(const char *fname, char *buf)
           break;
         }
         i++;
-        if (i >= 10000) // arbritarily big number to prevent an infinte loop if last line is a comment that doesn't have a new line at the end
+        if (i >= 10000) // arbitrarily big number to prevent an infinite loop if last line is a comment that doesn't have a new line at the end
         {
           WARNMSG("commented-out line from \"%s\" is too long at %ld characters", fname,i);
           return 0;
@@ -810,7 +810,7 @@ static TbBool load_kfx_toml_file(LevelNumber lv_num, const char *ext, const char
     // Validate total amount of sections
     if (total < 0)
     {
-        WARNMSG("Bad amount of secions in %s file", msg_name);
+        WARNMSG("Bad amount of sections in %s file", msg_name);
         value_fini(root_ptr);
         KfxFree(buf);
         return false;
