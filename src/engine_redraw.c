@@ -365,6 +365,21 @@ void generate_map_fade_ghost_table(const char *fname, unsigned char *palette, un
     }
 }
 
+int get_place_room_pointer_graphics(RoomKind rkind) {
+    struct RoomConfigStats* roomst = get_room_kind_stats(rkind);
+    return roomst->pointer_sprite_idx;
+}
+
+int get_place_trap_pointer_graphics(ThingModel trmodel) {
+    struct TrapConfigStats* trapst = get_trap_model_stats(trmodel);
+    return trapst->pointer_sprite_idx;
+}
+
+int get_place_door_pointer_graphics(ThingModel drmodel) {
+    struct DoorConfigStats* doorst = get_door_model_stats(drmodel);
+    return doorst->pointer_sprite_idx;
+}
+
 /**
  * Renders source and destination screens for map fading.
  * Stores them in given buffers.
@@ -705,24 +720,6 @@ void redraw_frontview(void)
     if (should_render_ui()) {
         gui_draw_all_boxes();
     }
-}
-
-int get_place_room_pointer_graphics(RoomKind rkind)
-{
-    struct RoomConfigStats* roomst = get_room_kind_stats(rkind);
-    return roomst->pointer_sprite_idx;
-}
-
-int get_place_trap_pointer_graphics(ThingModel trmodel)
-{
-    struct TrapConfigStats* trapst = get_trap_model_stats(trmodel);
-    return trapst->pointer_sprite_idx;
-}
-
-int get_place_door_pointer_graphics(ThingModel drmodel)
-{
-    struct DoorConfigStats* doorst = get_door_model_stats(drmodel);
-    return doorst->pointer_sprite_idx;
 }
 
 /**
