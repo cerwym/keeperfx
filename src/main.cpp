@@ -3169,29 +3169,6 @@ short display_should_be_updated_this_turn(void)
 }
 
 /**
- * Makes last updates to the video buffer, and swaps buffers to show
- * the new image.
- */
-TbBool keeper_screen_swap(void)
-{
-/*  // For resolution 640x480, move the graphics data 40 lines lower
-  if ( lbDisplay.ScreenMode == Lb_SCREEN_MODE_640_480_8 )
-    if (LbScreenLock() == Lb_SUCCESS)
-    {
-      int i;
-      int scrmove_x=0;
-      int scrmove_y=40;
-      int scanline_len=640;
-      for (i=400;i>=0;i--)
-        memcpy(lbDisplay.WScreen+scanline_len*(i+scrmove_y)+scrmove_x, lbDisplay.WScreen+scanline_len*i, scanline_len-scrmove_x);
-      memset(lbDisplay.WScreen, 0, scanline_len*scrmove_y);
-      LbScreenUnlock();
-    }*/
-  LbScreenSwap();
-  return true;
-}
-
-/**
  * Waits until the next game turn. Delay is usually controlled by
  * num_fps variable.
  */
@@ -3376,8 +3353,9 @@ void gameplay_loop_draw()
         do_draw = false;
     }
     if ( do_draw ) {
-        if (frametime_enabled())
+        if (frametime_enabled()) {
             framerate_measurement_capture(Framerate_Draw);
+        }
         keeper_screen_redraw();
     }
     keeper_wait_for_screen_focus();
@@ -3391,7 +3369,7 @@ void gameplay_loop_draw()
     }
     // Move the graphics window to center of screen buffer and swap screen
     if ( do_draw ) {
-        keeper_screen_swap();
+        LbScreenSwap();
     }
     frametime_end_measurement(Frametime_Draw);
     last_draw_completed_time = get_time_tick_ns();
