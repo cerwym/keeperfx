@@ -83,7 +83,6 @@ void redraw_frontview(void);
 int32_t xtab[640][2];
 int32_t ytab[480][2];
 
-unsigned char smooth_on;
 static unsigned char * map_fade_ghost_table;
 static unsigned char * map_fade_dest;
 static unsigned char * map_fade_src;
@@ -614,22 +613,17 @@ void draw_overlay_compass(long base_x, long base_y)
     lbDisplay.DrawFlags = flg_mem;
 }
 
+// Because of the way this is used for the dungeon heart fly-in effect, this remains un-refactored until I can
+// understand the setup required for the fly-in and how to make it work with the new rendering system.
 void redraw_creature_view(void)
 {
-    SYNCDBG(6,"Starting");
+    SYNCDBG(6, "Starting");
     struct PlayerInfo* player = get_my_player();
     update_explored_flags_for_power_sight(player);
     struct Thing* thing = thing_get(player->controlled_thing_idx);
     TRACE_THING(thing);
     if (thing_exists(thing))
-      draw_creature_view(thing);
-    if (smooth_on)
-    {
-        TbGraphicsWindow ewnd;
-        store_engine_window(&ewnd, pixel_size);
-        smooth_screen_area(lbDisplay.WScreen, ewnd.x, ewnd.y,
-            ewnd.width, ewnd.height, lbDisplay.GraphicsScreenWidth);
-    }
+        draw_creature_view(thing);
     remove_explored_flags_for_power_sight(player);
     if ((game.operation_flags & GOF_ShowGui) != 0) {
         draw_whole_status_panel();
@@ -639,48 +633,25 @@ void redraw_creature_view(void)
         draw_overlay_compass(player->minimap_pos_x, player->minimap_pos_y);
     }
     message_draw();
-    if (should_render_ui()) {
-        gui_draw_all_boxes();
-    }
+    gui_draw_all_boxes();
     draw_tooltip();
     struct CreatureControl* cctrl = creature_control_get_from_thing(thing);
-    if (!creature_control_invalid(cctrl))
-    {
+    if (!creature_control_invalid(cctrl)) {
         draw_creature_view_icons(thing);
-        if (!gui_box_is_not_valid(gui_cheat_box_3))
-        {
+        if (!gui_box_is_not_valid(gui_cheat_box_3)) {
             struct GuiBoxOption* guop = gui_cheat_box_3->optn_list;
-            while (guop->label[0] != '!')
-            {
-              guop->active = (cctrl->active_instance_id == guop->cb_param1);
-              guop++;
+            while (guop->label[0] != '!') {
+                guop->active = (cctrl->active_instance_id == guop->cb_param1);
+                guop++;
             }
         }
     }
+
 }
 
-void smooth_screen_area(unsigned char *scrbuf, long x, long y, long w, long h, long scanln)
-{
-    SYNCDBG(7,"Starting");
-    unsigned char* lnbuf = scrbuf + scanln * y + x;
-    for (long i = h - y - 1; i > 0; i--)
-    {
-        unsigned char* buf = lnbuf;
-        for (long k = w - x - 1; k > 0; k--)
-        {
-            unsigned int ghpos = (buf[0] << 8) + buf[1];
-            ghpos = (buf[scanln] << 8) + pixmap.ghost[ghpos];
-            buf[0] = ghpos;
-            buf++;
-      }
-      lnbuf += scanln;
-    }
-}
-
+// The default angled view.
 void redraw_isometric_view(void)
 {
-    SYNCDBG(6,"Starting");
-
     struct PlayerInfo* player = get_my_player();
     if (player->acamera == NULL)
         return;

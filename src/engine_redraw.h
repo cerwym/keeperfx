@@ -34,7 +34,7 @@ struct PlayerInfo;
 
 #pragma pack()
 /******************************************************************************/
-extern unsigned char smooth_on;
+
 /******************************************************************************/
 void setup_engine_window(long x1, long y1, long x2, long y2);
 void store_engine_window(TbGraphicsWindow *ewnd,int divider);

@@ -4033,7 +4033,8 @@ short process_command_line(unsigned short argc, char *argv[])
       } else
       if (strcasecmp(parstr, "vidsmooth") == 0)
       {
-          smooth_on = true;
+          // Todo : Renable this feature, right now, it looks like it's doing a full buffer resample which is dog slow.
+          // smooth_on = true;
       } else
       if ( strcasecmp(parstr,"level") == 0 )
       {
