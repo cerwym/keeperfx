@@ -43,6 +43,7 @@ void load_engine_window(TbGraphicsWindow *ewnd);
 void set_engine_view(struct PlayerInfo *player, long val);
 
 void draw_overlay_compass(long a1, long a2);
+void draw_2d_elements(struct PlayerInfo* player);
 
 TbBool keeper_screen_redraw(void);
 void smooth_screen_area(unsigned char *a1, long a2, long a3, long a4, long a5, long a6);

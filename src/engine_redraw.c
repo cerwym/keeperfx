@@ -675,28 +675,8 @@ void redraw_isometric_view(void)
     struct Camera* render_cam = get_local_camera(&player->cameras[CamIV_Isometric]);
     update_explored_flags_for_power_sight(player);
     engine(player,render_cam);
-    if (smooth_on)
-    {
-        store_engine_window(&ewnd,pixel_size);
-        smooth_screen_area(lbDisplay.WScreen, ewnd.x, ewnd.y,
-            ewnd.width, ewnd.height, lbDisplay.GraphicsScreenWidth);
-    }
     remove_explored_flags_for_power_sight(player);
-    if ((game.operation_flags & GOF_ShowGui) != 0) {
-        draw_whole_status_panel();
-    }
-    // Todo : Re-enable this.
-    // draw_gui();
-    if ((game.operation_flags & GOF_ShowGui) != 0) {
-        draw_overlay_compass(player->minimap_pos_x, player->minimap_pos_y);
-    }
-    message_draw();
-    if (should_render_ui()) {
-        gui_draw_all_boxes();
-    }
-    draw_power_hand();
-    draw_tooltip();
-    SYNCDBG(8,"Finished");
+    draw_2d_elements(player);
 }
 
 void redraw_frontview(void)
@@ -706,12 +686,18 @@ void redraw_frontview(void)
     struct Camera* render_cam = get_local_camera(&player->cameras[CamIV_FrontView]);
     update_explored_flags_for_power_sight(player);
     draw_frontview_engine(render_cam);
-     remove_explored_flags_for_power_sight(player);
-    if (flag_is_set(game.operation_flags,GOF_ShowGui)) {
+    remove_explored_flags_for_power_sight(player);
+    draw_2d_elements(player);
+}
+
+// Draws 2D elements on top of 3D view, like spell cursor. Called from redraw_isometric_view() and redraw_frontview()
+// after 3D rendering is done.  
+void draw_2d_elements(struct PlayerInfo* player) {
+    if (flag_is_set(game.operation_flags, GOF_ShowGui)) {
         draw_whole_status_panel();
     }
     draw_gui();
-    if (flag_is_set(game.operation_flags,GOF_ShowGui)) {
+    if (flag_is_set(game.operation_flags, GOF_ShowGui)) {
         draw_overlay_compass(player->minimap_pos_x, player->minimap_pos_y);
     }
     message_draw();
