@@ -26,6 +26,7 @@ List of required files will follow:
 
 ./data/bluepal.dat
 ./data/bluepall.dat
+./data/ceiling.txt
 ./data/dogpal.pal
 ./data/hitpall.dat
 ./data/lightng.pal

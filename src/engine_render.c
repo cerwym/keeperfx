@@ -1086,10 +1086,8 @@ static void fill_in_points_perspective(struct Camera *cam, long bstl_x, long bst
         mapblk = get_map_block_at(stl_x, stl_y+1);
         wib_v = get_mapblk_wibble_value(mapblk);
         hpos = subtile_coord(get_mapblk_filled_subtiles(mapblk),0) - view_alt;
-        if (wib_v == 2)
-        {
-            wibl = get_wibble_from_table(cam, wib_x + 2 * (hmax + 2 * wib_y - hmin) + 32, stl_x, stl_y);
-        }
+        // Always calculate the ceiling wibble offset based on height, not conditionally
+        wibl = get_wibble_from_table(cam, wib_x + 2 * (hmax + 2 * wib_y - hmin) + 32, stl_x, stl_y);
         ecord = &ecol->cors[8];
         {
             ecord->x = apos + wibl->offset_x;

@@ -13,9 +13,10 @@
 
 FROM scratch
 
-# 13 palette/map files from the original DK data/ directory
+# 14 palette/map files from the original DK data/ directory
 COPY --from=dk data/bluepal.dat   /dk/data/bluepal.dat
 COPY --from=dk data/bluepall.dat  /dk/data/bluepall.dat
+COPY --from=dk data/ceiling.txt   /dk/data/ceiling.txt
 COPY --from=dk data/dogpal.pal    /dk/data/dogpal.pal
 COPY --from=dk data/hitpall.dat   /dk/data/hitpall.dat
 COPY --from=dk data/lightng.pal   /dk/data/lightng.pal

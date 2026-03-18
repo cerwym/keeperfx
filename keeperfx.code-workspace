@@ -173,6 +173,7 @@
             "format": "c",
             "xstring": "c"
         },
-        "git.ignoreLimitWarning": true
+        "git.ignoreLimitWarning": true,
+        "powershell.cwd": "vita-hardware-acceleration"
     }
 }
