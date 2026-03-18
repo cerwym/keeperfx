@@ -112,28 +112,39 @@ _backtrace(int depth, LPCONTEXT context)
             fclose(mapFile);
     }
 
-    STACKFRAME frame;
+    STACKFRAME64 frame;
     memset(&frame, 0, sizeof(frame));
+
+#if defined(_M_X64)
+    const DWORD machine_type = IMAGE_FILE_MACHINE_AMD64;
+    frame.AddrPC.Offset    = context->Rip;
+    frame.AddrStack.Offset = context->Rsp;
+    frame.AddrFrame.Offset = context->Rbp;
+#elif defined(_M_IX86)
+    const DWORD machine_type = IMAGE_FILE_MACHINE_I386;
     frame.AddrPC.Offset    = context->Eip;
-    frame.AddrPC.Mode      = AddrModeFlat;
     frame.AddrStack.Offset = context->Esp;
-    frame.AddrStack.Mode   = AddrModeFlat;
     frame.AddrFrame.Offset = context->Ebp;
+#else
+    return;
+#endif
+    frame.AddrPC.Mode      = AddrModeFlat;
+    frame.AddrStack.Mode   = AddrModeFlat;
     frame.AddrFrame.Mode   = AddrModeFlat;
 
     HANDLE process = GetCurrentProcess();
     HANDLE thread  = GetCurrentThread();
 
-    while (StackWalk(IMAGE_FILE_MACHINE_I386, process, thread, &frame, context, 0,
-                     SymFunctionTableAccess, SymGetModuleBase, 0))
+    while (StackWalk64(machine_type, process, thread, &frame, context, nullptr,
+                       SymFunctionTableAccess64, SymGetModuleBase64, nullptr))
     {
         --depth;
         if (depth < 0) break;
 
-        DWORD module_base = SymGetModuleBase(process, frame.AddrPC.Offset);
+        DWORD64 module_base = SymGetModuleBase64(process, frame.AddrPC.Offset);
         const char *module_name = "[unknown module]";
         char module_name_raw[MAX_PATH];
-        if (module_base && GetModuleFileNameA((HINSTANCE)module_base, module_name_raw, MAX_PATH))
+        if (module_base && GetModuleFileNameA((HMODULE)(uintptr_t)module_base, module_name_raw, MAX_PATH))
         {
             module_name = strrchr(module_name_raw, '\\');
             if (module_name) module_name++;
