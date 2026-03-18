@@ -97,6 +97,10 @@ TbBool LbTextDraw(int posx, int posy, const char *text);
 #define LbTextDrawFmt(posx, posy, fmt, ...) LbTextDrawResizedFmt(posx, posy, 16, fmt, ##__VA_ARGS__)
 TbBool LbTextDrawResized(int posx, int posy, int units_per_px, const char *text);
 TbBool LbTextDrawResizedFmt(int posx, int posy, int units_per_px, const char *fmt, ...);
+/* Software text renderer implementation — do not call directly from game code */
+TbBool LbTextDraw_sw(int posx, int posy, const char *text);
+TbBool LbTextDrawResized_sw(int posx, int posy, int units_per_px, const char *text);
+TbBool LbTextDrawResizedFmt_sw(int posx, int posy, int units_per_px, const char *fmt, ...);
 int LbTextHeight(const char *text);
 int LbTextLineHeight(void);
 int LbTextSetWindow(int posx, int posy, int width, int height);
