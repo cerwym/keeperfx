@@ -77,7 +77,7 @@
 #include "player_utils.h"
 #include "config_players.h"
 #include "player_computer.h"
-#include "game_heap.h"
+#include "kfx/memory_system_c.h"
 #include "game_saves.h"
 #include "engine_render.h"
 #include "engine_lenses.h"

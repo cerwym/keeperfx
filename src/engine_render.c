@@ -52,7 +52,7 @@
 #include "local_camera.h"
 #include "front_simple.h"
 #include "frontend.h"
-#include "game_heap.h"
+#include "kfx/sprite_resources.h"
 #include "game_lghtshdw.h"
 #include "gui_draw.h"
 #include "keeperfx.hpp"
@@ -7526,7 +7526,12 @@ static long load_single_frame(TbSpriteData *data_ptr, unsigned short kspr_idx)
 {
     long nlength;
     nlength = creature_table[kspr_idx+1].DataOffset - creature_table[kspr_idx].DataOffset;
-    *data_ptr = he_alloc(nlength);
+    if (!he_ensure_sprite_frame(kspr_idx, (size_t)nlength))
+    {
+        ERRORLOG("Unable to reserve sprite.frame.%u (%ld bytes)",
+            (unsigned int)kspr_idx, nlength);
+        return 0;
+    }
 
     LbFileSeek(jty_file_handle, creature_table[kspr_idx].DataOffset, 0);
     LbFileRead(jty_file_handle, *data_ptr, nlength);
