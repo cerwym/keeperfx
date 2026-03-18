@@ -238,45 +238,39 @@ static TbBool load_letter_one_file(unsigned long tmapidx, char letter, void *dst
 
 TbBool load_texture_map_file(unsigned long tmapidx, LevelNumber lvnum, short fgroup)
 {
-    SYNCDBG(7,"Starting");
-    if (block_mem == NULL)
-    {
+    SYNCDBG(7, "Starting");
+    if (block_mem == NULL) {
         ERRORLOG("block_mem is NULL — texture buffer was never allocated");
         return false;
     }
-    if (!kfx_memory_ensure_capacity("texture.page.main", BLOCK_MEM_SIZE))
-    {
+    if (!kfx_memory_ensure_capacity("texture.page.main", BLOCK_MEM_SIZE)) {
         ERRORLOG("texture.page.main capacity check failed for %lu bytes", (unsigned long)BLOCK_MEM_SIZE);
         return false;
     }
     memset(block_mem, 130, BLOCK_MEM_SIZE);
-    if (!load_letter_one_file(tmapidx,'a', block_mem,lvnum,fgroup))
-    {
-        if (tmapidx != 0)
-        {
-            WARNMSG("Texture map %lu for level %lu is unavailable; falling back to texture map 0.", tmapidx, (unsigned long)lvnum);
+    if (!load_letter_one_file(tmapidx, 'a', block_mem, lvnum, fgroup)) {
+        if (tmapidx != 0) {
+            WARNMSG("Texture map %lu for level %lu is unavailable; falling back to texture map 0.", tmapidx,
+                    (unsigned long)lvnum);
             tmapidx = 0;
             if (!load_letter_one_file(tmapidx, 'a', block_mem, lvnum, fgroup))
                 return false;
-        }
-        else
-        {
+        } else {
             return false;
         }
     }
-    unsigned char *dst = block_mem + (TEXTURE_BLOCKS_STAT_COUNT_A * 32 * 32);
-    load_letter_one_file(tmapidx,'b', dst, lvnum, fgroup);
+    unsigned char* dst = block_mem + (TEXTURE_BLOCKS_STAT_COUNT_A * 32 * 32);
+    load_letter_one_file(tmapidx, 'b', dst, lvnum, fgroup);
     dst += (TEXTURE_BLOCKS_STAT_COUNT_B * 32 * 32);
 
-    for (int i = 0; i < TEXTURE_VARIATIONS_COUNT-1; i++)
+    for (int i = 0; i < TEXTURE_VARIATIONS_COUNT - 1; i++)
 
     {
-        load_letter_one_file(i,'a', dst, lvnum, fgroup);
+        load_letter_one_file(i, 'a', dst, lvnum, fgroup);
 
         dst += (TEXTURE_BLOCKS_STAT_COUNT_A * 32 * 32);
-        load_letter_one_file(i,'b', dst, lvnum, fgroup);
+        load_letter_one_file(i, 'b', dst, lvnum, fgroup);
         dst += (TEXTURE_BLOCKS_STAT_COUNT_B * 32 * 32);
-
     }
     return true;
 }

@@ -122,6 +122,7 @@ TbBool reset_all_minimap_interpolation = false;
 
 /******************************************************************************/
 
+// RENDER-BYPASS: direct write to lbDisplay.WScreen for minimap rendering — pending IMinimapRenderer migration.
 void panel_map_draw_pixel(RealScreenCoord x, RealScreenCoord y, TbPixel col)
 {
     if ((y >= 0) && (y < MapDiagonalLength))
