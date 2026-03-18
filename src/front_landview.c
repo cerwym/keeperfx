@@ -35,6 +35,7 @@
 #include "bflib_sndlib.h"
 #include "bflib_sound.h"
 #include "bflib_vidraw.h"
+#include "renderer/RendererManager.h"
 #include "bflib_network.h"
 #include "bflib_network_exchange.h"
 
@@ -109,10 +110,10 @@ long players_currently_in_session;
 /******************************************************************************/
 void draw_map_screen(void)
 {
-    copy_raw8_image_buffer(lbDisplay.WScreen,LbGraphicsScreenWidth(),LbGraphicsScreenHeight(),
+    RendererBlitRaw8(
         scale_value_landview(LANDVIEW_MAP_WIDTH), scale_value_landview(LANDVIEW_MAP_HEIGHT),
         -scale_value_landview(map_info.screen_shift_x), -scale_value_landview(map_info.screen_shift_y),
-        map_screen,LANDVIEW_MAP_WIDTH,LANDVIEW_MAP_HEIGHT);
+        map_screen, LANDVIEW_MAP_WIDTH, LANDVIEW_MAP_HEIGHT);
 }
 
 const struct TbSprite * get_map_ensign(long idx)

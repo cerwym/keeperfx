@@ -33,6 +33,7 @@
 #include "bflib_keybrd.h"
 #include "bflib_video.h"
 #include "bflib_vidraw.h"
+#include "renderer/RendererManager.h"
 #include "bflib_mouse.h"
 #include "bflib_sound.h"
 #include "bflib_sndlib.h"
@@ -187,8 +188,7 @@ TbBool fronttorture_draw(void)
   // Starting point coords
   int spx = (LbScreenWidth() - w) >> 1;
   int spy = (LbScreenHeight() - h) >> 1;
-  copy_raw8_image_buffer(lbDisplay.WScreen,LbGraphicsScreenWidth(),LbGraphicsScreenHeight(),
-      w,h,spx,spy,torture_background,img_width,img_height);
+  RendererBlitRaw8(w, h, spx, spy, torture_background, img_width, img_height);
 
   for (int i = 0; i < torture_doors_available; i++)
   {

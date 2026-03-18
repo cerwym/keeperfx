@@ -24,6 +24,7 @@
 #include "globals.h"
 #include "bflib_basics.h"
 #include "bflib_vidraw.h"
+#include "renderer/RendererManager.h"
 #include "bflib_sprite.h"
 #include "bflib_sprfnt.h"
 #include "bflib_dernc.h"
@@ -190,8 +191,10 @@ TbBool parchment_copy_background_at(const struct TbRect *bkgnd_area, int units_p
     if (LbGraphicsScreenBPP() != 8)
         return false;
     // Do the drawing
-    copy_raw8_image_buffer(lbDisplay.WScreen,LbGraphicsScreenWidth(),LbGraphicsScreenHeight(),
-        img_width*units_per_px/16,img_height*units_per_px/16,bkgnd_area->left,bkgnd_area->top,srcbuf,img_width,img_height);
+    RendererBlitRaw8(
+        img_width*units_per_px/16, img_height*units_per_px/16,
+        bkgnd_area->left, bkgnd_area->top,
+        srcbuf, img_width, img_height);
     // Burning candle flames
     const struct TbSprite* spr = get_button_sprite(GBS_parchment_map_screen_flame_1 + (game.play_gameturn & 3));
     LbSpriteDrawScaled(bkgnd_area->left+(36*units_per_px/(pixel_size << shift)),(bkgnd_area->top+0*units_per_px/(16*pixel_size)), spr, spr->SWidth*units_per_px/16, spr->SHeight*units_per_px/16);
