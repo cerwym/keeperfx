@@ -66,6 +66,7 @@
 #include "packets.h"
 #include "custom_sprites.h"
 #include "keeperfx.hpp"
+#include "renderer/RendererManager.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -256,6 +257,9 @@ void load_engine_window(TbGraphicsWindow *ewnd)
     player->engine_window_height = ewnd->height;
 }
 
+// RENDER-SW-IMPL: software implementation of IMapFadePass — per-pixel wipe into lbDisplay.WScreen.
+// Hardcoded to 320×200; hardware path would use a UV-warp fragment shader at native resolution.
+// Called directly by SoftwareMapFadePass::StepFadeIn/StepFadeOut via map_fade_in/map_fade_out.
 void map_fade(unsigned char *outbuf, unsigned char *srcbuf1, unsigned char *srcbuf2, unsigned char *fade_tbl, unsigned char *ghost_tbl, long a6, long const xmax, long const ymax, long a9)
 {
     long ix;
@@ -388,6 +392,8 @@ int get_place_door_pointer_graphics(ThingModel drmodel) {
  * @param scanline Line width of the two given buffers.
  * @param height Height to be filled in given buffers.
  */
+// RENDER-SW-IMPL: captures two rendered frames into CPU buffers as source/dest for map_fade().
+// Hardware path would replace with render-to-texture; both captures would be GPU framebuffers.
 void prepare_map_fade_buffers(unsigned char *fade_src, unsigned char *fade_dest, int scanline, int height)
 {
     struct PlayerInfo* player = get_my_player();
@@ -994,11 +1000,11 @@ void redraw_display(void)
         break;
     case PVM_ParchFadeIn:
         parchment_loaded = 0;
-        player->palette_fade_step_map = map_fade_in(player->palette_fade_step_map);
+        player->palette_fade_step_map = MapFadePass_StepFadeIn(player->palette_fade_step_map);
         break;
     case PVM_ParchFadeOut:
         parchment_loaded = 0;
-        player->palette_fade_step_map = map_fade_out(player->palette_fade_step_map);
+        player->palette_fade_step_map = MapFadePass_StepFadeOut(player->palette_fade_step_map);
         break;
     default:
         ERRORLOG("Unsupported drawing state, %d",(int)player->view_mode);
@@ -1234,4 +1240,5 @@ int get_place_terrain_pointer_graphics(SlabKind skind)
     }
     return result;
 }
+
 /******************************************************************************/

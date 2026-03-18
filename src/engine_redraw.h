@@ -49,6 +49,10 @@ TbBool keeper_screen_redraw(void);
 void smooth_screen_area(unsigned char *a1, long a2, long a3, long a4, long a5, long a6);
 
 int get_place_terrain_pointer_graphics(SlabKind skind);
+
+/** Map-fade transition steps — called by SoftwareMapFadePass. */
+long map_fade_in(long step);
+long map_fade_out(long step);
 /******************************************************************************/
 #ifdef __cplusplus
 }
