@@ -18,6 +18,9 @@
 /* IRenderer.h and RendererType are only visible in C++ translation units */
 #ifdef __cplusplus
 #  include "IRenderer.h"
+#  include "IWorldViewRenderer.h"
+#  include "IMapFadePass.h"
+#  include "ITextRenderer.h"
 #else
 /* In C translation units, RendererType is an opaque int */
 typedef int RendererType;
@@ -65,9 +68,62 @@ int RendererBeginFrame(void);
 void RendererEndFrame(void);
 
 /******************************************************************************/
+/* C-callable world-view renderer wrappers (safe to call from C files)        */
+/******************************************************************************/
+
+struct Camera; // forward declaration (defined in game_legacy.h)
+
+/** Bind the target framebuffer and configure the software rasterizer.
+ *  Call this once per view before adding geometry to the bucket list. */
+void WorldViewRenderer_BeginWorldPass(unsigned char* framebuf, int pitch, int w, int h);
+
+/** Flush the isometric/1st-person bucket list to the framebuffer.
+ *  Call this after draw_view() has filled the bucket list. */
+void WorldViewRenderer_FlushIsometricView(void);
+
+/** Flush the front-view bucket list to the framebuffer.
+ *  Call this after the front-view geometry has been added to the bucket list. */
+void WorldViewRenderer_FlushFrontView(struct Camera* cam);
+
+/******************************************************************************/
+/* C-callable map fade pass wrappers                                          */
+/******************************************************************************/
+
+/** Render one fade-in step (parchment → 3D view) and return next step value. */
+long MapFadePass_StepFadeIn(long step);
+
+/** Render one fade-out step (3D view → parchment) and return next step value. */
+long MapFadePass_StepFadeOut(long step);
+
+/******************************************************************************/
+/* C-callable text renderer wrapper                                           */
+/******************************************************************************/
+
+/** Draw text at (posx, posy) with the given scale through the active ITextRenderer. */
+TbBool TextRenderer_DrawTextResized(int posx, int posy, int units_per_px, const char* text);
+
+/******************************************************************************/
+/* C-callable raw framebuffer blit                                            */
+/******************************************************************************/
+
+/**
+ * Blit a RAW8 source image into the renderer's active framebuffer.
+ * The destination buffer, scanline, and screen dimensions are supplied by the renderer.
+ * Equivalent to copy_raw8_image_buffer(lbDisplay.WScreen, ...) but renderer-routed.
+ */
+TbBool RendererBlitRaw8(int dst_width, int dst_height, int dst_x, int dst_y,
+                        const unsigned char* src_buf, int src_width, int src_height);
+
+/******************************************************************************/
 #ifdef __cplusplus
 }
 /* C++ only: direct access to the active IRenderer* */
 IRenderer* RendererGetActive();
+/* C++ only: direct access to the active IWorldViewRenderer* */
+IWorldViewRenderer* RendererGetWorldViewRenderer();
+/* C++ only: direct access to the active IMapFadePass* */
+IMapFadePass* RendererGetMapFadePass();
+/* C++ only: direct access to the active ITextRenderer* */
+ITextRenderer* RendererGetTextRenderer();
 #endif
 #endif // RENDERER_MANAGER_H
