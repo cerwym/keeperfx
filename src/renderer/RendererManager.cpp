@@ -9,6 +9,9 @@
 #include "renderer/RendererManager.h"
 
 #include "renderer/RendererSoftware.h"
+#include "renderer/backends/SoftwareWorldViewRenderer.h"
+#include "renderer/backends/SoftwareMapFadePass.h"
+#include "renderer/backends/SoftwareTextRenderer.h"
 #ifdef RENDERER_OPENGL_ENABLED
 #  include "renderer/RendererOpenGL.h"
 #endif
@@ -21,12 +24,16 @@
 
 #include "bflib_basics.h"
 #include "globals.h"
+#include "bflib_video.h"
 #include "post_inc.h"
 
 /******************************************************************************/
 
-static IRenderer*    s_activeRenderer  = nullptr;
-static RendererType  s_activeType      = RENDERER_INVALID;
+static IRenderer*           s_activeRenderer      = nullptr;
+static RendererType         s_activeType          = RENDERER_INVALID;
+static IWorldViewRenderer*  s_worldViewRenderer   = nullptr;
+static IMapFadePass*        s_mapFadePass         = nullptr;
+static ITextRenderer*       s_textRenderer        = nullptr;
 
 /******************************************************************************/
 
@@ -57,6 +64,28 @@ static IRenderer* create_renderer(RendererType type)
         default:
             return nullptr;
     }
+}
+
+/** Allocates the appropriate IWorldViewRenderer for the given renderer type.
+ *  Currently all non-Vita platforms use the software rasterizer. */
+static IWorldViewRenderer* create_world_view_renderer(RendererType type)
+{
+    (void)type; // reserved for future GPU dispatch
+    return new SoftwareWorldViewRenderer();
+}
+
+/** Allocates the appropriate IMapFadePass for the given renderer type. */
+static IMapFadePass* create_map_fade_pass(RendererType type)
+{
+    (void)type; // reserved for future GPU dispatch
+    return new SoftwareMapFadePass();
+}
+
+/** Allocates the appropriate ITextRenderer for the given renderer type. */
+static ITextRenderer* create_text_renderer(RendererType type)
+{
+    (void)type; // reserved for future GPU dispatch
+    return new SoftwareTextRenderer();
 }
 
 /** Resolve RENDERER_AUTO to a concrete type.
@@ -98,6 +127,15 @@ int RendererInit(RendererType type)
     s_activeRenderer = backend;
     s_activeType     = type;
     SYNCLOG("Renderer initialised: %s", backend->GetName());
+
+    s_worldViewRenderer = create_world_view_renderer(type);
+    SYNCLOG("WorldViewRenderer initialised: %s", s_worldViewRenderer->GetName());
+
+    s_mapFadePass = create_map_fade_pass(type);
+    SYNCLOG("MapFadePass initialised: %s", s_mapFadePass->GetName());
+
+    s_textRenderer = create_text_renderer(type);
+    SYNCLOG("TextRenderer initialised: %s", s_textRenderer->GetName());
     return true;
 }
 
@@ -155,6 +193,21 @@ int RendererSwitch(RendererType type)
 
 void RendererShutdown()
 {
+    if (s_textRenderer)
+    {
+        delete s_textRenderer;
+        s_textRenderer = nullptr;
+    }
+    if (s_mapFadePass)
+    {
+        delete s_mapFadePass;
+        s_mapFadePass = nullptr;
+    }
+    if (s_worldViewRenderer)
+    {
+        delete s_worldViewRenderer;
+        s_worldViewRenderer = nullptr;
+    }
     if (s_activeRenderer)
     {
         s_activeRenderer->Shutdown();
@@ -167,6 +220,21 @@ void RendererShutdown()
 IRenderer* RendererGetActive()
 {
     return s_activeRenderer;
+}
+
+IWorldViewRenderer* RendererGetWorldViewRenderer()
+{
+    return s_worldViewRenderer;
+}
+
+IMapFadePass* RendererGetMapFadePass()
+{
+    return s_mapFadePass;
+}
+
+ITextRenderer* RendererGetTextRenderer()
+{
+    return s_textRenderer;
 }
 
 RendererType RendererGetActiveType()
@@ -202,4 +270,75 @@ void RendererEndFrame(void)
 {
     if (s_activeRenderer)
         s_activeRenderer->EndFrame();
+}
+
+/******************************************************************************/
+/* C-callable world-view renderer wrappers */
+/******************************************************************************/
+
+void WorldViewRenderer_BeginWorldPass(unsigned char* framebuf, int pitch, int w, int h)
+{
+    if (s_worldViewRenderer)
+        s_worldViewRenderer->BeginWorldPass(framebuf, pitch, w, h);
+}
+
+void WorldViewRenderer_FlushIsometricView(void)
+{
+    if (s_worldViewRenderer)
+        s_worldViewRenderer->FlushIsometricView();
+}
+
+void WorldViewRenderer_FlushFrontView(struct Camera* cam)
+{
+    if (s_worldViewRenderer)
+        s_worldViewRenderer->FlushFrontView(cam);
+}
+
+/******************************************************************************/
+/* C-callable map fade pass wrappers */
+/******************************************************************************/
+
+long MapFadePass_StepFadeIn(long step)
+{
+    if (s_mapFadePass)
+        return s_mapFadePass->StepFadeIn(step);
+    return step; // no-op: don't advance if not initialised
+}
+
+long MapFadePass_StepFadeOut(long step)
+{
+    if (s_mapFadePass)
+        return s_mapFadePass->StepFadeOut(step);
+    return step;
+}
+
+/******************************************************************************/
+/* C-callable text renderer wrapper */
+/******************************************************************************/
+
+TbBool TextRenderer_DrawTextResized(int posx, int posy, int units_per_px, const char* text)
+{
+    if (s_textRenderer)
+        return s_textRenderer->DrawTextResized(posx, posy, units_per_px, text);
+    return false;
+}
+
+/******************************************************************************/
+/* C-callable raw framebuffer blit                                            */
+/******************************************************************************/
+
+// Forward-declared: implemented in front_simple.c — used by the software blit path.
+extern "C" TbBool copy_raw8_image_buffer(
+    unsigned char *dst_buf, const int scanline, const int nlines,
+    const int dst_width, const int dst_height, const int spw, const int sph,
+    const unsigned char *src_buf, const int src_width, const int src_height);
+
+TbBool RendererBlitRaw8(int dst_width, int dst_height, int dst_x, int dst_y,
+                        const unsigned char* src_buf, int src_width, int src_height)
+{
+    return copy_raw8_image_buffer(
+        lbDisplay.WScreen,
+        LbGraphicsScreenWidth(), LbGraphicsScreenHeight(),
+        dst_width, dst_height, dst_x, dst_y,
+        src_buf, src_width, src_height);
 }
