@@ -3089,24 +3089,9 @@ void engine(struct PlayerInfo *player, struct Camera *cam)
     view_height_over_2 = ewnd.height/2;
     view_width_over_2 = ewnd.width/2;
     LbScreenSetGraphicsWindow(ewnd.x, ewnd.y, ewnd.width, ewnd.height);
-    setup_vecs(lbDisplay.GraphicsWindowPtr, 0, lbDisplay.GraphicsScreenWidth,
-        ewnd.width, ewnd.height);
+    WorldViewRenderer_BeginWorldPass(lbDisplay.GraphicsWindowPtr, lbDisplay.GraphicsScreenWidth,ewnd.width, ewnd.height);
     camera_zoom = scale_camera_zoom_to_screen(cam->zoom);
-#if defined(VITA_PERF_LOG)
-    {
-        static Uint32 _dv_accum = 0;
-        static int    _dv_cnt   = 0;
-        Uint32 _dv_t0 = SDL_GetTicks();
-        draw_view(cam, 0);
-        _dv_accum += SDL_GetTicks() - _dv_t0;
-        if (++_dv_cnt >= 60) {
-            JUSTLOG("[perf] draw_view  avg %u ms/frame (60-frame window)", _dv_accum / 60u);
-            _dv_accum = 0; _dv_cnt = 0;
-        }
-    }
-#else
     draw_view(cam, 0);
-#endif
     lbDisplay.DrawFlags = flg_mem;
     thing_being_displayed = 0;
     LbScreenLoadGraphicsWindow(&grwnd);

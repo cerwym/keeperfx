@@ -766,7 +766,7 @@ void draw_zoom_box_terrain(long scrtop_x, long scrtop_y, int stl_x, int stl_y, P
     lbDisplay.DrawFlags = 0;
     scrtop_x += 4*units_per_pixel/16;
     scrtop_y -= 4*units_per_pixel/16;
-    setup_vecs(lbDisplay.WScreen, 0, lbDisplay.GraphicsScreenWidth, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
+    WorldViewRenderer_BeginWorldPass(lbDisplay.WScreen, lbDisplay.GraphicsScreenWidth, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
     // Draw the actual map
     int scr_y = scrtop_y;
     for (int map_dy = 0; map_dy < draw_tiles_y; map_dy++)
