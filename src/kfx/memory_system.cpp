@@ -4,7 +4,6 @@
 #include <unordered_map>
 
 #include "kfx_memory.h"
-#include "globals.h"
 
 namespace {
 
@@ -110,11 +109,42 @@ public:
         return it->second.capacity;
     }
 
+    /**
+     * Free all external buffers registered under the given domain.
+     * Registry entries are kept so callers do not need to re-register;
+     * tracked capacity is reset to zero so the next ensureCapacity
+     * triggers a fresh allocation.
+     * @return number of resources that were freed.
+     */
+    int releaseDomain(KfxManagedDomain domain)
+    {
+        if (!initialized_) {
+            return 0;
+        }
+
+        int released = 0;
+        for (auto& kv : resources_) {
+            ManagedResource& res = kv.second;
+            if (res.domain != domain) {
+                continue;
+            }
+            if ((res.flags & KFX_MANAGED_EXTERNAL) && res.buffer_ptr && *res.buffer_ptr != nullptr) {
+                KfxFree(*res.buffer_ptr);
+                *res.buffer_ptr = nullptr;
+            }
+            res.capacity = 0;
+            ++released;
+        }
+        return released;
+    }
+
 private:
     std::unordered_map<std::string, ManagedResource> resources_;
     bool initialized_ = false;
 };
 
+// As declared inside of anomymous namespace, this is internal linkage and not visible outside this translation unit.
+// As declared inside of anonymous namespace, this is internal linkage and not visible outside this translation unit.
 MemorySystem g_memorySystem;
 
 } // namespace
@@ -147,4 +177,9 @@ extern "C" int kfx_memory_ensure_capacity(const char* resource_id, size_t requir
 extern "C" size_t kfx_memory_get_capacity(const char* resource_id)
 {
     return g_memorySystem.getCapacity(resource_id);
+}
+
+extern "C" int kfx_memory_release_domain(KfxManagedDomain domain)
+{
+    return g_memorySystem.releaseDomain(domain);
 }

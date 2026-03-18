@@ -95,6 +95,22 @@ int kfx_memory_ensure_capacity(const char* resource_id, size_t required_capacity
  */
 size_t kfx_memory_get_capacity(const char* resource_id);
 
+/** @brief Frees all external buffers registered under the given domain.
+ *
+ *  Registry entries are kept so callers do not need to re-register.
+ *  Tracked capacity is reset to zero so the next kfx_memory_ensure_capacity
+ *  triggers a fresh allocation.
+ *
+ *  Typical usage at level reset:
+ *  @code{.c}
+ *  kfx_memory_release_domain(KFX_DOMAIN_LEVEL_TRANSIENT);
+ *  @endcode
+ *
+ *  @param domain The lifetime domain to release.
+ *  @return Number of resources released.
+ */
+int kfx_memory_release_domain(KfxManagedDomain domain);
+
 #ifdef __cplusplus
 }
 #endif
