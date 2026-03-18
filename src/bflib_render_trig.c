@@ -26,6 +26,7 @@
 #include "bflib_video.h"
 #include "bflib_sprite.h"
 #include "bflib_vidraw.h"
+#include "keeperfx.hpp"
 #include "post_inc.h"
 
 #include "vidmode.h"
@@ -4433,6 +4434,24 @@ void trig_render_md26(struct TrigLocalRend *tlr)
     }
 }
 
+/** Draws a single line between two screen-space points directly into the screen buffer.
+ * Used for wireframe debug overlay.
+ */
+static void wireframe_line(long x0, long y0, long x1, long y1, TbPixel colour)
+{
+    long dx = abs(x1 - x0), sx = (x0 < x1) ? 1 : -1;
+    long dy = -abs(y1 - y0), sy = (y0 < y1) ? 1 : -1;
+    long err = dx + dy;
+    for (;;) {
+        if (x0 >= 0 && x0 < vec_window_width && y0 >= 0 && y0 < vec_window_height)
+            LbDrawPixel(x0, y0, colour);
+        if (x0 == x1 && y0 == y1) break;
+        long e2 = 2 * err;
+        if (e2 >= dy) { err += dy; x0 += sx; }
+        if (e2 <= dx) { err += dx; y0 += sy; }
+    }
+}
+
 /** Triangle rendering function.
  *
  * @param point_a
@@ -4596,6 +4615,12 @@ void trig(struct PolyPoint *point_a, struct PolyPoint *point_b, struct PolyPoint
     case RendVec_mode26:
         trig_render_md26(&tlr);
         break;
+    }
+
+    if ((start_params.debug_flags & DFlg_Wireframe) != 0) {
+        wireframe_line(opt_a->X, opt_a->Y, opt_b->X, opt_b->Y, 252);
+        wireframe_line(opt_b->X, opt_b->Y, opt_c->X, opt_c->Y, 252);
+        wireframe_line(opt_c->X, opt_c->Y, opt_a->X, opt_a->Y, 252);
     }
 
     NOLOG("end");

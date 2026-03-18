@@ -94,6 +94,7 @@ enum DebugFlags {
     DFlg_ShowGameTurns      =  0x04,
     DFlg_FrameStep          =  0x08,
     DFlg_PauseAtGameTurn    =  0x10,
+    DFlg_Wireframe          =  0x20,
 };
 
 #ifdef FUNCTESTING
