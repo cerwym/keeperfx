@@ -17,8 +17,9 @@ set -euo pipefail
 WORKSPACE="${1:-$(pwd)}"
 GIT_FILE="$WORKSPACE/.git"
 
-# --- Not a worktree? Nothing to do ---
+# --- Not a worktree? Just ensure filemode is off (Windows host mount noise) ---
 if [[ -d "$GIT_FILE" ]]; then
+    git -C "$WORKSPACE" config core.filemode false
     echo "✓ Git repository OK (not a worktree)."
     exit 0
 fi
@@ -88,6 +89,10 @@ if [[ -f "$GIT_FILE.worktree.bak" ]]; then
         BRANCH="$WT_NAME"
     fi
 fi
+
+# Disable filemode tracking — Windows bind-mounts set executable bits on
+# everything, causing every file to appear modified in Linux git.
+git -C "$WORKSPACE" config core.filemode false
 
 # Fetch and set up tracking
 echo "Fetching from origin..."
