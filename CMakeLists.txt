@@ -47,6 +47,7 @@ endif()
 # Vita-specific setup (PlayStation Vita support via vitaGL + FFmpeg-vita)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 if(PLATFORM_VITA)
+    include("$ENV{VITASDK}/share/vita.cmake" REQUIRED)
     include(ExternalProject)
     
     # SDL2 from vitasdk
@@ -196,8 +197,33 @@ if(PLATFORM_VITA)
     
     # Lua (SonicMastr/LuaJIT-Vita via vdpm)
     find_library(LUAJIT_LIB luajit-5.1 HINTS "$ENV{VITASDK}/arm-vita-eabi/lib")
-    if(LUAJIT_LIB)
-        target_link_libraries(keeperfx       PRIVATE ${LUAJIT_LIB})
-        target_link_libraries(keeperfx_hvlog PRIVATE ${LUAJIT_LIB})
+    find_path(LUAJIT_INCLUDE_DIR lua.h
+        HINTS
+            "$ENV{VITASDK}/arm-vita-eabi/include/luajit-2.1"
+            "$ENV{VITASDK}/arm-vita-eabi/include/luajit-2.0"
+            "$ENV{VITASDK}/arm-vita-eabi/include")
+    if(LUAJIT_LIB AND LUAJIT_INCLUDE_DIR)
+        target_include_directories(keeperfx       PRIVATE ${LUAJIT_INCLUDE_DIR})
+        target_include_directories(keeperfx_hvlog PRIVATE ${LUAJIT_INCLUDE_DIR})
+        # libdl provides POSIX dlopen/dlsym/dlclose/dlerror shims required by
+        # LuaJIT's lj_clib and lib_package objects on the Vita (no native libdl).
+        # libdl itself depends on taihen (taiGetModuleInfo) and SceSblSsMgr (sceSblDmac5HashTransform).
+        target_link_libraries(keeperfx       PRIVATE ${LUAJIT_LIB} dl taihen_stub SceSblSsMgr_stub)
+        target_link_libraries(keeperfx_hvlog PRIVATE ${LUAJIT_LIB} dl taihen_stub SceSblSsMgr_stub)
+    elseif(LUAJIT_LIB AND NOT LUAJIT_INCLUDE_DIR)
+        message(FATAL_ERROR "LuaJIT library found but lua.h not found.\nInstall LuaJIT headers via: \$VITASDK/bin/vdpm luajit")
     endif()
+
+    # ━━━ Vita package (.self + .vpk) ━━━
+    # vita_create_self / vita_create_vpk are provided by vitasdk's vita.toolchain.cmake.
+    # UNSAFE is required for vitaGL homebrew which uses unrestricted memory.
+    vita_create_self(keeperfx.self keeperfx UNSAFE)
+    vita_create_vpk(keeperfx.vpk KFXV00001 keeperfx.self
+        VERSION "01.00"
+        NAME    "KeeperFX"
+        FILE    ${CMAKE_SOURCE_DIR}/vita/sce_sys/icon0.png                             sce_sys/icon0.png
+        FILE    ${CMAKE_SOURCE_DIR}/vita/sce_sys/livearea/contents/bg.png              sce_sys/livearea/contents/bg.png
+        FILE    ${CMAKE_SOURCE_DIR}/vita/sce_sys/livearea/contents/startup.png         sce_sys/livearea/contents/startup.png
+        FILE    ${CMAKE_SOURCE_DIR}/vita/sce_sys/livearea/contents/template.xml        sce_sys/livearea/contents/template.xml
+    )
 endif()
