@@ -83,18 +83,7 @@ static const unsigned short SPECTATOR_MENUS[] = {
 static const int SPECTATOR_MENUS_COUNT = 
     sizeof(SPECTATOR_MENUS) / sizeof(SPECTATOR_MENUS[0]);
 
-/**
- * Menus for hidden role (AI, replay, etc.)
- * No menus - UI is completely disabled
- */
-static const unsigned short HIDDEN_MENUS[] = {
-    // No menus for hidden role. Dummy sentinel keeps MSVC happy
-    // (empty array initializers are a GCC extension, not valid C11).
-    // HIDDEN_MENUS_COUNT is 0 so this element is never accessed.
-    0
-};
-
-/** Number of spectator menus (always zero) */
+/** Number of hidden menus (hidden role has no UI) */
 static const int HIDDEN_MENUS_COUNT = 0;
 
 /******************************************************************************/
@@ -118,7 +107,7 @@ unsigned short *get_ui_menu_list_for_role(enum UIPlayerRole role, int *out_count
 
         case UIPROLE_HIDDEN:
             *out_count = HIDDEN_MENUS_COUNT;
-            return (unsigned short *)HIDDEN_MENUS;
+            return NULL;
 
         default:
             ERRORLOG("Unknown UI role: %d", (int)role);
