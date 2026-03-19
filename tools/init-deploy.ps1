@@ -29,8 +29,12 @@ $runtimeImage = "keeperfx-runtime-assets:local"
 
 function Test-DockerImageExists {
     param([string]$ImageName)
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = "SilentlyContinue"
     docker image inspect $ImageName *> $null
-    return ($LASTEXITCODE -eq 0)
+    $result = ($LASTEXITCODE -eq 0)
+    $ErrorActionPreference = $prev
+    return $result
 }
 
 function Assert-Tooling {
@@ -66,8 +70,16 @@ function Assert-DkFilesPresent {
 
     $missing = @()
     foreach ($rel in $RequiredFiles) {
-        $full = Join-Path $DkRoot $rel
-        if (-not (Test-Path $full)) {
+        # Case-insensitive search: find the file regardless of casing on disk
+        $dir  = Split-Path $rel -Parent
+        $leaf = Split-Path $rel -Leaf
+        $searchDir = Join-Path $DkRoot $dir
+        if (-not (Test-Path $searchDir)) {
+            $missing += $rel
+            continue
+        }
+        $found = Get-ChildItem -Path $searchDir -Filter $leaf -ErrorAction SilentlyContinue
+        if (-not $found) {
             $missing += $rel
         }
     }
@@ -150,7 +162,7 @@ function Copy-ImageTreeToHost {
         [string]$DestinationPath
     )
 
-    $cid = (docker create $ImageName)
+    $cid = (docker create $ImageName /)
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($cid)) {
         throw "Failed to create temp container from $ImageName"
     }
