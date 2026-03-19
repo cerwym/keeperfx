@@ -90,6 +90,47 @@ function Assert-DkFilesPresent {
     }
 }
 
+function New-NormalizedDkContext {
+    # Copies required DK files into a temp directory with all-lowercase names.
+    # This ensures the Docker build context is always case-consistent regardless
+    # of whether the source install uses UPPERCASE, lowercase, or Mixed casing.
+    param(
+        [string]$DkRoot,
+        [string[]]$RequiredFiles
+    )
+
+    $tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) ("dk-ctx-" + [System.IO.Path]::GetRandomFileName())
+    New-Item -ItemType Directory -Path $tmpDir | Out-Null
+
+    foreach ($rel in $RequiredFiles) {
+        $dir  = Split-Path $rel -Parent
+        $leaf = Split-Path $rel -Leaf
+        $searchDir = Join-Path $DkRoot $dir
+        $srcFile = Get-ChildItem -Path $searchDir -Filter $leaf -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($srcFile) {
+            $destDir = Join-Path $tmpDir $dir.ToLower()
+            if (-not (Test-Path $destDir)) { New-Item -ItemType Directory -Path $destDir | Out-Null }
+            Copy-Item -Path $srcFile.FullName -Destination (Join-Path $destDir $leaf.ToLower()) -Force
+        }
+    }
+
+    # Also copy ldata/ wholesale (lowercased) for the wildcard COPY in the Dockerfile
+    $ldataSrc = Join-Path $DkRoot "ldata"
+    if (-not (Test-Path $ldataSrc)) {
+        $ldataSrc = Get-ChildItem -Path $DkRoot -Directory -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -ieq "ldata" } | Select-Object -First 1 -ExpandProperty FullName
+    }
+    if ($ldataSrc -and (Test-Path $ldataSrc)) {
+        $ldataDest = Join-Path $tmpDir "ldata"
+        if (-not (Test-Path $ldataDest)) { New-Item -ItemType Directory -Path $ldataDest | Out-Null }
+        Get-ChildItem -Path $ldataSrc | ForEach-Object {
+            Copy-Item -Path $_.FullName -Destination (Join-Path $ldataDest $_.Name.ToLower()) -Force
+        }
+    }
+
+    return $tmpDir
+}
+
 function Ensure-DkOriginalsLayer {
     param(
         [string]$ImageName,
@@ -113,10 +154,16 @@ function Ensure-DkOriginalsLayer {
     $dkRoot = (Resolve-Path $DkPath).Path
     Assert-DkFilesPresent -DkRoot $dkRoot -RequiredFiles $RequiredFiles
 
-    Write-Host "Building $ImageName from DK install at $dkRoot" -ForegroundColor Cyan
-    docker build --build-context "dk=$dkRoot" -f $Dockerfile -t $ImageName $RepoRoot
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to build $ImageName"
+    Write-Host "Normalizing DK file casing into temp context..." -ForegroundColor Cyan
+    $tmpCtx = New-NormalizedDkContext -DkRoot $dkRoot -RequiredFiles $RequiredFiles
+    try {
+        Write-Host "Building $ImageName from DK install at $dkRoot" -ForegroundColor Cyan
+        docker build --build-context "dk=$tmpCtx" -f $Dockerfile -t $ImageName $RepoRoot
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to build $ImageName"
+        }
+    } finally {
+        Remove-Item -Recurse -Force $tmpCtx
     }
 }
 
