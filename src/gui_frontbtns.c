@@ -938,6 +938,21 @@ void gui_area_null(struct GuiButton *gbtn)
 
 void reset_scroll_window(struct GuiMenu *gmnu)
 {
+    // content.ptr in the static button init table was evaluated when gpGame was NULL,
+    // storing only the field offset instead of a valid runtime address.
+    // Repair it here before create_button copies the value to active buttons.
+    for (int i = 0; gmnu->buttons[i].gbtype != -1; i++)
+    {
+        struct GuiButtonInit *btn = &gmnu->buttons[i];
+        if (btn->draw_call    == gui_area_scroll_window
+         || btn->maintain_call == maintain_scroll_up
+         || btn->maintain_call == maintain_scroll_down
+         || btn->click_event   == gui_scroll_text_up
+         || btn->click_event   == gui_scroll_text_down)
+        {
+            btn->content.ptr = &game.evntbox_scroll_window;
+        }
+    }
     game.evntbox_scroll_window.start_y = 0;
     game.evntbox_scroll_window.action = 0;
     game.evntbox_scroll_window.text_height = 0;
