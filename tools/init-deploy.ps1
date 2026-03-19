@@ -6,10 +6,15 @@
 # Usage:
 #   powershell -ExecutionPolicy Bypass -File tools/init-deploy.ps1 -DungeonKeeperPath "C:\Games\Dungeon Keeper"
 #   powershell -ExecutionPolicy Bypass -File tools/init-deploy.ps1 -RefreshRuntimeLayer
+#   powershell -ExecutionPolicy Bypass -File tools/init-deploy.ps1 -DungeonKeeperPath "C:\Games\DK" -KeeperFxReleasePath "C:\Games\KeeperFX-1.3.1"
+#     -KeeperFxReleasePath  Optional. Overlays binary assets (levels, data, etc.) from a KeeperFX release
+#                           into .deploy after Docker layers. Used to supply binary level map files not
+#                           produced by the build (e.g. .slb, .clm, .tng). Script files are skipped.
 
 param(
     [string]$WorkspaceFolder = (Split-Path $PSScriptRoot -Parent),
     [string]$DungeonKeeperPath,
+    [string]$KeeperFxReleasePath,
     [switch]$RefreshDkLayer,
     [switch]$RefreshRuntimeLayer,
     [switch]$SkipPkgBuild
@@ -236,6 +241,41 @@ function Reset-DeployDirectory {
     Get-ChildItem -Path $Path -Force | Remove-Item -Recurse -Force
 }
 
+function Copy-ReleaseOverlay {
+    # Overlays binary asset files from a KeeperFX release into .deploy.
+    # Script/config files (.txt, .cfg, .toml) are skipped - those come from the repo.
+    param(
+        [string]$ReleasePath,
+        [string]$DeployPath
+    )
+
+    $releaseRoot = (Resolve-Path $ReleasePath).Path
+    Write-Host "Overlaying binary assets from KeeperFX release at $releaseRoot" -ForegroundColor Cyan
+
+    # Directories to overlay - copy binary data files only, skip script/config files
+    $overlayDirs = @('levels', 'data', 'ldata', 'sound', 'music', 'fxdata', 'campgns')
+    $skipExtensions = @('.txt', '.cfg', '.toml', '.log', '.ini', '.md')
+
+    foreach ($dir in $overlayDirs) {
+        $srcDir = Join-Path $releaseRoot $dir
+        if (-not (Test-Path $srcDir)) { continue }
+
+        Get-ChildItem -Path $srcDir -Recurse -File | ForEach-Object {
+            if ($skipExtensions -contains $_.Extension.ToLower()) { return }
+            $rel = $_.FullName.Substring($srcDir.Length).TrimStart('\')
+            $dest = Join-Path $DeployPath (Join-Path $dir $rel)
+            $destDir = Split-Path $dest -Parent
+            if (-not (Test-Path $destDir)) { New-Item -ItemType Directory -Path $destDir | Out-Null }
+            # Only copy if destination doesn't already have the file (Docker layers take precedence)
+            if (-not (Test-Path $dest)) {
+                Copy-Item -Path $_.FullName -Destination $dest -Force
+            }
+        }
+    }
+
+    Write-Host "Release overlay complete." -ForegroundColor Green
+}
+
 Assert-Tooling
 
 $requiredDkFiles = Get-RequiredDkFiles -ListFile $requiredDkList
@@ -261,7 +301,14 @@ Reset-DeployDirectory -Path $deployDir
 Copy-ImageTreeToHost -ImageName $runtimeImage -ContainerPath "/kfx" -DestinationPath $deployDir
 Copy-ImageTreeToHost -ImageName $dkImage -ContainerPath "/dk" -DestinationPath $deployDir
 
+if (-not [string]::IsNullOrWhiteSpace($KeeperFxReleasePath)) {
+    Copy-ReleaseOverlay -ReleasePath $KeeperFxReleasePath -DeployPath $deployDir
+}
+
 Write-Host "Initialized .deploy from local Docker layers:" -ForegroundColor Green
 Write-Host "  - $runtimeImage" -ForegroundColor Green
 Write-Host "  - $dkImage" -ForegroundColor Green
+if (-not [string]::IsNullOrWhiteSpace($KeeperFxReleasePath)) {
+    Write-Host "  - KeeperFX release overlay: $KeeperFxReleasePath" -ForegroundColor Green
+}
 
