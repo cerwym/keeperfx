@@ -29,6 +29,17 @@ COPY --from=dk data/slab0-1.dat   /dk/data/slab0-1.dat
 COPY --from=dk data/vampal.pal    /dk/data/vampal.pal
 COPY --from=dk data/whitepal.col  /dk/data/whitepal.col
 
+# UI/frontend/door/flag sprites, videos, and other assets from ldata/
+COPY --from=dk ldata/ /dk/ldata/
+
+# Redbook CD music — Steam stores these in the install root, not a music/ subdir
+COPY --from=dk keeper02.ogg /dk/music/keeper02.ogg
+COPY --from=dk keeper03.ogg /dk/music/keeper03.ogg
+COPY --from=dk keeper04.ogg /dk/music/keeper04.ogg
+COPY --from=dk keeper05.ogg /dk/music/keeper05.ogg
+COPY --from=dk keeper06.ogg /dk/music/keeper06.ogg
+COPY --from=dk keeper07.ogg /dk/music/keeper07.ogg
+
 # 3 sound bank files from the original DK sound/ directory
 COPY --from=dk sound/atmos1.sbk   /dk/sound/atmos1.sbk
 COPY --from=dk sound/atmos2.sbk   /dk/sound/atmos2.sbk
