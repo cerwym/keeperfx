@@ -15,6 +15,8 @@ COPY config/keeperfx.cfg /kfx/keeperfx.cfg
 COPY config/creatrs/ /kfx/creatrs/
 COPY config/fxdata/ /kfx/fxdata/
 COPY config/mods/ /kfx/mods/
+
+# KeeperFX extended graphics packs (.zip) and fonts (font*.fon) are included above via config/fxdata/
 COPY campgns/ /kfx/campgns/
 COPY levels/ /kfx/levels/
 
