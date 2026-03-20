@@ -93,13 +93,8 @@ if(PLATFORM_VITA)
     add_dependencies(keeperfx       vitagl_external)
     add_dependencies(keeperfx_hvlog vitagl_external)
     
-    # Memory handling: route malloc/free through vitaGL allocator
-    target_sources(keeperfx       PRIVATE "src/platform/vita_malloc_wrap.c")
-    target_sources(keeperfx_hvlog PRIVATE "src/platform/vita_malloc_wrap.c")
     target_sources(keeperfx       PRIVATE "src/platform/stack_monitor.c")
     target_sources(keeperfx_hvlog PRIVATE "src/platform/stack_monitor.c")
-    target_link_options(keeperfx       PRIVATE -Wl,--wrap,malloc -Wl,--wrap,free -Wl,--wrap,calloc -Wl,--wrap,realloc -Wl,--wrap,memalign)
-    target_link_options(keeperfx_hvlog PRIVATE -Wl,--wrap,malloc -Wl,--wrap,free -Wl,--wrap,calloc -Wl,--wrap,realloc -Wl,--wrap,memalign)
     
     # Vita stubs and support libraries
     add_library(sceshacccgext_stubs STATIC "${CMAKE_SOURCE_DIR}/deps/sceshacccgext-stubs/sceshacccgext_stubs.c")
