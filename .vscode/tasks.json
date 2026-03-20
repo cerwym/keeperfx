@@ -377,17 +377,6 @@
 },
 
 {
-    "label": "Vita PrincessLog Listener",
-    "detail": "Standalone listener for PrincessLog stdout (Ctrl+C to stop)",
-    "type": "shell",
-    "command": "bash '${workspaceFolder}/tools/vita-companion.sh' log ${input:princessLogPort}",
-    "problemMatcher": [],
-    "group": "build",
-    "isBackground": true,
-    "presentation": { "reveal": "always", "focus": true, "panel": "dedicated", "showReuseMessage": false }
-},
-
-{
     "label": "Reboot Vita",
     "detail": "Send reboot command to Vita via vitacompanion",
     "type": "shell",
@@ -405,6 +394,16 @@
     "problemMatcher": [],
     "group": "build",
     "presentation": { "reveal": "always", "focus": true, "panel": "dedicated", "showReuseMessage": false }
+},
+
+{
+    "label": "Build & Deploy Switch",
+    "detail": "Build → deploy → launch on Switch",
+    "type": "shell",
+    "command": "cmake --preset ${input:switchPreset} && cmake --build --preset ${input:switchPreset} && SWITCH_PRESET='${input:switchPreset}' bash '${workspaceFolder}/tools/switch-companion.sh' deploy-launch",
+    "problemMatcher": "$gcc",
+    "group": "build",
+    "presentation": { "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
 },
 
 // ── Fork management ──────────────────────────────────────────────────
@@ -469,6 +468,13 @@
     "description": "Vita build preset to deploy",
     "options": ["vita-reldebug", "vita-debug", "vita-release"],
     "default": "vita-reldebug"
+},
+{
+    "id": "switchPreset",
+    "type": "pickString",
+    "description": "Switch build preset to deploy",
+    "options": ["switch-reldebug", "switch-debug", "switch-release"],
+    "default": "switch-reldebug"
 },
 {
     "id": "princessLogPort",

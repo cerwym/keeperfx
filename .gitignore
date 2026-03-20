@@ -60,3 +60,4 @@ __pycache__/
 *_SECURITY_AUDIT.md
 VITAGL_SECURITY_AUDIT.md
 .vscode/.sonar-token
+build_results.json

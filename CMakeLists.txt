@@ -38,7 +38,7 @@ include(BuildTargets)
 # Subdirectories (desktop only)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Go into submodules (desktop only — homebrew platforms use their own SDK deps).
-if(NOT PLATFORM_VITA AND NOT PLATFORM_3DS AND NOT PLATFORM_SWITCH)
+if(NOT PLATFORM_VITA AND NOT PLATFORM_3DS AND NOT PLATFORM_SWITCH AND NOT PLATFORM_WII_U)
     add_subdirectory(deps)
     add_subdirectory(tools)
 endif()
@@ -221,4 +221,116 @@ if(PLATFORM_VITA)
         FILE    ${CMAKE_SOURCE_DIR}/vita/sce_sys/livearea/contents/startup.png         sce_sys/livearea/contents/startup.png
         FILE    ${CMAKE_SOURCE_DIR}/vita/sce_sys/livearea/contents/template.xml        sce_sys/livearea/contents/template.xml
     )
+endif()
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 3DS-specific setup (Nintendo 3DS support via citro3d + devkitARM)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+if(PLATFORM_3DS)
+    # devkitARM and 3DS SDK paths from DEVKITARM environment variable
+    if(NOT DEVKITARM)
+        message(FATAL_ERROR "DEVKITARM environment variable not set. Install devkitARM from devkitPro")
+    endif()
+    
+    # Optimization flags (architecture-specific flags are set by the toolchain)
+    target_compile_options(keeperfx       PRIVATE -ffast-math)
+    target_compile_options(keeperfx_hvlog PRIVATE -ffast-math)
+    
+    # citro3d library (PICA200 hardware abstraction)
+    find_library(CITRO3D_LIB citro3d HINTS "${DEVKITPRO}/libctru/lib" REQUIRED)
+    find_library(CTR_LIB ctru HINTS "${DEVKITPRO}/libctru/lib" REQUIRED)
+    find_library(M_LIB m HINTS "${DEVKITARM}/lib")
+    
+    # 3D graphics via citro3d
+    target_link_libraries(keeperfx       PRIVATE ${CITRO3D_LIB} ${CTR_LIB} ${M_LIB})
+    target_link_libraries(keeperfx_hvlog PRIVATE ${CITRO3D_LIB} ${CTR_LIB} ${M_LIB})
+    
+    # Debug symbols for crash analysis
+    if(NOT CMAKE_BUILD_TYPE STREQUAL "Release")
+        target_compile_options(keeperfx       PRIVATE -g)
+        target_compile_options(keeperfx_hvlog PRIVATE -g)
+    endif()
+endif()
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Switch-specific setup (Nintendo Switch support via libnx)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+if(PLATFORM_SWITCH)
+    # devkitA64 and Switch SDK paths from DEVKITA64 environment variable or infer from DEVKITPRO
+    if(NOT DEVKITA64)
+        if(DEVKITPRO)
+            set(DEVKITA64 "${DEVKITPRO}/devkitA64")
+            message(STATUS "DEVKITA64 inferred from DEVKITPRO: ${DEVKITA64}")
+        else()
+            message(FATAL_ERROR "DEVKITA64 environment variable not set and DEVKITPRO not found. Install devkitA64 from devkitPro")
+        endif()
+    endif()
+
+    include_directories($ENV{DEVKITPRO}/portlibs/switch/include)
+    set(USE_SYSTEM_SDL2_DEFAULT ON)
+    
+    # Optimization flags (architecture-specific flags are set by the toolchain)
+    target_compile_options(keeperfx       PRIVATE -ffast-math)
+    target_compile_options(keeperfx_hvlog PRIVATE -ffast-math)
+    
+    # libnx core library
+    find_library(NX_LIB nx HINTS "${DEVKITA64}/lib" REQUIRED)
+    find_library(M_LIB m HINTS "${DEVKITA64}/lib")
+    
+    # Audio rendering (audren service)v
+    find_library(AUDREN_LIB audren HINTS "${DEVKITA64}/lib")
+    if(AUDREN_LIB)
+        target_link_libraries(keeperfx       PRIVATE ${AUDREN_LIB})
+        target_link_libraries(keeperfx_hvlog PRIVATE ${AUDREN_LIB})
+    endif()
+    
+    # Core libnx linkage
+    target_link_libraries(keeperfx       PRIVATE ${NX_LIB} ${M_LIB})
+    target_link_libraries(keeperfx_hvlog PRIVATE ${NX_LIB} ${M_LIB})
+    
+    # Debug symbols for crash analysis
+    if(NOT CMAKE_BUILD_TYPE STREQUAL "Release")
+        target_compile_options(keeperfx       PRIVATE -g)
+        target_compile_options(keeperfx_hvlog PRIVATE -g)
+    endif()
+endif()
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Wii U-specific setup (Nintendo Wii U support via libgfd + libgx2)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+if(PLATFORM_WII_U)
+    # devkitPPC and Wii U SDK paths from DEVKITPPC environment variable
+    if(NOT DEVKITPPC)
+        message(FATAL_ERROR "DEVKITPPC environment variable not set. Install devkitPPC from devkitPro")
+    endif()
+    
+    # Optimization flags (architecture-specific flags are set by the toolchain)
+    target_compile_options(keeperfx       PRIVATE -ffast-math)
+    target_compile_options(keeperfx_hvlog PRIVATE -ffast-math)
+    
+    # Graphics library (GX2)
+    find_library(GX2_LIB gx2 HINTS "${DEVKITPRO}/libwut/lib" "${DEVKITPPC}/lib")
+    
+    # Graphics format library
+    find_library(GFD_LIB gfd HINTS "${DEVKITPRO}/libwut/lib" "${DEVKITPPC}/lib")
+    
+    # Audio subsystem
+    find_library(AX_LIB ax HINTS "${DEVKITPRO}/libwut/lib" "${DEVKITPPC}/lib")
+    
+    # Core Wii U library
+    find_library(WIIU_LIB wiiu HINTS "${DEVKITPRO}/libwut/lib" "${DEVKITPPC}/lib")
+    find_library(M_LIB m HINTS "${DEVKITPRO}/libwut/lib" "${DEVKITPPC}/lib")
+    
+    # Memory and system libraries
+    find_library(COREINIT_LIB coreinit HINTS "${DEVKITPRO}/libwut/lib" "${DEVKITPPC}/lib")
+    
+    # Link all graphics and audio subsystems
+    target_link_libraries(keeperfx       PRIVATE ${GX2_LIB} ${GFD_LIB} ${AX_LIB} ${WIIU_LIB} ${COREINIT_LIB} ${M_LIB})
+    target_link_libraries(keeperfx_hvlog PRIVATE ${GX2_LIB} ${GFD_LIB} ${AX_LIB} ${WIIU_LIB} ${COREINIT_LIB} ${M_LIB})
+    
+    # Debug symbols for crash analysis
+    if(NOT CMAKE_BUILD_TYPE STREQUAL "Release")
+        target_compile_options(keeperfx       PRIVATE -g)
+        target_compile_options(keeperfx_hvlog PRIVATE -g)
+    endif()
 endif()

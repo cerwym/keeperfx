@@ -59,6 +59,27 @@ services:
       dockerfile: docker/vitasdk/Dockerfile
     image: ghcr.io/${DOCKER_ORG:-cerwym}/build-vitasdk:latest
 
+  3ds-sdk:
+    <<: *build-base
+    build:
+      context: ..
+      dockerfile: docker/3ds-sdk/Dockerfile
+    image: ghcr.io/${DOCKER_ORG:-cerwym}/build-3ds-sdk:latest
+
+  wii-u-sdk:
+    <<: *build-base
+    build:
+      context: ..
+      dockerfile: docker/wii-u-sdk/Dockerfile
+    image: ghcr.io/${DOCKER_ORG:-cerwym}/build-wii-u-sdk:latest
+
+  switch-sdk:
+    <<: *build-base
+    build:
+      context: ..
+      dockerfile: docker/switch-sdk/Dockerfile
+    image: ghcr.io/${DOCKER_ORG:-cerwym}/build-switch-sdk:latest
+
   sonarscanner:
     <<: *build-base
     image: sonarsource/sonar-scanner-cli:latest

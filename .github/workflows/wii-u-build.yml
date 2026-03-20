@@ -1,0 +1,88 @@
+name: Wii U Build
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+jobs:
+  prepare:
+    name: Prepare
+    runs-on: ubuntu-latest
+    outputs:
+      registry_owner: ${{ steps.lower.outputs.owner }}
+    steps:
+      - id: lower
+        run: echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_OUTPUT
+
+  build:
+    name: Build Wii U ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    needs: prepare
+    container:
+      image: ghcr.io/${{ needs.prepare.outputs.registry_owner }}/keeperfx-build-wii-u-sdk:latest
+      options: --user root
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Release
+            preset: wii-u-release
+            artifact-name: keeperfx-wii-u-release
+
+          - name: RelWithDebInfo
+            preset: wii-u-reldebug
+            artifact-name: keeperfx-wii-u-reldebug
+
+          - name: Debug
+            preset: wii-u-debug
+            artifact-name: keeperfx-wii-u-debug
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Mark git directory as safe
+        run: git config --global --add safe.directory '*'
+
+      - name: Configure CMake
+        run: cmake --preset ${{ matrix.preset }}
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: 4
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: 4
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: |
+            out/build/${{ matrix.preset }}/keeperfx.rpx
+            out/build/${{ matrix.preset }}/keeperfx.elf
+          if-no-files-found: warn
+
+  summary:
+    name: Build Summary
+    runs-on: ubuntu-latest
+    needs: build
+    if: always()
+
+    steps:
+      - name: Check build status
+        run: |
+          if [ "${{ needs.build.result }}" == "success" ]; then
+            echo "✅ All Wii U builds passed!"
+            exit 0
+          else
+            echo "❌ One or more Wii U builds failed"
+            exit 1
+          fi

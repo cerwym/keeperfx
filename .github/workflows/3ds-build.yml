@@ -1,0 +1,88 @@
+name: 3DS Build
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+jobs:
+  prepare:
+    name: Prepare
+    runs-on: ubuntu-latest
+    outputs:
+      registry_owner: ${{ steps.lower.outputs.owner }}
+    steps:
+      - id: lower
+        run: echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_OUTPUT
+
+  build:
+    name: Build 3DS ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    needs: prepare
+    container:
+      image: ghcr.io/${{ needs.prepare.outputs.registry_owner }}/keeperfx-build-3ds-sdk:latest
+      options: --user root
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Release
+            preset: 3ds-release
+            artifact-name: keeperfx-3ds-release
+
+          - name: RelWithDebInfo
+            preset: 3ds-reldebug
+            artifact-name: keeperfx-3ds-reldebug
+
+          - name: Debug
+            preset: 3ds-debug
+            artifact-name: keeperfx-3ds-debug
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Mark git directory as safe
+        run: git config --global --add safe.directory '*'
+
+      - name: Configure CMake
+        run: cmake --preset ${{ matrix.preset }}
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: 4
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: 4
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: |
+            out/build/${{ matrix.preset }}/keeperfx.3dsx
+            out/build/${{ matrix.preset }}/keeperfx
+          if-no-files-found: warn
+
+  summary:
+    name: Build Summary
+    runs-on: ubuntu-latest
+    needs: build
+    if: always()
+
+    steps:
+      - name: Check build status
+        run: |
+          if [ "${{ needs.build.result }}" == "success" ]; then
+            echo "✅ All 3DS builds passed!"
+            exit 0
+          else
+            echo "❌ One or more 3DS builds failed"
+            exit 1
+          fi

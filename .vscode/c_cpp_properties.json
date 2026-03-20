@@ -1,39 +1,50 @@
 {
     "configurations": [
         {
-            // IntelliSense for Windows x86 desktop build (cross-compiled via Docker mingw32).
-            // Run "Generate compile_commands.json" task first to populate the database.
             "name": "Docker MinGW (Windows x86 Debug)",
-            "compileCommands": "${workspaceFolder}/out/build/windows-x86-debug/compile_commands.json",
+            "compileCommands": [
+                "${workspaceFolder}/out/build/windows-x86-debug/compile_commands.json"
+            ],
             "cStandard": "gnu11",
             "cppStandard": "gnu++17",
             "intelliSenseMode": "windows-gcc-x86"
         },
         {
-            // IntelliSense for PS Vita builds. Run "Build Vita Debug" task first to
-            // populate compile_commands.json. Paths in the file are /src/... (Docker
-            // mount) — cpptools resolves them via the compileCommands database.
             "name": "PS Vita (vita-debug)",
-            "compileCommands": "${workspaceFolder}/out/build/vita-debug/compile_commands.json",
+            "compileCommands": [
+                "${workspaceFolder}/out/build/vita-debug/compile_commands.json"
+            ],
             "cStandard": "gnu11",
             "cppStandard": "gnu++17",
             "intelliSenseMode": "linux-gcc-arm"
         },
         {
-            // Linux native build IntelliSense. Run "Build Linux x64" task first.
             "name": "Linux x64",
-            "compileCommands": "${workspaceFolder}/out/build/linux-x64-release/compile_commands.json",
+            "compileCommands": [
+                "${workspaceFolder}/out/build/linux-x64-release/compile_commands.json"
+            ],
             "cStandard": "gnu11",
             "cppStandard": "gnu++17",
             "intelliSenseMode": "linux-gcc-x64"
         },
         {
-            // Windows x86 release build IntelliSense. Run "Build Windows x86 Release" task first.
             "name": "Docker MinGW (Windows x86 Release)",
-            "compileCommands": "${workspaceFolder}/out/build/windows-x86-release/compile_commands.json",
+            "compileCommands": [
+                "${workspaceFolder}/out/build/windows-x86-release/compile_commands.json"
+            ],
             "cStandard": "gnu11",
             "cppStandard": "gnu++17",
             "intelliSenseMode": "windows-gcc-x86"
+        },
+        {
+            "name": "Switch (switch-debug)",
+            "includePath": [
+                "${workspaceFolder}/**"
+            ],
+            "defines": [],
+            "compilerPath": "/usr/bin/gcc",
+            "cppStandard": "c++20",
+            "cStandard": "c17"
         }
     ],
     "version": 4
