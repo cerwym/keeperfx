@@ -688,16 +688,21 @@ int64_t get_named_field_value(const struct NamedField* named_field, const struct
         return *(int32_t *)field;
     case dt_ulong:
         return *(uint32_t *)field;
-    case dt_longlong:
-        return *(int64_t *)field;
-    case dt_ulonglong:
-        return *(uint64_t *)field;
+    case dt_longlong: {
+        /* Use memcpy to avoid ARM LDRD strict-alignment fault. */
+        int64_t v; memcpy(&v, field, sizeof(v)); return v;
+    }
+    case dt_ulonglong: {
+        uint64_t v; memcpy(&v, field, sizeof(v)); return (int64_t)v;
+    }
     case dt_float:
         return (int64_t)(*(float*)field);
-    case dt_double:
-        return (int64_t)(*(double*)field);
-    case dt_longdouble:
-        return (int64_t)(*(long double*)field);
+    case dt_double: {
+        double v; memcpy(&v, field, sizeof(v)); return (int64_t)v;
+    }
+    case dt_longdouble: {
+        long double v; memcpy(&v, field, sizeof(v)); return (int64_t)v;
+    }
     case dt_charptr:
     case dt_default:
     case dt_void:
@@ -771,24 +776,34 @@ void assign_default(const struct NamedField* named_field, int64_t value, const s
     case dt_longlong:
         if (value < INT64_MIN || value > INT64_MAX)
             NAMFIELDWRNLOG("Value out of range for signed long long: %" PRId64, value);
-        else
-            *(signed long long *)field = (signed long long)value;
+        else {
+            /* Use memcpy to avoid ARM STRD strict-alignment fault (ARMv7 STRD requires
+             * 8-byte aligned address; struct base may only be 4-byte aligned). */
+            signed long long v = (signed long long)value;
+            memcpy(field, &v, sizeof(v));
+        }
         break;
     case dt_ulonglong:
         if (value < 0)
             NAMFIELDWRNLOG("Value out of range for unsigned long long: %" PRId64, value);
-        else
-            *(unsigned long long *)field = (unsigned long long)value;
+        else {
+            unsigned long long v = (unsigned long long)value;
+            memcpy(field, &v, sizeof(v));
+        }
         break;
     case dt_float:
         *(float*)field = (float)value;
         break;
-    case dt_double:
-        *(double*)field = (double)value;
+    case dt_double: {
+        double v = (double)value;
+        memcpy(field, &v, sizeof(v));
         break;
-    case dt_longdouble:
-        *(long double*)field = (long double)value;
+    }
+    case dt_longdouble: {
+        long double v = (long double)value;
+        memcpy(field, &v, sizeof(v));
         break;
+    }
     case dt_charptr:
     case dt_default:
     case dt_void:
