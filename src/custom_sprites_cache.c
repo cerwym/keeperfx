@@ -341,8 +341,15 @@ static void tier_write(const char *path, const SpriteCacheCtx *ctx,
         sceIoRemove(tmp);
         return;
     }
-    JUSTLOG("sprite_cache: wrote '%s' (+%d ksprites, +%d icons) in %u ms",
-            path, cnt_kspr, cnt_cspr, SDL_GetTicks() - t0);
+    if (cnt_kspr > 0 || cnt_cspr > 0) {
+        JUSTLOG("sprite_cache: wrote '%s' (+%d ksprites[%d..%d], +%d icons[%d..%d]) in %u ms",
+                path, cnt_kspr, base_kspr, base_kspr + cnt_kspr - 1,
+                cnt_cspr, base_icons, base_icons + cnt_cspr - 1,
+                SDL_GetTicks() - t0);
+    } else {
+        JUSTLOG("sprite_cache: wrote '%s' (+0 ksprites, +0 icons) in %u ms",
+                path, SDL_GetTicks() - t0);
+    }
     return;
 
 err:
@@ -468,8 +475,15 @@ static TbBool tier_try_load(const char *path, SpriteCacheCtx *ctx,
     *ctx->p_next_free_icon  = (short)h_end_nfi;
 
     sceIoClose(fd);
-    JUSTLOG("sprite_cache: loaded '%s' (+%u ksprites, +%u icons) in %u ms",
-            path, h_cnt_kspr, h_cnt_cspr, SDL_GetTicks() - t0);
+    if (h_cnt_kspr > 0 || h_cnt_cspr > 0) {
+        JUSTLOG("sprite_cache: loaded '%s' (+%u ksprites[%u..%u], +%u icons[%u..%u]) in %u ms",
+                path, h_cnt_kspr, h_base_kspr, h_base_kspr + h_cnt_kspr - 1,
+                h_cnt_cspr, h_base_icons, h_base_icons + h_cnt_cspr - 1,
+                SDL_GetTicks() - t0);
+    } else {
+        JUSTLOG("sprite_cache: loaded '%s' (+0 ksprites, +0 icons) in %u ms",
+                path, SDL_GetTicks() - t0);
+    }
     return true;
 
 stale:

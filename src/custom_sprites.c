@@ -513,6 +513,38 @@ void init_custom_sprites(LevelNumber lvnum)
         }
         if (!level_hit)
             sprite_cache_write_level(s_lvl_zip, &cache_ctx, &campaign_snap);
+
+        /* Inventory summary: log the final sprite/icon index ranges per tier */
+        {
+            SpriteCacheTierSnapshot final_snap;
+            sprite_cache_snapshot(&cache_ctx, &final_snap);
+            int g_kspr = global_snap.next_free_sprite;
+            int c_kspr = campaign_snap.next_free_sprite - global_snap.next_free_sprite;
+            int l_kspr = final_snap.next_free_sprite - campaign_snap.next_free_sprite;
+            int g_icon = global_snap.num_added_icons;
+            int c_icon = campaign_snap.num_added_icons - global_snap.num_added_icons;
+            int l_icon = final_snap.num_added_icons - campaign_snap.num_added_icons;
+            JUSTLOG("sprite_cache: inventory lvl%lu: "
+                    "global[kspr 0..%d icons 0..%d] "
+                    "campgn[%s] "
+                    "level[%s]",
+                    (unsigned long)lvnum,
+                    g_kspr > 0 ? g_kspr - 1 : 0, g_icon > 0 ? g_icon - 1 : 0,
+                    (c_kspr > 0 || c_icon > 0) ? "non-empty" : "empty",
+                    (l_kspr > 0 || l_icon > 0) ? "non-empty" : "empty");
+            if (c_kspr > 0 || c_icon > 0)
+                JUSTLOG("sprite_cache: inventory campgn: kspr[%d..%d] icons[%d..%d]",
+                        global_snap.next_free_sprite,
+                        campaign_snap.next_free_sprite - 1,
+                        global_snap.num_added_icons,
+                        campaign_snap.num_added_icons - 1);
+            if (l_kspr > 0 || l_icon > 0)
+                JUSTLOG("sprite_cache: inventory level:  kspr[%d..%d] icons[%d..%d]",
+                        campaign_snap.next_free_sprite,
+                        final_snap.next_free_sprite - 1,
+                        campaign_snap.num_added_icons,
+                        final_snap.num_added_icons - 1);
+        }
     }
 #else
     {
