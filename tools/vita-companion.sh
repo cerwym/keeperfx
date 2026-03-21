@@ -10,6 +10,7 @@
 #   ./tools/vita-companion.sh deploy-eboot   # Upload eboot.bin from latest build
 #   ./tools/vita-companion.sh launch         # Kill + relaunch KeeperFX
 #   ./tools/vita-companion.sh deploy-launch  # deploy-eboot + launch in one step
+#   ./tools/vita-companion.sh wait-for-gdb   # poll port 1234 until vita-uvdb stub is ready
 #   ./tools/vita-companion.sh reboot         # Reboot the Vita
 #   ./tools/vita-companion.sh fetch-logs     # Download kfx_boot/preinit/keeperfx logs to out/vita-logs/
 #   ./tools/vita-companion.sh log [port]     # Listen for PrincessLog output (default 8080)
@@ -225,6 +226,14 @@ cmd_deploy_eboot() {
     ok "eboot.bin deployed to ux0:/app/${TITLE_ID}/"
 }
 
+# ── KILL: Kill running app on the Vita ──────────────────────────────
+
+cmd_kill() {
+    info "Killing running apps on ${VITA_IP}..."
+    vita_cmd "destroy"
+    ok "Kill command sent"
+}
+
 # ── LAUNCH: Kill running apps and launch KeeperFX ────────────────────
 
 cmd_launch() {
@@ -241,6 +250,25 @@ cmd_launch() {
 cmd_deploy_launch() {
     cmd_deploy_eboot
     cmd_launch
+}
+
+# ── WAIT FOR GDB STUB ────────────────────────────────────────────────
+
+cmd_wait_for_gdb() {
+    local port="${1:-1234}"
+    local timeout_sec="${2:-60}"
+    info "Waiting for vita-uvdb GDB stub on ${VITA_IP}:${port} (timeout ${timeout_sec}s)..."
+    local i=0
+    while [ $i -lt $timeout_sec ]; do
+        if nc -z -w1 "${VITA_IP}" "${port}" 2>/dev/null; then
+            ok "GDB stub is ready — attach with F5"
+            return 0
+        fi
+        sleep 1
+        i=$((i + 1))
+    done
+    err "Timed out after ${timeout_sec}s waiting for GDB stub on ${VITA_IP}:${port}"
+    exit 1
 }
 
 # ── REBOOT ───────────────────────────────────────────────────────────
@@ -334,6 +362,61 @@ cmd_screen() {
     ok "Screen command sent"
 }
 
+# ── SETUP-UVDB: Install kubridge on Vita for vita-uvdb GDB stub ──────────────
+# vita-uvdb (https://github.com/sleirsgoevy/vita-uvdb) embeds a GDB stub inside
+# the keeperfx binary.  It requires kubridge.skprx loaded as a *KERNEL plugin.
+# Run this once per Vita — no rerun needed unless kubridge is removed.
+
+cmd_setup_uvdb() {
+    info "Setting up kubridge v0.3.1_hotfix for vita-uvdb on ${VITA_IP}..."
+    mkdir -p "$PLUGIN_DIR"
+
+    local KUBRIDGE_URL="https://github.com/bythos14/kubridge/releases/download/v0.3.1_hotfix/kubridge.skprx"
+    local kubridge_dest="$PLUGIN_DIR/kubridge.skprx"
+
+    if [[ ! -f "$kubridge_dest" ]]; then
+        info "Downloading kubridge.skprx..."
+        curl -fsSL -o "$kubridge_dest" "$KUBRIDGE_URL"
+        ok "Downloaded kubridge.skprx"
+    else
+        ok "kubridge.skprx already cached"
+    fi
+
+    info ""
+    info "=== Plugin Upload ==="
+    info "Make sure FTP is running on the Vita (vitacompanion or VitaShell → SELECT)."
+    ftp_upload "$kubridge_dest" "ur0:/tai/kubridge.skprx"
+
+    info "=== taiHEN Config Update ==="
+    local tai_config="$PLUGIN_DIR/config.txt"
+    local tai_backup="$PLUGIN_DIR/config.txt.backup.uvdb"
+    ftp_download "ur0:/tai/config.txt" "$tai_config"
+    cp "$tai_config" "$tai_backup"
+    ok "Backed up config.txt → $(basename "$tai_backup")"
+
+    if ! grep -q "kubridge.skprx" "$tai_config"; then
+        if ! grep -q '^\*KERNEL' "$tai_config"; then
+            echo -e "\n*KERNEL" >> "$tai_config"
+        fi
+        sed -i '/^\*KERNEL/a ur0:tai/kubridge.skprx' "$tai_config"
+        info "Uploading updated config.txt..."
+        ftp_upload "$tai_config" "ur0:/tai/config.txt"
+        ok "Added kubridge.skprx to *KERNEL"
+    else
+        warn "kubridge.skprx already in config — no change"
+    fi
+
+    echo ""
+    ok "=== Setup Complete ==="
+    info "1. Reboot the Vita to load kubridge:  ./tools/vita-companion.sh reboot"
+    info "2. Rebuild the vitasdk Docker image (once, for kubridge_stub.a):"
+    info "   docker compose -f docker/compose.yml build vitasdk"
+    info "3. Build the vita-gdb preset:"
+    info "   cmake --preset vita-gdb && cmake --build --preset vita-gdb"
+    info "4. Deploy and launch, then attach GDB from VS Code (F5 with 'Debug KeeperFX (Vita GDB)')."
+    info "   The game will block at startup until GDB connects on port 1234."
+}
+
 # ── MAIN ─────────────────────────────────────────────────────────────
 
 usage() {
@@ -341,9 +424,12 @@ usage() {
     echo ""
     echo "Commands:"
     echo "  setup            Download plugins, upload to Vita, patch taiHEN config"
+    echo "  setup-uvdb       Install kubridge on Vita for vita-uvdb GDB stub (one-time)"
     echo "  deploy-eboot     Upload eboot.bin from build output to Vita"
-    echo "  launch           Kill running apps + launch KeeperFX"
+    echo "  kill             Kill the running app on the Vita
+  launch           Kill running apps + launch KeeperFX"
     echo "  deploy-launch    Deploy eboot + launch (combined)"
+    echo "  wait-for-gdb     Poll port 1234 until vita-uvdb GDB stub is ready"
     echo "  reboot           Reboot the Vita"
     echo "  fetch-logs       Download kfx_boot.log, kfx_preinit.log, keeperfx.log → out/vita-logs/"
     echo "  log [port]       Listen for PrincessLog output (default: 8080)"
@@ -355,9 +441,12 @@ usage() {
 
 case "${1:-}" in
     setup)          cmd_setup ;;
+    setup-uvdb)     cmd_setup_uvdb ;;
     deploy-eboot)   cmd_deploy_eboot ;;
+    kill)           cmd_kill ;;
     launch)         cmd_launch ;;
     deploy-launch)  cmd_deploy_launch ;;
+    wait-for-gdb)   cmd_wait_for_gdb "${2:-1234}" "${3:-60}" ;;
     reboot)         cmd_reboot ;;
     fetch-logs)     cmd_fetch_logs ;;
     log)            cmd_log "${2:-8080}" ;;

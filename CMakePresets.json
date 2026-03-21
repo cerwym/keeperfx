@@ -395,10 +395,41 @@
                 "CMAKE_TOOLCHAIN_FILE": "$env{VITASDK}/share/vita.toolchain.cmake",
                 "CMAKE_BUILD_TYPE": "RelWithDebInfo",
                 "PLATFORM_VITA": "ON",
-                "KFX_DEBUG_MEMORY": "ON",
                 "CMAKE_EXPORT_COMPILE_COMMANDS": "on"
             }
         },
+
+        {
+            "name": "vita-ubsan",
+            "displayName": "PS Vita UBSan",
+            "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" },
+            "description": "PlayStation Vita RelWithDebInfo + UndefinedBehaviorSanitizer (trap-on-error, zero extra RAM overhead)",
+            "inherits": "base",
+            "cacheVariables": {
+                "CMAKE_TOOLCHAIN_FILE": "$env{VITASDK}/share/vita.toolchain.cmake",
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "PLATFORM_VITA": "ON",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "on",
+                "CMAKE_C_FLAGS_INIT": "-fsanitize=undefined -fsanitize-undefined-trap-on-error -fno-omit-frame-pointer",
+                "CMAKE_CXX_FLAGS_INIT": "-fsanitize=undefined -fsanitize-undefined-trap-on-error -fno-omit-frame-pointer"
+            }
+        },
+
+        {
+            "name": "vita-gdb",
+            "displayName": "PS Vita GDB (vita-uvdb stub)",
+            "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" },
+            "description": "PlayStation Vita Debug build with embedded vita-uvdb GDB stub. Game blocks at startup until arm-vita-eabi-gdb / gdb-multiarch connects on port 1234. Requires kubridge.skprx on the Vita (run Setup Vita uvdb once) and a rebuilt vitasdk Docker image.",
+            "inherits": "base",
+            "cacheVariables": {
+                "CMAKE_TOOLCHAIN_FILE": "$env{VITASDK}/share/vita.toolchain.cmake",
+                "CMAKE_BUILD_TYPE": "Debug",
+                "PLATFORM_VITA": "ON",
+                "VITA_UVDB": "ON",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "on"
+            }
+        },
+
 
         {
             "name": "vita-debug",
@@ -425,38 +456,7 @@
             "inherits": "base",
             "cacheVariables": {
                 "CMAKE_TOOLCHAIN_FILE": "$env{DEVKITPRO}/cmake/Switch.cmake",
-                "CMAKE_INSTALL_PREFIX": "$env{DEVKITPRO}/portlibs/switch",
                 "CMAKE_BUILD_TYPE": "Release",
-                "PLATFORM_SWITCH": "ON",
-                "CMAKE_EXPORT_COMPILE_COMMANDS": "on"
-            }
-        },
-
-        {
-            "name": "switch-reldebug",
-            "displayName": "Nintendo Switch RelWithDebInfo",
-            "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" },
-            "description": "Nintendo Switch build using devkitA64",
-            "inherits": "base",
-            "cacheVariables": {
-                "CMAKE_TOOLCHAIN_FILE": "$env{DEVKITPRO}/cmake/Switch.cmake",
-                "CMAKE_INSTALL_PREFIX": "$env{DEVKITPRO}/portlibs/switch",
-                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
-                "PLATFORM_SWITCH": "ON",
-                "CMAKE_EXPORT_COMPILE_COMMANDS": "on"
-            }
-        },
-        
-        {
-            "name": "switch-debug",
-            "displayName": "Nintendo Switch Debug",
-            "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" },
-            "description": "Nintendo Switch build using devkitA64",
-            "inherits": "base",
-            "cacheVariables": {
-                "CMAKE_TOOLCHAIN_FILE": "$env{DEVKITPRO}/cmake/Switch.cmake",
-                "CMAKE_INSTALL_PREFIX": "$env{DEVKITPRO}/portlibs/switch",
-                "CMAKE_BUILD_TYPE": "Debug",
                 "PLATFORM_SWITCH": "ON",
                 "CMAKE_EXPORT_COMPILE_COMMANDS": "on"
             }
@@ -681,22 +681,26 @@
         },
 
         {
+            "name": "vita-ubsan",
+            "displayName": "PS Vita UBSan Build",
+            "inherits": "StandardLog",
+            "configurePreset": "vita-ubsan",
+            "targets": ["keeperfx.vpk"]
+        },
+
+        {
+            "name": "vita-gdb",
+            "displayName": "PS Vita GDB Build (vita-uvdb stub)",
+            "inherits": "StandardLog",
+            "configurePreset": "vita-gdb",
+            "targets": ["keeperfx.vpk"]
+        },
+
+        {
             "name": "switch-release",
             "displayName": "Nintendo Switch Release Build",
             "inherits": "StandardLog",
             "configurePreset": "switch-release"
-        },
-        {
-            "name": "switch-reldebug",
-            "displayName": "Nintendo Switch RelWithDebInfo Build",
-            "inherits": "StandardLog",
-            "configurePreset": "switch-reldebug"
-        },
-        {
-            "name": "switch-debug",
-            "displayName": "Nintendo Switch Debug Build",
-            "inherits": "StandardLog",
-            "configurePreset": "switch-debug"
         }
     ]
 }

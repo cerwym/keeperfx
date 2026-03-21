@@ -209,6 +209,33 @@ if(PLATFORM_VITA)
         message(FATAL_ERROR "LuaJIT library found but lua.h not found.\nInstall LuaJIT headers via: \$VITASDK/bin/vdpm luajit")
     endif()
 
+    # ━━━ vita-uvdb: intra-process GDB stub (vita-gdb preset only) ━━━━━━━━━━━━━━━━━
+    # Embeds a minimal GDB remote stub into the binary so arm-vita-eabi-gdb can
+    # connect over TCP port 1234 for live breakpoints, single-step, and memory I/O.
+    # Requires kubridge.skprx loaded on the Vita (see "Setup Vita uvdb" task) and
+    # kubridge_stub.a in the SDK sysroot (baked into the vitasdk Docker image).
+    # Enable only for the vita-gdb configure preset; do NOT enable on release/reldebug.
+    option(VITA_UVDB "Embed vita-uvdb GDB stub (vita-gdb preset only)" OFF)
+    if(VITA_UVDB)
+        find_library(KUBRIDGE_STUB_LIB kubridge_stub
+            HINTS "$ENV{VITASDK}/arm-vita-eabi/lib")
+        if(NOT KUBRIDGE_STUB_LIB)
+            message(FATAL_ERROR
+                "VITA_UVDB=ON but kubridge_stub.a was not found in the VitaSDK sysroot.\n"
+                "Pull the latest base image and rebuild:\n"
+                "  docker compose -f docker/compose.yml build vitasdk")
+        endif()
+
+        # Build the forked vita-uvdb from local source (breakpoint + single-step support)
+        add_library(vita_uvdb STATIC
+            ${CMAKE_SOURCE_DIR}/deps/vita-uvdb/uvdb.c
+            ${CMAKE_SOURCE_DIR}/deps/vita-uvdb/stdio_redirect.c)
+        target_include_directories(vita_uvdb PUBLIC ${CMAKE_SOURCE_DIR}/deps/vita-uvdb)
+
+        add_compile_definitions(VITA_UVDB=1)
+        target_link_libraries(keeperfx PRIVATE vita_uvdb ${KUBRIDGE_STUB_LIB} SceNetPs_stub)
+    endif()
+
     # ━━━ Vita package (.self + .vpk) ━━━
     # vita_create_self / vita_create_vpk are provided by vitasdk's vita.toolchain.cmake.
     # UNSAFE is required for vitaGL homebrew which uses unrestricted memory.

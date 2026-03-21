@@ -31,6 +31,9 @@
 extern "C" {
 #include "platform/vita_sce_diag.h"
 }
+#ifdef VITA_UVDB
+#include <uvdb.h>
+#endif
 extern "C" void input_vita_initialize(void);
 #endif
 #include "post_inc.h"
@@ -623,6 +626,17 @@ void PlatformVita::SystemInit()
     // are captured.  kfxmain() will re-open with the config-selected filename.
     LbErrorLogSetup(GetDataPath(), "keeperfx.log", 5);
     _SYSI_LOG("log-setup");
+#ifdef VITA_UVDB
+    // Block here until GDB connects on port 1234, then stop at the initial
+    // breakpoint.  Press Continue (F5) in VS Code once GDB attaches.
+    // Exception handlers registered by uvdb supersede the POSIX crash handler.
+    // Connect with: gdb-multiarch out/build/vita-gdb/keeperfx
+    //                 -ex 'set architecture armv7'
+    //                 -ex 'target remote 192.168.0.66:1234'
+    _SYSI_LOG("uvdb-wait");
+    uvdb_enter();
+    _SYSI_LOG("uvdb-connected");
+#endif
 #undef _SYSI_LOG
 }
 

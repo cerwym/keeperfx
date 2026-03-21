@@ -396,6 +396,56 @@
     "presentation": { "reveal": "always", "focus": true, "panel": "dedicated", "showReuseMessage": false }
 },
 
+// ── vita-uvdb GDB stub ───────────────────────────────────────────────
+//
+// vita-uvdb embeds a GDB remote stub into the vita-gdb binary.  On startup
+// the game blocks at uvdb_enter() until gdb-multiarch connects on port 1234.
+// Pre-requisites (one-time):
+//   1. Run "Setup Vita uvdb" to install kubridge.skprx on the Vita.
+//   2. Run "docker compose -f docker/compose.yml build vitasdk" to bake
+//      kubridge_stub.a into the vitasdk image.
+// Then build vita-gdb, deploy, launch, and use F5 ("Debug KeeperFX (Vita GDB)").
+
+{
+    "label": "Setup Vita uvdb",
+    "detail": "Download kubridge.skprx, upload to Vita, patch taiHEN config (one-time)",
+    "type": "shell",
+    "command": "bash '${workspaceFolder}/tools/vita-companion.sh' setup-uvdb",
+    "problemMatcher": [],
+    "group": "build",
+    "presentation": { "reveal": "always", "focus": true, "panel": "dedicated", "showReuseMessage": false }
+},
+
+{
+    "label": "Build vita-gdb",
+    "detail": "Build vita-gdb preset (embedded GDB stub, blocks at startup until debugger attaches)",
+    "type": "shell",
+    "command": "cmake --preset vita-gdb && cmake --build --preset vita-gdb",
+    "problemMatcher": "$gcc",
+    "group": "build",
+    "presentation": { "clear": true, "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
+},
+
+{
+    "label": "Build & Deploy Vita GDB",
+    "detail": "Build vita-gdb → deploy eboot.bin → launch → wait for GDB stub on port 1234",
+    "type": "shell",
+    "command": "cmake --preset vita-gdb && cmake --build --preset vita-gdb && VITA_PRESET='vita-gdb' bash '${workspaceFolder}/tools/vita-companion.sh' deploy-launch && bash '${workspaceFolder}/tools/vita-companion.sh' wait-for-gdb",
+    "problemMatcher": "$gcc",
+    "group": "build",
+    "presentation": { "clear": true, "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
+},
+
+{
+    "label": "Kill Vita App",
+    "detail": "Send destroy command to vitacompanion to kill the running app",
+    "type": "shell",
+    "command": "bash '${workspaceFolder}/tools/vita-companion.sh' kill",
+    "problemMatcher": [],
+    "group": "build",
+    "presentation": { "reveal": "silent", "panel": "shared", "showReuseMessage": false }
+},
+
 {
     "label": "Build & Deploy Switch",
     "detail": "Build → deploy → launch on Switch",
@@ -466,7 +516,7 @@
     "id": "vitaPreset",
     "type": "pickString",
     "description": "Vita build preset to deploy",
-    "options": ["vita-reldebug", "vita-debug", "vita-release"],
+    "options": ["vita-reldebug", "vita-ubsan", "vita-debug", "vita-release"],
     "default": "vita-reldebug"
 },
 {

@@ -86,7 +86,10 @@ endif()
 # Sanitizers (AddressSanitizer + UndefinedBehaviorSanitizer)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 option(KEEPERFX_SANITIZERS "Enable AddressSanitizer (+ UBSan on GCC/Clang)" OFF)
-if(KEEPERFX_SANITIZERS)
+# ASan requires shadow memory (~1:8 address space ratio). On constrained 32-bit
+# platforms (Vita/3DS/Switch) the ~32 MB shadow region would exhaust the process
+# address space immediately. Silently skip rather than producing a misleading build.
+if(KEEPERFX_SANITIZERS AND NOT PLATFORM_VITA AND NOT PLATFORM_3DS AND NOT PLATFORM_SWITCH)
     if(MSVC)
         add_compile_options(/fsanitize=address)
         # MSVC ASan needs the debug info for useful stack traces
