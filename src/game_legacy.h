@@ -212,14 +212,30 @@ struct Game {
     struct SlabObj slabobjs[SLABOBJS_COUNT];
     unsigned char land_map_start;
     struct LightsShadows lish;
+#if defined(__ARM_ARCH)
+    /* ARM requires 4-byte alignment for word/struct accesses. #pragma pack(1) above
+     * suppresses natural alignment, so we insert explicit padding to realign each
+     * large array. Padding amounts derived from offsetof() measurements on ARMv7.
+     * These pads must NOT be added on x86 (would break save file compatibility). */
+    char _arm_align_pad0[3]; /* cctrl_data lands at mod4=1 without this */
+#endif
     struct CreatureControl cctrl_data[CREATURES_COUNT];
     struct Thing things_data[THINGS_COUNT];
     NavColour navigation_map[MAX_SUBTILES_X*MAX_SUBTILES_Y];
+#if defined(__ARM_ARCH)
+    char _arm_align_pad1[2]; /* navigation_map size is mod4=2, misaligns map */
+#endif
     struct Map map[MAX_SUBTILES_X*MAX_SUBTILES_Y];
+#if defined(__ARM_ARCH)
+    char _arm_align_pad2[3]; /* map size is mod4=1, misaligns computer_task */
+#endif
     struct ComputerTask computer_task[COMPUTER_TASKS_COUNT];
     struct Computer2 computer[PLAYERS_COUNT];
     struct SlabMap slabmap[MAX_TILES_X*MAX_TILES_Y];
     struct Room rooms[ROOMS_COUNT];
+#if defined(__ARM_ARCH)
+    char _arm_align_pad3[2]; /* rooms size is mod4=2, misaligns dungeon */
+#endif
     struct Dungeon dungeon[DUNGEONS_COUNT];
     struct StructureList thing_lists[13];
     ColumnIndex unrevealed_column_idx;
