@@ -1,0 +1,52 @@
+// KeeperFX Dev Container — Linux x64 (native build)
+//
+// Opens the repository inside the keeperfx-build-linux Docker image —
+// the same environment used by CI. Native gcc/g++ build with system
+// SDL2, OpenAL, FFmpeg, LuaJIT, and all dev headers pre-installed.
+//
+// Worktree-safe: uses /workspaces/ mount path (not /src) so the Dev
+// Containers extension auto-detects git worktrees and mounts the main
+// .git directory alongside the workspace.
+//
+// Usage:
+//   1. Install the "Dev Containers" extension (ms-vscode-remote.remote-containers)
+//   2. Cmd/Ctrl+Shift+P → "Dev Containers: Reopen in Container"
+//   3. Select "KeeperFX — Linux (native x64 build)"
+//
+// Inside the container, build with cmake directly — no docker compose wrapper:
+//   cmake --preset linux-x64-release && cmake --build --preset linux-x64-release
+{
+	"name": "KeeperFX — Linux (native x64 build)",
+	"image": "ghcr.io/cerwym/keeperfx-build-linux:latest",
+	"workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/${localWorkspaceFolderBasename},type=bind",
+	"workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+
+	"remoteEnv": {
+		"VITA_IP": "${localEnv:VITA_IP}"
+	},
+
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"ms-vscode.cpptools",
+				"eamodio.gitlens",
+				"github.vscode-pull-request-github"
+			],
+			"settings": {
+				"C_Cpp.default.configurationName": "Linux x64",
+				"C_Cpp.default.compileCommands": "${workspaceFolder}/out/build/linux-x64-release/compile_commands.json",
+				"C_Cpp.default.compilerPath": "/usr/bin/gcc",
+				"C_Cpp.default.intelliSenseMode": "linux-gcc-x64",
+				"C_Cpp.default.cStandard": "gnu11",
+				"C_Cpp.default.cppStandard": "gnu++20",
+				"cmake.configureOnOpen": false,
+				"cmake.autoSelectActiveFolder": false
+			}
+		}
+	},
+
+	// Reconfigure only when CMake cache has stale paths (e.g. /src from Docker
+	// Compose builds) or doesn't exist yet. Skips the slow cmake step on
+	// subsequent container starts when paths already match /workspaces/.
+	"postStartCommand": "if ! grep -q 'CMAKE_HOME_DIRECTORY:INTERNAL=/workspaces' out/build/linux-x64-release/CMakeCache.txt 2>/dev/null; then rm -rf out/build/linux-x64-release/CMakeCache.txt out/build/linux-x64-release/CMakeFiles && cmake --preset linux-x64-release 2>&1 | tail -20; fi && echo '\u2713 IntelliSense ready (linux-x64-release).'"
+}

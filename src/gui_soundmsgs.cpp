@@ -67,6 +67,8 @@ struct Message {
 	: type(_type), duration(_duration)
 	{}
 
+	virtual ~Message() = default;
+
 	virtual bool is(const Message &) const noexcept = 0;
 	virtual void play() const noexcept = 0;
 };
@@ -345,18 +347,20 @@ void script_play_message(TbBool param_is_string, const char msgtype_id, const sh
     }
     else
     {
-        const char * filepath = prepare_file_fmtpath(FGrp_CmpgMedia,"%s", filename);
-        switch (msgtype_id)
-        {
-            case 1: // speech message
+        const char * filepath = get_game_file_path_fmt(FGrp_CmpgMedia,"%s", filename);
+        if (filepath != NULL) {
+            switch (msgtype_id)
             {
-                output_custom_message(filepath, settings.mentor_volume);
-                break;
-            }
-            case 2: // sound effect
-            {
-                play_streamed_sample(filepath, settings.sound_volume);
-                break;
+                case 1: // speech message
+                {
+                    output_custom_message(filepath, settings.mentor_volume);
+                    break;
+                }
+                case 2: // sound effect
+                {
+                    play_streamed_sample(filepath, settings.sound_volume);
+                    break;
+                }
             }
         }
     }

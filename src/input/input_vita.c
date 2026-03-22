@@ -196,6 +196,16 @@ static void input_vita_get_mouse(int* x, int* y, int* buttons)
         *buttons = s_mouseButtons;
 }
 
+// Exposed for WindowSystemVita::PollInput() — returns the current virtual
+// cursor position maintained by analog-stick and front-touchscreen logic.
+void vita_get_virtual_cursor(int* x, int* y)
+{
+    if (x != NULL)
+        *x = s_mouseX;
+    if (y != NULL)
+        *y = s_mouseY;
+}
+
 static TbBool input_vita_get_gamepad_axis(int axis, int* value)
 {
     if (value == NULL)

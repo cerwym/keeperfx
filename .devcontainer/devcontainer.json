@@ -1,4 +1,4 @@
-// KeeperFX Dev Container
+// KeeperFX Dev Container — Windows x86 Cross-Compile (MinGW32)
 //
 // Opens the repository inside the keeperfx-build-mingw32 Docker image —
 // the same environment used by CI and local Docker tasks. Provides:
@@ -6,42 +6,54 @@
 //   - Native cpptools IntelliSense against the real compiler and headers
 //   - cmake + ninja available directly in the terminal
 //
+// Worktree-safe: uses /workspaces/ mount path (not /src) so the Dev
+// Containers extension auto-detects git worktrees and mounts the main
+// .git directory alongside the workspace.
+//
 // Usage:
 //   1. Install the "Dev Containers" extension (ms-vscode-remote.remote-containers)
-//   2. Open Command Palette → "Dev Containers: Reopen in Container"
+//   2. Cmd/Ctrl+Shift+P → "Dev Containers: Reopen in Container"
+//   3. Select "KeeperFX — MinGW32 (Windows x86 cross-compile)"
 //
-// Inside the container, build commands use cmake directly — no docker compose wrapper:
-//   cmake --preset windows-x86-debug && cmake --build --preset windows-x86-debug
+// Inside the container, build with cmake directly — no docker compose wrapper:
+//   cmake --preset windows-x86-debug   && cmake --build --preset windows-x86-debug
+//   cmake --preset windows-x86-release && cmake --build --preset windows-x86-release
 //
-// Note: Windows .exe artifacts are cross-compiled and cannot be run inside the
-// container. For F5 debugging, reopen in the host window and use the GDB tasks.
+// Note: Windows .exe artifacts are cross-compiled. In-container F5 debugging
+// is supported through winegdb via the "Devcontainer F5" launch profile.
+// If winegdb is missing in the image, the preLaunch task prints install guidance.
 {
-	"name": "KeeperFX (mingw32 build environment)",
+	"name": "KeeperFX — MinGW32 (Windows x86 cross-compile)",
 	"image": "ghcr.io/cerwym/keeperfx-build-mingw32:latest",
-	"workspaceMount": "source=${localWorkspaceFolder},target=/src,type=bind",
-	"workspaceFolder": "/src",
+	"workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/${localWorkspaceFolderBasename},type=bind",
+	"workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+
+	"remoteEnv": {
+		"VITA_IP": "${localEnv:VITA_IP}"
+	},
 
 	"customizations": {
 		"vscode": {
 			"extensions": [
 				"ms-vscode.cpptools",
 				"eamodio.gitlens",
-				"spmeesseman.vscode-taskexplorer"
+				"github.vscode-pull-request-github"
 			],
 			"settings": {
-				"cmake.configureOnOpen": false,
-				"cmake.autoSelectActiveFolder": false,
-				// Point IntelliSense at the compile_commands.json the debug preset generates
-				"C_Cpp.default.compileCommands": "/src/out/build/windows-x86-debug/compile_commands.json",
-				"C_Cpp.default.compilerPath": "/usr/bin/i686-w64-mingw32-gcc-posix",
+				"C_Cpp.default.configurationName": "Docker MinGW (Windows x86 Debug)",
+				"C_Cpp.default.compileCommands": "${workspaceFolder}/out/build/windows-x86-debug/compile_commands.json",
+				"C_Cpp.default.compilerPath": "/usr/bin/i686-w64-mingw32-gcc-win32",
 				"C_Cpp.default.intelliSenseMode": "linux-gcc-x86",
 				"C_Cpp.default.cStandard": "gnu11",
-				"C_Cpp.default.cppStandard": "gnu++17"
+				"C_Cpp.default.cppStandard": "gnu++20",
+				"cmake.configureOnOpen": false,
+				"cmake.autoSelectActiveFolder": false
 			}
 		}
 	},
 
-	// On first container start, generate compile_commands.json so IntelliSense
-	// is ready immediately without needing a manual task run.
-	"postStartCommand": "cmake --preset windows-x86-debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON 2>&1 | tail -5 && echo 'IntelliSense ready.'"
+	// Startup fixups for worktrees and IntelliSense:
+	//   1) Repairs broken worktree git pointers inside the container when needed.
+	//   2) Reconfigures or rewrites compile_commands paths only when stale.
+	"postStartCommand": "bash .devcontainer/fix-git-worktree.sh && bash .devcontainer/fix-intellisense.sh windows-x86-debug"
 }

@@ -3,6 +3,7 @@
 
 #include "platform/IPlatform.h"
 #include "platform/IAudioPlatform.h"
+#include "platform/WindowSystemVita.h"
 
 /** Vita-specific IAudioPlatform — wraps vita_fmv_audio_* C functions. */
 class VitaAudioPlatform : public IAudioPlatform {
@@ -55,6 +56,12 @@ public:
 
     void LogWrite(const char* message) override;
 
+    void VideoInit() override;
+    void InputInit() override;
+    void AudioInit() override;
+    TbBool ForcesAllModesAvailable() const override { return true; }
+    TbBool OwnsDisplay() const override { return true; }
+
     void SystemInit() override;
     void FrameTick() override;
     void WorkTick() override;
@@ -62,9 +69,11 @@ public:
     size_t GetPolyPoolSize() const override;
 
     IAudioPlatform* GetAudio() override;
+    IWindowSystem* GetWindowSystem() override;
 
 private:
     VitaAudioPlatform m_audio;
+    WindowSystemVita  m_windowSystem;
 };
 
 #endif // PLATFORM_VITA_H

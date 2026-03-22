@@ -33,6 +33,7 @@
 #include <SDL2/SDL.h>
 #include <math.h>
 #include "platform/PlatformManager.h"
+#include "platform/kfx_breadcrumb.h"
 #include "post_inc.h"
 
 #define SCREEN_MODES_COUNT 40
@@ -69,10 +70,6 @@ char lbDrawAreaTitle[128] = "Bullfrog Shell";
 volatile TbBool lbInteruptMouse;
 volatile unsigned long lbIconIndex = 0;
 SDL_Window *lbWindow = NULL;
-
-#if defined(PLATFORM_VITA) && defined(VITA_HAVE_VITAGL)
-extern bool vita_is_vitagl_ready(void);
-#endif
 
 TbDisplayStruct lbDisplay;
 
@@ -147,6 +144,7 @@ TbResult LbScreenUnlock(void)
 
 TbResult LbScreenSwap(void)
 {
+    KFX_BREADCRUMB("LbScreenSwap");
     SYNCDBG(12,"Starting");
     PlatformManager_FrameTick();
     TbResult ret = LbMouseOnBeginSwap();
@@ -353,16 +351,10 @@ static TbBool LbHwCheckIsModeAvailable(TbScreenMode mode, unsigned short display
     mdinfo->Available = false;
     mdinfo->window_pos_x = SDL_WINDOWPOS_CENTERED_DISPLAY(display);
     mdinfo->window_pos_y = SDL_WINDOWPOS_CENTERED_DISPLAY(display);
-#if defined(PLATFORM_VITA) && defined(VITA_HAVE_VITAGL)
-    // When vitaGL owns the display, SDL video is not initialised so SDL display
-    // queries cannot work.  The Vita screen is 960×544; our renderer scales any
-    // logical framebuffer up to fill it, so every registered mode is reachable.
-    extern bool vita_is_vitagl_ready(void);
-    if (vita_is_vitagl_ready()) {
+    if (PlatformManager_ForcesAllModesAvailable()) {
         mdinfo->Available = true;
         return true;
     }
-#endif
     // if this is window mode
     if (mdinfo->VideoFlags & Lb_VF_WINDOWED)
     {
@@ -521,31 +513,16 @@ TbResult LbScreenInitialize(void)
         LbRegisterStandardVideoModes();
         LbRegisterModernVideoModes(); // register modern and flexible custom modes
     }
-    // Initialize SDL library
-#if defined(PLATFORM_VITA) && defined(VITA_HAVE_VITAGL)
-    // vitaGL must take ownership of the GXM display context BEFORE SDL_Init
-    // touches video hardware.  The full GL setup (textures, shaders) is done
-    // later in RendererVita::Init(), but the context must exist first.
-    { FILE* _f = fopen("ux0:kfx_boot.log", "a"); if (_f) { fprintf(_f, "pre-preinit\n"); fclose(_f); } }
-    extern void vita_vitagl_preinit(void);
-    vita_vitagl_preinit();
-    { FILE* _f = fopen("ux0:kfx_boot.log", "a"); if (_f) { fprintf(_f, "post-preinit ready=%d\n", (int)vita_is_vitagl_ready()); fclose(_f); } }
-#endif
-#if defined(PLATFORM_VITA) && defined(VITA_HAVE_VITAGL)
-    if (vita_is_vitagl_ready()) {
-        // vitaGL owns GXM — SDL video would conflict.
-        // Audio is sceAudioOut (audio_vita.c), so SDL_INIT_AUDIO is not needed.
-        // Input buttons go through SDL GameController (bflib_input_joyst.cpp),
-        // so both JOYSTICK and GAMECONTROLLER are needed; VIDEO must never be initialised.
-        SDL_Init(SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER);
-    } else
-#endif
-    if (SDL_Init(SDL_INIT_VIDEO|SDL_INIT_JOYSTICK) < 0) {
-        ERRORLOG("SDL init: %s",SDL_GetError());
-        return Lb_FAIL;
+    // SDL_Init(VIDEO|JOYSTICK) was already called by VideoInit() on all platforms.
+    // On platforms that own the display (Vita: vitaGL/GXM), skip SDL video init
+    // entirely; on others (desktop, 3DS, Switch) it is performed here.
+    if (!PlatformManager_OwnsDisplay()) {
+        if (SDL_Init(SDL_INIT_VIDEO|SDL_INIT_JOYSTICK) < 0) {
+            ERRORLOG("SDL init: %s",SDL_GetError());
+            return Lb_FAIL;
+        }
+        atexit(SDL_Quit);
     }
-    // Setup the atexit() call to un-initialize
-    atexit(SDL_Quit);
     return Lb_SUCCESS;
 }
 
@@ -553,6 +530,7 @@ TbResult LbScreenInitialize(void)
 TbResult LbScreenSetup(TbScreenMode mode, TbScreenCoord width, TbScreenCoord height,
     unsigned char *palette, short buffers_count, TbBool wscreen_vid)
 {
+    KFX_BREADCRUMB("LbScreenSetup");
     int32_t hot_x;
     int32_t hot_y;
     const struct TbSprite* msspr = NULL;
@@ -624,9 +602,7 @@ TbResult LbScreenSetup(TbScreenMode mode, TbScreenCoord width, TbScreenCoord hei
         }
     }
     // If the game window doesn't yet exists
-#if defined(PLATFORM_VITA) && defined(VITA_HAVE_VITAGL)
-    if (!vita_is_vitagl_ready())
-#endif
+    if (!PlatformManager_OwnsDisplay())
     {
         if (lbWindow == NULL) {
             lbWindow = SDL_CreateWindow(lbDrawAreaTitle, mdinfo->window_pos_x, mdinfo->window_pos_y, mdinfo->Width, mdinfo->Height, mdinfo->sdlFlags);

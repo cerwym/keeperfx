@@ -73,7 +73,7 @@ bool load_data_file(TbSpriteSheet & sheet, offset_list & offsets, const char * f
         const auto sprite_idx = offsets[i].second;
         auto & sprite = sheet.sprites[sprite_idx];
         auto & data = sheet.data[sprite_idx];
-        data = std::move(std::vector<unsigned char>(&buffer[offset], &buffer[offset + size]));
+        data = std::vector<unsigned char>(buffer.data() + offset, buffer.data() + offset + size);
         sprite.Data = data.data();
     }
     return true;

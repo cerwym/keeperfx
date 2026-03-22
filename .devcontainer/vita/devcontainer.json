@@ -1,0 +1,65 @@
+// KeeperFX Dev Container — PS Vita (vitasdk cross-compile)
+//
+// Opens the repository inside the vitasdk Docker image with the full ARM
+// cross-toolchain, vitaGL, FFmpeg-vita, LuaJIT, and all Vita SDK headers.
+// IntelliSense resolves <psp2/*>, <vitashark.h>, and SDL2 headers natively.
+//
+// Worktree-safe: uses /workspaces/ mount path (not /src) so the Dev
+// Containers extension auto-detects git worktrees and mounts the main
+// .git directory alongside the workspace.
+//
+// Usage:
+//   1. Install the "Dev Containers" extension (ms-vscode-remote.remote-containers)
+//   2. Cmd/Ctrl+Shift+P → "Dev Containers: Reopen in Container"
+//   3. Select "KeeperFX — Vita SDK (PS Vita cross-compile)"
+//
+// Inside the container, build with cmake directly — no docker compose wrapper:
+//   cmake --preset vita-debug   && cmake --build --preset vita-debug
+//   cmake --preset vita-reldebug && cmake --build --preset vita-reldebug
+//   cmake --preset vita-release  && cmake --build --preset vita-release
+//
+// Crash analysis (inside the container terminal):
+//   arm-vita-eabi-addr2line -e out/build/vita-debug/keeperfx -fCa 0x81XXXXXX
+{
+	"name": "KeeperFX — Vita SDK (PS Vita cross-compile)",
+	"build": {
+		"dockerfile": "../../docker/vitasdk/Dockerfile",
+		"context": "../.."
+	},
+	"workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/${localWorkspaceFolderBasename},type=bind",
+	"workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+
+	"remoteEnv": {
+		"VITA_IP": "${localEnv:VITA_IP}"
+	},
+
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"ms-vscode.cpptools",
+				"eamodio.gitlens",
+				"github.vscode-pull-request-github"
+			],
+			"settings": {
+				// IntelliSense: point at the vita-debug compile database (has the
+				// most defines active: VITA_PERF_LOG, VITA_SCE_DIAG, etc.).
+				// Switch to vita-reldebug or vita-release by changing the path below
+				// and re-running the corresponding cmake --preset.
+				"C_Cpp.default.configurationName": "PS Vita (vita-debug)",
+				"C_Cpp.default.compileCommands": "${workspaceFolder}/out/build/vita-debug/compile_commands.json",
+				"C_Cpp.default.compilerPath": "/usr/local/vitasdk/bin/arm-vita-eabi-gcc",
+				"C_Cpp.default.intelliSenseMode": "linux-gcc-arm",
+				"C_Cpp.default.cStandard": "gnu11",
+				"C_Cpp.default.cppStandard": "gnu++20",
+				// Prevent cmake-tools from interfering if installed globally
+				"cmake.configureOnOpen": false,
+				"cmake.autoSelectActiveFolder": false
+			}
+		}
+	},
+
+	// Reconfigure only when CMake cache has stale paths (e.g. /src from Docker
+	// Compose builds) or doesn't exist yet. Skips the slow cmake step on
+	// subsequent container starts when paths already match /workspaces/.
+	"postStartCommand": "if ! grep -q 'CMAKE_HOME_DIRECTORY:INTERNAL=/workspaces' out/build/vita-debug/CMakeCache.txt 2>/dev/null; then rm -rf out/build/vita-debug/CMakeCache.txt out/build/vita-debug/CMakeFiles && cmake --preset vita-debug 2>&1 | tail -20; fi && echo '\u2713 IntelliSense ready (vita-debug).'"
+}

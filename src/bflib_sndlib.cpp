@@ -247,7 +247,7 @@ struct WAVEFORMATEX {
 
 class wave_file {
 public:
-	wave_file(std::ifstream & stream) {
+    wave_file(std::ifstream& stream, uint32_t max_data_size = UINT32_MAX) : m_max_data_size(max_data_size) {
 		riff_chunk_t riff_header;
 		stream.read(reinterpret_cast<char *>(&riff_header), sizeof(riff_header));
 		if (riff_header.tag != make_fourcc("RIFF")) {
@@ -260,7 +260,9 @@ public:
 		}
 		riff_chunk_t chunk;
 		for (bool have_format = false, have_data = false; !(have_format && have_data);) {
-			stream.read(reinterpret_cast<char *>(&chunk), sizeof(chunk));
+           if (!stream.read(reinterpret_cast<char *>(&chunk), sizeof(chunk))) {
+				throw std::runtime_error("Unexpected end of WAVE stream");
+			}
 			if (chunk.tag == make_fourcc("fmt ")) {
 				if (chunk.size < sizeof(WAVEFORMATEX)) {
 					throw std::runtime_error("Expected WAVEFORMATEX struct");
@@ -290,6 +292,11 @@ public:
 				}
 				have_format = true;
 			} else if (chunk.tag == make_fourcc("data")) {
+                if (chunk.size > m_max_data_size) {
+                    throw std::runtime_error(std::string("WAVE data chunk size ") + std::to_string(chunk.size) +
+                                             " exceeds declared sample size " + std::to_string(m_max_data_size) +
+                                             " — seek offset is likely wrong");
+                }
 				m_pcm.resize(chunk.size);
 				stream.read(reinterpret_cast<char *>(m_pcm.data()), m_pcm.size());
 				have_data = true;
@@ -313,6 +320,7 @@ public:
 
 protected:
 	int m_samplerate = 0;
+    uint32_t m_max_data_size = UINT32_MAX;
 	ALenum m_format = 0;
 	std::vector<uint8_t> m_pcm;
 };
@@ -393,22 +401,39 @@ std::vector<sound_sample> load_sound_bank(const char * filename) {
 	SoundBankEntry bentries[9];
 	stream.read(reinterpret_cast<char *>(bentries), sizeof(bentries));
 	const auto & directory = bentries[directory_index];
-	if (directory.first_sample_offset == 0) {
-		throw std::runtime_error("Invalid sample offset");
-	} else if (directory.total_samples_size < sizeof(SoundBankSample)) {
+	if (directory.first_sample_offset == 0) { throw std::runtime_error("Invalid sample offset"); } 
+    if (directory.total_samples_size < sizeof(SoundBankSample)) {
 		throw std::runtime_error("Invalid samples size");
 	}
 	const int sample_count = directory.total_samples_size / sizeof(SoundBankSample);
+	JUSTLOG("Loading %s: dir[%d] first_sample=%u first_data=%u total_size=%u count=%d",
+    filename, directory_index,
+    directory.first_sample_offset, directory.first_data_offset,
+    directory.total_samples_size, sample_count);
+if (sample_count <= 0 || sample_count > 65535) {
+    // I've seen this from copying over the sound bank file from the steam release. Unsure what it's reading at this point that's subtly different
+    throw std::runtime_error(
+        std::string("Implausible sample count ") + std::to_string(sample_count) +
+        " — directory_index=" + std::to_string(directory_index) +
+        " total_samples_size=" + std::to_string(directory.total_samples_size));
+}
 	stream.seekg(directory.first_sample_offset, std::ios::beg);
 	std::vector<sound_sample> buffers;
 	buffers.reserve(sample_count);
 	SoundBankSample sample;
-	for (int i = 0; i < sample_count; ++i) {
-		stream.seekg(directory.first_sample_offset + (sizeof(sample) * i), std::ios::beg);
-		stream.read(reinterpret_cast<char *>(&sample), sizeof(sample));
-		stream.seekg(directory.first_data_offset + sample.data_offset, std::ios::beg);
-		buffers.emplace_back(sample.filename, sample.sfxid, wave_file(stream));
-	}
+    for (int i = 0; i < sample_count; ++i) {
+        stream.seekg(directory.first_sample_offset + (sizeof(sample) * i), std::ios::beg);
+        stream.read(reinterpret_cast<char*>(&sample), sizeof(sample));
+        const uint32_t data_seek = directory.first_data_offset + sample.data_offset;
+        stream.seekg(data_seek, std::ios::beg);
+        try {
+            buffers.emplace_back(sample.filename, sample.sfxid, wave_file(stream, sample.data_size));
+        } catch (const std::exception& ex) {
+            ERRORLOG("Sample %d '%s' from '%s' failed at offset %u (data_size=%u): %s", i, sample.filename, filename,
+                     data_seek, sample.data_size, ex.what());
+            throw;
+        }
+    }
 	JUSTLOG("Loaded %d sound samples from %s", (int) buffers.size(), filename);
 	return buffers;
 }
@@ -420,17 +445,22 @@ void load_sound_banks() {
 	char snd_fname[2048];
 	prepare_file_path_buf(snd_fname, sizeof(snd_fname), FGrp_LrgSound, "sound.dat");
 	// language-specific speech file
-	char * spc_fname = prepare_file_fmtpath(FGrp_LrgSound, "speech_%s.dat", get_language_lwrstr(install_info.lang_id));
+	char * spc_fname = get_game_file_path_fmt(FGrp_LrgSound, "speech_%s.dat", get_language_lwrstr(install_info.lang_id));
 	// default speech file
-	if (!LbFileExists(spc_fname)) {
+	if (!spc_fname || !LbFileExists(spc_fname)) {
 		spc_fname = prepare_file_path(FGrp_LrgSound, "speech.dat");
 	}
 	// speech file for english
-	if (!LbFileExists(spc_fname)) {
-		spc_fname = prepare_file_fmtpath(FGrp_LrgSound, "speech_%s.dat", get_language_lwrstr(1));
+	if (!spc_fname || !LbFileExists(spc_fname)) {
+		spc_fname = get_game_file_path_fmt(FGrp_LrgSound, "speech_%s.dat", get_language_lwrstr(1));
 	}
 	g_banks[0] = load_sound_bank(snd_fname);
-	g_banks[1] = load_sound_bank(spc_fname);
+	try {
+	    g_banks[1] = load_sound_bank(spc_fname);
+	} catch (const std::exception & e) {
+	    WARNLOG("Speech bank failed to load, speech will be unavailable: %s", e.what());
+	    g_banks[1].clear();
+	}
 }
 
 void print_device_info() {
@@ -527,7 +557,8 @@ extern "C" TbBool play_music_track(int track) {
 		stop_music();
 		return true;
 	} else if (features_enabled & Ft_NoCdMusic) {
-		return play_music(prepare_file_fmtpath(FGrp_Music, "keeper%02d.ogg", track));
+		char * music_fname = get_game_file_path_fmt(FGrp_Music, "keeper%02d.ogg", track);
+		return (music_fname != NULL && play_music(music_fname));
 	} else {
 		if (PlayRedbookTrack(track)) {
 			JUSTLOG("Playing track %d", game.music_track);

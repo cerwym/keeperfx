@@ -38,6 +38,27 @@ extern "C" {
 
 #define WANDER_POINTS_COUNT    200
 
+/******************************************************************************/
+// UI Player Role - Determines which menus are initialized for a player
+// Used by the decoupled UI architecture to pre-allocate menus based on player type
+/******************************************************************************/
+enum UIPlayerRole {
+    UIPROLE_ACTIVE_PLAYER  = 0,  // Full UI (rooms, spells, creatures, etc.)
+    UIPROLE_SPECTATOR      = 1,  // View-only spectator UI (no action buttons)
+    UIPROLE_HIDDEN         = 2,  // AI or replay mode (no UI at all)
+};
+
+/**
+ * Player UI Configuration - Stored in each player's PlayerInfo
+ * Manages per-player UI state and initialization
+ */
+struct PlayerUIConfig {
+    enum UIPlayerRole role;          // Which UI role this player has
+    unsigned char ui_menus_initialized;  // Whether menus have been pre-allocated
+};
+
+/******************************************************************************/
+
 enum PlayerInitFlags {
     PlaF_Allocated               = 0x01,
     PlaF_unusedparam             = 0x02,
@@ -262,6 +283,7 @@ struct PlayerInfo {
     ThingModel special_digger;
     int isometric_tilt;
     unsigned short generate_speed;
+    struct PlayerUIConfig ui_config;  // UI initialization config (decoupled UI architecture)
     };
 
 /******************************************************************************/

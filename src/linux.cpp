@@ -17,6 +17,7 @@ extern "C" void   StopRedbookTrack()            {}
 
 extern "C" int main(int argc, char *argv[]) {
     PlatformManager::Set(new PlatformLinux());
+    PlatformManager::Get()->VideoInit();
     KfxMemInit();
     return kfxmain(argc, argv);
 }

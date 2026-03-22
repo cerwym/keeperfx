@@ -2,6 +2,7 @@
 #define PLATFORM_LINUX_H
 
 #include "platform/IPlatform.h"
+#include "platform/WindowSystemSDL.h"
 
 /** Linux implementation of IPlatform using POSIX dirent/fnmatch. */
 class PlatformLinux : public IPlatform {
@@ -13,6 +14,8 @@ public:
 
     void ErrorParachuteInstall() override;
     void ErrorParachuteUpdate() override;
+
+    void VideoInit() override;
 
     TbFileFind* FileFindFirst(const char* filespec, TbFileEntry* entry) override;
     int32_t     FileFindNext(TbFileFind* handle, TbFileEntry* entry) override;
@@ -42,6 +45,8 @@ public:
     void   PauseRedbookTrack() override;
     void   ResumeRedbookTrack() override;
     void   StopRedbookTrack() override;
+
+    IWindowSystem* GetWindowSystem() override;
 
 private:
     char data_path_[256] = ".";

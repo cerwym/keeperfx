@@ -5,6 +5,7 @@
 #include "bflib_fileio.h"
 #include "bflib_sound.h"
 #include "IAudioPlatform.h"
+#include "IWindowSystem.h"
 
 /** Abstract interface for OS/platform-specific operations.
  *
@@ -95,6 +96,35 @@ public:
     virtual void   ResumeRedbookTrack() = 0;
     virtual void   StopRedbookTrack() = 0;
 
+    // ----- Lifecycle init hooks (called from main() before kfxmain()) -----
+    /** Initialise the display/GPU subsystem.
+     *  SDL desktop: SDL_Init(VIDEO|JOYSTICK) + atexit(SDL_Quit).
+     *  Vita: vglInitExtended (vitaGL owns GXM) + SDL_Init(JOYSTICK|GAMECONTROLLER).
+     *  Console stubs: no-op. */
+    virtual void VideoInit() {}
+
+    /** Initialise the platform input layer.
+     *  Vita: calls input_vita_initialize().
+     *  SDL desktop: no-op (input arrives via SDL_PollEvent). */
+    virtual void InputInit() {}
+
+    /** Initialise the platform audio layer.
+     *  Vita: calls audio_vita_initialize().
+     *  SDL desktop: no-op. */
+    virtual void AudioInit() {}
+
+    /** Return true if all registered video modes should be reported as available
+     *  without querying SDL display capabilities.
+     *  Vita (vitaGL owns display, SDL VIDEO not initialised): true.
+     *  SDL desktop: false. */
+    virtual TbBool ForcesAllModesAvailable() const { return false; }
+
+    /** Return true if the platform owns the display directly and bflib should
+     *  not create an SDL window.
+     *  Vita: true (vitaGL renders directly to GXM).
+     *  SDL desktop: false. */
+    virtual TbBool OwnsDisplay() const { return false; }
+
     // ----- Log output routing -----
     /** Called for every formatted log line (prefix already prepended).
      *  The default is a no-op — override to mirror output to a platform
@@ -131,6 +161,14 @@ public:
      *  has no native audio path (desktop CI, headless builds).
      *  When nullptr, callers fall back to SDL audio or silent playback. */
     virtual IAudioPlatform* GetAudio() { return nullptr; }
+
+    /** Returns the platform window-system implementation.
+     *  Desktop SDL platforms return a WindowSystemSDL instance.
+     *  Console platforms (Vita, 3DS, Switch) return a platform-specific or
+     *  default IWindowSystem whose HasOSCursor() returns false.
+     *  Never returns nullptr — the base implementation returns a static
+     *  default IWindowSystem instance with safe no-op behaviour. */
+    virtual IWindowSystem* GetWindowSystem();
 };
 
 #endif // IPLATFORM_H

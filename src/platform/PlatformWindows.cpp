@@ -3,11 +3,14 @@
 #include "platform/PlatformWindows.h"
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <SDL2/SDL.h>
 #include <excpt.h>
-#include <imagehlp.h>
+// imagehlp.h omitted: dbghelp.h supersedes it and defines the same types.
+// Including both causes C2011 type redefinition errors on MSVC.
 #include <dbghelp.h>
 #include <psapi.h>
 #include <direct.h>
+#include <io.h>
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>
@@ -109,28 +112,39 @@ _backtrace(int depth, LPCONTEXT context)
             fclose(mapFile);
     }
 
-    STACKFRAME frame;
+    STACKFRAME64 frame;
     memset(&frame, 0, sizeof(frame));
+
+#if defined(_M_X64)
+    const DWORD machine_type = IMAGE_FILE_MACHINE_AMD64;
+    frame.AddrPC.Offset    = context->Rip;
+    frame.AddrStack.Offset = context->Rsp;
+    frame.AddrFrame.Offset = context->Rbp;
+#elif defined(_M_IX86)
+    const DWORD machine_type = IMAGE_FILE_MACHINE_I386;
     frame.AddrPC.Offset    = context->Eip;
-    frame.AddrPC.Mode      = AddrModeFlat;
     frame.AddrStack.Offset = context->Esp;
-    frame.AddrStack.Mode   = AddrModeFlat;
     frame.AddrFrame.Offset = context->Ebp;
+#else
+    return;
+#endif
+    frame.AddrPC.Mode      = AddrModeFlat;
+    frame.AddrStack.Mode   = AddrModeFlat;
     frame.AddrFrame.Mode   = AddrModeFlat;
 
     HANDLE process = GetCurrentProcess();
     HANDLE thread  = GetCurrentThread();
 
-    while (StackWalk(IMAGE_FILE_MACHINE_I386, process, thread, &frame, context, 0,
-                     SymFunctionTableAccess, SymGetModuleBase, 0))
+    while (StackWalk64(machine_type, process, thread, &frame, context, nullptr,
+                       SymFunctionTableAccess64, SymGetModuleBase64, nullptr))
     {
         --depth;
         if (depth < 0) break;
 
-        DWORD module_base = SymGetModuleBase(process, frame.AddrPC.Offset);
+        DWORD64 module_base = SymGetModuleBase64(process, frame.AddrPC.Offset);
         const char *module_name = "[unknown module]";
         char module_name_raw[MAX_PATH];
-        if (module_base && GetModuleFileNameA((HINSTANCE)module_base, module_name_raw, MAX_PATH))
+        if (module_base && GetModuleFileNameA((HMODULE)(uintptr_t)module_base, module_name_raw, MAX_PATH))
         {
             module_name = strrchr(module_name_raw, '\\');
             if (module_name) module_name++;
@@ -243,6 +257,13 @@ void PlatformWindows::ErrorParachuteInstall()
 void PlatformWindows::ErrorParachuteUpdate()
 {
     SetUnhandledExceptionFilter(ctrl_handler_w32);
+}
+
+void PlatformWindows::VideoInit()
+{
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK) < 0)
+        fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
+    atexit(SDL_Quit);
 }
 
 // ----- File system helpers -----
@@ -463,4 +484,9 @@ long PlatformWindows::FileLength(const char* fname)
 int PlatformWindows::FileDelete(const char* fname)
 {
     return remove(fname) ? -1 : 1;
+}
+
+IWindowSystem* PlatformWindows::GetWindowSystem()
+{
+    return GetSDLWindowSystem();
 }

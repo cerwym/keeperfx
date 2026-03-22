@@ -28,12 +28,13 @@
 #include "front_simple.h"
 #include "config.h"
 #include "game_legacy.h"
+#include "kfx/memory_system_c.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-/******************************************************************************/
+/************** ****************************************************************/
 unsigned char *block_mem = NULL;
 unsigned char *block_ptrs[TEXTURE_VARIATIONS_COUNT * TEXTURE_BLOCKS_COUNT];
 
@@ -48,8 +49,14 @@ static long anim_counter;
 /******************************************************************************/
 void setup_texture_block_mem(void)
 {
-    if (block_mem == NULL)
-        block_mem = (unsigned char *)KfxCalloc(1, BLOCK_MEM_SIZE);
+    kfx_memory_register_external_buffer("texture.page.main", (void**)&block_mem,
+        (block_mem != NULL) ? BLOCK_MEM_SIZE : 0, KFX_DOMAIN_GAMEPLAY_STATIC,
+        KFX_MANAGED_MUTABLE | KFX_MANAGED_EXTERNAL);
+    if (!kfx_memory_ensure_capacity("texture.page.main", BLOCK_MEM_SIZE))
+    {
+        ERRORLOG("Unable to reserve texture.page.main memory (%lu bytes)", (unsigned long)BLOCK_MEM_SIZE);
+        return;
+    }
     unsigned char** dst = block_ptrs;
     unsigned char* src  = block_mem;
     for (int i = 0; i < (TEXTURE_VARIATIONS_COUNT * TEXTURE_BLOCKS_COUNT); i++)
@@ -129,22 +136,22 @@ static char *prepare_letter_one_file_path_for_mod_one(unsigned long tmapidx, cha
 
     if (mod_state->cmpg_lvls)
     {
-        fname = prepare_file_fmtpath_mod(mod_dir, FGrp_CmpgLvls, "map%05lu.tmap%c%03d.dat", (unsigned long)lvnum, letter, tmapidx);
-        if (fname[0] != 0 && LbFileExists(fname))
+        fname = get_mod_file_path_fmt(mod_dir, FGrp_CmpgLvls, "map%05lu.tmap%c%03d.dat", (unsigned long)lvnum, letter, tmapidx);
+        if (fname != NULL && LbFileExists(fname))
             return fname;
     }
 
     if (mod_state->cmpg_config)
     {
-        fname = prepare_file_fmtpath_mod(mod_dir, FGrp_CmpgConfig, "tmap%c%03d.dat", letter, tmapidx);
-        if (fname[0] != 0 && LbFileExists(fname))
+        fname = get_mod_file_path_fmt(mod_dir, FGrp_CmpgConfig, "tmap%c%03d.dat", letter, tmapidx);
+        if (fname != NULL && LbFileExists(fname))
             return fname;
     }
 
     if (mod_state->std_data)
     {
-        fname = prepare_file_fmtpath_mod(mod_dir, FGrp_StdData, "tmap%c%03d.dat", letter, tmapidx);
-        if (fname[0] != 0 && LbFileExists(fname))
+        fname = get_mod_file_path_fmt(mod_dir, FGrp_StdData, "tmap%c%03d.dat", letter, tmapidx);
+        if (fname != NULL && LbFileExists(fname))
             return fname;
     }
 
@@ -160,7 +167,7 @@ static char *prepare_letter_one_file_path_for_mod_list(unsigned long tmapidx, ch
         if (mod_item->state.mod_dir == 0)
             continue;
 
-        char *fname = prepare_letter_one_file_path_for_mod_one(tmapidx, letter, fgroup, lvnum, mod_item);
+        char *fname = prepare_letter_one_file_path_for_mod_one(tmapidx, letter, lvnum, fgroup, mod_item);
         if (fname != NULL)
             return fname;
     }
@@ -178,8 +185,8 @@ static char *prepare_letter_one_file_path(unsigned long tmapidx, char letter, Le
             return fname;
     }
 
-    fname = prepare_file_fmtpath(fgroup, "map%05lu.tmap%c%03d.dat",(unsigned long)lvnum, letter, tmapidx);
-    if (LbFileExists(fname))
+    fname = get_game_file_path_fmt(fgroup, "map%05lu.tmap%c%03d.dat",(unsigned long)lvnum, letter, tmapidx);
+    if (fname != NULL && LbFileExists(fname))
         return fname;
 
     if (mods_conf.after_campaign_cnt > 0)
@@ -189,8 +196,8 @@ static char *prepare_letter_one_file_path(unsigned long tmapidx, char letter, Le
             return fname;
     }
 
-    fname = prepare_file_fmtpath(FGrp_CmpgConfig, "tmap%c%03d.dat", letter, tmapidx);
-    if (LbFileExists(fname))
+    fname = get_game_file_path_fmt(FGrp_CmpgConfig, "tmap%c%03d.dat", letter, tmapidx);
+    if (fname != NULL && LbFileExists(fname))
         return fname;
 
     if (mods_conf.after_base_cnt > 0)
@@ -200,7 +207,7 @@ static char *prepare_letter_one_file_path(unsigned long tmapidx, char letter, Le
             return fname;
     }
 
-    fname = prepare_file_fmtpath(FGrp_StdData, "tmap%c%03d.dat", letter, tmapidx);
+    fname = get_game_file_path_fmt(FGrp_StdData, "tmap%c%03d.dat", letter, tmapidx);
     return fname;
 }
 
@@ -209,6 +216,11 @@ static TbBool load_letter_one_file(unsigned long tmapidx, char letter, void *dst
     SYNCDBG(9,"Starting");
 
     char* fname = prepare_letter_one_file_path(tmapidx, letter, lvnum, fgroup);
+    if (fname == NULL || fname[0] == '\0')
+    {
+        WARNMSG("Texture file path resolution failed for map %lu texture %lu%c.", (unsigned long)lvnum, tmapidx, letter);
+        return false;
+    }
     if (!LbFileExists(fname))
     {
         SYNCDBG(10, "Texture file \"%s\" doesn't exist.",fname);
@@ -226,25 +238,39 @@ static TbBool load_letter_one_file(unsigned long tmapidx, char letter, void *dst
 
 TbBool load_texture_map_file(unsigned long tmapidx, LevelNumber lvnum, short fgroup)
 {
-    SYNCDBG(7,"Starting");
-    memset(block_mem, 130, BLOCK_MEM_SIZE);
-    if (!load_letter_one_file(tmapidx,'a', block_mem,lvnum,fgroup))
-    {
+    SYNCDBG(7, "Starting");
+    if (block_mem == NULL) {
+        ERRORLOG("block_mem is NULL — texture buffer was never allocated");
         return false;
     }
-    unsigned char *dst = block_mem + (TEXTURE_BLOCKS_STAT_COUNT_A * 32 * 32);
-    load_letter_one_file(tmapidx,'b', dst, lvnum, fgroup);
+    if (!kfx_memory_ensure_capacity("texture.page.main", BLOCK_MEM_SIZE)) {
+        ERRORLOG("texture.page.main capacity check failed for %lu bytes", (unsigned long)BLOCK_MEM_SIZE);
+        return false;
+    }
+    memset(block_mem, 130, BLOCK_MEM_SIZE);
+    if (!load_letter_one_file(tmapidx, 'a', block_mem, lvnum, fgroup)) {
+        if (tmapidx != 0) {
+            WARNMSG("Texture map %lu for level %lu is unavailable; falling back to texture map 0.", tmapidx,
+                    (unsigned long)lvnum);
+            tmapidx = 0;
+            if (!load_letter_one_file(tmapidx, 'a', block_mem, lvnum, fgroup))
+                return false;
+        } else {
+            return false;
+        }
+    }
+    unsigned char* dst = block_mem + (TEXTURE_BLOCKS_STAT_COUNT_A * 32 * 32);
+    load_letter_one_file(tmapidx, 'b', dst, lvnum, fgroup);
     dst += (TEXTURE_BLOCKS_STAT_COUNT_B * 32 * 32);
 
-    for (int i = 0; i < TEXTURE_VARIATIONS_COUNT-1; i++)
+    for (int i = 0; i < TEXTURE_VARIATIONS_COUNT - 1; i++)
 
     {
-        load_letter_one_file(i,'a', dst, lvnum, fgroup);
+        load_letter_one_file(i, 'a', dst, lvnum, fgroup);
 
         dst += (TEXTURE_BLOCKS_STAT_COUNT_A * 32 * 32);
-        load_letter_one_file(i,'b', dst, lvnum, fgroup);
+        load_letter_one_file(i, 'b', dst, lvnum, fgroup);
         dst += (TEXTURE_BLOCKS_STAT_COUNT_B * 32 * 32);
-
     }
     return true;
 }

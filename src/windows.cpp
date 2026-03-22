@@ -71,6 +71,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
         argv[i] = args[i].data();
     }
     LocalFree(szArglist);
+    PlatformManager::Get()->VideoInit();
     return kfxmain(argc, argv.data());
 }
 

@@ -359,7 +359,11 @@ TbBool FlyeyeEffect::Setup(long lens_idx)
     
     FreeLookupTable();
     m_current_lens = lens_idx;
-    
+
+#ifdef PLATFORM_VITA
+    m_gpu_pass.Init();
+#endif
+
     SYNCDBG(7, "Flyeye effect ready");
     return true;
 }
@@ -368,6 +372,9 @@ void FlyeyeEffect::Cleanup()
 {
     FreeLookupTable();
     m_current_lens = -1;
+#ifdef PLATFORM_VITA
+    m_gpu_pass.Free();
+#endif
 }
 
 TbBool FlyeyeEffect::Draw(LensRenderContext* ctx)

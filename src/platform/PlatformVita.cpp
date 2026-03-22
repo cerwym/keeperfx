@@ -7,8 +7,11 @@
 #include <psp2/io/stat.h>
 #include <psp2/kernel/processmgr.h>
 #include <psp2/kernel/clib.h>
-#include <psp2/power.h>
+#include <psp2/kernel/sysmem.h>
+#include <psp2/kernel/modulemgr.h>
 #include <psp2/kernel/threadmgr.h>
+#include <psp2/power.h>
+#include <psp2/rtc.h>
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>
@@ -20,23 +23,45 @@
 #include "bflib_filelst.h"
 #include "config.h"
 #include "audio/audio_vita.h"
+#include "audio/audio_interface.h"
+#include "platform/kfx_breadcrumb.h"
+#include "platform/stack_monitor.h"
+#include <vitaGL.h>
+#include <SDL2/SDL.h>
+extern "C" {
+#include "platform/vita_sce_diag.h"
+}
+#ifdef VITA_UVDB
+#include <uvdb.h>
+#endif
+extern "C" void input_vita_initialize(void);
 #endif
 #include "post_inc.h"
 
 #ifdef PLATFORM_VITA
+
+// ---------------------------------------------------------------------------
+// vitaGL / display subsystem state — owned here, not in the renderer.
+// ---------------------------------------------------------------------------
+static bool s_vita_video_ready = false;
+
+// Display config (matches 960×544 native Vita resolution; MSAA=0 → NONE).
+static int s_vita_msaa       = 0;
+static int s_vita_scr_width  = 960;
+static int s_vita_scr_height = 544;
+
+extern "C" bool vita_is_vitagl_ready(void) { return s_vita_video_ready; }
 
 /* Link-time heap and stack declarations required by vitasdk.
  * These are read by the linker/loader before main() runs.
  *
  * Memory budget (256 MB process limit on HENkaku):
  *   Code (.text):    ~4 MB
- *   Data + BSS:    ~114 MB  (struct Game=51 MB, block_mem=34 MB, poly_pool=16 MB, ...)
+ *   Data + BSS:     ~9.1 MB  (reduced from 114 MB across BSS paths A–E)
  *   Main stack:      4 MB
- *   Heap (below):  128 MB
- *   Total:        ~250 MB  (leaves ~6 MB headroom for kernel/system allocations)
- *
- * BSS is now ~9.1 MB (reduced from 114 MB across BSS paths A–E), so a 192 MB heap
- * leaves ~245 MB total (text + data/BSS + stack + heap), safely within 256 MB. */
+ *   Heap (below):  192 MB
+ *   Total:        ~209 MB  (leaves ~47 MB headroom for kernel/system allocations)
+ */
 int _newlib_heap_size_user  = 192 * 1024 * 1024; // 192 MB heap — ~245 MB total, within 256 MB
 int sceUserMainThreadStackSize = 4 * 1024 * 1024; // 4 MB main thread stack
 
@@ -79,14 +104,113 @@ const char* PlatformVita::GetWineHost() const
 
 // ----- Crash / error parachute -----
 
+// Global breadcrumb ring buffer — written by KFX_BREADCRUMB() macro
+KfxBreadcrumbRing g_kfx_breadcrumbs = {};
+
+static const char* _sig_name(int sig)
+{
+    switch (sig) {
+        case SIGSEGV: return "SIGSEGV";
+        case SIGABRT: return "SIGABRT";
+        case SIGFPE:  return "SIGFPE";
+        case SIGILL:  return "SIGILL";
+        default:      return "UNKNOWN";
+    }
+}
+
 static void vita_crash_handler(int sig)
 {
+    // Prevent recursive crashes in the handler
+    signal(sig, SIG_DFL);
+
+    // Get timestamp
+    SceDateTime dt;
+    sceRtcGetCurrentClockLocalTime(&dt);
+
+    // Get thread info
+    SceKernelThreadInfo tinfo;
+    memset(&tinfo, 0, sizeof(tinfo));
+    tinfo.size = sizeof(tinfo);
+    SceUID tid = sceKernelGetThreadId();
+    sceKernelGetThreadInfo(tid, &tinfo);
+
+    // Capture ARM registers via inline assembly
+    // Note: these are the handler's registers, not the faulting context.
+    // The OS core dump (.psp2dmp) has the actual faulting registers.
+    // These are still useful as an approximation.
+    unsigned int regs[16];
+    __asm__ volatile(
+        "str r0,  [%0, #0]\n"
+        "str r1,  [%0, #4]\n"
+        "str r2,  [%0, #8]\n"
+        "str r3,  [%0, #12]\n"
+        "str r4,  [%0, #16]\n"
+        "str r5,  [%0, #20]\n"
+        "str r6,  [%0, #24]\n"
+        "str r7,  [%0, #28]\n"
+        "str r8,  [%0, #32]\n"
+        "str r9,  [%0, #36]\n"
+        "str r10, [%0, #40]\n"
+        "str r11, [%0, #44]\n"
+        "str r12, [%0, #48]\n"
+        "str sp,  [%0, #52]\n"
+        "str lr,  [%0, #56]\n"
+        "adr r1,  .         \n"
+        "str r1,  [%0, #60]\n"
+        : : "r"(regs) : "r1", "memory"
+    );
+
+    // Write structured crash log
     FILE* f = fopen("ux0:data/keeperfx/crash.log", "a");
     if (f) {
-        fprintf(f, "KeeperFX crashed: signal %d\n", sig);
+        fprintf(f, "[CRASH] %04d-%02d-%02dT%02d:%02d:%02d\n",
+                dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second);
+        fprintf(f, "signal=%d (%s)\n", sig, _sig_name(sig));
+        fprintf(f, "thread=%s tid=0x%08x\n", tinfo.name, tid);
+        fprintf(f, "handler_regs: sp=0x%08x lr=0x%08x pc=0x%08x\n",
+                regs[13], regs[14], regs[15]);
+        fprintf(f, "r0=0x%08x r1=0x%08x r2=0x%08x r3=0x%08x\n",
+                regs[0], regs[1], regs[2], regs[3]);
+        fprintf(f, "r4=0x%08x r5=0x%08x r6=0x%08x r7=0x%08x\n",
+                regs[4], regs[5], regs[6], regs[7]);
+        fprintf(f, "r8=0x%08x r9=0x%08x r10=0x%08x r11=0x%08x r12=0x%08x\n",
+                regs[8], regs[9], regs[10], regs[11], regs[12]);
+
+        // Memory stats
+        SceKernelFreeMemorySizeInfo meminfo;
+        memset(&meminfo, 0, sizeof(meminfo));
+        meminfo.size = sizeof(meminfo);
+        if (sceKernelGetFreeMemorySize(&meminfo) >= 0) {
+            fprintf(f, "free_mem: user=%u cdram=%u phycont=%u\n",
+                    meminfo.size_user, meminfo.size_cdram, meminfo.size_phycont);
+        }
+
+        // Battery / power info (useful for long debug sessions)
+        int battery = scePowerGetBatteryLifePercent();
+        fprintf(f, "battery=%d%%\n", battery);
+
+        // Breadcrumb trail
+        fprintf(f, "breadcrumbs=");
+        unsigned int bc_count = g_kfx_breadcrumbs.count;
+        unsigned int bc_head = g_kfx_breadcrumbs.head;
+        if (bc_count > 0) {
+            unsigned int n = (bc_count < KFX_BREADCRUMB_SLOTS) ? bc_count : KFX_BREADCRUMB_SLOTS;
+            // Print oldest to newest
+            unsigned int start = (bc_head >= n) ? (bc_head - n) : (KFX_BREADCRUMB_SLOTS - (n - bc_head));
+            for (unsigned int i = 0; i < n; i++) {
+                unsigned int idx = (start + i) % KFX_BREADCRUMB_SLOTS;
+                const char* label = g_kfx_breadcrumbs.labels[idx];
+                if (label) {
+                    if (i > 0) fprintf(f, ",");
+                    fprintf(f, "%s", label);
+                }
+            }
+        }
+        fprintf(f, "\n\n");
         fclose(f);
     }
-    sceClibPrintf("KeeperFX CRASH: signal %d\n", sig);
+
+    sceClibPrintf("KeeperFX CRASH: signal %d (%s) thread=%s\n", sig, _sig_name(sig), tinfo.name);
     sceKernelExitProcess(1);
 }
 
@@ -363,10 +487,111 @@ extern "C" const char *vita_modify_load_filename(const char *input)
     return resolved;
 }
 
+void PlatformVita::VideoInit()
+{
+    if (s_vita_video_ready) return;
+
+#define _VGL_LOG(step) \
+    { FILE* _pf = fopen("ux0:data/keeperfx/kfx_preinit.log", "a"); \
+      if (_pf) { fprintf(_pf, step "\n"); fclose(_pf); } }
+
+    sceIoMkdir("ux0:data/keeperfx", 0777);
+    { FILE* _tr = fopen("ux0:data/keeperfx/kfx_preinit.log", "w"); if (_tr) fclose(_tr); }
+    _VGL_LOG("VideoInit:start")
+
+    // Diagnostic: log available CDRAM and heap headroom before vglInit.
+    FILE* _diag = fopen("ux0:data/keeperfx/kfx_preinit.log", "a");
+    if (_diag) {
+        SceUID cdram = sceKernelAllocMemBlock("probe_cdram",
+            SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW, 256*1024, NULL);
+        fprintf(_diag, "CDRAM probe uid=0x%08X\n", (unsigned)cdram);
+        if (cdram >= 0) sceKernelFreeMemBlock(cdram);
+
+        void* hp = KfxAlloc(32 * 1024 * 1024);
+        fprintf(_diag, "KfxAlloc(32MB) = %s\n", hp ? "OK" : "FAIL");
+        if (hp) KfxFree(hp);
+        fclose(_diag);
+    }
+    _VGL_LOG("VideoInit:probed")
+
+#ifdef VITA_SCE_DIAG
+    vita_diag_install_hooks();
+#endif
+
+    // Use pool_size=0 (auto, matches d3es/vitaQuakeIII pattern).
+    // ram_threshold = 4 MB (reserved headroom for system/newlib).
+    // vglInitExtended computes: pool = sceKernelGetFreeMemorySize().size_user - ram_threshold.
+    // With 16-24 MB threshold the probe above showed KfxAlloc(32MB)=OK, so free user RAM is
+    // >32MB, leaving >28MB for vitaGL.  Previous 0x1000000 (16MB) threshold was too high and
+    // left vitaGL with ~0 bytes, causing all glTexImage2D calls to silently fail.
+    GLboolean vgl_ok;
+    switch (s_vita_msaa) {
+        case 2:
+            vgl_ok = vglInitExtended(0, s_vita_scr_width, s_vita_scr_height, 0x400000, SCE_GXM_MULTISAMPLE_2X);
+            break;
+        case 4:
+            vgl_ok = vglInitExtended(0, s_vita_scr_width, s_vita_scr_height, 0x400000, SCE_GXM_MULTISAMPLE_4X);
+            break;
+        default:
+            vgl_ok = vglInitExtended(0, s_vita_scr_width, s_vita_scr_height, 0x400000, SCE_GXM_MULTISAMPLE_NONE);
+            break;
+    }
+
+#ifdef VITA_SCE_DIAG
+    vita_diag_unhook_all();
+    _VGL_LOG("VideoInit:vglInit-diag")
+#endif
+    _VGL_LOG("VideoInit:vglInit")
+
+    // Route all textures through VRAM (matches vitaQuakeIII/d3es pattern).
+    vglUseVram(GL_TRUE);
+    _VGL_LOG("VideoInit:vram")
+
+    // vglInitExtended returns res_fallback (GL_TRUE = resolution was clamped,
+    // GL_FALSE = exact resolution used).  It does NOT return GL_FALSE on failure —
+    // neither vitaQuakeIII nor d3es-vita check the return value at all.
+    // A real init failure would leave sceGxmCreateContext with a null context,
+    // which we log from VITA_SCE_DIAG above; absent that, assume success.
+    (void)vgl_ok;
+    s_vita_video_ready = GL_TRUE;
+    SYNCLOG("[vitaGL] VideoInit: %s (msaa=%d %dx%d)",
+            s_vita_video_ready ? "OK" : "FAILED",
+            s_vita_msaa, s_vita_scr_width, s_vita_scr_height);
+
+    // Initialise SDL input subsystems only — VIDEO is owned by vitaGL/GXM.
+    SDL_Init(SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER);
+    atexit(SDL_Quit);
+    _VGL_LOG("VideoInit:sdl")
+
+#undef _VGL_LOG
+}
+
+void PlatformVita::InputInit()
+{
+    input_vita_initialize();
+}
+
+void PlatformVita::AudioInit()
+{
+    audio_vita_initialize();
+}
+
 void PlatformVita::SystemInit()
 {
 #define _SYSI_LOG(msg) do { FILE* _f = fopen("ux0:data/keeperfx/kfx_boot.log", "a"); if (_f) { fprintf(_f, "sysinit:" msg "\n"); fclose(_f); } } while(0)
     _SYSI_LOG("enter");
+    // libshacccg.suprx is intentionally NOT pre-loaded here.
+    //
+    // Loading it before vglInitExtended causes SCE_KERNEL_ERROR_MODULEMGR_OLD_LIB
+    // when vitaGL's internal vitaSHARK subsequently tries to load the same path:
+    // the kernel version-checks the in-memory module against vitaSHARK's import
+    // stubs and rejects it if the on-disk copy is below the required library
+    // version.  First-time loads by vitaSHARK skip this check.
+    //
+    // vitaGL's startShaderCompiler() loads libshacccg during vglInitExtended;
+    // our own custom shark_init() is called after that from VitaShaderProgram
+    // and falls back to the already-mapped SceShaccCg import stubs if needed.
+    _SYSI_LOG("shacccg-skip");
     // Maximise CPU/GPU clocks — default is throttled; same settings as vitaQuakeII.
     scePowerSetArmClockFrequency(444);
     _SYSI_LOG("arm-clk");
@@ -378,6 +603,9 @@ void PlatformVita::SystemInit()
     // denormal or other edge-case float operation in the game code will trap.
     sceKernelChangeThreadVfpException(0x0800009FU, 0x0);
     _SYSI_LOG("vfp");
+    // Initialize stack depth monitoring for optimization validation.
+    StackMonitor_Init();
+    _SYSI_LOG("stack-mon");
     // chdir so that any POSIX-relative opens outside LbDataLoad also resolve.
     chdir(GetDataPath());
     _SYSI_LOG("chdir");
@@ -394,6 +622,21 @@ void PlatformVita::SystemInit()
     extern unsigned char *big_scratch;
     big_scratch = (unsigned char *)KfxAlloc(256 * 1024);
     _SYSI_LOG("malloc-done");
+    // Early log — bootstraps keeperfx.log so errors during VideoInit/InputInit/AudioInit
+    // are captured.  kfxmain() will re-open with the config-selected filename.
+    LbErrorLogSetup(GetDataPath(), "keeperfx.log", 5);
+    _SYSI_LOG("log-setup");
+#ifdef VITA_UVDB
+    // Block here until GDB connects on port 1234, then stop at the initial
+    // breakpoint.  Press Continue (F5) in VS Code once GDB attaches.
+    // Exception handlers registered by uvdb supersede the POSIX crash handler.
+    // Connect with: gdb-multiarch out/build/vita-gdb/keeperfx
+    //                 -ex 'set architecture armv7'
+    //                 -ex 'target remote 192.168.0.66:1234'
+    _SYSI_LOG("uvdb-wait");
+    uvdb_enter();
+    _SYSI_LOG("uvdb-connected");
+#endif
 #undef _SYSI_LOG
 }
 
@@ -440,6 +683,11 @@ int64_t VitaAudioPlatform::FmvAudioPtsNs()
 IAudioPlatform* PlatformVita::GetAudio()
 {
     return &m_audio;
+}
+
+IWindowSystem* PlatformVita::GetWindowSystem()
+{
+    return &m_windowSystem;
 }
 
 #endif // PLATFORM_VITA

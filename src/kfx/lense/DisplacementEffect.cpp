@@ -184,8 +184,12 @@ TbBool DisplacementEffect::Setup(long lens_idx)
     
     // Note: Lookup table built on first Draw() when we know the resolution
     FreeLookupTable();
-    
+
     m_current_lens = lens_idx;
+#ifdef PLATFORM_VITA
+    m_gpu_pass.Configure((int)m_algorithm, m_magnitude, m_period);
+    m_gpu_pass.Init();
+#endif
     SYNCDBG(7, "Displacement effect ready (algo=%d, mag=%d, period=%d)",
            m_algorithm, m_magnitude, m_period);
     return true;
@@ -195,6 +199,9 @@ void DisplacementEffect::Cleanup()
 {
     FreeLookupTable();
     m_current_lens = -1;
+#ifdef PLATFORM_VITA
+    m_gpu_pass.Free();
+#endif
 }
 
 TbBool DisplacementEffect::Draw(LensRenderContext* ctx)

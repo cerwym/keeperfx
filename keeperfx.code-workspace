@@ -176,6 +176,8 @@
             "xloctime": "c",
             "format": "c",
             "xstring": "c"
-        }
+        },
+        "git.ignoreLimitWarning": true,
+        "powershell.cwd": "vita-hardware-acceleration"
     }
 }

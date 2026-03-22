@@ -21,6 +21,10 @@
 
 #include "LensEffect.h"
 
+#ifdef PLATFORM_VITA
+#include "renderer/vita/VitaDisplacePass.h"
+#endif
+
 /******************************************************************************/
 
 enum DisplacementAlgorithm {
@@ -47,20 +51,30 @@ public:
     virtual TbBool Setup(long lens_idx) override;
     virtual void Cleanup() override;
     virtual TbBool Draw(LensRenderContext* ctx) override;
-    
+
+#ifdef PLATFORM_VITA
+    virtual IPostProcessPass* GetGPUPass() override {
+        return m_gpu_pass.IsInitialized() ? &m_gpu_pass : nullptr;
+    }
+#endif
+
 private:
     void BuildLookupTable(long width, long height);
     void FreeLookupTable();
-    
+
     long m_current_lens;
     DisplacementAlgorithm m_algorithm;
     int m_magnitude;
     int m_period;
-    
+
     // Pre-computed lookup table for current resolution
     DisplaceLookupEntry* m_lookup_table;
     long m_table_width;
     long m_table_height;
+
+#ifdef PLATFORM_VITA
+    VitaDisplacePass m_gpu_pass;
+#endif
 };
 
 /******************************************************************************/

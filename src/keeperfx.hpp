@@ -94,6 +94,7 @@ enum DebugFlags {
     DFlg_ShowGameTurns      =  0x04,
     DFlg_FrameStep          =  0x08,
     DFlg_PauseAtGameTurn    =  0x10,
+    DFlg_Wireframe          =  0x20,
 };
 
 #ifdef FUNCTESTING
@@ -259,8 +260,6 @@ void update_creatr_model_activities_list(TbBool forced);
 TbBool any_player_close_enough_to_see(const struct Coord3d *pos);
 void affect_nearby_stuff_with_vortex(struct Thing *thing);
 void affect_nearby_friends_with_alarm(struct Thing *thing);
-long apply_wallhug_force_to_boulder(struct Thing *thing);
-long process_boulder_collision(struct Thing *boulder, struct Coord3d *pos, int direction_x, int direction_y);
 void lightning_modify_palette(struct Thing *thing);
 unsigned long lightning_is_close_to_player(struct PlayerInfo *player, struct Coord3d *pos);
 

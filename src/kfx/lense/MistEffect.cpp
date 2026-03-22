@@ -236,10 +236,19 @@ TbBool MistEffect::Setup(long lens_idx)
                    (unsigned char)cfg->mist_sec_x_step,
                    (unsigned char)cfg->mist_sec_y_step);
     renderer->SetAnimation(0, 1024);
-    
+
     // Store renderer in user data (we'll manage it through the base class)
     m_user_data = renderer;
     m_current_lens = lens_idx;
+
+#ifdef PLATFORM_VITA
+    m_gpu_pass.Configure((const unsigned char*)eye_lens_memory,
+                         (unsigned char)cfg->mist_pos_x_step,
+                         (unsigned char)cfg->mist_pos_y_step,
+                         (unsigned char)cfg->mist_sec_x_step,
+                         (unsigned char)cfg->mist_sec_y_step);
+    m_gpu_pass.Init();
+#endif
     
     SYNCDBG(7, "Mist effect ready");
     return true;
@@ -256,6 +265,9 @@ void MistEffect::Cleanup()
             m_user_data = NULL;
         }
         m_current_lens = -1;
+#ifdef PLATFORM_VITA
+        m_gpu_pass.Free();
+#endif
         SYNCDBG(9, "Mist effect cleaned up");
     }
 }

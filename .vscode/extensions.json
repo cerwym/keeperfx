@@ -1,24 +1,20 @@
 {
 	"recommendations": [
-		// C/C++ IntelliSense and debugging
+		// Core C/C++ — IntelliSense, debugging, CMake integration
 		"ms-vscode.cpptools",
-		// Docker container management UI
-		"ms-azuretools.vscode-docker",
-		// Dev Containers — open repo directly inside a Docker build container.
-		// Provides native IntelliSense, working terminal, and full toolchain
-		// without installing anything locally. Works on Windows, Mac, and Linux.
+		"ms-vscode.cpptools-extension-pack",
+		"ms-vscode.cmake-tools",
+		// Devcontainer support (required for MinGW / VitaSDK / Linux containers)
 		"ms-vscode-remote.remote-containers",
-		// Task sidebar — shows all tasks.json entries as a clickable tree
-		"spmeesseman.vscode-taskexplorer",
-		// GitLens — inline blame, history, and PR context
+		// Alternative GDB/LLDB frontend — better raw register/memory views
+		"webfreak.debug",
+		// Binary file inspection (.psp2dmp, .dat, sound banks, etc.)
+		"ms-vscode.hexeditor",
+		// Inline compiler errors/warnings in the editor margin
+		"usernamehw.errorlens",
+		// Git blame, history, and bisect helpers inline
 		"eamodio.gitlens",
-		// GitHub Pull Requests — review and manage PRs inside VS Code
+		// GitHub PR / issues integration
 		"github.vscode-pull-request-github"
 	],
-	// These extensions try to own the build system locally — all builds run
-	// inside Docker so they serve no purpose and generate confusing popups
-	"unwantedRecommendations": [
-		"ms-vscode.cmake-tools",
-		"ms-vscode.makefile-tools"
-	]
 }

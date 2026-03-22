@@ -7,6 +7,12 @@
 - A legal copy of **Dungeon Keeper** (GOG or CD version)
 - The KeeperFX `.vpk` release package
 
+## Building From Source
+
+For Vita source builds, CMake presets, and full preset tables, see:
+
+- `docs/platforms/vita/vita-cmake-build.md`
+
 ## Installing the VPK
 
 1. Copy `keeperfx.vpk` to your Vita via VitaShell (USB or FTP).

@@ -4,8 +4,18 @@
         "sdl2-image",
         "sdl2-mixer",
         "sdl2-net",
-        "glad"
-    ],
-    "$note": "Many dependencies (enet, zlib, spng, astronomy, centijson, ffmpeg, openal, luajit, miniupnpc, libnatpmp) are NOT managed by vcpkg in this project. They are downloaded as prebuilt binaries from https://github.com/dkfans/kfx-deps by deps/CMakeLists.txt. This is due to custom build configurations and platform-specific requirements. To use vcpkg-managed versions, significant refactoring would be required."
+        {
+            "name": "ffmpeg",
+            "features": ["avcodec", "avformat", "swresample"]
+        },
+        "openal-soft",
+        "enet6",
+        "astronomy",
+        "libnatpmp",
+        "libspng",
+        "zlib",
+        "minizip",
+        "luajit",
+        "miniupnpc"
+    ]
 }
-

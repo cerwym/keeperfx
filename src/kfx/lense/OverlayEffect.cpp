@@ -47,6 +47,11 @@ public:
     TbBool LoadOverlay(long lens_idx);
     void Render(unsigned char *dstbuf, long dstpitch, unsigned char *srcbuf, long srcpitch, 
                 long width, long height);
+
+    const unsigned char* GetData()   const { return m_overlay_data; }
+    int                  GetWidth()  const { return m_width; }
+    int                  GetHeight() const { return m_height; }
+    float                GetAlphaF() const { return m_alpha / 256.0f; }
     
 private:
     OverlayEffect* m_parent;         // Parent effect for asset loading
@@ -268,7 +273,13 @@ TbBool OverlayEffect::Setup(long lens_idx)
     
     m_user_data = renderer;
     m_current_lens = lens_idx;
-    
+
+#ifdef PLATFORM_VITA
+    m_gpu_pass.Configure(renderer->GetData(), renderer->GetWidth(),
+                         renderer->GetHeight(), renderer->GetAlphaF());
+    m_gpu_pass.Init();
+#endif
+
     SYNCDBG(7, "Overlay effect ready");
     return true;
 }
@@ -283,6 +294,9 @@ void OverlayEffect::Cleanup()
             m_user_data = NULL;
         }
         m_current_lens = -1;
+#ifdef PLATFORM_VITA
+        m_gpu_pass.Free();
+#endif
         SYNCDBG(9, "Overlay effect cleaned up");
     }
 }

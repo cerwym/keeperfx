@@ -6,6 +6,7 @@
 /** Nintendo Switch implementation of IPlatform (stub — extend as needed). */
 class PlatformSwitch : public IPlatform {
 public:
+    void SystemInit() override;
     const char* GetOSVersion() const override;
     const void* GetImageBase() const override;
     const char* GetWineVersion() const override;

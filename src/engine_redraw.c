@@ -47,6 +47,7 @@
 #include "front_simple.h"
 #include "front_easter.h"
 #include "frontend.h"
+#include "ui_init.h"
 #include "frontmenu_ingame_tabs.h"
 #include "frontmenu_ingame_evnt.h"
 #include "frontmenu_ingame_map.h"
@@ -65,6 +66,7 @@
 #include "packets.h"
 #include "custom_sprites.h"
 #include "keeperfx.hpp"
+#include "renderer/RendererManager.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -82,7 +84,6 @@ void redraw_frontview(void);
 int32_t xtab[640][2];
 int32_t ytab[480][2];
 
-unsigned char smooth_on;
 static unsigned char * map_fade_ghost_table;
 static unsigned char * map_fade_dest;
 static unsigned char * map_fade_src;
@@ -256,6 +257,9 @@ void load_engine_window(TbGraphicsWindow *ewnd)
     player->engine_window_height = ewnd->height;
 }
 
+// RENDER-SW-IMPL: software implementation of IMapFadePass — per-pixel wipe into lbDisplay.WScreen.
+// Hardcoded to 320×200; hardware path would use a UV-warp fragment shader at native resolution.
+// Called directly by SoftwareMapFadePass::StepFadeIn/StepFadeOut via map_fade_in/map_fade_out.
 void map_fade(unsigned char *outbuf, unsigned char *srcbuf1, unsigned char *srcbuf2, unsigned char *fade_tbl, unsigned char *ghost_tbl, long a6, long const xmax, long const ymax, long a9)
 {
     long ix;
@@ -365,6 +369,21 @@ void generate_map_fade_ghost_table(const char *fname, unsigned char *palette, un
     }
 }
 
+int get_place_room_pointer_graphics(RoomKind rkind) {
+    struct RoomConfigStats* roomst = get_room_kind_stats(rkind);
+    return roomst->pointer_sprite_idx;
+}
+
+int get_place_trap_pointer_graphics(ThingModel trmodel) {
+    struct TrapConfigStats* trapst = get_trap_model_stats(trmodel);
+    return trapst->pointer_sprite_idx;
+}
+
+int get_place_door_pointer_graphics(ThingModel drmodel) {
+    struct DoorConfigStats* doorst = get_door_model_stats(drmodel);
+    return doorst->pointer_sprite_idx;
+}
+
 /**
  * Renders source and destination screens for map fading.
  * Stores them in given buffers.
@@ -373,6 +392,8 @@ void generate_map_fade_ghost_table(const char *fname, unsigned char *palette, un
  * @param scanline Line width of the two given buffers.
  * @param height Height to be filled in given buffers.
  */
+// RENDER-SW-IMPL: captures two rendered frames into CPU buffers as source/dest for map_fade().
+// Hardware path would replace with render-to-texture; both captures would be GPU framebuffers.
 void prepare_map_fade_buffers(unsigned char *fade_src, unsigned char *fade_dest, int scanline, int height)
 {
     struct PlayerInfo* player = get_my_player();
@@ -613,22 +634,17 @@ void draw_overlay_compass(long base_x, long base_y)
     lbDisplay.DrawFlags = flg_mem;
 }
 
+// Because of the way this is used for the dungeon heart fly-in effect, this remains un-refactored until I can
+// understand the setup required for the fly-in and how to make it work with the new rendering system.
 void redraw_creature_view(void)
 {
-    SYNCDBG(6,"Starting");
+    SYNCDBG(6, "Starting");
     struct PlayerInfo* player = get_my_player();
     update_explored_flags_for_power_sight(player);
     struct Thing* thing = thing_get(player->controlled_thing_idx);
     TRACE_THING(thing);
     if (thing_exists(thing))
-      draw_creature_view(thing);
-    if (smooth_on)
-    {
-        TbGraphicsWindow ewnd;
-        store_engine_window(&ewnd, pixel_size);
-        smooth_screen_area(lbDisplay.WScreen, ewnd.x, ewnd.y,
-            ewnd.width, ewnd.height, lbDisplay.GraphicsScreenWidth);
-    }
+        draw_creature_view(thing);
     remove_explored_flags_for_power_sight(player);
     if ((game.operation_flags & GOF_ShowGui) != 0) {
         draw_whole_status_panel();
@@ -641,43 +657,22 @@ void redraw_creature_view(void)
     gui_draw_all_boxes();
     draw_tooltip();
     struct CreatureControl* cctrl = creature_control_get_from_thing(thing);
-    if (!creature_control_invalid(cctrl))
-    {
+    if (!creature_control_invalid(cctrl)) {
         draw_creature_view_icons(thing);
-        if (!gui_box_is_not_valid(gui_cheat_box_3))
-        {
+        if (!gui_box_is_not_valid(gui_cheat_box_3)) {
             struct GuiBoxOption* guop = gui_cheat_box_3->optn_list;
-            while (guop->label[0] != '!')
-            {
-              guop->active = (cctrl->active_instance_id == guop->cb_param1);
-              guop++;
+            while (guop->label[0] != '!') {
+                guop->active = (cctrl->active_instance_id == guop->cb_param1);
+                guop++;
             }
         }
     }
+
 }
 
-void smooth_screen_area(unsigned char *scrbuf, long x, long y, long w, long h, long scanln)
-{
-    SYNCDBG(7,"Starting");
-    unsigned char* lnbuf = scrbuf + scanln * y + x;
-    for (long i = h - y - 1; i > 0; i--)
-    {
-        unsigned char* buf = lnbuf;
-        for (long k = w - x - 1; k > 0; k--)
-        {
-            unsigned int ghpos = (buf[0] << 8) + buf[1];
-            ghpos = (buf[scanln] << 8) + pixmap.ghost[ghpos];
-            buf[0] = ghpos;
-            buf++;
-      }
-      lnbuf += scanln;
-    }
-}
-
+// The default angled view.
 void redraw_isometric_view(void)
 {
-    SYNCDBG(6,"Starting");
-
     struct PlayerInfo* player = get_my_player();
     if (player->acamera == NULL)
         return;
@@ -686,25 +681,8 @@ void redraw_isometric_view(void)
     struct Camera* render_cam = get_local_camera(&player->cameras[CamIV_Isometric]);
     update_explored_flags_for_power_sight(player);
     engine(player,render_cam);
-    if (smooth_on)
-    {
-        store_engine_window(&ewnd,pixel_size);
-        smooth_screen_area(lbDisplay.WScreen, ewnd.x, ewnd.y,
-            ewnd.width, ewnd.height, lbDisplay.GraphicsScreenWidth);
-    }
     remove_explored_flags_for_power_sight(player);
-    if ((game.operation_flags & GOF_ShowGui) != 0) {
-        draw_whole_status_panel();
-    }
-    draw_gui();
-    if ((game.operation_flags & GOF_ShowGui) != 0) {
-        draw_overlay_compass(player->minimap_pos_x, player->minimap_pos_y);
-    }
-    message_draw();
-    gui_draw_all_boxes();
-    draw_power_hand();
-    draw_tooltip();
-    SYNCDBG(8,"Finished");
+    draw_2d_elements(player);
 }
 
 void redraw_frontview(void)
@@ -714,36 +692,26 @@ void redraw_frontview(void)
     struct Camera* render_cam = get_local_camera(&player->cameras[CamIV_FrontView]);
     update_explored_flags_for_power_sight(player);
     draw_frontview_engine(render_cam);
-     remove_explored_flags_for_power_sight(player);
-    if (flag_is_set(game.operation_flags,GOF_ShowGui)) {
+    remove_explored_flags_for_power_sight(player);
+    draw_2d_elements(player);
+}
+
+// Draws 2D elements on top of 3D view, like spell cursor. Called from redraw_isometric_view() and redraw_frontview()
+// after 3D rendering is done.  
+void draw_2d_elements(struct PlayerInfo* player) {
+    if (flag_is_set(game.operation_flags, GOF_ShowGui)) {
         draw_whole_status_panel();
     }
     draw_gui();
-    if (flag_is_set(game.operation_flags,GOF_ShowGui)) {
+    if (flag_is_set(game.operation_flags, GOF_ShowGui)) {
         draw_overlay_compass(player->minimap_pos_x, player->minimap_pos_y);
     }
     message_draw();
     draw_power_hand();
     draw_tooltip();
-    gui_draw_all_boxes();
-}
-
-int get_place_room_pointer_graphics(RoomKind rkind)
-{
-    struct RoomConfigStats* roomst = get_room_kind_stats(rkind);
-    return roomst->pointer_sprite_idx;
-}
-
-int get_place_trap_pointer_graphics(ThingModel trmodel)
-{
-    struct TrapConfigStats* trapst = get_trap_model_stats(trmodel);
-    return trapst->pointer_sprite_idx;
-}
-
-int get_place_door_pointer_graphics(ThingModel drmodel)
-{
-    struct DoorConfigStats* doorst = get_door_model_stats(drmodel);
-    return doorst->pointer_sprite_idx;
+    if (should_render_ui()) {
+        gui_draw_all_boxes();
+    }
 }
 
 /**
@@ -1032,11 +1000,11 @@ void redraw_display(void)
         break;
     case PVM_ParchFadeIn:
         parchment_loaded = 0;
-        player->palette_fade_step_map = map_fade_in(player->palette_fade_step_map);
+        player->palette_fade_step_map = MapFadePass_StepFadeIn(player->palette_fade_step_map);
         break;
     case PVM_ParchFadeOut:
         parchment_loaded = 0;
-        player->palette_fade_step_map = map_fade_out(player->palette_fade_step_map);
+        player->palette_fade_step_map = MapFadePass_StepFadeOut(player->palette_fade_step_map);
         break;
     default:
         ERRORLOG("Unsupported drawing state, %d",(int)player->view_mode);
@@ -1272,4 +1240,5 @@ int get_place_terrain_pointer_graphics(SlabKind skind)
     }
     return result;
 }
+
 /******************************************************************************/

@@ -311,11 +311,11 @@ TbBool save_game(long slot_num)
         ERRORLOG("Outranged slot index %d",(int)slot_num);
         return false;
     }
-    char* fname = prepare_file_fmtpath(FGrp_Save, saved_game_filename, slot_num);
-    TbFileHandle handle = LbFileOpen(fname, Lb_FILE_MODE_NEW);
+    char* fname = get_game_file_path_fmt(FGrp_Save, saved_game_filename, slot_num);
+    TbFileHandle handle = (fname != NULL) ? LbFileOpen(fname, Lb_FILE_MODE_NEW) : 0;
     if (!handle)
     {
-        WARNMSG("Cannot open file to save, \"%s\".",fname);
+        WARNMSG("Cannot open file to save, \"%s\".",fname != NULL ? fname : "");
         return false;
     }
     if (!save_game_chunks(handle,&save_game_catalogue[slot_num]))
@@ -332,8 +332,8 @@ TbBool save_game(long slot_num)
 TbBool is_save_game_loadable(long slot_num)
 {
     // Prepare filename and open the file
-    char* fname = prepare_file_fmtpath(FGrp_Save, saved_game_filename, slot_num);
-    TbFileHandle fh = LbFileOpen(fname, Lb_FILE_MODE_READ_ONLY);
+    char* fname = get_game_file_path_fmt(FGrp_Save, saved_game_filename, slot_num);
+    TbFileHandle fh = (fname != NULL) ? LbFileOpen(fname, Lb_FILE_MODE_READ_ONLY) : 0;
     if (fh)
     {
         // Let's try to read the file, just to be sure
@@ -361,12 +361,12 @@ TbBool load_game(long slot_num)
     SYNCDBG(6,"Starting");
     reset_eye_lenses();
     {
-        // Use fname only here - it is overwritten by next use of prepare_file_fmtpath()
-        char* fname = prepare_file_fmtpath(FGrp_Save, saved_game_filename, slot_num);
-        fh = LbFileOpen(fname,Lb_FILE_MODE_READ_ONLY);
+        // Use fname only here - it is overwritten by next use of get_game_file_path_fmt()
+        char* fname = get_game_file_path_fmt(FGrp_Save, saved_game_filename, slot_num);
+        fh = (fname != NULL) ? LbFileOpen(fname,Lb_FILE_MODE_READ_ONLY) : 0;
         if (!fh)
         {
-          WARNMSG("Cannot open saved game file \"%s\".",fname);
+          WARNMSG("Cannot open saved game file \"%s\".",fname != NULL ? fname : "");
           save_catalogue_slot_disable(slot_num);
           return false;
         }
@@ -519,8 +519,8 @@ TbBool load_game_save_catalogue(void)
     {
         struct CatalogueEntry* centry = &save_game_catalogue[slot_num];
         memset(centry, 0, sizeof(struct CatalogueEntry));
-        char* fname = prepare_file_fmtpath(FGrp_Save, saved_game_filename, slot_num);
-        TbFileHandle fh = LbFileOpen(fname, Lb_FILE_MODE_READ_ONLY);
+        char* fname = get_game_file_path_fmt(FGrp_Save, saved_game_filename, slot_num);
+        TbFileHandle fh = (fname != NULL) ? LbFileOpen(fname, Lb_FILE_MODE_READ_ONLY) : 0;
         if (!fh)
             continue;
         struct FileChunkHeader hdr;

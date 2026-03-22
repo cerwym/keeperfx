@@ -21,7 +21,8 @@ There is also one local-only image that is **never pushed to any registry**:
 
 | Image | Purpose |
 |---|---|
-| `keeperfx-dk-originals:local` | Caches the 16 original Dungeon Keeper files required by KeeperFX. Built once per machine by `.vscode/init_dk_layer.ps1`. |
+| `keeperfx-dk-originals:local` | Caches the 16 original Dungeon Keeper files required by KeeperFX. Built once per machine by `tools/init-deploy.ps1`. |
+| `keeperfx-runtime-assets:local` | Caches KeeperFX runtime assets (`config/`, `campgns/`, `levels/`, SDL DLLs, and generated `pkg/*` runtime content). Rebuilt locally when asset inputs change. |
 
 ---
 
@@ -80,6 +81,31 @@ docker compose -f docker/compose.yml run linux `
   bash -c "cmake --preset linux-x64-release && cmake --build --preset linux-x64-release"
 ```
 
+### Build Linux x86_64 with AddressSanitizer
+
+Runs the same Linux image with ASan + UBSan enabled.  Catches heap overflows,
+use-after-free, double-free, and undefined behaviour — no special toolchain
+needed (GCC ships with libasan).
+
+```pwsh
+# Build
+docker compose -f docker/compose.yml run linux-asan `
+  bash -c "cmake --preset linux-x64-asan && cmake --build --preset linux-x64-asan"
+
+# Run unit tests under sanitizers
+docker compose -f docker/compose.yml run linux-asan `
+  ./out/build/linux-x64-asan/tests
+```
+
+The `linux-asan` service sets `ASAN_OPTIONS` and `UBSAN_OPTIONS` automatically.
+Override them if needed:
+
+```pwsh
+$env:ASAN_OPTIONS = "detect_leaks=1:halt_on_error=0"
+docker compose -f docker/compose.yml run linux-asan `
+  ./out/build/linux-x64-asan/tests
+```
+
 ### Build WebAssembly
 
 ```pwsh
@@ -97,15 +123,30 @@ docker compose -f docker/compose.yml run linux bash -c "make pkg-lang"
 
 ---
 
-## VS Code integration (layered deploy)
+## CLion integration (layered deploy)
 
-The `.vscode/` tasks use the images above automatically.
-Use **Ctrl+Shift+B** to build and deploy to `.deploy/` for local testing.
+Initialize `.deploy/` once per machine/worktree:
 
-On first use on a new machine, VS Code will ask for your Dungeon Keeper
-GOG/Steam install path once.  This is cached into a local Docker image
-(`keeperfx-dk-originals:local`) and never asked again — across all
-worktrees on that machine.
+```pwsh
+powershell -ExecutionPolicy Bypass -File tools/init-deploy.ps1 -DungeonKeeperPath "C:\Path\To\Dungeon Keeper"
+```
+
+What this does:
+- Builds (or reuses) `keeperfx-dk-originals:local` from your legal DK install.
+- Builds `keeperfx-runtime-assets:local` after generating `pkg-gfx`, `pkg-sfx`, and `pkg-languages` in Docker.
+- Recreates `.deploy/` by layering runtime assets + original DK files.
+
+Refresh behaviors:
+
+```pwsh
+# Force rebuild only DK originals layer
+powershell -ExecutionPolicy Bypass -File tools/init-deploy.ps1 -DungeonKeeperPath "C:\Path\To\Dungeon Keeper" -RefreshDkLayer
+
+# Force rebuild runtime assets layer (no Docker cache)
+powershell -ExecutionPolicy Bypass -File tools/init-deploy.ps1 -RefreshRuntimeLayer
+```
+
+`tools/clion-build-deploy.ps1` now validates that `.deploy/` is initialized and fails fast with instructions if required runtime files are missing.
 
 ---
 

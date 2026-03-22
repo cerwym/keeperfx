@@ -171,12 +171,12 @@ TbBool open_lua_script(LevelNumber lvnum)
 
     setLuaPath(Lvl_script);
     
-    char* fname = prepare_file_fmtpath(FGrp_FxData, "lua/init.lua");
+    char* fname = get_game_file_path_fmt(FGrp_FxData, "lua/init.lua");
 
 	// Load and parse the Lua File
-    if ( !LbFileExists(fname) )
+    if ( !fname || !LbFileExists(fname) )
     {
-        ERRORLOG("file %s missing",fname);
+        ERRORLOG("file %s missing", fname != NULL ? fname : "lua/init.lua");
         return false;
     }
 	if(!CheckLua(Lvl_script, luaL_dofile(Lvl_script, fname),"global_lua_file"))
@@ -186,8 +186,8 @@ TbBool open_lua_script(LevelNumber lvnum)
         return false;
 	}
 
-    fname = prepare_file_fmtpath(FGrp_CmpgConfig, "lua/init.lua");
-    if (LbFileExists(fname))
+    fname = get_game_file_path_fmt(FGrp_CmpgConfig, "lua/init.lua");
+    if (fname && LbFileExists(fname))
     {
         if (!CheckLua(Lvl_script, luaL_dofile(Lvl_script, fname), "campaign_lua_file"))
         {
@@ -196,9 +196,9 @@ TbBool open_lua_script(LevelNumber lvnum)
     }
 
     short fgroup = get_level_fgroup(lvnum);
-    fname = prepare_file_fmtpath(fgroup, "map%05lu.lua", (unsigned long)lvnum);
+    fname = get_game_file_path_fmt(fgroup, "map%05lu.lua", (unsigned long)lvnum);
 	// Load and parse the Lua File
-    if ( !LbFileExists(fname) )
+    if ( !fname || !LbFileExists(fname) )
       return false;
 
     if(!CheckLua(Lvl_script, luaL_dofile(Lvl_script, fname),"level_script_loading"))

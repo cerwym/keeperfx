@@ -36,7 +36,7 @@
 #include "front_simple.h"
 #include "front_landview.h"
 #include "frontend.h"
-#include "game_heap.h"
+#include "kfx/sprite_resources.h"
 #include "gui_draw.h"
 #include "gui_parchment.h"
 #include "gui_topmsg.h"
@@ -916,8 +916,14 @@ TbScreenMode setup_screen_mode_zero(TbScreenMode nmode)
  */
 TbScreenMode reenter_video_mode(void)
 {
+#ifdef PLATFORM_VITA
+  // Vita has a fixed 960x544 display; always render the game at 640x480.
+  // Ignore the user's INGAME_RES config and saved index — 320x200 is unusable.
+  TbScreenMode scrmode = setup_screen_mode(Lb_SCREEN_MODE_640_480_8, false);
+#else
   TbScreenMode scrmode = get_game_vidmode(settings.switching_vidmodes_index);
   scrmode = setup_screen_mode(scrmode, false);
+#endif
   if (scrmode == Lb_SCREEN_MODE_INVALID)
   {
     // try all of the other switchable video modes before eventually trying the failsafe

@@ -30,7 +30,7 @@
 #include "frontend.h"
 #include "frontmenu_ingame_tabs.h"
 #include "frontmenu_ingame_map.h"
-#include "game_heap.h"
+#include "kfx/sprite_resources.h"
 #include "game_legacy.h"
 #include "game_merge.h"
 #include "gui_topmsg.h"
@@ -58,6 +58,7 @@
   #include "ftests/ftest.h"
 #endif
 
+#include "platform/kfx_breadcrumb.h"
 #include "post_inc.h"
 
 extern TbBool force_player_num;
@@ -153,6 +154,7 @@ void init_lookups(void)
 
 static void init_level(void)
 {
+    KFX_BREADCRUMB("init_level");
     SYNCDBG(6,"Starting");
     struct IntralevelData transfer_mem;
     //memcpy(&transfer_mem,&game.intralvl.transferred_creature,sizeof(struct CreatureStorage));
@@ -286,6 +288,7 @@ void startup_saved_packet_game(void)
     struct CatalogueEntry centry;
     clear_packets();
     open_packet_file_for_load(game.packet_fname,&centry);
+    
     if (!change_campaign(centry.campaign_fname))
     {
         ERRORLOG("Unable to load campaign associated with packet file");

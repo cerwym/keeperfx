@@ -36,7 +36,8 @@
 static int thing_set_field(lua_State *L);
 static int thing_get_field(lua_State *L);
 
-static const struct luaL_Reg thing_methods[];
+// Forward reference: defined after thing_get_field. Pointer allows use before definition.
+static const struct luaL_Reg *thing_methods_ptr = NULL;
 
 
 
@@ -371,7 +372,7 @@ static int thing_set_field(lua_State *L) {
 static int thing_get_field(lua_State *L) {
     const char* key = luaL_checkstring(L, 2);
 
-    if (try_get_c_method(L, key, thing_methods))
+    if (try_get_c_method(L, key, thing_methods_ptr))
     {
         return 1;
     }
@@ -562,7 +563,7 @@ static int thing_eq(lua_State *L) {
 }
 
 
-static const struct luaL_Reg thing_methods[] = {
+static const struct luaL_Reg thing_methods_arr[] = {
     {"make_thing_zombie", make_thing_zombie},
     {"walk_to",  lua_creature_walk_to},
     {"kill",    lua_kill_creature},
@@ -592,9 +593,12 @@ void Thing_register(lua_State *L) {
     // Set metamethods (__index, __eq, etc.) from thing_meta[]
     luaL_setfuncs(L, thing_meta, 0);
 
+    // Initialise forward-reference pointer now that the array is defined
+    thing_methods_ptr = thing_methods_arr;
+
     // Create the method table for Lua-accessible methods
     lua_newtable(L);
-    luaL_setfuncs(L, thing_methods, 0); // your C methods
+    luaL_setfuncs(L, thing_methods_arr, 0); // your C methods
 
     // Save method table into metatable under __methods
     lua_setfield(L, -2, "__methods");

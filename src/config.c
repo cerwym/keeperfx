@@ -688,16 +688,21 @@ int64_t get_named_field_value(const struct NamedField* named_field, const struct
         return *(int32_t *)field;
     case dt_ulong:
         return *(uint32_t *)field;
-    case dt_longlong:
-        return *(int64_t *)field;
-    case dt_ulonglong:
-        return *(uint64_t *)field;
+    case dt_longlong: {
+        /* Use memcpy to avoid ARM LDRD strict-alignment fault. */
+        int64_t v; memcpy(&v, field, sizeof(v)); return v;
+    }
+    case dt_ulonglong: {
+        uint64_t v; memcpy(&v, field, sizeof(v)); return (int64_t)v;
+    }
     case dt_float:
         return (int64_t)(*(float*)field);
-    case dt_double:
-        return (int64_t)(*(double*)field);
-    case dt_longdouble:
-        return (int64_t)(*(long double*)field);
+    case dt_double: {
+        double v; memcpy(&v, field, sizeof(v)); return (int64_t)v;
+    }
+    case dt_longdouble: {
+        long double v; memcpy(&v, field, sizeof(v)); return (int64_t)v;
+    }
     case dt_charptr:
     case dt_default:
     case dt_void:
@@ -771,24 +776,34 @@ void assign_default(const struct NamedField* named_field, int64_t value, const s
     case dt_longlong:
         if (value < INT64_MIN || value > INT64_MAX)
             NAMFIELDWRNLOG("Value out of range for signed long long: %" PRId64, value);
-        else
-            *(signed long long *)field = (signed long long)value;
+        else {
+            /* Use memcpy to avoid ARM STRD strict-alignment fault (ARMv7 STRD requires
+             * 8-byte aligned address; struct base may only be 4-byte aligned). */
+            signed long long v = (signed long long)value;
+            memcpy(field, &v, sizeof(v));
+        }
         break;
     case dt_ulonglong:
         if (value < 0)
             NAMFIELDWRNLOG("Value out of range for unsigned long long: %" PRId64, value);
-        else
-            *(unsigned long long *)field = (unsigned long long)value;
+        else {
+            unsigned long long v = (unsigned long long)value;
+            memcpy(field, &v, sizeof(v));
+        }
         break;
     case dt_float:
         *(float*)field = (float)value;
         break;
-    case dt_double:
-        *(double*)field = (double)value;
+    case dt_double: {
+        double v = (double)value;
+        memcpy(field, &v, sizeof(v));
         break;
-    case dt_longdouble:
-        *(long double*)field = (long double)value;
+    }
+    case dt_longdouble: {
+        long double v = (long double)value;
+        memcpy(field, &v, sizeof(v));
         break;
+    }
     case dt_charptr:
     case dt_default:
     case dt_void:
@@ -1232,11 +1247,18 @@ char *prepare_file_path_buf(char *dst, int dst_size, short fgroup, const char *f
 {
     return prepare_file_path_buf_mod(dst, dst_size, NULL, fgroup, fname);
 }
+
 /*
  * @mod_dir insert before fgroup related sdir, set NULL if no mod.
  * @fname insert after fgroup related sdir.
  */
-char *prepare_file_path_buf_mod(char *dst, int dst_size, const char *mod_dir, short fgroup, const char *fname)
+/**
+ * Internal helper: Resolve a file path with bounds checking to prevent buffer overflow.
+ * Returns NULL if the constructed path would exceed dst_size.
+ */
+static char *_resolve_file_path_internal(char *dst, size_t dst_size, 
+                                          const char *mod_dir, short fgroup, 
+                                          const char *fname)
 {
   const char *mdir = NULL;
   const char *sdir = NULL;
@@ -1351,9 +1373,10 @@ char *prepare_file_path_buf_mod(char *dst, int dst_size, const char *mod_dir, sh
       sdir=NULL;
       break;
   }
-  if (mdir == NULL)
+  
+  if (mdir == NULL) {
       dst[0] = '\0';
-  else {
+  } else {
       if (mod_dir == NULL)
           mod_dir = "";
       if (sdir == NULL)
@@ -1361,32 +1384,139 @@ char *prepare_file_path_buf_mod(char *dst, int dst_size, const char *mod_dir, sh
       if (fname == NULL)
           fname = "";
 
-      const char *mod_sep = mod_dir[0] ==0 ? "" : "/";
+      /* SAFETY: Validate component lengths before string concatenation */
+      /* Use safe strnlen with max 4KB per component (generous but bounded) */
+      int len_mdir = strnlen(mdir, 4096);
+      int len_mod_dir = strnlen(mod_dir, 4096);
+      int len_sdir = strnlen(sdir, 4096);
+      int len_fname = strnlen(fname, 4096);
+      
+      /* Check for invalid string lengths (detected by strnlen returning max) */
+      if (len_mdir >= 4096 || len_mod_dir >= 4096 || len_sdir >= 4096 || len_fname >= 4096) {
+          ERRORMSG("CORRUPTED STRING: mdir_len=%d, mod_dir_len=%d, sdir_len=%d, fname_len=%d (possibly unterminated or unmapped)",
+                   len_mdir, len_mod_dir, len_sdir, len_fname);
+          dst[0] = '\0';
+          return dst;
+      }
+      
+      /* Sanity check: strings should be reasonable length */
+      if (len_mdir >= 4096 || len_mod_dir >= 4096 || 
+          len_sdir >= 4096 || len_fname >= 4096) {
+          ERRORMSG("INSANE STRING LENGTH: mdir=%d, mod_dir=%d, sdir=%d, fname=%d bytes",
+                   len_mdir, len_mod_dir, len_sdir, len_fname);
+          dst[0] = '\0';
+          return dst;
+      }
+      
+      int total_len = len_mdir + len_mod_dir + len_sdir + len_fname + 3; /* +3 for separators */
+      
+      if (total_len >= (int)dst_size) {
+          ERRORMSG("Path construction would overflow: total_len=%d, buffer_size=%lu. Components: mdir=%d, mod_dir=%d, sdir=%d, fname=%d",
+                   total_len, (unsigned long)dst_size, 
+                   len_mdir, len_mod_dir, 
+                   len_sdir, len_fname);
+          dst[0] = '\0';
+          return dst;
+      }
+
+      const char *mod_sep = mod_dir[0] == 0 ? "" : "/";
       const char *dir_sep = sdir[0] == 0 ? "" : "/";
-      const char *file_sep = fname[0] ==0 ? "" : "/";
-      snprintf(dst, dst_size, "%s%s%s%s%s%s%s", mdir, mod_sep, mod_dir, dir_sep, sdir, file_sep, fname);
+      const char *file_sep = fname[0] == 0 ? "" : "/";
+      
+      /* OVERFLOW CHECK: snprintf returns number of chars that would have been written.
+         If >= dst_size, the buffer was overflowed. Return NULL to signal error. */
+      int written = snprintf(dst, dst_size, "%s%s%s%s%s%s%s", 
+                             mdir, mod_sep, mod_dir, dir_sep, sdir, file_sep, fname);
+      if (written < 0 || (size_t)written >= dst_size) {
+          ERRORMSG("Path construction overflow: len=%d, buffer_size=%lu. Components: mdir=%lu, mod_dir=%lu, sdir=%lu, fname=%lu",
+                   written, (unsigned long)dst_size, 
+                   (unsigned long)len_mdir, (unsigned long)len_mod_dir, 
+                   (unsigned long)len_sdir, (unsigned long)len_fname);
+          dst[0] = '\0';
+          return dst;
+      }
   }
   return dst;
 }
 
+/**
+ * Public API: Get path for a game file (no mod overlay).
+ * Returns pointer to internal static buffer, or NULL if path construction failed.
+ */
+char *get_game_file_path(short fgroup, const char *fname)
+{
+  static char ffullpath[4096];
+  return _resolve_file_path_internal(ffullpath, sizeof(ffullpath), NULL, fgroup, fname);
+}
+
+/**
+ * Public API: Get path for a mod-overlaid file.
+ * Returns pointer to internal static buffer, or NULL if path construction failed.
+ * mod_dir: the mod subdirectory within keeper_runtime_directory, or NULL for no overlay.
+ */
+char *get_mod_file_path(const char *mod_dir, short fgroup, const char *fname)
+{
+  static char ffullpath[4096];
+  return _resolve_file_path_internal(ffullpath, sizeof(ffullpath), mod_dir, fgroup, fname);
+}
+
+/**
+ * Public API: Get path for a game file with formatted filename.
+ * Returns pointer to internal static buffer, or NULL if path/format construction failed.
+ */
+char *get_game_file_path_fmt(short fgroup, const char *fmt_str, ...)
+{
+  char fname[255] = "";
+  va_list val;
+  va_start(val, fmt_str);
+  vsnprintf(fname, sizeof(fname), fmt_str, val);
+  va_end(val);
+  
+  static char ffullpath[2048];
+  return _resolve_file_path_internal(ffullpath, sizeof(ffullpath), NULL, fgroup, fname);
+}
+
+/**
+ * Public API: Get path for a mod-overlaid file with formatted filename.
+ * Returns pointer to internal static buffer, or NULL if path/format construction failed.
+ * mod_dir: the mod subdirectory within keeper_runtime_directory, or NULL for no overlay.
+ */
+char *get_mod_file_path_fmt(const char *mod_dir, short fgroup, const char *fmt_str, ...)
+{
+  char fname[255] = "";
+  va_list val;
+  va_start(val, fmt_str);
+  vsnprintf(fname, sizeof(fname), fmt_str, val);
+  va_end(val);
+  
+  static char ffullpath[4096];
+  return _resolve_file_path_internal(ffullpath, sizeof(ffullpath), mod_dir, fgroup, fname);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   DEPRECATED: Old API kept for compatibility. Prefer get_*_file_path* instead.
+   ───────────────────────────────────────────────────────────────────────── */
+
+char *prepare_file_path_buf_mod(char *dst, int dst_size, const char *mod_dir, short fgroup, const char *fname)
+{
+  return _resolve_file_path_internal(dst, dst_size, mod_dir, fgroup, fname);
+}
+
 char *prepare_file_path_mod(const char *mod_dir, short fgroup, const char *fname)
 {
-  static char ffullpath[2048];
-  return prepare_file_path_buf_mod(ffullpath, sizeof(ffullpath), mod_dir, fgroup, fname);
+  return get_mod_file_path(mod_dir, fgroup, fname);
 }
 
 char *prepare_file_path(short fgroup, const char *fname)
 {
-  static char ffullpath[2048];
-  return prepare_file_path_buf_mod(ffullpath, sizeof(ffullpath), NULL, fgroup, fname);
+  return get_game_file_path(fgroup, fname);
 }
 
 char *prepare_file_path_va_mod(const char *mod_dir, short fgroup, const char *fmt_str, va_list arg)
 {
   char fname[255] = "";
   vsnprintf(fname, sizeof(fname), fmt_str, arg);
-  static char ffullpath[2048];
-  return prepare_file_path_buf_mod(ffullpath, sizeof(ffullpath), mod_dir, fgroup, fname);
+  return get_mod_file_path(mod_dir, fgroup, fname);
 }
 
 char *prepare_file_fmtpath_mod(const char *mod_dir, short fgroup, const char *fmt_str, ...)
@@ -2108,8 +2238,8 @@ static void load_config_for_mod_one(const struct ConfigFileData* file_data, unsi
 
     if (mod_state->cmpg_lvls)
     {
-        fname = prepare_file_fmtpath_mod(mod_dir, FGrp_CmpgLvls, "map%05lu.%s", get_selected_level_number(), conf_fname);
-        if (strlen(fname) > 0)
+        fname = get_mod_file_path_fmt(mod_dir, FGrp_CmpgLvls, "map%05lu.%s", get_selected_level_number(), conf_fname);
+        if (fname && strlen(fname) > 0)
         {
             file_data->load_func(fname,flags);
         }
@@ -2159,8 +2289,8 @@ TbBool load_config(const struct ConfigFileData* file_data, unsigned short flags)
         load_config_for_mod_list(file_data, flags, mods_conf.after_campaign_item, mods_conf.after_campaign_cnt);
     }
 
-    fname = prepare_file_fmtpath(FGrp_CmpgLvls, "map%05lu.%s", get_selected_level_number(), conf_fname);
-    if (strlen(fname) > 0)
+    fname = get_game_file_path_fmt(FGrp_CmpgLvls, "map%05lu.%s", get_selected_level_number(), conf_fname);
+    if (fname && strlen(fname) > 0)
     {
         file_data->load_func(fname,flags|CnfLd_AcceptPartial|CnfLd_IgnoreErrors);
     }

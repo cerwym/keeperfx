@@ -50,6 +50,10 @@ void        PlatformManager_FrameTick(void);
 void        PlatformManager_WorkTick(void);
 size_t      PlatformManager_GetScratchSize(void);
 size_t      PlatformManager_GetPolyPoolSize(void);
+/** Returns non-zero if all video modes should be forced available (console, no SDL display query). */
+TbBool      PlatformManager_ForcesAllModesAvailable(void);
+/** Returns non-zero if the platform owns the display and bflib must not create an SDL window. */
+TbBool      PlatformManager_OwnsDisplay(void);
 
 #ifdef __cplusplus
 } // extern "C"

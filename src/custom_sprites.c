@@ -370,8 +370,8 @@ static void load_sprites_for_mod_one(LevelNumber lvnum, const struct ModConfigIt
 
     if (mod_state->cmpg_lvls)
     {
-        fname = prepare_file_fmtpath_mod(mod_dir, FGrp_CmpgLvls, "map%05lu.zip", lvnum);
-        if (strlen(fname) > 0 && LbFileExists(fname))
+        fname = get_mod_file_path_fmt(mod_dir, FGrp_CmpgLvls, "map%05lu.zip", lvnum);
+        if (fname && strlen(fname) > 0 && LbFileExists(fname))
         {
             sprintf(desc, "Mod[%s] CmpgLvls file", mod_item->name);
             load_file_sprites(fname, desc);
@@ -493,8 +493,8 @@ void init_custom_sprites(LevelNumber lvnum)
         /* --- Level tier (map ZIP + after_map) --- */
         sprite_cache_begin_phase(2);
         {
-            char *fpath = prepare_file_fmtpath(get_level_fgroup(lvnum), "map%05lu.zip", lvnum);
-            strncpy(s_lvl_zip, fpath, sizeof(s_lvl_zip) - 1);
+            char *fpath = get_game_file_path_fmt(get_level_fgroup(lvnum), "map%05lu.zip", lvnum);
+            strncpy(s_lvl_zip, fpath != NULL ? fpath : "", sizeof(s_lvl_zip) - 1);
         }
         level_hit = sprite_cache_try_load_level(s_lvl_zip, &cache_ctx, &campaign_snap);
         if (!level_hit) {
@@ -513,6 +513,38 @@ void init_custom_sprites(LevelNumber lvnum)
         }
         if (!level_hit)
             sprite_cache_write_level(s_lvl_zip, &cache_ctx, &campaign_snap);
+
+        /* Inventory summary: log the final sprite/icon index ranges per tier */
+        {
+            SpriteCacheTierSnapshot final_snap;
+            sprite_cache_snapshot(&cache_ctx, &final_snap);
+            int g_kspr = global_snap.next_free_sprite;
+            int c_kspr = campaign_snap.next_free_sprite - global_snap.next_free_sprite;
+            int l_kspr = final_snap.next_free_sprite - campaign_snap.next_free_sprite;
+            int g_icon = global_snap.num_added_icons;
+            int c_icon = campaign_snap.num_added_icons - global_snap.num_added_icons;
+            int l_icon = final_snap.num_added_icons - campaign_snap.num_added_icons;
+            JUSTLOG("sprite_cache: inventory lvl%lu: "
+                    "global[kspr 0..%d icons 0..%d] "
+                    "campgn[%s] "
+                    "level[%s]",
+                    (unsigned long)lvnum,
+                    g_kspr > 0 ? g_kspr - 1 : 0, g_icon > 0 ? g_icon - 1 : 0,
+                    (c_kspr > 0 || c_icon > 0) ? "non-empty" : "empty",
+                    (l_kspr > 0 || l_icon > 0) ? "non-empty" : "empty");
+            if (c_kspr > 0 || c_icon > 0)
+                JUSTLOG("sprite_cache: inventory campgn: kspr[%d..%d] icons[%d..%d]",
+                        global_snap.next_free_sprite,
+                        campaign_snap.next_free_sprite - 1,
+                        global_snap.num_added_icons,
+                        campaign_snap.num_added_icons - 1);
+            if (l_kspr > 0 || l_icon > 0)
+                JUSTLOG("sprite_cache: inventory level:  kspr[%d..%d] icons[%d..%d]",
+                        campaign_snap.next_free_sprite,
+                        final_snap.next_free_sprite - 1,
+                        campaign_snap.num_added_icons,
+                        final_snap.num_added_icons - 1);
+        }
     }
 #else
     {
@@ -524,8 +556,8 @@ void init_custom_sprites(LevelNumber lvnum)
         load_dir_sprites(dname, "Main CmpgConfig dir");
         if (mods_conf.after_campaign_cnt > 0)
             load_sprites_for_mod_list(lvnum, mods_conf.after_campaign_item, mods_conf.after_campaign_cnt);
-        char *fname = prepare_file_fmtpath(get_level_fgroup(lvnum), "map%05lu.zip", lvnum);
-        if (LbFileExists(fname))
+        char *fname = get_game_file_path_fmt(get_level_fgroup(lvnum), "map%05lu.zip", lvnum);
+        if (fname && LbFileExists(fname))
             load_file_sprites(fname, "Main CmpgLvls file");
         if (mods_conf.after_map_cnt > 0)
             load_sprites_for_mod_list(lvnum, mods_conf.after_map_item, mods_conf.after_map_cnt);
@@ -868,8 +900,10 @@ static int read_png_icon(unzFile zip, const char *path, const char *subpath, int
     return 1;
 }
 
+#ifdef __clang__
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "bugprone-branch-clone"
+#endif
 static int read_png_data(unzFile zip, const char *path, struct SpriteContext *context, const char *subpath,
                          int fp, VALUE *def, VALUE *itm)
 {
@@ -1014,7 +1048,9 @@ static int read_png_data(unzFile zip, const char *path, struct SpriteContext *co
     KfxFree(dst_buf);
     return 1;
 }
+#ifdef __clang__
 #pragma clang diagnostic pop
+#endif
 
 static void convert_row(unsigned char *dst_buf, uint32_t *src_buf, int len)
 {
@@ -1065,10 +1101,10 @@ static void load_rgb_to_pal_table()
         ERRORLOG("Cannot allocate rgb conversion table");
         return;
     }
-    const char * fname = prepare_file_fmtpath(FGrp_StdData, "png_conv_pal.dat");
-    if (!LbFileExists(fname))
+    const char * fname = get_game_file_path_fmt(FGrp_StdData, "png_conv_pal.dat");
+    if (!fname || !LbFileExists(fname))
     {
-        WARNMSG("Palette file \"%s\" doesn't exist.", fname);
+        WARNMSG("Palette file \"%s\" doesn't exist.", fname != NULL ? fname : "");
         return;
     }
     uint8_t palette[768];

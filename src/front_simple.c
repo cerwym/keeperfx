@@ -35,6 +35,7 @@
 #include "config.h"
 #include "kjm_input.h"
 #include "scrcapt.h"
+#include "renderer/RendererManager.h"
 #include "gui_draw.h"
 #include "vidfade.h"
 
@@ -242,8 +243,7 @@ TbBool copy_raw8_image_to_screen_center(const unsigned char *buf, const int img_
         return false;
 
     // Copy image buffer to screen buffer
-    copy_raw8_image_buffer(lbDisplay.WScreen, LbGraphicsScreenWidth(), LbGraphicsScreenHeight(),
-                           scaled_width, scaled_height, coord_x, coord_y, buf, img_width, img_height);
+    RendererBlitRaw8(scaled_width, scaled_height, coord_x, coord_y, buf, img_width, img_height);
 
     // Perform any screen capturing
     perform_any_screen_capturing();

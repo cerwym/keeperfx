@@ -26,6 +26,7 @@ List of required files will follow:
 
 ./data/bluepal.dat
 ./data/bluepall.dat
+./data/ceiling.txt
 ./data/dogpal.pal
 ./data/hitpall.dat
 ./data/lightng.pal
@@ -37,6 +38,65 @@ List of required files will follow:
 ./data/slab0-1.dat
 ./data/vampal.pal
 ./data/whitepal.col
+
+./ldata/dkflag00.dat
+./ldata/dkflag00.tab
+./ldata/dkwind00.dat
+./ldata/door01.dat
+./ldata/door01.tab
+./ldata/door02.dat
+./ldata/door02.tab
+./ldata/door03.dat
+./ldata/door03.tab
+./ldata/door04.dat
+./ldata/door04.tab
+./ldata/door05.dat
+./ldata/door05.tab
+./ldata/door06.dat
+./ldata/door06.tab
+./ldata/door07.dat
+./ldata/door07.tab
+./ldata/door08.dat
+./ldata/door08.tab
+./ldata/door09.dat
+./ldata/door09.tab
+./ldata/drag.smk
+./ldata/front.pal
+./ldata/front.raw
+./ldata/frontbit.dat
+./ldata/frontbit.tab
+./ldata/frontft1.dat
+./ldata/frontft1.tab
+./ldata/frontft2.dat
+./ldata/frontft2.tab
+./ldata/frontft3.dat
+./ldata/frontft3.tab
+./ldata/frontft4.dat
+./ldata/frontft4.tab
+./ldata/fronttor.dat
+./ldata/fronttor.tab
+./ldata/intromix.smk
+./ldata/maphand.dat
+./ldata/maphand.tab
+./ldata/netflag.dat
+./ldata/netflag.tab
+./ldata/netfont.dat
+./ldata/netfont.tab
+./ldata/outromix.smk
+./ldata/torture.pal
+./ldata/torture.raw
+
+# Notes on ldata files NOT listed here:
+#   bullfrog.smk, ea.smk      -- CD-only intro videos; absent from Steam install; optional at runtime
+#   lndflag_ens/pin.*, netflag_ens/pin.* -- Provided by the KFX build (pkg/ldata/), not from DK
+
+# Music: Steam stores ogg files in the install root, not a music/ subdirectory
+./keeper02.ogg
+./keeper03.ogg
+./keeper04.ogg
+./keeper05.ogg
+./keeper06.ogg
+./keeper07.ogg
 
 ./sound/atmos1.sbk
 ./sound/atmos2.sbk

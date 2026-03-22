@@ -1,37 +1,241 @@
-// KeeperFX Launch Configuration
-//
-// Prerequisites:
-//   1. Docker Desktop running
-//   2. Run "Init .deploy/" task once to populate game data into .deploy/
-//
-// F5 triggers "Build & Deploy Windows Debug" which cross-compiles via the
-// mingw32 Docker container and copies the exe to .deploy/ before launching.
-//
-// Source file paths embedded in DWARF debug info use /src (the Docker mount
-// point). The sourceFileMap below translates them back to your workspace.
 {
-"version": "0.2.0",
-"configurations": [
-{
-"name": "Debug keeperfx",
-"type": "cppdbg",
-"request": "launch",
-"program": "${workspaceFolder}/.deploy/keeperfx.exe",
-"cwd": "${workspaceFolder}/.deploy",
-"args": [],
-"windows": {
-"miDebuggerPath": "${workspaceFolder}/.vscode/gdb.exe"
-},
-"MIMode": "gdb",
-"setupCommands": [
-{ "description": "Enable pretty-printing", "text": "-enable-pretty-printing", "ignoreFailures": true },
-{ "description": "Intel disassembly flavour", "text": "-gdb-set disassembly-flavor intel", "ignoreFailures": true }
-],
-"sourceFileMap": { "/src": "${workspaceFolder}" },
-"preLaunchTask": "Build & Deploy Windows Debug",
-"externalConsole": true,
-"stopAtEntry": false,
-"logging": { "moduleLoad": false }
-}
-]
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug KeeperFX (Windows MSVC)",
+      // F5 — Native MSVC build (no Docker). Builds with cl.exe, copies exe to .deploy/, launches with VS debugger.
+      // Run "Init .deploy/" once first to populate game data layers.
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/.deploy/keeperfx.exe",
+      "cwd": "${workspaceFolder}/.deploy",
+      "args": ["-nointro"],
+      "visualizerFile": "${workspaceFolder}/.vscode/keeperfx.natvis",
+      "showDisplayString": true,
+      "preLaunchTask": "Build & Deploy Windows MSVC Debug",
+      "externalConsole": true,
+      "stopAtEntry": false,
+      "internalConsoleOptions": "openOnSessionStart"
+    },
+    {
+      "name": "Debug KeeperFX (Windows Host)",
+      // Builds in Docker/MinGW container, copies exe to .deploy/, then launches + debugs on Windows host.
+      // Run \"Init .deploy/\" once first to populate game data layers.
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/.deploy/keeperfx.exe",
+      "cwd": "${workspaceFolder}/.deploy",
+      "args": [
+        "-nointro",
+        "-alex"
+      ],
+      "MIMode": "gdb",
+      "visualizerFile": "${workspaceFolder}/.vscode/keeperfx.natvis",
+      "showDisplayString": true,
+      "windows": {
+        "miDebuggerPath": "${workspaceFolder}/.vscode/gdb.exe"
+      },
+      "linux": {
+        "miDebuggerPath": "winegdb"
+      },
+      "setupCommands": [
+        {
+          "description": "Enable pretty-printing for gdb",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        },
+        {
+          "description": "Set disassembly flavor to Intel",
+          "text": "-gdb-set disassembly-flavor intel",
+          "ignoreFailures": true
+        },
+        {
+          "description": "Improve value readability in Watch/Locals",
+          "text": "-interpreter-exec console \"set print pretty on\"",
+          "ignoreFailures": true
+        },
+        {
+          "description": "Avoid truncating arrays/strings in prints",
+          "text": "-interpreter-exec console \"set print elements 0\"",
+          "ignoreFailures": true
+        },
+        {
+          "description": "Stop C strings at null terminator",
+          "text": "-interpreter-exec console \"set print null-stop on\"",
+          "ignoreFailures": true
+        },
+        {
+          "description": "Hide noisy array indexes in GDB prints",
+          "text": "-interpreter-exec console \"set print array-indexes off\"",
+          "ignoreFailures": true
+        },
+        {
+          "description": "Load KeeperFX GDB pretty printers (char[] fields show as strings)",
+          "text": "-interpreter-exec console \"python exec(open(r'${workspaceFolder}/.vscode/keeperfx-gdb-printers.py').read())\"",
+          "ignoreFailures": true
+        }
+      ],
+      "sourceFileMap": {
+        "/src": "${workspaceFolder}"
+      },
+      "preLaunchTask": "Build & Deploy Windows Debug",
+      "externalConsole": true,
+      "stopAtEntry": false,
+      "internalConsoleOptions": "openOnSessionStart"
+    },
+    {
+      "name": "Devcontainer F5 (Wine)",
+      // Use this profile when working inside the MinGW devcontainer.
+      // Builds natively with the container's own compiler (no Docker-in-Docker),
+      // then launches keeperfx.exe under Wine with GDB attached.
+      // One-time setup: run task \"Install Devcontainer Wine Debugger\" first.
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/.deploy/keeperfx.exe",
+      "cwd": "${workspaceFolder}/.deploy",
+      "args": [
+        "-nointro",
+        "-alex"
+      ],
+      "MIMode": "gdb",
+      "miDebuggerPath": "${workspaceFolder}/.vscode/wine_debugger.sh",
+      "visualizerFile": "${workspaceFolder}/.vscode/keeperfx.natvis",
+      "showDisplayString": true,
+      "setupCommands": [
+        {
+          "description": "Enable pretty-printing for gdb",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        },
+        {
+          "description": "Set disassembly flavor to Intel",
+          "text": "-gdb-set disassembly-flavor intel",
+          "ignoreFailures": true
+        },
+        {
+          "description": "Improve value readability in Watch/Locals",
+          "text": "-interpreter-exec console \"set print pretty on\"",
+          "ignoreFailures": true
+        },
+        {
+          "description": "Avoid truncating arrays/strings in prints",
+          "text": "-interpreter-exec console \"set print elements 0\"",
+          "ignoreFailures": true
+        },
+        {
+          "description": "Stop C strings at null terminator",
+          "text": "-interpreter-exec console \"set print null-stop on\"",
+          "ignoreFailures": true
+        },
+        {
+          "description": "Hide noisy array indexes in GDB prints",
+          "text": "-interpreter-exec console \"set print array-indexes off\"",
+          "ignoreFailures": true
+        },
+        {
+          "description": "Load KeeperFX GDB pretty printers (char[] fields show as strings)",
+          "text": "-interpreter-exec console \"python exec(open(r'${workspaceFolder}/.vscode/keeperfx-gdb-printers.py').read())\"",
+          "ignoreFailures": true
+        }
+      ],
+      "preLaunchTask": "Devcontainer F5 Prep (Windows Debug)",
+      "externalConsole": false,
+      "stopAtEntry": false,
+      "internalConsoleOptions": "openOnSessionStart"
+    },
+    {
+      "name": "Debug KeeperFX (Vita GDB)",
+      // Attaches gdb-multiarch to the vita-uvdb GDB stub running on the Vita.
+      // Pre-requisites:
+      //   1. Run "Setup Vita uvdb" once to install kubridge.skprx on the device.
+      //   2. Rebuild the vitasdk Docker image: docker compose build vitasdk
+      //   3. Run "Build & Deploy Vita GDB" task (or F5 will trigger it automatically).
+      //   4. The game starts and blocks waiting for GDB — then F5 continues it.
+      // The game pauses again on any crash (data abort → uvdb → GDB).
+      // Override the IP by setting VITA_IP in your environment (devcontainer remoteEnv).
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/out/build/vita-gdb/keeperfx",
+      "MIMode": "gdb",
+      "miDebuggerPath": "gdb-multiarch",
+      "miDebuggerServerAddress": "192.168.0.66:1234",
+      "launchCompleteCommand": "exec-continue",
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "setupCommands": [
+        {
+          "description": "Set architecture to ARMv7",
+          "text": "-gdb-set architecture armv7",
+          "ignoreFailures": false
+        },
+        {
+          "description": "Enable pretty-printing",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        },
+        {
+          "description": "Set print pretty on",
+          "text": "-interpreter-exec console \"set print pretty on\"",
+          "ignoreFailures": true
+        },
+        {
+          "description": "Avoid truncating arrays/strings",
+          "text": "-interpreter-exec console \"set print elements 0\"",
+          "ignoreFailures": true
+        },
+        {
+          "description": "Source map: /src → workspace (for Docker-built symbols)",
+          "text": "-interpreter-exec console \"set substitute-path /src ${workspaceFolder}\"",
+          "ignoreFailures": true
+        }
+      ],
+      "preLaunchTask": "Build & Deploy Vita GDB",
+      "postDebugTask": "Kill Vita App",
+      "internalConsoleOptions": "openOnSessionStart"
+    },
+    {
+      "name": "Attach KeeperFX (Vita GDB)",
+      // Use this when the Vita is already running with the GDB stub waiting on port 1234.
+      // Skips build/deploy — just attaches gdb-multiarch directly.
+      // Override the IP by setting VITA_IP in your environment (devcontainer remoteEnv).
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/out/build/vita-gdb/keeperfx",
+      "MIMode": "gdb",
+      "miDebuggerPath": "gdb-multiarch",
+      "miDebuggerServerAddress": "192.168.0.66:1234",
+      "launchCompleteCommand": "exec-continue",
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "setupCommands": [
+        {
+          "description": "Set architecture to ARMv7",
+          "text": "-gdb-set architecture armv7",
+          "ignoreFailures": false
+        },
+        {
+          "description": "Enable pretty-printing",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        },
+        {
+          "description": "Set print pretty on",
+          "text": "-interpreter-exec console \"set print pretty on\"",
+          "ignoreFailures": true
+        },
+        {
+          "description": "Avoid truncating arrays/strings",
+          "text": "-interpreter-exec console \"set print elements 0\"",
+          "ignoreFailures": true
+        },
+        {
+          "description": "Source map: /src → workspace (for Docker-built symbols)",
+          "text": "-interpreter-exec console \"set substitute-path /src ${workspaceFolder}\"",
+          "ignoreFailures": true
+        }
+      ],
+      "postDebugTask": "Kill Vita App",
+      "internalConsoleOptions": "openOnSessionStart"
+    }
+  ]
 }

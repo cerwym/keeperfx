@@ -88,6 +88,10 @@ public:
     
     // State query
     TbBool IsReady() const { return m_initialized; }
+
+    /** Read-only access to the registered effect list.
+     *  Used by RendererVita to collect GPU passes during EndFrame(). */
+    const std::vector<LensEffect*>& GetEffects() const { return m_effects; }
     
     // Helper: Copy buffer with pitch
     static void CopyBuffer(unsigned char *dst, long dstpitch,

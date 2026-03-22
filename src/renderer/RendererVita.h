@@ -4,17 +4,10 @@
 /** @file RendererVita.h
  *     PlayStation Vita renderer backend declaration.
  * @par Purpose:
- *     IRenderer implementation for the PlayStation Vita.
+ *     IRenderer for the PlayStation Vita — vitaGL GPU palette shader path.
  *
- *     When VITA_HAVE_VITAGL is defined at compile time AND vitaGL
- *     pre-initialises successfully at runtime (vita_vitagl_preinit()),
- *     the GPU palette-lookup path is used:
- *       8-bit indexed framebuffer → GL_LUMINANCE texture → Cg palette
- *       shader → 960×544 screen.  Zero CPU per-pixel cost.
- *
- *     If vitaGL is not available or pre-init fails, falls back to:
- *       SDL2 blit path — palette-expand on CPU, SDL_UpdateTexture,
- *       SDL_RenderCopy.
+ *     8-bit indexed framebuffer → GL_LUMINANCE texture → Cg palette
+ *     shader → 960×544 screen.  Zero CPU per-pixel cost.
  */
 /******************************************************************************/
 #ifndef RENDERER_VITA_H
@@ -24,12 +17,12 @@
 
 #include "IRenderer.h"
 
-#ifdef VITA_HAVE_VITAGL
 #include <vitaGL.h>
-#endif
+#include "renderer/vita/VitaBlitShader.h"
+#include "renderer/vita/VitaPassthroughPass.h"
 
 /**
- * Vita renderer backend.  Tries vitaGL at runtime; falls back to SDL2.
+ * Vita renderer backend — vitaGL GPU palette shader path.
  */
 class RendererVita : public IRenderer {
 public:
@@ -45,15 +38,9 @@ public:
     uint8_t* LockFramebuffer(int* out_pitch) override;
     void UnlockFramebuffer() override;
 
-    const char* GetName() const override {
-#ifdef VITA_HAVE_VITAGL
-        return m_use_vitagl ? "Vita (vitaGL palette shader)"
-                            : "Vita (SDL2 blit fallback)";
-#else
-        return "Vita (SDL2 blit)";
-#endif
-    }
+    const char* GetName() const override { return "Vita (vitaGL palette shader)"; }
     bool SupportsRuntimeSwitch() const override { return false; }
+    bool SupportsGPUPasses() const override { return true; }
 
 private:
     static const int k_gameW = 640;
@@ -61,30 +48,21 @@ private:
 
     bool m_initialized = false;
 
-#ifdef VITA_HAVE_VITAGL
-    bool   m_use_vitagl  = false; /**< true when vitaGL preinit succeeded */
-
-    // vitaGL GPU path members
     GLuint m_index_tex   = 0;   /**< 640×480 GL_LUMINANCE: 8-bit palette indices */
     GLuint m_palette_tex = 0;   /**< 256×1  GL_RGBA:       expanded palette colours */
-    GLuint m_vert_shader = 0;
-    GLuint m_frag_shader = 0;
-    GLuint m_program     = 0;
-    GLint  m_loc_index   = -1;  /**< uniform "indexTex"   */
-    GLint  m_loc_palette = -1;  /**< uniform "paletteTex" */
-#endif
 
-    // SDL2 CPU blit path members (always compiled in; used when vitaGL unavailable)
-    struct SDL_Renderer* m_renderer   = nullptr;
-    struct SDL_Texture*  m_texture    = nullptr;
-    uint8_t*             m_rgbaBuffer = nullptr;
-    int                  m_surfW      = 0;
-    int                  m_surfH      = 0;
-    uint32_t             m_paletteLut[256] = {};
+    VitaBlitShader m_blit;      /**< fullscreen palette-decode blit shader */
+    VitaPassthroughPass m_passthrough; /**< stage-3 final blit to screen (960x544) */
 
-    bool EnsureSurface(int w, int h);
-    void RebuildPaletteLut();
-    void ExpandPaletteFrom(const uint8_t* src);
+    /** Post-process FBOs — ping-pong between m_pass_fbo_a/b for GPU passes.
+     *  m_scene_fbo holds the RGBA-decoded scene produced by m_blit.
+     *  Each IPostProcessPass reads from the src texture and writes to the dst FBO. */
+    GLuint m_scene_fbo   = 0;   /**< decoded RGBA 640×480 scene render target */
+    GLuint m_scene_tex   = 0;
+    GLuint m_pass_fbo_a  = 0;   /**< ping-pong FBO A */
+    GLuint m_pass_tex_a  = 0;
+    GLuint m_pass_fbo_b  = 0;   /**< ping-pong FBO B */
+    GLuint m_pass_tex_b  = 0;
 };
 
 #endif // PLATFORM_VITA

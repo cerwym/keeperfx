@@ -1,0 +1,19 @@
+#!/bin/bash
+# post-checkout: Friendly reminder when switching to master.
+
+prev_ref="$1"
+new_ref="$2"
+branch_flag="$3"  # 1 = branch checkout, 0 = file checkout
+
+if [ "$branch_flag" != "1" ]; then
+    exit 0
+fi
+
+branch=$(git symbolic-ref --short HEAD 2>/dev/null)
+
+if [ "$branch" = "master" ]; then
+    echo ""
+    echo "  You're on master (upstream mirror)."
+    echo "  Don't commit here — branch off develop for new work."
+    echo ""
+fi

@@ -77,7 +77,7 @@
 extern "C" {
 #endif
 
-#if defined(__MINGW32__)
+#if defined(__MINGW32__) || defined(_MSC_VER)
 
 // Copied from stack overflow because MingW doesn't provide it.
 char *strsep(char ** stringp, const char * delim) {
@@ -2142,6 +2142,15 @@ TbBool cmd_luatypedump(PlayerNumber plyr_idx, char * args)
     return true;
 }
 
+TbBool cmd_wireframe(PlayerNumber plyr_idx, char * args)
+{
+    toggle_flag(start_params.debug_flags, DFlg_Wireframe);
+    TbBool on = flag_is_set(start_params.debug_flags, DFlg_Wireframe);
+    targeted_message_add(MsgType_Player, plyr_idx, plyr_idx, GUI_MESSAGES_DELAY,
+        "Wireframe mode %s", on ? "on" : "off");
+    return true;
+}
+
 TbBool cmd_cheat_menu(PlayerNumber plyr_idx, char * args)
 {
     if (game.easter_eggs_enabled == false) {
@@ -2297,6 +2306,7 @@ static const struct ConsoleCommand console_commands[] = {
     { "lua", cmd_lua},
     { "luatypedump", cmd_luatypedump},
     { "cheat.menu", cmd_cheat_menu},
+    { "wireframe", cmd_wireframe},
 };
 static const int console_command_count = sizeof(console_commands) / sizeof(*console_commands);
 

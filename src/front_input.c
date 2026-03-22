@@ -78,6 +78,7 @@
 #include "KeeperSpeech.h"
 
 #include <math.h>
+#include "platform/kfx_breadcrumb.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -2740,6 +2741,7 @@ TbBool active_menu_functions_while_paused()
  */
 short get_inputs(void)
 {
+    KFX_BREADCRUMB("get_inputs");
     if ((game.mode_flags & MFlg_IsDemoMode) != 0)
     {
         SYNCDBG(5,"Starting for demo mode");

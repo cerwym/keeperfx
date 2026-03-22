@@ -36,6 +36,7 @@
 #include "../../game_legacy.h"
 
 #include "../../keeperfx.hpp"
+#include "../../renderer/RendererManager.h"
 #include "../../post_inc.h"
 
 /******************************************************************************/
@@ -256,6 +257,15 @@ void LensManager::Draw(unsigned char* srcbuf, unsigned char* dstbuf,
     TbBool rendered = false;
     for (LensEffect* effect : m_effects) {
         if (effect->IsEnabled()) {
+            // When the active renderer supports GPU post-process passes and
+            // this effect provides one, skip the CPU Draw() path — the GPU
+            // renderer handles it in EndFrame().  GetGPUPass() returns nullptr
+            // and SupportsGPUPasses() returns false on all CPU-only platforms,
+            // so this condition is always false there at zero cost.
+            if (effect->GetGPUPass() != nullptr && RendererGetActive()->SupportsGPUPasses()) {
+                rendered = true; // treat as rendered so fallback copy is suppressed
+                continue;
+            }
             if (effect->Draw(&ctx)) {
                 rendered = true;
             }

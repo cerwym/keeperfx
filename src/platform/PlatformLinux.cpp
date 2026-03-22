@@ -1,6 +1,7 @@
 #include "kfx_memory.h"
 #include "pre_inc.h"
 #include "platform/PlatformLinux.h"
+#include <SDL2/SDL.h>
 #include <string>
 #include <memory>
 #include <sys/types.h>
@@ -60,6 +61,13 @@ void PlatformLinux::ErrorParachuteInstall()
 
 void PlatformLinux::ErrorParachuteUpdate()
 {
+}
+
+void PlatformLinux::VideoInit()
+{
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK) < 0)
+        fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
+    atexit(SDL_Quit);
 }
 
 // ----- File system helpers -----
@@ -299,4 +307,9 @@ long PlatformLinux::FileLength(const char* fname)
 int PlatformLinux::FileDelete(const char* fname)
 {
     return remove(fname) ? -1 : 1;
+}
+
+IWindowSystem* PlatformLinux::GetWindowSystem()
+{
+    return GetSDLWindowSystem();
 }

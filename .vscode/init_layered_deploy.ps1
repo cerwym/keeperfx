@@ -1,176 +1,162 @@
-#!/usr/bin/env pwsh
-<#
-.SYNOPSIS
-    Creates a Docker-native layered deployment environment for local testing.
-
-.DESCRIPTION
-    Initializes the .deploy/ directory by assembling all layers via Docker:
-
-    Layer 0 (DK originals)  — extracted from keeperfx-dk-originals:local image
-    Layer 1 (SDL2 DLLs)     — extracted from keeperfx-build-mingw32:latest image
-    Layer 2 (KFX gfx data)  — built by Docker and extracted to .deploy/data/ + .deploy/ldata/
-    Layer 3 (Repo assets)   — Windows junctions → live edits in VS Code instant in .deploy/
-    Layer 4 (Executable)    — populated by compile task on each build
-
-    The DK originals image is built once per machine by init_dk_layer.ps1.
-    If not present, this script will run it automatically.
-
-    No clean master directory needed. No per-worktree prompts.
-
-.EXAMPLE
-    .\.vscode\init_layered_deploy.ps1
-#>
-
-[CmdletBinding()]
 param(
-    [Parameter(Mandatory=$false)]
-    [string]$WorkspaceFolder = (Split-Path -Parent $PSScriptRoot),
-
-    [Parameter(Mandatory=$false)]
-    [switch]$Force
+    [Parameter(Mandatory=$true)]
+    [string]$WorkspaceFolder,
+    [string]$DkInstallPath
 )
 
-Set-StrictMode -Version Latest
-$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = "Stop"
 
-$script:C = @{
-    Reset  = "`e[0m"; Green  = "`e[32m"; Yellow = "`e[33m"
-    Blue   = "`e[34m"; Red   = "`e[31m"; Cyan   = "`e[36m"; Gray = "`e[90m"
-}
-function Write-C([string]$Msg, [string]$Color = 'Reset') {
-    Write-Host "$($script:C[$Color])$Msg$($script:C.Reset)"
-}
-
-$DEPLOY      = Join-Path $WorkspaceFolder ".deploy"
-$DK_IMAGE    = "keeperfx-dk-originals:local"
-
-Write-C "=== KeeperFX Layered Deploy Init ===" 'Cyan'
-Write-Host ""
-
-# Handle existing deploy directory
-if (Test-Path $DEPLOY) {
-    if (-not $Force) {
-        Write-C "Deployment already exists at: $DEPLOY" 'Yellow'
-        $r = Read-Host "Delete and recreate? (y/N)"
-        if ($r -ne 'y') { Write-C "Aborted." 'Yellow'; exit 0 }
+function Assert-Command {
+    param([string]$Name)
+    if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
+        throw "Required command '$Name' was not found in PATH."
     }
-    Write-C "Removing existing deployment..." 'Yellow'
-    & "$PSScriptRoot\reset_layered_deploy.ps1" -Force
 }
 
-New-Item -ItemType Directory -Path $DEPLOY -Force | Out-Null
-New-Item -ItemType Directory -Path (Join-Path $DEPLOY "data")  -Force | Out-Null
-New-Item -ItemType Directory -Path (Join-Path $DEPLOY "sound") -Force | Out-Null
+Assert-Command docker
 
-# ── Layer 0: DK originals ─────────────────────────────────────────────────────
-Write-C "`nLayer 0: DK original files" 'Green'
+$workspace = (Resolve-Path $WorkspaceFolder).Path
+$deployDir = Join-Path $workspace ".deploy"
+$deployData = Join-Path $deployDir "data"
+$deploySound = Join-Path $deployDir "sound"
+$deployLevels = Join-Path $deployDir "levels"
+$composeFile = Join-Path $workspace "docker/compose.yml"
+$initDkScript = Join-Path $workspace ".vscode/init_dk_layer.ps1"
 
-$imageExists = docker image inspect $DK_IMAGE 2>$null
+if (-not (Test-Path $composeFile)) {
+    throw "Compose file not found: $composeFile"
+}
+if (-not (Test-Path $initDkScript)) {
+    throw "Script not found: $initDkScript"
+}
+
+Write-Host "Ensuring local DK originals layer exists..." -ForegroundColor Cyan
+if ($DkInstallPath) {
+    & $initDkScript -WorkspaceFolder $workspace -DkInstallPath $DkInstallPath
+} else {
+    & $initDkScript -WorkspaceFolder $workspace
+}
 if ($LASTEXITCODE -ne 0) {
-    Write-C "  Image '$DK_IMAGE' not found. Running one-time setup..." 'Yellow'
-    & "$PSScriptRoot\init_dk_layer.ps1" -WorkspaceFolder $WorkspaceFolder
-    if ($LASTEXITCODE -ne 0) { Write-C "ERROR: DK layer setup failed." 'Red'; exit 1 }
+    throw "Failed to initialize DK layer image."
 }
 
-$cid = docker create $DK_IMAGE /no-op 2>&1
-docker cp "${cid}:/dk/data/."  (Join-Path $DEPLOY "data")  | Out-Null
-docker cp "${cid}:/dk/sound/." (Join-Path $DEPLOY "sound") | Out-Null
-docker rm $cid | Out-Null
-Write-C "  ✓ 16 original DK files extracted" 'Green'
+Write-Host "Creating .deploy scaffold..." -ForegroundColor Cyan
+New-Item -ItemType Directory -Force -Path $deployData | Out-Null
+New-Item -ItemType Directory -Force -Path $deploySound | Out-Null
+New-Item -ItemType Directory -Force -Path $deployLevels | Out-Null
 
-# ── Layer 1: SDL2 DLLs (skipped — SDL2 is statically linked) ─────────────────
-# All SDL2 libraries are linked statically into keeperfx.exe.
-# No SDL2*.dll files are needed at runtime.
-Write-C "`nLayer 1: SDL2 DLLs — skipped (statically linked)" 'Gray'
-
-# ── Layer 2: KFX generated gfx data ──────────────────────────────────────────
-Write-C "`nLayer 2: KFX generated graphics data" 'Green'
-
-$pkgData  = Join-Path $WorkspaceFolder "pkg\data"
-$pkgLdata = Join-Path $WorkspaceFolder "pkg\ldata"
-$hashFile = Join-Path $WorkspaceFolder "pkg\.gfx-hash"
-
-# Ensure gfx submodule is initialized
-$subStatus = (git -C $WorkspaceFolder submodule status gfx 2>&1)
-if ($subStatus -match '^-') {
-    Write-C "  Initializing gfx submodule..." 'Yellow'
-    git -C $WorkspaceFolder submodule update --init gfx 2>&1 | Out-Null
-    $subStatus = (git -C $WorkspaceFolder submodule status gfx 2>&1)
-}
-
-# Parse current submodule commit hash (works whether initialized or not)
-$currentHash = if ($subStatus -match '^\s*[-+]?([0-9a-f]{40})\s') { $Matches[1] } else { $null }
-$cachedHash  = if (Test-Path $hashFile) { (Get-Content $hashFile -Raw).Trim() } else { "" }
-
-if (-not $currentHash) {
-    Write-C "  ⚠  gfx submodule not available — SSH key may be required" 'Yellow'
-    Write-C "     Run: git submodule update --init gfx  then re-run this init" 'Yellow'
-} elseif ((Test-Path $pkgData) -and ($currentHash -eq $cachedHash)) {
-    Write-C "  ✓ gfx data up to date (hash $($currentHash.Substring(0,8)))" 'Green'
+$dkStage = Join-Path $workspace ".local/dk-stage"
+$dkConfigPath = Join-Path $workspace ".local/dk-install-path.txt"
+if ((Test-Path (Join-Path $dkStage "data")) -and (Test-Path (Join-Path $dkStage "sound"))) {
+    Write-Host "Copying DK originals from normalized local stage..." -ForegroundColor Cyan
+    Copy-Item (Join-Path $dkStage "data/*") $deployData -Recurse -Force
+    Copy-Item (Join-Path $dkStage "sound/*") $deploySound -Recurse -Force
+} elseif (Test-Path $dkConfigPath) {
+    $dkRoot = (Get-Content $dkConfigPath -Raw).Trim()
+    if ([string]::IsNullOrWhiteSpace($dkRoot) -or -not (Test-Path $dkRoot)) {
+        throw "Cached DK install path is invalid; rerun Init DK Originals Layer."
+    }
+    Write-Host "Copying DK originals directly from cached install path..." -ForegroundColor Cyan
+    Copy-Item (Join-Path $dkRoot "data/*") $deployData -Recurse -Force
+    Copy-Item (Join-Path $dkRoot "sound/*") $deploySound -Recurse -Force
 } else {
-    $reason = if (-not (Test-Path $pkgData)) { "no cached output" } else { "submodule changed ($($currentHash.Substring(0,8)))" }
-    Write-C "  Building pkg-gfx ($reason)..." 'Yellow'
-    docker compose -f (Join-Path $WorkspaceFolder "docker\compose.yml") `
-        run --rm linux bash -c "make pkg-gfx -j\$(nproc)"
-    if ($LASTEXITCODE -eq 0) {
-        New-Item -ItemType Directory -Path (Split-Path $hashFile) -Force | Out-Null
-        Set-Content $hashFile $currentHash
-        Write-C "  ✓ pkg-gfx built (hash $($currentHash.Substring(0,8)))" 'Green'
-    } else {
-        Write-C "  ⚠  pkg-gfx build failed" 'Yellow'
+    throw "No DK source found. Rerun Init DK Originals Layer."
+}
+
+if (Test-Path $dkConfigPath) {
+    $dkRootFromCfg = (Get-Content $dkConfigPath -Raw).Trim()
+    $dkLevels = Join-Path $dkRootFromCfg "levels"
+    if (-not [string]::IsNullOrWhiteSpace($dkRootFromCfg) -and (Test-Path $dkLevels)) {
+        Write-Host "Copying original DK levels into .deploy/levels..." -ForegroundColor Cyan
+        Copy-Item (Join-Path $dkLevels "*") $deployLevels -Recurse -Force
     }
 }
 
-# Deploy whatever is available
+Write-Host "Building KeeperFX asset packages (pkg-gfx/pkg-languages/pkg-sfx)..." -ForegroundColor Cyan
+docker compose -f "$composeFile" run --rm linux bash -lc "make -j1 pkg-gfx && make -j1 pkg-languages && make -j1 pkg-sfx"
+if ($LASTEXITCODE -ne 0) {
+    throw "Asset packaging failed."
+}
+
+Write-Host "Staging generated pkg assets into .deploy..." -ForegroundColor Cyan
+$pkgData = Join-Path $workspace "pkg/data"
+$pkgLdata = Join-Path $workspace "pkg/ldata"
+$pkgFxdata = Join-Path $workspace "pkg/fxdata"
+$pkgCampgns = Join-Path $workspace "pkg/campgns"
+$pkgLevels = Join-Path $workspace "pkg/levels"
+$deployLdata = Join-Path $deployDir "ldata"
+$deployFxdata = Join-Path $deployDir "fxdata"
+$deployCampgns = Join-Path $deployDir "campgns"
+$deployLevels = Join-Path $deployDir "levels"
+
 if (Test-Path $pkgData) {
-    Copy-Item (Join-Path $pkgData "*") (Join-Path $DEPLOY "data") -Force
-    Write-C "  ✓ pkg/data/ deployed" 'Green'
-} else {
-    Write-C "  ⚠  pkg/data/ not found — Layer 2 incomplete" 'Yellow'
+    Copy-Item "$pkgData\*" $deployData -Recurse -Force
 }
 if (Test-Path $pkgLdata) {
-    New-Item -ItemType Directory -Path (Join-Path $DEPLOY "ldata") -Force | Out-Null
-    Copy-Item (Join-Path $pkgLdata "*") (Join-Path $DEPLOY "ldata") -Force
-    Write-C "  ✓ pkg/ldata/ deployed" 'Green'
+    New-Item -ItemType Directory -Force -Path $deployLdata | Out-Null
+    Copy-Item "$pkgLdata\*" $deployLdata -Recurse -Force
+}
+if (Test-Path $pkgFxdata) {
+    New-Item -ItemType Directory -Force -Path $deployFxdata | Out-Null
+    Copy-Item "$pkgFxdata\*" $deployFxdata -Recurse -Force
+}
+if (Test-Path $pkgCampgns) {
+    New-Item -ItemType Directory -Force -Path $deployCampgns | Out-Null
+    Copy-Item "$pkgCampgns\*" $deployCampgns -Recurse -Force
+}
+if (Test-Path $pkgLevels) {
+    New-Item -ItemType Directory -Force -Path $deployLevels | Out-Null
+    Copy-Item "$pkgLevels\*" $deployLevels -Recurse -Force
 }
 
-# ── Layer 3: Repo assets (Windows junctions — live edits) ─────────────────────
-Write-C "`nLayer 3: Repo asset junctions (live editing)" 'Green'
+# Keep DK/release-provided sound banks for runtime. pkg/sound assets are not
+# guaranteed to match the expected bank layout consumed by bflib_sndlib.
 
-$junctions = @{
-    "campgns" = "campgns"
-    "levels"  = "levels"
-    "lang"    = "lang"
-    "fxdata"  = "fxdata"
-    "config"  = "config"
+# KeeperFX community maps (classic/standard/lostlvls) ship their binary data
+# only in the official "complete" release archive, not in the git repo.
+# Download and extract them when needed.
+$kfxReleaseUrl = "https://github.com/dkfans/keeperfx/releases/download/v1.3.1/keeperfx_1_3_1_complete.7z"
+$kfxCacheDir = Join-Path $workspace ".local/kfx-complete"
+$kfxArchive = Join-Path $kfxCacheDir "keeperfx_1_3_1_complete.7z"
+$kfxExtracted = Join-Path $kfxCacheDir "extracted"
+$sevenZip = "C:\Program Files\7-Zip\7z.exe"
+
+$needRelease = $false
+foreach ($pack in @("classic", "standard", "lostlvls")) {
+    $packDir = Join-Path $deployLevels $pack
+    $hasDat = (Get-ChildItem $packDir -File -Filter "*.dat" -ErrorAction SilentlyContinue).Count -gt 0
+    if (-not $hasDat) { $needRelease = $true; break }
 }
 
-foreach ($pair in $junctions.GetEnumerator()) {
-    $src  = Join-Path $WorkspaceFolder $pair.Value
-    $dest = Join-Path $DEPLOY $pair.Key
-    if (Test-Path $src) {
-        cmd /c mklink /J "$dest" "$src" 2>&1 | Out-Null
-        if ($LASTEXITCODE -eq 0) {
-            Write-C "  ✓ $($pair.Key) -> repo/$($pair.Value)" 'Green'
-        } else {
-            Write-C "  ✗ Failed to create junction for $($pair.Key)" 'Red'
-        }
-    } else {
-        Write-C "  ⚠  $($pair.Value) not found in repo — skipping junction" 'Yellow'
+if ($needRelease -and (Test-Path $sevenZip)) {
+    Write-Host "Community map binaries missing; sourcing from KeeperFX release archive..." -ForegroundColor Cyan
+    New-Item -ItemType Directory -Force -Path $kfxCacheDir | Out-Null
+    if (-not (Test-Path $kfxArchive)) {
+        Write-Host "Downloading keeperfx complete release (~356 MB)..." -ForegroundColor Yellow
+        Invoke-WebRequest -Uri $kfxReleaseUrl -OutFile $kfxArchive -UseBasicParsing
     }
+    if (-not (Test-Path (Join-Path $kfxExtracted "levels"))) {
+        Write-Host "Extracting map pack levels..." -ForegroundColor Yellow
+        New-Item -ItemType Directory -Force -Path $kfxExtracted | Out-Null
+        & $sevenZip x $kfxArchive -o"$kfxExtracted" -y 'levels\classic\*' 'levels\standard\*' 'levels\lostlvls\*' | Out-Null
+    }
+    foreach ($pack in @("classic", "standard", "lostlvls")) {
+        $src = Join-Path $kfxExtracted "levels/$pack"
+        $dst = Join-Path $deployLevels $pack
+        if (Test-Path $src) {
+            New-Item -ItemType Directory -Force -Path $dst | Out-Null
+            Copy-Item "$src\*" $dst -Recurse -Force
+            Write-Host "  Hydrated levels/$pack from release archive." -ForegroundColor Green
+        }
+    }
+} elseif ($needRelease) {
+    Write-Host "WARNING: Community map binaries missing and 7-Zip not found at $sevenZip. Free Play maps will be unavailable." -ForegroundColor Yellow
 }
 
-# Placeholder keeperfx.cfg at root (game expects it there)
-$cfgSrc = Join-Path $WorkspaceFolder "config\keeperfx.cfg"
-if (Test-Path $cfgSrc) {
-    cmd /c mklink /H (Join-Path $DEPLOY "keeperfx.cfg") "$cfgSrc" 2>&1 | Out-Null
-    Write-C "  ✓ keeperfx.cfg (hard link)" 'Green'
+Write-Host "Running runtime asset preflight checks..." -ForegroundColor Cyan
+& (Join-Path $workspace ".vscode/validate_runtime_assets.ps1") -WorkspaceFolder $workspace -DeploySubdir ".deploy"
+if ($LASTEXITCODE -ne 0) {
+    throw "Runtime asset preflight failed. See .deploy/runtime-asset-report.txt"
 }
 
-# ── Done ──────────────────────────────────────────────────────────────────────
-Write-Host ""
-Write-C "=== Deployment Ready ===" 'Cyan'
-Write-C "Location: $DEPLOY" 'Blue'
-Write-C "Disk usage: ~25MB (junctions + Docker-extracted files)" 'Green'
-Write-Host ""
-Write-C "Next: press Ctrl+Shift+B in VS Code to build and deploy keeperfx.exe" 'Yellow'
+Write-Host ".deploy is initialized and layered for host runtime testing." -ForegroundColor Green

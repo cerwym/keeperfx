@@ -1,6 +1,7 @@
 #include "kfx_memory.h"
 #include "pre_inc.h"
 #include "platform/Platform3DS.h"
+#include "bflib_basics.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include "post_inc.h"
@@ -10,6 +11,11 @@ struct TbFileFind {};
 
 // TbFileInfo is defined here; it is an opaque type to all callers.
 struct TbFileInfo { FILE* fp; };
+
+void Platform3DS::SystemInit()
+{
+    LbErrorLogSetup(GetDataPath(), "keeperfx.log", 5);
+}
 
 const char* Platform3DS::GetOSVersion() const    { return "Nintendo 3DS"; }
 const void* Platform3DS::GetImageBase() const    { return nullptr; }

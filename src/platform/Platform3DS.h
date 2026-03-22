@@ -6,6 +6,7 @@
 /** Nintendo 3DS implementation of IPlatform (stub — extend as needed). */
 class Platform3DS : public IPlatform {
 public:
+    void SystemInit() override;
     const char* GetOSVersion() const override;
     const void* GetImageBase() const override;
     const char* GetWineVersion() const override;

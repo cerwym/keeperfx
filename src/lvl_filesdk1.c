@@ -126,8 +126,8 @@ struct LegacyInitLight { // sizeof=0x14
 unsigned char *load_single_map_file_to_buffer(LevelNumber lvnum,const char *fext,int32_t *ldsize,unsigned short flags)
 {
   short fgroup = get_level_fgroup(lvnum);
-  char* fname = prepare_file_fmtpath(fgroup, "map%05u.%s", lvnum, fext);
-  long fsize = LbFileLengthRnc(fname);
+  char* fname = get_game_file_path_fmt(fgroup, "map%05u.%s", lvnum, fext);
+  long fsize = (fname != NULL) ? LbFileLengthRnc(fname) : 0;
   if (fsize < *ldsize)
   {
       if ((flags & LMFF_Optional) == 0)
@@ -194,7 +194,7 @@ long level_lif_entry_parse(const char *fname, char *buf)
           break;
         }
         i++;
-        if (i >= 10000) // arbritarily big number to prevent an infinte loop if last line is a comment that doesn't have a new line at the end
+        if (i >= 10000) // arbitrarily big number to prevent an infinite loop if last line is a comment that doesn't have a new line at the end
         {
           WARNMSG("commented-out line from \"%s\" is too long at %ld characters", fname,i);
           return 0;
@@ -810,7 +810,7 @@ static TbBool load_kfx_toml_file(LevelNumber lv_num, const char *ext, const char
     // Validate total amount of sections
     if (total < 0)
     {
-        WARNMSG("Bad amount of secions in %s file", msg_name);
+        WARNMSG("Bad amount of sections in %s file", msg_name);
         value_fini(root_ptr);
         KfxFree(buf);
         return false;
@@ -1306,12 +1306,12 @@ short load_and_setup_map_info(unsigned long lv_num)
 static void load_ext_slabs(LevelNumber lvnum)
 {
     short fgroup = get_level_fgroup(lvnum);
-    char* fname = prepare_file_fmtpath(fgroup, "map%05lu.slx", (unsigned long)lvnum);
-    if (LbFileExists(fname))
+    char* fname = get_game_file_path_fmt(fgroup, "map%05lu.slx", (unsigned long)lvnum);
+    if (fname && LbFileExists(fname))
     {
         if (game.map_tiles_x * game.map_tiles_y != LbFileLoadAt(fname, game.slab_ext_data))
         {
-            JUSTLOG("Invalid ExtSlab data from %s", fname);
+            JUSTLOG("Invalid ExtSlab data from %s", fname != NULL ? fname : "");
             memset(game.slab_ext_data, 0, sizeof(game.slab_ext_data));
         }
         SYNCDBG(1, "ExtSlab file:%s ok", fname);
@@ -1326,21 +1326,24 @@ static void load_ext_slabs(LevelNumber lvnum)
 
 void load_map_string_data(struct GameCampaign *campgn, LevelNumber lvnum, short fgroup)
 {
-    char* fname = prepare_file_fmtpath(fgroup, "map%05lu.%s.dat", (unsigned long)lvnum, get_language_lwrstr(install_info.lang_id));
-    if (!LbFileExists(fname))
+    char* fname = get_game_file_path_fmt(fgroup, "map%05lu.%s.dat", (unsigned long)lvnum, get_language_lwrstr(install_info.lang_id));
+    if (!fname || !LbFileExists(fname))
     {
-        SYNCMSG("Map string file %s doesn't exist.", fname);
+        SYNCMSG("Map string file %s doesn't exist.", fname != NULL ? fname : "");
         char buf[2048];
-        buf[0] = 0;
-        memcpy(&buf, fname, 2048);
-        fname = prepare_file_fmtpath(fgroup, "map%05lu.%s.dat", (unsigned long)lvnum, get_language_lwrstr(campgn->default_language));
-        if (strcasecmp(fname, buf) == 0)
+      buf[0] = '\0';
+      if (fname)
+      {
+        snprintf(buf, sizeof(buf), "%s", fname);
+      }
+        fname = get_game_file_path_fmt(fgroup, "map%05lu.%s.dat", (unsigned long)lvnum, get_language_lwrstr(campgn->default_language));
+        if (!fname || strcasecmp(fname, buf) == 0)
         {
             return;
         }
         if (!LbFileExists(fname))
         {
-            SYNCMSG("Map string file %s doesn't exist.", fname);
+            SYNCMSG("Map string file %s doesn't exist.", fname != NULL ? fname : "");
             return;
         }
     }
@@ -1381,8 +1384,8 @@ static TbBool load_level_file(LevelNumber lvnum)
     TbBool result;
     TbBool new_format = true;
     short fgroup = get_level_fgroup(lvnum);
-    char* fname = prepare_file_fmtpath(fgroup, "map%05lu.slb", (unsigned long)lvnum);
-    if (LbFileExists(fname))
+    char* fname = get_game_file_path_fmt(fgroup, "map%05lu.slb", (unsigned long)lvnum);
+    if (fname && LbFileExists(fname))
     {
         result = true;
         struct GameCampaign *campgn = &campaign;
@@ -1403,6 +1406,11 @@ static TbBool load_level_file(LevelNumber lvnum)
           result = false;
         load_map_wibble_file(lvnum);
         load_and_setup_map_info(lvnum);
+        if (!game.texture_id)
+        {
+            ERRORLOG("Invalid texture id in map info file for level %lu", (unsigned long)lvnum);
+            game.texture_id = 0;
+        }
         load_texture_map_file(game.texture_id, lvnum, fgroup);
         if (new_format)
         {

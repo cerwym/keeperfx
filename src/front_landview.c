@@ -35,6 +35,7 @@
 #include "bflib_sndlib.h"
 #include "bflib_sound.h"
 #include "bflib_vidraw.h"
+#include "renderer/RendererManager.h"
 #include "bflib_network.h"
 #include "bflib_network_exchange.h"
 
@@ -109,10 +110,10 @@ long players_currently_in_session;
 /******************************************************************************/
 void draw_map_screen(void)
 {
-    copy_raw8_image_buffer(lbDisplay.WScreen,LbGraphicsScreenWidth(),LbGraphicsScreenHeight(),
+    RendererBlitRaw8(
         scale_value_landview(LANDVIEW_MAP_WIDTH), scale_value_landview(LANDVIEW_MAP_HEIGHT),
         -scale_value_landview(map_info.screen_shift_x), -scale_value_landview(map_info.screen_shift_y),
-        map_screen,LANDVIEW_MAP_WIDTH,LANDVIEW_MAP_HEIGHT);
+        map_screen, LANDVIEW_MAP_WIDTH, LANDVIEW_MAP_HEIGHT);
 }
 
 const struct TbSprite * get_map_ensign(long idx)
@@ -737,11 +738,11 @@ TbBool play_description_speech(LevelNumber lvnum, short play_good)
           WARNLOG("No extension specified for good speech file; defaulting to '.wav'.");
           char path[DISKPATH_SIZE];
           snprintf(path, sizeof(path), "%s.wav", lvinfo->speech_before);
-          fname = prepare_file_fmtpath(FGrp_AtlSound, "%s", path);
+          fname = get_game_file_path_fmt(FGrp_AtlSound, "%s", path);
       }
       else
       {
-          fname = prepare_file_fmtpath(FGrp_AtlSound,"%s",lvinfo->speech_before);
+          fname = get_game_file_path_fmt(FGrp_AtlSound,"%s",lvinfo->speech_before);
       }
       playing_good_descriptive_speech = 1;
     } else
@@ -754,11 +755,11 @@ TbBool play_description_speech(LevelNumber lvnum, short play_good)
           WARNLOG("No extension specified for evil speech file; defaulting to '.wav'.");
           char path[DISKPATH_SIZE];
           snprintf(path, sizeof(path), "%s.wav", lvinfo->speech_after);
-          fname = prepare_file_fmtpath(FGrp_AtlSound, "%s", path);
+          fname = get_game_file_path_fmt(FGrp_AtlSound, "%s", path);
       }
       else
       {
-          fname = prepare_file_fmtpath(FGrp_AtlSound,"%s",lvinfo->speech_after);
+          fname = get_game_file_path_fmt(FGrp_AtlSound,"%s",lvinfo->speech_after);
       }
       playing_bad_descriptive_speech = 1;
     }
@@ -927,8 +928,8 @@ TbBool load_map_and_window(LevelNumber lvnum)
         return false;
     }
     // Prepare full file name and load the image
-    char* fname = prepare_file_fmtpath(FGrp_LandView, "%s.raw", land_view);
-    long flen = LbFileLengthRnc(fname);
+    char* fname = get_game_file_path_fmt(FGrp_LandView, "%s.raw", land_view);
+    long flen = (fname != NULL) ? LbFileLengthRnc(fname) : 0;
     if (flen < 1024)
     {
         ERRORLOG("Land Map background \"%s.raw\" doesn't exist or is too small",land_view);
@@ -949,8 +950,8 @@ TbBool load_map_and_window(LevelNumber lvnum)
     unsigned char* ptr = block_mem;
     memcpy(frontend_backup_palette, &frontend_palette, PALETTE_SIZE);
     // Now prepare window sprite file name and load the file
-    fname = prepare_file_fmtpath(FGrp_LandView,"%s.dat",land_window);
-    map_window_len = LbFileLoadAt(fname, ptr);
+    fname = get_game_file_path_fmt(FGrp_LandView,"%s.dat",land_window);
+    map_window_len = (fname != NULL) ? LbFileLoadAt(fname, ptr) : 0;
     if (map_window_len < (int32_t)(WINDOW_Y_SIZE*sizeof(int32_t)))
     {
         ERRORLOG("Unable to load Land Map Window \"%s.dat\"",land_window);
@@ -967,8 +968,8 @@ TbBool load_map_and_window(LevelNumber lvnum)
     // Update length, so that it corresponds to map_window pointer
     map_window_len -= WINDOW_Y_SIZE*sizeof(int32_t);
     // Load palette
-    fname = prepare_file_fmtpath(FGrp_LandView,"%s.pal",land_view);
-    if (LbFileLoadAt(fname, frontend_palette) != PALETTE_SIZE)
+    fname = get_game_file_path_fmt(FGrp_LandView,"%s.pal",land_view);
+    if (!fname || LbFileLoadAt(fname, frontend_palette) != PALETTE_SIZE)
     {
         ERRORLOG("Unable to load Land Map palette \"%s.pal\"",land_view);
         unload_map_and_window();
@@ -1015,8 +1016,8 @@ static void frontmap_start_music(void)
         if (track >= 1) {
             play_music_track(track);
         } else {
-            const char* fname = prepare_file_fmtpath(FGrp_CmpgMedia, campaign.soundtrack_fname);
-            play_music(fname);
+            const char* fname = get_game_file_path_fmt(FGrp_CmpgMedia, campaign.soundtrack_fname);
+            if (fname) play_music(fname);
         }
     } else {
         play_music_track(2);

@@ -1,0 +1,12 @@
+{
+  "debug.showVariableTypes": true,
+  "debug.inlineValues": true,
+  "debug.console.wordWrap": true,
+  "debug.toolBarLocation": "floating",
+  "task.allowAutomaticTasks": "on",
+  "sonarlint.pathToCompileCommands": "${workspaceFolder}\\out\\build\\linux-x64-release\\compile_commands.json",
+  "sonarlint.connectedMode.project": {
+    "connectionId": "http://host.docker.internal:9000",
+    "projectKey": "keeperfx-local-vita-hardware-acceleration"
+  }
+}

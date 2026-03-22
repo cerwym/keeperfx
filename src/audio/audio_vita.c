@@ -463,14 +463,14 @@ TbBool InitAudio(const struct SoundSettings *settings)
     prepare_file_path_buf(snd_path, sizeof(snd_path), FGrp_LrgSound, "sound.dat");
 
     char spc_path[2048];
-    const char *spc_auto = prepare_file_fmtpath(FGrp_LrgSound, "speech_%s.dat",
+    const char *spc_auto = get_game_file_path_fmt(FGrp_LrgSound, "speech_%s.dat",
                                                  get_language_lwrstr(install_info.lang_id));
-    if (!LbFileExists(spc_auto))
+    if (!spc_auto || !LbFileExists(spc_auto))
         spc_auto = prepare_file_path(FGrp_LrgSound, "speech.dat");
-    if (!LbFileExists(spc_auto))
-        spc_auto = prepare_file_fmtpath(FGrp_LrgSound, "speech_%s.dat",
+    if (!spc_auto || !LbFileExists(spc_auto))
+        spc_auto = get_game_file_path_fmt(FGrp_LrgSound, "speech_%s.dat",
                                         get_language_lwrstr(1));
-    snprintf(spc_path, sizeof(spc_path), "%s", spc_auto);
+    snprintf(spc_path, sizeof(spc_path), "%s", spc_auto != NULL ? spc_auto : "");
 
     vita_load_sound_bank(snd_path, 0);
     vita_load_sound_bank(spc_path, 1);
@@ -746,7 +746,8 @@ TbBool play_music(const char *fname)
 TbBool play_music_track(int t)
 {
     if (t == 0) { stop_music(); return true; }
-    return play_music(prepare_file_fmtpath(FGrp_Music, "keeper%02d.ogg", t));
+    char *music_fname = get_game_file_path_fmt(FGrp_Music, "keeper%02d.ogg", t);
+    return (music_fname != NULL && play_music(music_fname));
 }
 
 void pause_music(void)

@@ -1,96 +1,43 @@
 #!/usr/bin/env bash
-# rebuild_gfx_layer.sh — Rebuild Layer 2 (KFX generated gfx data) into .deploy/
-#
-# Hash-based caching: only reruns make pkg-gfx when the gfx submodule commit
-# has changed or pkg/data/ doesn't exist. Use --force to always rebuild.
-#
-# Works on Linux, macOS, and Windows (Git Bash / WSL).
-#
-# Usage:
-#   .vscode/rebuild_gfx_layer.sh [--force]
-
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-WF="$(cd "$SCRIPT_DIR/.." && pwd)"
-FORCE=0
-for arg in "$@"; do [[ "$arg" == "--force" ]] && FORCE=1; done
+workspace="${1:-$(pwd)}"
+deploy_dir="$workspace/.deploy"
+compose_file="$workspace/docker/compose.yml"
 
-PKG_DATA="$WF/pkg/data"
-PKG_LDATA="$WF/pkg/ldata"
-HASH_FILE="$WF/pkg/.gfx-hash"
-DEPLOY="$WF/.deploy"
-
-C_CYAN='\033[0;36m' C_GREEN='\033[0;32m' C_YELLOW='\033[1;33m'
-C_RED='\033[0;31m'  C_GRAY='\033[0;90m'  C_RESET='\033[0m'
-
-log()  { echo -e "${C_CYAN}$*${C_RESET}"; }
-ok()   { echo -e "  ${C_GREEN}✓ $*${C_RESET}"; }
-warn() { echo -e "  ${C_YELLOW}⚠  $*${C_RESET}"; }
-err()  { echo -e "${C_RED}ERROR: $*${C_RESET}"; exit 1; }
-
-log "=== KeeperFX Layer 2: GFX Data ==="
-echo
-
-[[ -d "$DEPLOY" ]] || err ".deploy/ not found. Run 'Init .deploy/' first."
-
-# ── Ensure gfx submodule is initialized ───────────────────────────────────────
-SUB_STATUS=$(git -C "$WF" submodule status gfx 2>&1 || true)
-if [[ "$SUB_STATUS" == -* ]]; then
-    echo -e "  ${C_YELLOW}Initializing gfx submodule...${C_RESET}"
-    git -C "$WF" submodule update --init gfx 2>/dev/null || {
-        # git worktree quirk: submodule update --init can fail with "No such ref: HEAD"
-        # Fall back to cloning directly from the HTTPS URL
-        GFX_URL=$(git -C "$WF" config submodule.gfx.url 2>/dev/null || echo "https://github.com/Cerwym/FXGraphics.git")
-        GFX_BRANCH=$(git -C "$WF" config submodule.gfx.branch 2>/dev/null || echo "develop")
-        echo -e "  ${C_YELLOW}submodule init failed; cloning directly from $GFX_URL${C_RESET}"
-        git clone "$GFX_URL" "$WF/gfx" --branch "$GFX_BRANCH" --single-branch --depth 1 || \
-            err "gfx clone failed."
-    }
-    SUB_STATUS=$(git -C "$WF" submodule status gfx 2>&1)
+if [[ ! -d "$deploy_dir" ]]; then
+  echo ".deploy does not exist. Run Init .deploy/ first."
+  exit 1
 fi
 
-# Parse commit hash (strip leading +/- and trailing path)
-CURRENT_HASH=$(echo "$SUB_STATUS" | grep -oE '[0-9a-f]{40}' | head -1)
-[[ -n "$CURRENT_HASH" ]] || err "Could not determine gfx submodule hash."
-
-CACHED_HASH=$(cat "$HASH_FILE" 2>/dev/null | tr -d '[:space:]' || true)
-SHORT="${CURRENT_HASH:0:8}"
-
-# ── Build if needed ────────────────────────────────────────────────────────────
-if [[ $FORCE -eq 0 && -d "$PKG_DATA" && "$CURRENT_HASH" == "$CACHED_HASH" ]]; then
-    ok "gfx data up to date (hash $SHORT)"
-    echo -e "  ${C_GRAY}Use --force to rebuild anyway.${C_RESET}"
-else
-    if   [[ $FORCE -eq 1 ]];          then REASON="forced"
-    elif [[ ! -d "$PKG_DATA" ]];      then REASON="no cache"
-    else                                   REASON="submodule changed"; fi
-    echo -e "  ${C_YELLOW}Building pkg-gfx ($REASON, hash $SHORT)...${C_RESET}"
-    echo
-
-    docker compose -f "$WF/docker/compose.yml" run --rm linux bash -c "make pkg-gfx -j\$(nproc)"
-
-    mkdir -p "$(dirname "$HASH_FILE")"
-    echo "$CURRENT_HASH" > "$HASH_FILE"
-    ok "pkg-gfx built (hash $SHORT)"
+if [[ ! -f "$compose_file" ]]; then
+  echo "Compose file not found: $compose_file"
+  exit 1
 fi
 
-# ── Deploy into .deploy/ ───────────────────────────────────────────────────────
-echo
-echo -e "${C_CYAN}Deploying to .deploy/...${C_RESET}"
+echo "Rebuilding gfx package in linux container..."
+docker compose -f "$compose_file" run --rm linux bash -lc "make pkg-gfx"
 
-if [[ -d "$PKG_DATA" ]]; then
-    cp -r "$PKG_DATA"/. "$DEPLOY/data/"
-    ok "pkg/data/ deployed"
-else
-    warn "pkg/data/ not found"
+echo "Staging pkg/data, pkg/ldata, pkg/fxdata, pkg/campgns and pkg/levels into .deploy..."
+mkdir -p "$deploy_dir/data"
+if [[ -d "$workspace/pkg/data" ]]; then
+  cp -a "$workspace/pkg/data/." "$deploy_dir/data/"
+fi
+if [[ -d "$workspace/pkg/ldata" ]]; then
+  mkdir -p "$deploy_dir/ldata"
+  cp -a "$workspace/pkg/ldata/." "$deploy_dir/ldata/"
+fi
+if [[ -d "$workspace/pkg/fxdata" ]]; then
+  mkdir -p "$deploy_dir/fxdata"
+  cp -a "$workspace/pkg/fxdata/." "$deploy_dir/fxdata/"
+fi
+if [[ -d "$workspace/pkg/campgns" ]]; then
+  mkdir -p "$deploy_dir/campgns"
+  cp -a "$workspace/pkg/campgns/." "$deploy_dir/campgns/"
+fi
+if [[ -d "$workspace/pkg/levels" ]]; then
+  mkdir -p "$deploy_dir/levels"
+  cp -a "$workspace/pkg/levels/." "$deploy_dir/levels/"
 fi
 
-if [[ -d "$PKG_LDATA" ]]; then
-    mkdir -p "$DEPLOY/ldata"
-    cp -r "$PKG_LDATA"/. "$DEPLOY/ldata/"
-    ok "pkg/ldata/ deployed"
-fi
-
-echo
-log "=== Layer 2 complete ==="
+echo "GFX layer refreshed in .deploy/data, .deploy/ldata, .deploy/fxdata, .deploy/campgns and .deploy/levels."

@@ -40,10 +40,50 @@ services:
     <<: *build-base
     image: ghcr.io/${DOCKER_ORG:-cerwym}/keeperfx-build-linux:latest
 
+  linux-asan:
+    <<: *build-base
+    image: ghcr.io/${DOCKER_ORG:-cerwym}/keeperfx-build-linux:latest
+    environment:
+      CMAKE_BUILD_PARALLEL_LEVEL: "${CMAKE_BUILD_PARALLEL_LEVEL:-4}"
+      ASAN_OPTIONS: "detect_leaks=0:halt_on_error=1:print_stats=1"
+      UBSAN_OPTIONS: "print_stacktrace=1:halt_on_error=1"
+
   wasm:
     <<: *build-base
     image: ghcr.io/${DOCKER_ORG:-cerwym}/keeperfx-build-wasm:latest
 
   vitasdk:
     <<: *build-base
-    image: ghcr.io/${DOCKER_ORG:-cerwym}/keeperfx-build-vitasdk:latest
+    build:
+      context: ..
+      dockerfile: docker/vitasdk/Dockerfile
+    image: ghcr.io/${DOCKER_ORG:-cerwym}/build-vitasdk:latest
+
+  3ds-sdk:
+    <<: *build-base
+    build:
+      context: ..
+      dockerfile: docker/3ds-sdk/Dockerfile
+    image: ghcr.io/${DOCKER_ORG:-cerwym}/build-3ds-sdk:latest
+
+  wii-u-sdk:
+    <<: *build-base
+    build:
+      context: ..
+      dockerfile: docker/wii-u-sdk/Dockerfile
+    image: ghcr.io/${DOCKER_ORG:-cerwym}/build-wii-u-sdk:latest
+
+  switch-sdk:
+    <<: *build-base
+    build:
+      context: ..
+      dockerfile: docker/switch-sdk/Dockerfile
+    image: ghcr.io/${DOCKER_ORG:-cerwym}/build-switch-sdk:latest
+
+  sonarscanner:
+    <<: *build-base
+    image: sonarsource/sonar-scanner-cli:latest
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      SONAR_HOST_URL: "${SONAR_HOST_URL:-http://host.docker.internal:9000}"

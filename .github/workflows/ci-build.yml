@@ -43,6 +43,11 @@ jobs:
             preset: linux-x64-release
             artifact-name: keeperfx-linux-x64
 
+          - name: Linux x64 (ASAN)
+            image: linux
+            preset: linux-x64-asan
+            artifact-name: keeperfx-linux-x64-asan
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -62,6 +67,13 @@ jobs:
         run: cmake --build --preset ${{ matrix.preset }}
         env:
           CMAKE_BUILD_PARALLEL_LEVEL: 4
+
+      - name: Run tests (ASAN)
+        if: contains(matrix.preset, 'asan')
+        run: ./out/build/${{ matrix.preset }}/tests
+        env:
+          ASAN_OPTIONS: "detect_leaks=0:halt_on_error=1:print_stats=1"
+          UBSAN_OPTIONS: "print_stacktrace=1:halt_on_error=1"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

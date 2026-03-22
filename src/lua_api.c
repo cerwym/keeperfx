@@ -1558,7 +1558,8 @@ static int lua_Set_music(lua_State *L)
         }
     } else {
         const char *track_name = luaL_checkstring(L, 1);
-        play_music(prepare_file_fmtpath(FGrp_CmpgMedia, "%s", track_name));
+        const char *music_fname = get_game_file_path_fmt(FGrp_CmpgMedia, "%s", track_name);
+        if (music_fname) play_music(music_fname);
     }
     return 0;
 }

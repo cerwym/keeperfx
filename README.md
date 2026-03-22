@@ -101,6 +101,20 @@ detailed instructions on setting up a development environment and building Keepe
 If you wish to discuss development, you can join the [Keeper Klan discord](https://discord.gg/hE4p7vy2Hb) and ask to 
 be added to the KeeperFX development channel.
 
+For a CLion workflow using Docker cross-builds and local Windows GDB, see `docs/clion-windows-debug.md`.
+
+### Windows debug runtime from the mingw devcontainer
+- Build/package task for full debug runtime layout: `Build & Assemble Windows Debug Runtime`.
+- Output path: `out/package/windows-x86-debug/` — identical structure to the release package.
+- **Staying in the devcontainer (recommended):** press F5 and choose `Container F5: Attach via gdbserver (Windows Host)`.
+  - preLaunchTask builds the debug runtime and copies `gdbserver.exe` into the package, then prints the exact host command.
+  - On the Windows host run that printed command (one terminal, stays open).
+  - VS Code connects via `host.docker.internal:2159` using the cross-compile GDB inside the container; full breakpoints, step, locals, and source navigation work.
+- **From a Windows-hosted VS Code session:** use `Host F5: Build + Assemble + Debug (Windows gdb)` instead (runs gdb natively, no gdbserver needed).
+- Host debugger preflight (`Verify Windows Host GDB`) checks `.vscode/gdb.exe` and fails fast with instructions if missing.
+- First-time requirement: initialize `.deploy/` once so layered runtime assets are available for assembly:
+  `powershell -ExecutionPolicy Bypass -File tools/init-deploy.ps1 -DungeonKeeperPath "C:\\Path\\To\\Dungeon Keeper"`.
+
 
 ## Components
 | Component | Language | Info |

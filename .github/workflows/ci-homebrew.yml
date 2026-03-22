@@ -18,12 +18,12 @@ jobs:
         include:
           - name: PS Vita
             preset: vita-release
-            container: ghcr.io/${{ github.repository_owner }}/keeperfx-build-vitasdk:latest
+            container: ghcr.io/${{ github.repository_owner }}/build-vitasdk:latest
             artifact-name: keeperfx-vita
 
           - name: PS Vita Debug
             preset: vita-debug
-            container: ghcr.io/${{ github.repository_owner }}/keeperfx-build-vitasdk:latest
+            container: ghcr.io/${{ github.repository_owner }}/build-vitasdk:latest
             artifact-name: keeperfx-vita-debug
 
     steps:

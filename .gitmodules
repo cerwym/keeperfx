@@ -14,3 +14,6 @@
 	path = custom
 	url = https://github.com/Cerwym/customsprites.git
 	branch = develop
+[submodule "external/vcpkg"]
+	path = external/vcpkg
+	url = https://github.com/microsoft/vcpkg

@@ -26,6 +26,7 @@
 #include "bflib_video.h"
 #include "bflib_sprite.h"
 #include "bflib_vidraw.h"
+#include "keeperfx.hpp"
 #include "post_inc.h"
 
 /******************************************************************************/
@@ -360,6 +361,24 @@ void draw_gpoly_sub7b();
 void draw_gpoly_sub13();
 void draw_gpoly_sub14();
 
+/** Draws a single line between two screen-space points directly into the screen buffer.
+ * Used for wireframe debug overlay.
+ */
+static void wireframe_line(long x0, long y0, long x1, long y1, TbPixel colour)
+{
+    long dx = abs(x1 - x0), sx = (x0 < x1) ? 1 : -1;
+    long dy = -abs(y1 - y0), sy = (y0 < y1) ? 1 : -1;
+    long err = dx + dy;
+    for (;;) {
+        if (x0 >= 0 && x0 < vec_window_width && y0 >= 0 && y0 < vec_window_height)
+            LbDrawPixel(x0, y0, colour);
+        if (x0 == x1 && y0 == y1) break;
+        long e2 = 2 * err;
+        if (e2 >= dy) { err += dy; x0 += sx; }
+        if (e2 <= dx) { err += dx; y0 += sy; }
+    }
+}
+
 void draw_gpoly(struct PolyPoint *point_a, struct PolyPoint *point_b, struct PolyPoint *point_c)
 {
     LOC_poly_screen = poly_screen;
@@ -528,6 +547,12 @@ void draw_gpoly(struct PolyPoint *point_a, struct PolyPoint *point_b, struct Pol
     } else // not exceeds_window
     {
         draw_gpoly_sub14();
+    }
+
+    if ((start_params.debug_flags & DFlg_Wireframe) != 0) {
+        wireframe_line(point_a->X, point_a->Y, point_b->X, point_b->Y, 252);
+        wireframe_line(point_b->X, point_b->Y, point_c->X, point_c->Y, 252);
+        wireframe_line(point_c->X, point_c->Y, point_a->X, point_a->Y, 252);
     }
 }
 

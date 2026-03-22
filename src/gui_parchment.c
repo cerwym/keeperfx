@@ -24,6 +24,7 @@
 #include "globals.h"
 #include "bflib_basics.h"
 #include "bflib_vidraw.h"
+#include "renderer/RendererManager.h"
 #include "bflib_sprite.h"
 #include "bflib_sprfnt.h"
 #include "bflib_dernc.h"
@@ -83,7 +84,7 @@ void reload_parchment_file(TbBool hires)
   if (hires)
   {
 #ifdef SPRITE_FORMAT_V2
-      fname = prepare_file_fmtpath(FGrp_StdData,"gmap-%d.raw",64);
+      fname = get_game_file_path_fmt(FGrp_StdData,"gmap-%d.raw",64);
 #else
       fname = prepare_file_path(FGrp_StdData,"gmap64.raw");
 #endif
@@ -91,7 +92,7 @@ void reload_parchment_file(TbBool hires)
   } else
   {
 #ifdef SPRITE_FORMAT_V2
-      fname = prepare_file_fmtpath(FGrp_StdData,"gmap-%d.raw",32);
+      fname = get_game_file_path_fmt(FGrp_StdData,"gmap-%d.raw",32);
 #else
       fname = prepare_file_path(FGrp_StdData,"gmap32.raw");
 #endif
@@ -190,8 +191,10 @@ TbBool parchment_copy_background_at(const struct TbRect *bkgnd_area, int units_p
     if (LbGraphicsScreenBPP() != 8)
         return false;
     // Do the drawing
-    copy_raw8_image_buffer(lbDisplay.WScreen,LbGraphicsScreenWidth(),LbGraphicsScreenHeight(),
-        img_width*units_per_px/16,img_height*units_per_px/16,bkgnd_area->left,bkgnd_area->top,srcbuf,img_width,img_height);
+    RendererBlitRaw8(
+        img_width*units_per_px/16, img_height*units_per_px/16,
+        bkgnd_area->left, bkgnd_area->top,
+        srcbuf, img_width, img_height);
     // Burning candle flames
     const struct TbSprite* spr = get_button_sprite(GBS_parchment_map_screen_flame_1 + (game.play_gameturn & 3));
     LbSpriteDrawScaled(bkgnd_area->left+(36*units_per_px/(pixel_size << shift)),(bkgnd_area->top+0*units_per_px/(16*pixel_size)), spr, spr->SWidth*units_per_px/16, spr->SHeight*units_per_px/16);
@@ -763,7 +766,7 @@ void draw_zoom_box_terrain(long scrtop_x, long scrtop_y, int stl_x, int stl_y, P
     lbDisplay.DrawFlags = 0;
     scrtop_x += 4*units_per_pixel/16;
     scrtop_y -= 4*units_per_pixel/16;
-    setup_vecs(lbDisplay.WScreen, 0, lbDisplay.GraphicsScreenWidth, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
+    WorldViewRenderer_BeginWorldPass(lbDisplay.WScreen, lbDisplay.GraphicsScreenWidth, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
     // Draw the actual map
     int scr_y = scrtop_y;
     for (int map_dy = 0; map_dy < draw_tiles_y; map_dy++)

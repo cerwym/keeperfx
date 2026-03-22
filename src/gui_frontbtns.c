@@ -355,7 +355,9 @@ void init_menu_buttons(struct GuiMenu *gmnu)
     {
       gbtn = &active_buttons[i];
       callback = gbtn->maintain_call;
-      if ((callback != NULL) && (gbtn->gmenu_idx == gmnu->number))
+      // Only call maintain callbacks on active buttons for the current menu
+      // This prevents calling callbacks on stale buttons from previously-closed menus
+      if ((callback != NULL) && (gbtn->flags & LbBtnF_Active) && (gbtn->gmenu_idx == gmnu->number))
         callback(gbtn);
     }
 }
@@ -364,6 +366,10 @@ void kill_button(struct GuiButton *gbtn)
 {
     if (gbtn != NULL) {
         gbtn->flags &= ~LbBtnF_Active;
+        // Zero stale fields to prevent reuse of dangling pointers
+        gbtn->maintain_call = NULL;
+        gbtn->content.ptr = NULL;
+        gbtn->gmenu_idx = 0;
     }
 }
 
@@ -932,10 +938,40 @@ void gui_area_null(struct GuiButton *gbtn)
 
 void reset_scroll_window(struct GuiMenu *gmnu)
 {
+    // content.ptr in the static button init table was evaluated when gpGame was NULL,
+    // storing only the field offset instead of a valid runtime address.
+    // Repair it here before create_button copies the value to active buttons.
+    for (int i = 0; gmnu->buttons[i].gbtype != -1; i++)
+    {
+        struct GuiButtonInit *btn = &gmnu->buttons[i];
+        if (btn->draw_call    == gui_area_scroll_window
+         || btn->maintain_call == maintain_scroll_up
+         || btn->maintain_call == maintain_scroll_down
+         || btn->click_event   == gui_scroll_text_up
+         || btn->click_event   == gui_scroll_text_down)
+        {
+            btn->content.ptr = &game.evntbox_scroll_window;
+        }
+    }
     game.evntbox_scroll_window.start_y = 0;
     game.evntbox_scroll_window.action = 0;
     game.evntbox_scroll_window.text_height = 0;
     game.evntbox_scroll_window.window_height = 0;
+}
+
+void reset_tend_buttons(struct GuiMenu *gmnu)
+{
+    // Same root cause as reset_scroll_window: &game.field was evaluated at static
+    // init time when gpGame was NULL, storing only the field offset.
+    // Repair content.ptr here, after gpGame is valid, before create_button runs.
+    for (int i = 0; gmnu->buttons[i].gbtype != -1; i++)
+    {
+        struct GuiButtonInit *btn = &gmnu->buttons[i];
+        if (btn->id_num == BID_QRY_IMPRSN)
+            btn->content.ptr = &game.creatures_tend_imprison;
+        else if (btn->id_num == BID_QRY_FLEE)
+            btn->content.ptr = &game.creatures_tend_flee;
+    }
 }
 
 void gui_set_menu_mode(struct GuiButton *gbtn)

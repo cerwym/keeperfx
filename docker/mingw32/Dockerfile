@@ -2,7 +2,7 @@
 # Cross-compiles for Windows x86 from Ubuntu using i686-w64-mingw32 toolchain.
 #
 # Bakes in:
-#   - MinGW-w64 i686 cross-toolchain (posix threads)
+#   - MinGW-w64 i686 cross-toolchain (win32 threads)
 #   - CMake + Ninja
 #   - SDL2 / SDL2_image / SDL2_mixer / SDL2_net official MinGW prebuilts
 #     installed into /usr/i686-w64-mingw32/ (the CMAKE_FIND_ROOT_PATH for
@@ -19,11 +19,18 @@ FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
 
 # ── Toolchain & build tools ──────────────────────────────────────────────────
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        gcc-mingw-w64-i686-posix \
-        g++-mingw-w64-i686-posix \
+RUN dpkg --add-architecture i386 \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        gcc-mingw-w64-i686-win32 \
+        g++-mingw-w64-i686-win32 \
         cmake \
         ninja-build \
+        gdb \
+        gdb-mingw-w64 \
+        gdb-mingw-w64-target \
+        wine \
+        wine32 \
         curl \
         git \
         ca-certificates \
@@ -121,13 +128,13 @@ RUN set -eux; \
 
 # deps/CMakeLists.txt reads KFX_DEPS_CACHE before downloading from GitHub.
 RUN mkdir -p /opt/kfx-deps && cd /opt/kfx-deps && \
-    curl -fsSLo enet-mingw32.tar.gz       "https://github.com/dkfans/kfx-deps/releases/download/initial/enet-mingw32.tar.gz" && \
+    curl -fsSLo enet6-mingw32.tar.gz      "https://github.com/dkfans/kfx-deps/releases/download/20260310/enet6-mingw32.tar.gz" && \
     curl -fsSLo zlib-mingw32.tar.gz       "https://github.com/dkfans/kfx-deps/releases/download/initial/zlib-mingw32.tar.gz" && \
     curl -fsSLo spng-mingw32.tar.gz       "https://github.com/dkfans/kfx-deps/releases/download/initial/spng-mingw32.tar.gz" && \
     curl -fsSLo astronomy-mingw32.tar.gz  "https://github.com/dkfans/kfx-deps/releases/download/initial/astronomy-mingw32.tar.gz" && \
     curl -fsSLo centijson-mingw32.tar.gz  "https://github.com/dkfans/kfx-deps/releases/download/initial/centijson-mingw32.tar.gz" && \
     curl -fsSLo ffmpeg-mingw32.tar.gz     "https://github.com/dkfans/kfx-deps/releases/download/initial/ffmpeg-mingw32.tar.gz" && \
-    curl -fsSLo openal-mingw32.tar.gz     "https://github.com/dkfans/kfx-deps/releases/download/2024-11-14/openal-mingw32.tar.gz" && \
+    curl -fsSLo openal-mingw32.tar.gz     "https://github.com/dkfans/kfx-deps/releases/download/20260310/openal-mingw32.tar.gz" && \
     curl -fsSLo luajit-mingw32.tar.gz     "https://github.com/dkfans/kfx-deps/releases/download/20250418/luajit-mingw32.tar.gz" && \
     curl -fsSLo miniupnpc-mingw32.tar.gz  "https://github.com/dkfans/kfx-deps/releases/download/20260102/miniupnpc-mingw32.tar.gz" && \
     curl -fsSLo libnatpmp-mingw32.tar.gz  "https://github.com/dkfans/kfx-deps/releases/download/20260102/libnatpmp-mingw32.tar.gz"

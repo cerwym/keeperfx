@@ -92,6 +92,11 @@ public:
     /** Returns true if this backend supports switching to/from it at runtime
      *  without requiring a full application restart. */
     virtual bool SupportsRuntimeSwitch() const = 0;
+
+    /** Returns true if this backend can execute IPostProcessPass GPU lens effects.
+     *  When true, RendererVita runs GPU passes in EndFrame() and LensManager
+     *  skips the corresponding CPU Draw() calls. */
+    virtual bool SupportsGPUPasses() const { return false; }
 };
 
 /******************************************************************************/

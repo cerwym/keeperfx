@@ -52,9 +52,11 @@
 #include "frontmenu_net.h"
 #include "gui_parchment.h"
 #include "gui_frontmenu.h"
+#include "ui_init.h"
 #include "gui_msgs.h"
 #include "scrcapt.h"
 #include "vidmode.h"
+#include "kfx/memory_system_c.h"
 #include "kjm_input.h"
 #include "packets.h"
 #include "config.h"
@@ -75,7 +77,7 @@
 #include "player_utils.h"
 #include "config_players.h"
 #include "player_computer.h"
-#include "game_heap.h"
+#include "kfx/memory_system_c.h"
 #include "game_saves.h"
 #include "engine_render.h"
 #include "engine_lenses.h"
@@ -148,6 +150,7 @@
   #include "ftests/ftest.h"
 #endif
 
+#include "platform/kfx_breadcrumb.h"
 #include "post_inc.h"
 
 #ifdef _MSC_VER
@@ -157,8 +160,11 @@
 short do_draw;
 short default_loc_player = 0;
 struct StartupParameters start_params;
+// Defined with C linkage so .c translation units can reference them without name mangling
+extern "C" {
 char autostart_multiplayer_campaign[80] = "";
-int autostart_multiplayer_level = 0;
+int  autostart_multiplayer_level = 0;
+}
 int32_t game_num_fps;
 
 int32_t game_num_fps_draw_current = 0;
@@ -428,165 +434,6 @@ void affect_nearby_friends_with_alarm(struct Thing *traptng)
     }
 }
 
-long apply_wallhug_force_to_boulder(struct Thing *thing)
-{
-  unsigned short angle;
-  long collide;
-  unsigned short new_angle;
-  struct Coord3d pos2;
-  struct Coord3d pos;
-  struct ShotConfigStats *shotst = get_shot_model_stats(thing->model);
-  short speed = shotst->speed;
-  pos.x.val = move_coord_with_angle_x(thing->mappos.x.val,speed,thing->move_angle_xy);
-  pos.y.val = move_coord_with_angle_y(thing->mappos.y.val,speed,thing->move_angle_xy);
-  pos.z.val = thing->mappos.z.val;
-  if ( (GAME_RANDOM(8) == 0) && (!thing->velocity.z.val ) )
-  {
-    if ( thing_touching_floor(thing) )
-    {
-      long top_cube = get_top_cube_at(thing->mappos.x.stl.num, thing->mappos.y.stl.num, NULL);
-      if ( ((top_cube & 0xFFFFFFFE) != 0x28) && (top_cube != 39) )
-      {
-        thing->veloc_push_add.z.val += 48;
-        thing->state_flags |= TF1_PushAdd;
-      }
-    }
-  }
-  if ( thing_in_wall_at(thing, &pos) )
-  {
-    long blocked_flags = get_thing_blocked_flags_at(thing, &pos);
-    if ( blocked_flags & SlbBloF_WalledX )
-    {
-      angle = thing->move_angle_xy;
-      if ( (angle) && (angle <= ANGLE_SOUTH) )
-        collide = process_boulder_collision(thing, &pos, 1, 0);
-      else
-        collide = process_boulder_collision(thing, &pos, -1, 0);
-    }
-    else if ( blocked_flags & SlbBloF_WalledY )
-    {
-      angle = thing->move_angle_xy;
-      if ( (angle <= ANGLE_EAST) || (angle > ANGLE_WEST) )
-        collide = process_boulder_collision(thing, &pos, 0, -1);
-      else
-        collide = process_boulder_collision(thing, &pos, 0, 1);
-    }
-    else
-    {
-      collide = 0;
-    }
-    if ( collide != 1 )
-    {
-      if ( (thing->model != ShM_SolidBoulder) && (collide == 0) )
-      {
-        thing->health -= game.conf.rules[thing->owner].gameplay.boulder_reduce_health_wall;
-      }
-      slide_thing_against_wall_at(thing, &pos, blocked_flags);
-      if ( blocked_flags & SlbBloF_WalledX )
-      {
-        angle = thing->move_angle_xy;
-        if ( (angle) && ( (angle <= ANGLE_EAST) || (angle > ANGLE_WEST) ) )
-        {
-          unsigned short y = thing->mappos.y.val;
-          pos2.x.val = thing->mappos.x.val;
-          pos2.z.val = 0;
-          pos2.y.val = y - STL_PER_SLB * speed;
-          pos2.z.val = get_thing_height_at(thing, &pos2);
-          new_angle = (thing_in_wall_at(thing, &pos2) < 1) ? ANGLE_NORTH : ANGLE_SOUTH;
-        }
-        else
-        {
-          pos2.x.val = thing->mappos.x.val;
-          pos2.z.val = 0;
-          pos2.y.val = thing->mappos.y.val + STL_PER_SLB * speed;
-          pos2.z.val = get_thing_height_at(thing, &pos2);
-          new_angle = (thing_in_wall_at(thing, &pos2) < 1) ? ANGLE_SOUTH : ANGLE_NORTH;
-        }
-      }
-      else if ( blocked_flags & SlbBloF_WalledY )
-      {
-        angle = thing->move_angle_xy;
-        if ( (angle) && (angle <= ANGLE_SOUTH) )
-        {
-          pos2.z.val = 0;
-          pos2.y.val = thing->mappos.y.val;
-          pos2.x.val = thing->mappos.x.val + STL_PER_SLB * speed;
-          pos2.z.val = get_thing_height_at(thing, &pos2);
-          new_angle = (thing_in_wall_at(thing, &pos2) < 1) ? ANGLE_EAST : ANGLE_WEST;
-        }
-        else
-        {
-          unsigned short x = thing->mappos.x.val;
-          pos2.z.val = 0;
-          pos2.y.val = thing->mappos.y.val;
-          pos2.x.val = x - STL_PER_SLB * speed;
-          pos2.z.val = get_thing_height_at(thing, &pos2);
-          new_angle = (thing_in_wall_at(thing, &pos2) < 1) ? ANGLE_WEST : ANGLE_EAST;
-        }
-      }
-      else
-      {
-        ERRORLOG("Cannot find boulder wall hug angle!");
-        new_angle = 0;
-      }
-      thing->move_angle_xy = new_angle;
-    }
-  }
-  angle = thing->move_angle_xy;
-  thing->velocity.x.val = distance_with_angle_to_coord_x(shotst->speed,angle);
-  thing->velocity.y.val = distance_with_angle_to_coord_y(shotst->speed,angle);
-  return 0;
-}
-
-long process_boulder_collision(struct Thing *boulder, struct Coord3d *pos, int direction_x, int direction_y)
-{
-    unsigned short boulder_radius = (boulder->clipbox_size_xy >> 1);
-    MapSubtlCoord pos_x = (pos->x.val + boulder_radius * direction_x) >> 8;
-    MapSubtlCoord pos_y = (pos->y.val + boulder_radius * direction_y) >> 8;
-    MapSubtlCoord stl_x = stl_slab_center_subtile(pos_x);
-    MapSubtlCoord stl_y = stl_slab_center_subtile(pos_y);
-
-    struct Room *room = subtile_room_get(stl_x, stl_y);
-    if (room_exists(room))
-    {
-        if (room->kind == RoK_GUARDPOST)  // Collide with Guardposts
-        {
-            if (room->owner != game.neutral_player_num)
-            {
-                struct Dungeon *dungeon = get_dungeon(room->owner);
-                if (!dungeon_invalid(dungeon))
-                {
-                    dungeon->rooms_destroyed++; // add to player stats
-                }
-            }
-            delete_room_slab(subtile_slab(stl_x), subtile_slab(stl_y), 0); // destroy guardpost
-            for (long k = 0; k < AROUND_TILES_COUNT; k++)
-            {
-                create_dirt_rubble_for_dug_block(stl_x + around[k].delta_x, stl_y + around[k].delta_y, 4, room->owner);
-            }
-            if (boulder->model != ShM_SolidBoulder) // Solid Boulder (shot20) takes no damage when destroying guardposts
-            {
-                boulder->health -= game.conf.rules[boulder->owner].gameplay.boulder_reduce_health_room; // decrease boulder health
-            }
-            return 1; // guardpost destroyed
-        }
-    }
-    else
-    {
-        if (subtile_has_door_thing_on(stl_x, stl_y)) // Collide with Doors
-        {
-            struct Thing *doortng = get_door_for_position(stl_x, stl_y);
-            HitPoints door_health = doortng->health;
-            doortng->health -= boulder->health; // decrease door health
-            boulder->health -= door_health; // decrease boulder health
-            if (doortng->health <= 0)
-            {
-                return 2; // door destroyed
-            }
-        }
-    }
-    return 0; // Default: No collision OR boulder destroyed on door
-}
 
 void draw_flame_breath(struct Coord3d *pos1, struct Coord3d *pos2, long delta_step, long num_per_step, short ef_or_efel_model, ThingIndex parent_idx)
 {
@@ -956,8 +803,8 @@ TbBool initial_setup(void)
     SYNCDBG(6,"Starting");
     // setting this will force video mode change, even if previous one is same
     MinimalResolutionSetup = true;
-    // Set size of static textures buffer
-    game_load_files[1].SLength = max((ulong)TEXTURE_BLOCKS_STAT_COUNT_A*block_dimension*block_dimension,(ulong)LANDVIEW_MAP_WIDTH*LANDVIEW_MAP_HEIGHT);
+    // Reserve the full texture page; later texture loading writes BLOCK_MEM_SIZE bytes.
+    game_load_files[1].SLength = max((ulong)BLOCK_MEM_SIZE, (ulong)LANDVIEW_MAP_WIDTH*LANDVIEW_MAP_HEIGHT);
     if (LbDataLoadAllV2(game_load_files))
     {
         ERRORLOG("Unable to load game_load_files");
@@ -981,6 +828,8 @@ TbBool initial_setup(void)
 
 short setup_game(void)
 {
+    // Prepare the Game structure and do it super fucking early so nothing is null
+    clear_complete_game();
   struct CPU_INFO cpu_info; // CPU status variable
   short result;
 #if defined(VITA_PERF_LOG)
@@ -993,6 +842,7 @@ short setup_game(void)
 #define VITA_TICK(label) ((void)0)
 #endif
   // Do only a very basic setup
+    kfx_memory_system_init();
   cpu_detect(&cpu_info);
   SYNCMSG("CPU %s type %d family %d model %d stepping %d features %08lx",cpu_info.vendor,
       (int)cpu_get_type(&cpu_info),(int)cpu_get_family(&cpu_info),(int)cpu_get_model(&cpu_info),
@@ -1109,8 +959,7 @@ short setup_game(void)
   }
 
   // Now do more setup
-  // Prepare the Game structure
-  clear_complete_game();
+
   // Moon phase calculation
   calculate_moon_phase(true,true);
   // Start the sound system
@@ -1617,6 +1466,7 @@ void reinit_level_after_load(void)
     load_texture_map_file(game.texture_id, get_loaded_level_number(), get_level_fgroup(get_loaded_level_number()));
     init_animating_texture_maps();
     init_gui();
+    init_gameplay_ui(UIPROLE_ACTIVE_PLAYER, game.active_players_count > 1);
     reset_gui_based_on_player_mode();
     erstats_clear();
     player = get_my_player();
@@ -3242,24 +3092,9 @@ void engine(struct PlayerInfo *player, struct Camera *cam)
     view_height_over_2 = ewnd.height/2;
     view_width_over_2 = ewnd.width/2;
     LbScreenSetGraphicsWindow(ewnd.x, ewnd.y, ewnd.width, ewnd.height);
-    setup_vecs(lbDisplay.GraphicsWindowPtr, 0, lbDisplay.GraphicsScreenWidth,
-        ewnd.width, ewnd.height);
+    WorldViewRenderer_BeginWorldPass(lbDisplay.GraphicsWindowPtr, lbDisplay.GraphicsScreenWidth,ewnd.width, ewnd.height);
     camera_zoom = scale_camera_zoom_to_screen(cam->zoom);
-#if defined(VITA_PERF_LOG)
-    {
-        static Uint32 _dv_accum = 0;
-        static int    _dv_cnt   = 0;
-        Uint32 _dv_t0 = SDL_GetTicks();
-        draw_view(cam, 0);
-        _dv_accum += SDL_GetTicks() - _dv_t0;
-        if (++_dv_cnt >= 60) {
-            JUSTLOG("[perf] draw_view  avg %u ms/frame (60-frame window)", _dv_accum / 60u);
-            _dv_accum = 0; _dv_cnt = 0;
-        }
-    }
-#else
     draw_view(cam, 0);
-#endif
     lbDisplay.DrawFlags = flg_mem;
     thing_being_displayed = 0;
     LbScreenLoadGraphicsWindow(&grwnd);
@@ -3319,29 +3154,6 @@ short display_should_be_updated_this_turn(void)
       return true;
     }
     return false;
-}
-
-/**
- * Makes last updates to the video buffer, and swaps buffers to show
- * the new image.
- */
-TbBool keeper_screen_swap(void)
-{
-/*  // For resolution 640x480, move the graphics data 40 lines lower
-  if ( lbDisplay.ScreenMode == Lb_SCREEN_MODE_640_480_8 )
-    if (LbScreenLock() == Lb_SUCCESS)
-    {
-      int i;
-      int scrmove_x=0;
-      int scrmove_y=40;
-      int scanline_len=640;
-      for (i=400;i>=0;i--)
-        memcpy(lbDisplay.WScreen+scanline_len*(i+scrmove_y)+scrmove_x, lbDisplay.WScreen+scanline_len*i, scanline_len-scrmove_x);
-      memset(lbDisplay.WScreen, 0, scanline_len*scrmove_y);
-      LbScreenUnlock();
-    }*/
-  LbScreenSwap();
-  return true;
 }
 
 /**
@@ -3529,8 +3341,9 @@ void gameplay_loop_draw()
         do_draw = false;
     }
     if ( do_draw ) {
-        if (frametime_enabled())
+        if (frametime_enabled()) {
             framerate_measurement_capture(Framerate_Draw);
+        }
         keeper_screen_redraw();
     }
     keeper_wait_for_screen_focus();
@@ -3544,7 +3357,7 @@ void gameplay_loop_draw()
     }
     // Move the graphics window to center of screen buffer and swap screen
     if ( do_draw ) {
-        keeper_screen_swap();
+        LbScreenSwap();
     }
     frametime_end_measurement(Frametime_Draw);
     last_draw_completed_time = get_time_tick_ns();
@@ -3612,6 +3425,7 @@ void gameplay_loop_timestep()
 
 void keeper_gameplay_loop(void)
 {
+    KFX_BREADCRUMB("keeper_gameplay_loop");
     struct PlayerInfo *player;
     SYNCDBG(5,"Starting");
     player = get_my_player();
@@ -3978,6 +3792,7 @@ static TbBool wait_at_frontend(void)
 
 void game_loop(void)
 {
+    KFX_BREADCRUMB("game_loop");
     unsigned long total_play_turns;
     unsigned long playtime;
     playtime = 0;
@@ -4090,6 +3905,7 @@ short reset_game(void)
     RendererShutdown();
     free_gui_strings_data();
     free_level_strings_data();
+    kfx_memory_system_shutdown();
     FreeAudio();
     return 1;
 }
@@ -4183,7 +3999,8 @@ short process_command_line(unsigned short argc, char *argv[])
       } else
       if (strcasecmp(parstr, "vidsmooth") == 0)
       {
-          smooth_on = true;
+          // Todo : Renable this feature, right now, it looks like it's doing a full buffer resample which is dog slow.
+          // smooth_on = true;
       } else
       if ( strcasecmp(parstr,"level") == 0 )
       {

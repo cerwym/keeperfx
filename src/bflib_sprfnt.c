@@ -28,6 +28,7 @@
 #include "bflib_sprite.h"
 #include "bflib_fileio.h"
 #include "bflib_vidraw.h"
+#include "renderer/RendererManager.h"
 
 //TODO: this breaks my convention - non-bflib call from bflib (used for asian fonts)
 #include "frontend.h"
@@ -1032,7 +1033,7 @@ long text_string_height(int units_per_px, const char *text)
  * @param text The text to be drawn.
  * @return
  */
-TbBool LbTextDrawResized(int posx, int posy, int units_per_px, const char *text)
+TbBool LbTextDrawResized_sw(int posx, int posy, int units_per_px, const char *text)
 {
     // Counter for amount of blank characters in a line
     const char *ebuf;
@@ -1214,10 +1215,9 @@ TbBool LbTextDrawResized(int posx, int posy, int units_per_px, const char *text)
  * @param text The text to be drawn.
  * @return
  */
-TbBool LbTextDraw(int posx, int posy, const char *text)
+TbBool LbTextDraw_sw(int posx, int posy, const char *text)
 {
-    // Using resized version - it will end up with version optimized for no resize anyway
-    return LbTextDrawResized(posx, posy, 16, text);
+    return LbTextDrawResized_sw(posx, posy, 16, text);
 }
 
 /**
@@ -1227,6 +1227,36 @@ TbBool LbTextDraw(int posx, int posy, const char *text)
  * @param fmt The text format to be drawn.
  * @return
  */
+TbBool LbTextDrawResizedFmt_sw(int posx, int posy, int units_per_px, const char *fmt, ...)
+{
+    char * text = (char *)KfxAlloc(8192);
+    if (text == NULL) return false;
+    va_list val;
+    va_start(val, fmt);
+    vsnprintf(text, TEXT_DRAW_MAX_LEN, fmt, val);
+    va_end(val);
+    TbBool result = LbTextDrawResized_sw(posx, posy, units_per_px, text);
+    KfxFree(text);
+    return result;
+}
+
+/** Returns standard height of a line of text, in currently active font.
+ *  Supports both sprite fonts and dbc fonts.
+ */
+/******************************************************************************/
+/* Public API shims — dispatch through ITextRenderer                          */
+/******************************************************************************/
+
+TbBool LbTextDraw(int posx, int posy, const char *text)
+{
+    return TextRenderer_DrawTextResized(posx, posy, 16, text);
+}
+
+TbBool LbTextDrawResized(int posx, int posy, int units_per_px, const char *text)
+{
+    return TextRenderer_DrawTextResized(posx, posy, units_per_px, text);
+}
+
 TbBool LbTextDrawResizedFmt(int posx, int posy, int units_per_px, const char *fmt, ...)
 {
     char * text = (char *)KfxAlloc(8192);
@@ -1235,22 +1265,20 @@ TbBool LbTextDrawResizedFmt(int posx, int posy, int units_per_px, const char *fm
     va_start(val, fmt);
     vsnprintf(text, TEXT_DRAW_MAX_LEN, fmt, val);
     va_end(val);
-    TbBool result = LbTextDrawResized(posx, posy, units_per_px, text);
+    TbBool result = TextRenderer_DrawTextResized(posx, posy, units_per_px, text);
     KfxFree(text);
     return result;
 }
 
+/******************************************************************************/
 /** Returns standard height of a line of text, in currently active font.
  *  Supports both sprite fonts and dbc fonts.
  */
-int LbTextLineHeight(void)
-{
-    if ((dbc_initialized) && (dbc_enabled))
-    {
-      return dbc_char_height(0xFFFF);
-    } else
-    {
-      return LbSprFontCharHeight(lbFontPtr,' ');
+int LbTextLineHeight(void) {
+    if ((dbc_initialized) && (dbc_enabled)) {
+        return dbc_char_height(0xFFFF);
+    } else {
+        return LbSprFontCharHeight(lbFontPtr, ' ');
     }
 }
 

@@ -68,6 +68,17 @@ public:
     // Configuration
     void SetEnabled(TbBool enabled) { m_enabled = enabled; }
     TbBool IsEnabled() const { return m_enabled; }
+
+    /**
+     * Returns a GPU post-process pass for this effect, or nullptr if the
+     * effect is CPU-only (the default).  RendererVita calls this each frame
+     * to run GPU passes instead of the CPU Draw() path.
+     *
+     * The returned pointer is owned by the LensEffect subclass.
+     * It is valid for as long as the effect is active (between Setup and
+     * Cleanup calls).
+     */
+    virtual class IPostProcessPass* GetGPUPass() { return nullptr; }
     
     // Identification
     LensEffectType GetType() const { return m_type; }

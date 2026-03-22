@@ -860,7 +860,12 @@ void maintain_scroll_up(struct GuiButton *gbtn)
 {
     struct TextScrollWindow * scrollwnd;
     scrollwnd = (struct TextScrollWindow *)gbtn->content.ptr;
-    gbtn->flags ^= (gbtn->flags ^ LbBtnF_Enabled * (scrollwnd->start_y < 0)) & LbBtnF_Enabled;
+    // Old code bit-twiddles, changing this to if else so it's more readable, it'll be compiled away.
+    if (scrollwnd->start_y < 0)
+        gbtn->flags |= LbBtnF_Enabled; // Set enabled if we can scroll up
+    else
+        gbtn->flags &= ~LbBtnF_Enabled; // Clear enabled if we can't scroll up
+
     if (!check_current_gui_layer(GuiLayer_OneClick))
     {
         if (wheel_scrolled_up && (is_game_key_pressed(Gkey_RotateMod, NULL, true)))
@@ -953,7 +958,7 @@ TbResult frontend_load_data(void)
     ret = Lb_SUCCESS;
     frontend_background = (unsigned char *)game.map;
 #ifdef SPRITE_FORMAT_V2
-    fname = prepare_file_fmtpath(FGrp_LoData,"front-%d.raw",64);
+    fname = get_game_file_path_fmt(FGrp_LoData,"front-%d.raw",64);
 #else
     fname = prepare_file_path(FGrp_LoData,"front.raw");
 #endif
@@ -967,12 +972,14 @@ TbResult frontend_load_data(void)
     char dat_fname[2048];
     char tab_fname[2048];
 #ifdef SPRITE_FORMAT_V2
-    strcpy(dat_fname, prepare_file_fmtpath(FGrp_LoData,"frontbit-%d.dat",64));
-    strcpy(tab_fname, prepare_file_fmtpath(FGrp_LoData,"frontbit-%d.tab",64));
+    const char *tmp_path = get_game_file_path_fmt(FGrp_LoData,"frontbit-%d.dat",64);
+    strcpy(dat_fname, tmp_path != NULL ? tmp_path : "");
+    tmp_path = get_game_file_path_fmt(FGrp_LoData,"frontbit-%d.tab",64);
+    strcpy(tab_fname, tmp_path != NULL ? tmp_path : "");
 #else
     strcpy(dat_fname, prepare_file_path(FGrp_LoData,"frontbit.dat"));
     strcpy(tab_fname, prepare_file_path(FGrp_LoData,"frontbit.tab"));
- #endif
+#endif
     frontend_sprite = load_spritesheet(dat_fname, tab_fname);
     if (!frontend_sprite) {
         ERRORLOG("Cannot load frontend sprites.");
@@ -1683,14 +1690,18 @@ void gui_scroll_text_up(struct GuiButton *gbtn)
 {
     struct TextScrollWindow *scroll_window;
     scroll_window = (struct TextScrollWindow *)gbtn->content.ptr;
-    scroll_window->action = 1;
+    if (scroll_window) {
+        scroll_window->action = 1;
+    }
 }
 
 void gui_scroll_text_down(struct GuiButton *gbtn)
 {
     struct TextScrollWindow *scroll_window;
     scroll_window = (struct TextScrollWindow *)gbtn->content.ptr;
-    scroll_window->action = 2;
+    if (scroll_window) {
+        scroll_window->action = 2;
+    }
 }
 
 /**

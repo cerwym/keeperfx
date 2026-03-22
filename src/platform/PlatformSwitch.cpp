@@ -1,6 +1,7 @@
 #include "kfx_memory.h"
 #include "pre_inc.h"
 #include "platform/PlatformSwitch.h"
+#include "bflib_basics.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include "post_inc.h"
@@ -10,6 +11,11 @@ struct TbFileFind {};
 
 // TbFileInfo is defined here; it is an opaque type to all callers.
 struct TbFileInfo { FILE* fp; };
+
+void PlatformSwitch::SystemInit()
+{
+    LbErrorLogSetup(GetDataPath(), "keeperfx.log", 5);
+}
 
 const char* PlatformSwitch::GetOSVersion() const    { return "Nintendo Switch"; }
 const void* PlatformSwitch::GetImageBase() const    { return nullptr; }

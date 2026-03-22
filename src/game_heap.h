@@ -30,6 +30,8 @@ extern "C" {
 TbBool setup_heap_manager(void);
 void reset_heap_manager(void);
 
+TbBool he_ensure_sprite_frame(unsigned short kspr_idx, size_t size);
+
 /******************************************************************************/
 void *he_alloc(size_t size);
 

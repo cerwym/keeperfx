@@ -52,7 +52,7 @@
 #include "local_camera.h"
 #include "front_simple.h"
 #include "frontend.h"
-#include "game_heap.h"
+#include "kfx/sprite_resources.h"
 #include "game_lghtshdw.h"
 #include "gui_draw.h"
 #include "keeperfx.hpp"
@@ -65,6 +65,7 @@
 #include "vidmode.h"
 
 #include "platform/PlatformManager.h"
+#include "renderer/RendererManager.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -1085,10 +1086,8 @@ static void fill_in_points_perspective(struct Camera *cam, long bstl_x, long bst
         mapblk = get_map_block_at(stl_x, stl_y+1);
         wib_v = get_mapblk_wibble_value(mapblk);
         hpos = subtile_coord(get_mapblk_filled_subtiles(mapblk),0) - view_alt;
-        if (wib_v == 2)
-        {
-            wibl = get_wibble_from_table(cam, wib_x + 2 * (hmax + 2 * wib_y - hmin) + 32, stl_x, stl_y);
-        }
+        // Always calculate the ceiling wibble offset based on height, not conditionally
+        wibl = get_wibble_from_table(cam, wib_x + 2 * (hmax + 2 * wib_y - hmin) + 32, stl_x, stl_y);
         ecord = &ecol->cors[8];
         {
             ecord->x = apos + wibl->offset_x;
@@ -6519,7 +6518,7 @@ static void draw_subdivided_near_polygon(struct BucketKindPolygonNearFP *polygon
     }
 
 }
-static void display_drawlist(void) // Draws isometric and 1st person view. Not frontview.
+void display_drawlist(void) // Draws isometric and 1st person view. Not frontview.
 {
     struct PlayerInfo *player;
     const struct Camera *cam;
@@ -6840,7 +6839,7 @@ void draw_view(struct Camera *cam, unsigned char a2)
     zoom_mem = cam->zoom;//TODO [zoom] remove when all cam->zoom will be changed to camera_zoom
     cam->zoom = camera_zoom;//TODO [zoom] remove when all cam->zoom will be changed to camera_zoom
     long x = cam->mappos.x.val;
-    long y = cam->mappos.y.val;
+    long y = cam->mappos.y.val; 
     long z = cam->mappos.z.val;
 
     getpoly = poly_pool;
@@ -6904,7 +6903,7 @@ void draw_view(struct Camera *cam, unsigned char a2)
         process_isometric_map_volume_box(x, y, z, my_player_number);
     }
 
-    display_drawlist();
+    WorldViewRenderer_FlushIsometricView();
     cam->zoom = zoom_mem;//TODO [zoom] remove when all cam->zoom will be changed to camera_zoom
     SYNCDBG(9,"Finished");
 }
@@ -6959,7 +6958,7 @@ static void draw_texturedquad_block(struct BucketKindTexturedQuad *txquad)
     draw_gpoly(&point_a, &point_b, &point_c);
 }
 
-static void display_fast_drawlist(struct Camera *cam) // Draws frontview only. Not isometric or 1st person view.
+void display_fast_drawlist(struct Camera *cam) // Draws frontview only. Not isometric or 1st person view.
 {
     int bucket_num;
     union {
@@ -7525,7 +7524,12 @@ static long load_single_frame(TbSpriteData *data_ptr, unsigned short kspr_idx)
 {
     long nlength;
     nlength = creature_table[kspr_idx+1].DataOffset - creature_table[kspr_idx].DataOffset;
-    *data_ptr = he_alloc(nlength);
+    if (!he_ensure_sprite_frame(kspr_idx, (size_t)nlength))
+    {
+        ERRORLOG("Unable to reserve sprite.frame.%u (%ld bytes)",
+            (unsigned int)kspr_idx, nlength);
+        return 0;
+    }
 
     LbFileSeek(jty_file_handle, creature_table[kspr_idx].DataOffset, 0);
     LbFileRead(jty_file_handle, *data_ptr, nlength);
@@ -8990,7 +8994,7 @@ void draw_frontview_engine(struct Camera *cam)
     LbScreenStoreGraphicsWindow(&grwnd);
     store_engine_window(&ewnd,pixel_size);
     LbScreenSetGraphicsWindow(ewnd.x, ewnd.y, ewnd.width, ewnd.height);
-    setup_vecs(lbDisplay.GraphicsWindowPtr, NULL, lbDisplay.GraphicsScreenWidth, ewnd.width, ewnd.height);
+    WorldViewRenderer_BeginWorldPass(lbDisplay.GraphicsWindowPtr, lbDisplay.GraphicsScreenWidth, ewnd.width, ewnd.height);
     clear_fast_bucket_list();
     store_engine_window(&ewnd,1);
     setup_engine_window(ewnd.x, ewnd.y, ewnd.width, ewnd.height);
@@ -9089,7 +9093,7 @@ void draw_frontview_engine(struct Camera *cam)
         stl_y += y_step2[qdrant];
     }
 
-    display_fast_drawlist(cam);
+    WorldViewRenderer_FlushFrontView(cam);
     LbScreenLoadGraphicsWindow(&grwnd);
     cam->zoom = zoom_mem;//TODO [zoom] remove when all cam->zoom will be changed to camera_zoom
     SYNCDBG(9,"Finished");
@@ -9139,4 +9143,5 @@ void render_set_sprite_debug(int level)
             render_sprite_debug_fn = &render_sprite_debug_id;
     }
 }
+
 /******************************************************************************/

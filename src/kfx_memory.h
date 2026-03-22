@@ -40,6 +40,9 @@ size_t KfxScratchUsed(void);
 /* ---------- Diagnostics ---------- */
 /** Log per-callsite allocation totals via stderr.  No-op in release builds. */
 void   KfxMemDump(void);
+/** Walk all tracked allocations and validate guard-zone canaries.
+ *  Aborts on corruption.  No-op in release builds. */
+void   KfxMemValidate(void);
 
 /* ---------- Debug-mode overrides ---------- */
 #ifdef KFX_DEBUG_MEMORY

@@ -448,7 +448,7 @@ struct GuiMenu trap_menu =
 struct GuiMenu creature_menu =
  {       GMnu_CREATURE, 0, 1, creature_menu_buttons,                       0,   0, 140, 400, gui_activity_background,     0, NULL,    NULL,                    0, 0, 1,};
 struct GuiMenu query_menu =
- {          GMnu_QUERY, 0, 1, query_menu_buttons,                          0,   0, 140, 400, NULL,                        0, NULL,    NULL,                    0, 0, 1,};
+ {          GMnu_QUERY, 0, 1, query_menu_buttons,                          0,   0, 140, 400, NULL,                        0, NULL,    reset_tend_buttons,      0, 0, 1,};
 struct GuiMenu event_menu =
  {          GMnu_EVENT, 0, 1, event_menu_buttons,                          0,   0, 140, 400, NULL,                        0, NULL,    NULL,                    0, 0, 0,};
 struct GuiMenu creature_query_menu1 =

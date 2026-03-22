@@ -10,19 +10,59 @@
 // Run "Init .deploy/" once before first use to populate game data layers.
 
 {
-"label": "Build & Deploy Windows Debug",
+"label": "Build & Deploy Windows MSVC Debug",
+"detail": "Build with native MSVC (no Docker), copy exe to .deploy/, validate game assets.",
 "type": "shell",
-"command": "docker compose -f '${workspaceFolder}/docker/compose.yml' run --rm mingw32 bash -c 'cmake --preset windows-x86-debug && cmake --build --preset windows-x86-debug' && cp out/build/windows-x86-debug/keeperfx.exe .deploy/keeperfx.exe && echo 'Deployed.'",
 "windows": {
 "command": [
-"docker compose -f '${workspaceFolder}\\docker\\compose.yml' run --rm mingw32 bash -c 'cmake --preset windows-x86-debug && cmake --build --preset windows-x86-debug';",
+"cmake --build --preset x86-windows-static-debug;",
+"if ($LASTEXITCODE -ne 0) { exit 1 };",
+"Copy-Item '${workspaceFolder}\\out\\build\\x86-windows-static-debug\\keeperfx.exe' '${workspaceFolder}\\.deploy\\keeperfx.exe' -Force;",
+"Write-Host 'keeperfx.exe deployed to .deploy/' -ForegroundColor Green;",
+"powershell -ExecutionPolicy Bypass -File '${workspaceFolder}\\.vscode\\validate_runtime_assets.ps1' -WorkspaceFolder '${workspaceFolder}' -DeploySubdir '.deploy'"
+]
+},
+"command": "cmake --build --preset x86-windows-static-debug && cp out/build/x86-windows-static-debug/keeperfx.exe .deploy/keeperfx.exe && bash '${workspaceFolder}/.vscode/validate_runtime_assets.sh' '${workspaceFolder}' '.deploy'",
+"problemMatcher": "$msCompile",
+"group": "build",
+"presentation": { "clear": true, "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
+},
+
+{
+"label": "Build & Deploy Windows Debug",
+"type": "shell",
+"command": "docker compose -f '${workspaceFolder}/docker/compose.yml' run --rm mingw32 bash -c 'if grep -q /workspaces out/build/windows-x86-debug/CMakeCache.txt 2>/dev/null; then rm -rf out/build/windows-x86-debug/CMakeCache.txt out/build/windows-x86-debug/CMakeFiles; fi && cmake --preset windows-x86-debug && cmake --build --preset windows-x86-debug' && cp out/build/windows-x86-debug/keeperfx.exe .deploy/keeperfx.exe && echo 'Deployed.' && bash '${workspaceFolder}/.vscode/validate_runtime_assets.sh' '${workspaceFolder}' '.deploy'",
+"windows": {
+"command": [
+"docker compose -f '${workspaceFolder}\\docker\\compose.yml' run --rm mingw32 bash -c 'if grep -q /workspaces out/build/windows-x86-debug/CMakeCache.txt 2>/dev/null; then rm -rf out/build/windows-x86-debug/CMakeCache.txt out/build/windows-x86-debug/CMakeFiles; fi && cmake --preset windows-x86-debug && cmake --build --preset windows-x86-debug';",
 "if ($LASTEXITCODE -ne 0) { exit 1 };",
 "Copy-Item '${workspaceFolder}\\out\\build\\windows-x86-debug\\keeperfx.exe' '${workspaceFolder}\\.deploy\\keeperfx.exe' -Force;",
-"Write-Host 'keeperfx.exe deployed to .deploy/' -ForegroundColor Green;"
+"Write-Host 'keeperfx.exe deployed to .deploy/' -ForegroundColor Green;",
+"powershell -ExecutionPolicy Bypass -File '${workspaceFolder}\\.vscode\\validate_runtime_assets.ps1' -WorkspaceFolder '${workspaceFolder}' -DeploySubdir '.deploy'"
 ]
 },
 "problemMatcher": "$gcc",
 "group": { "kind": "build", "isDefault": true },
+"presentation": { "clear": true, "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
+},
+
+{
+"label": "Devcontainer F5 Prep (Windows Debug)",
+"detail": "Build windows-x86-debug then incrementally sync exe/assets into .deploy for winegdb",
+"type": "shell",
+"command": "bash '${workspaceFolder}/.vscode/devcontainer_f5_prepare.sh' '${workspaceFolder}' 'windows-x86-debug'",
+"problemMatcher": "$gcc",
+"group": "build",
+"presentation": { "clear": true, "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
+},
+
+{
+"label": "Install Devcontainer Wine Debugger",
+"detail": "One-time setup in devcontainer: install wine + winegdb required by container F5 debug profile",
+"type": "shell",
+"command": "bash '${workspaceFolder}/.vscode/install_wine_debugger.sh'",
+"problemMatcher": [],
+"group": "build",
 "presentation": { "clear": true, "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
 },
 
@@ -36,6 +76,36 @@
 "problemMatcher": "$gcc",
 "group": "build",
 "presentation": { "clear": true, "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
+},
+
+{
+"label": "Build & Assemble Windows Runtime",
+"detail": "Compile in mingw container, then create clean host runtime package in out/package/<preset>/",
+"type": "shell",
+"windows": {
+"command": [
+"docker compose -f '${workspaceFolder}\\docker\\compose.yml' run --rm mingw32 bash -c 'cmake --preset ${input:windowsBuildPreset} && cmake --build --preset ${input:windowsBuildPreset}';",
+"if ($LASTEXITCODE -ne 0) { exit 1 };",
+"powershell -ExecutionPolicy Bypass -File '${workspaceFolder}\\.vscode\\assemble_windows_runtime.ps1' -WorkspaceFolder '${workspaceFolder}' -Preset '${input:windowsBuildPreset}'"
+]
+},
+"command": "bash '${workspaceFolder}/.vscode/build_and_assemble_windows_runtime.sh' '${workspaceFolder}' '${input:windowsBuildPreset}'",
+"problemMatcher": "$gcc",
+"group": "build",
+"presentation": { "clear": true, "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
+},
+
+{
+"label": "Assemble Windows Runtime Package",
+"detail": "Create clean host runtime package from .deploy + latest built executable",
+"type": "shell",
+"windows": {
+"command": "powershell -ExecutionPolicy Bypass -File '${workspaceFolder}\\.vscode\\assemble_windows_runtime.ps1' -WorkspaceFolder '${workspaceFolder}' -Preset '${input:windowsBuildPreset}'"
+},
+"command": "bash '${workspaceFolder}/.vscode/assemble_windows_runtime.sh' '${workspaceFolder}' '${input:windowsBuildPreset}'",
+"problemMatcher": [],
+"group": "build",
+"presentation": { "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
 },
 
 // ── Linux (Docker) ───────────────────────────────────────────────────
@@ -97,17 +167,32 @@
 {
 // One-time setup: builds game data layers and populates .deploy/.
 // Requires the DK original game files to be present on this machine.
+"label": "Init DK Originals Layer",
+"type": "shell",
+"windows": {
+"command": "powershell -ExecutionPolicy Bypass -File '${workspaceFolder}\\.vscode\\init_dk_layer.ps1' -WorkspaceFolder '${workspaceFolder}' -DkInstallPath '${input:dkInstallPath}'"
+},
+"command": "bash '${workspaceFolder}/.vscode/init_dk_layer.sh' '${workspaceFolder}' '${input:dkInstallPath}'",
+"problemMatcher": [],
+"group": "build",
+"presentation": { "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
+},
+
+{
+// One-time setup: builds game data layers and populates .deploy/.
+// Requires the DK original game files to be present on this machine.
 "label": "Init .deploy/",
 "type": "shell",
 "windows": {
-"command": "powershell -ExecutionPolicy Bypass -File '${workspaceFolder}\\.vscode\\init_layered_deploy.ps1' -WorkspaceFolder '${workspaceFolder}'"
+"command": "powershell -ExecutionPolicy Bypass -File '${workspaceFolder}\\.vscode\\init_layered_deploy.ps1' -WorkspaceFolder '${workspaceFolder}' -DkInstallPath '${input:dkInstallPath}'"
 },
 "osx": {
-"command": "echo 'Init .deploy/ is Windows-only. Copy DK originals to .deploy/ manually on Mac.'"
+"command": "bash '${workspaceFolder}/.vscode/init_layered_deploy.sh' '${workspaceFolder}' '${input:dkInstallPath}'"
 },
 "linux": {
-"command": "echo 'Init .deploy/ is Windows-only. Copy DK originals to .deploy/ manually on Linux.'"
+"command": "bash '${workspaceFolder}/.vscode/init_layered_deploy.sh' '${workspaceFolder}' '${input:dkInstallPath}'"
 },
+"command": "bash '${workspaceFolder}/.vscode/init_layered_deploy.sh' '${workspaceFolder}' '${input:dkInstallPath}'",
 "problemMatcher": [],
 "group": "build",
 "presentation": { "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
@@ -131,18 +216,6 @@
 "problemMatcher": [],
 "group": "build",
 "presentation": { "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
-},
-
-
-{
-"label": "View Game Log",
-"type": "shell",
-"command": "tail -f '${workspaceFolder}/.deploy/keeperfx.log'",
-"windows": {
-"command": "Get-Content '${workspaceFolder}\\.deploy\\keeperfx.log' -Wait -Tail 50"
-},
-"problemMatcher": [],
-"presentation": { "reveal": "always", "focus": false, "panel": "dedicated", "showReuseMessage": false }
 },
 
 // ── IntelliSense / tooling ───────────────────────────────────────────
@@ -182,7 +255,295 @@
 },
 "problemMatcher": "$gcc",
 "group": "build"
+},
+
+// ── Vita crash analysis ──────────────────────────────────────────────
+
+{
+"label": "Parse Vita Crash Dump",
+    "detail": "Auto-download latest crash dump from Vita and generate report",
+    "type": "shell",
+    "command": "bash '${workspaceFolder}/tools/vita-parse-crash.sh' --open",
+    "windows": {
+        "command": "powershell -ExecutionPolicy Bypass -File '${workspaceFolder}\\tools\\vita-parse-crash.ps1'; if (Test-Path '${workspaceFolder}\\out\\vita-dumps\\crash_report.html') { code '${workspaceFolder}\\out\\vita-dumps\\crash_report.html' }"
+    },
+    "problemMatcher": [],
+    "group": "build",
+    "presentation": { "reveal": "always", "focus": true, "panel": "dedicated", "showReuseMessage": false, "close": false }
+},
+
+{
+"label": "Parse Local Crash Dump",
+"type": "shell",
+"command": "bash '${workspaceFolder}/tools/vita-parse-crash.sh' --dump '${input:dumpFile}' --open",
+"windows": {
+"command": "powershell -ExecutionPolicy Bypass -File '${workspaceFolder}\\tools\\vita-parse-crash.ps1' -Dump '${input:dumpFile}'; if (Test-Path '${workspaceFolder}\\out\\vita-dumps\\crash_report.html') { code '${workspaceFolder}\\out\\vita-dumps\\crash_report.html' }"
+},
+"problemMatcher": [],
+"group": "build",
+"presentation": { "reveal": "always", "focus": true, "panel": "dedicated" }
+},
+
+// ── Vita debugger plugins ────────────────────────────────────────────
+
+{
+"label": "Fetch Vita Debugger Plugins",
+"type": "shell",
+"command": [
+    "$outDir = '${workspaceFolder}\\out\\vita-tools';",
+    "New-Item -ItemType Directory -Force -Path $outDir | Out-Null;",
+    "Write-Host 'Pulling kvdb OCI artifact...' -ForegroundColor Cyan;",
+    "$kvdbId = docker create ghcr.io/cerwym/vita-kvdb:latest 2>$null;",
+    "if (!$kvdbId) { Write-Host 'ERROR: Failed to pull ghcr.io/cerwym/vita-kvdb:latest' -ForegroundColor Red; exit 1 };",
+    "docker cp \"${kvdbId}:/kvdb.skprx\" \"$outDir/kvdb.skprx\";",
+    "docker rm $kvdbId | Out-Null;",
+    "Write-Host 'Pulling vdbtcp OCI artifact...' -ForegroundColor Cyan;",
+    "$vdbtcpId = docker create ghcr.io/cerwym/vita-vdbtcp:latest 2>$null;",
+    "if (!$vdbtcpId) { Write-Host 'ERROR: Failed to pull ghcr.io/cerwym/vita-vdbtcp:latest' -ForegroundColor Red; exit 1 };",
+    "docker cp \"${vdbtcpId}:/vdbtcp.suprx\" \"$outDir/vdbtcp.suprx\";",
+    "docker rm $vdbtcpId | Out-Null;",
+    "Write-Host 'Vita debugger plugins saved to out/vita-tools/' -ForegroundColor Green;",
+    "Get-ChildItem $outDir | Format-Table Name, Length;"
+],
+"problemMatcher": [],
+"group": "build",
+"presentation": { "reveal": "always", "focus": true, "panel": "dedicated" }
+},
+
+{
+"label": "Deploy Vita Debugger",
+"type": "shell",
+"command": [
+    "$vitaIp = if ($env:VITA_IP) { $env:VITA_IP } else { '192.168.0.66' };" ,
+    "$toolsDir = '${workspaceFolder}\\out\\vita-tools';",
+    "if (!(Test-Path \"$toolsDir\\kvdb.skprx\") -or !(Test-Path \"$toolsDir\\vdbtcp.suprx\")) {",
+    "  Write-Host 'ERROR: Plugins not found. Run Fetch Vita Debugger Plugins first.' -ForegroundColor Red; exit 1",
+    "};",
+    "Write-Host \"Uploading to $vitaIp via FTP...\" -ForegroundColor Cyan;",
+    "docker run --rm -v \"${toolsDir}:/data\" curlimages/curl:latest -T /data/kvdb.skprx \"ftp://${vitaIp}:1337/ur0:/tai/kvdb.skprx\" --ftp-create-dirs;",
+    "docker run --rm -v \"${toolsDir}:/data\" curlimages/curl:latest -T /data/vdbtcp.suprx \"ftp://${vitaIp}:1337/ur0:/tai/vdbtcp.suprx\" --ftp-create-dirs;",
+    "Write-Host 'Plugins deployed to ur0:/tai/ — reboot Vita to load.' -ForegroundColor Green;"
+],
+"problemMatcher": [],
+"group": "build",
+"presentation": { "reveal": "always", "focus": true, "panel": "dedicated" }
+},
+
+// ── Vita companion / deploy / logging ────────────────────────────────
+//
+// vitacompanion provides FTP (1337) + command server (1338) on the Vita.
+// PrincessLog streams printf/sceClibPrintf over TCP to your dev machine.
+// noASLR makes crash addresses deterministic across runs.
+// Run "Setup Vita Companion" once to install all three plugins.
+
+{
+    "label": "Setup Vita Companion",
+    "detail": "Download vitacompanion + noASLR + PrincessLog, upload to Vita, patch taiHEN config",
+    "type": "shell",
+    "command": "bash '${workspaceFolder}/tools/vita-companion.sh' setup",
+    "problemMatcher": [],
+    "group": "build",
+    "presentation": { "reveal": "always", "focus": true, "panel": "dedicated", "showReuseMessage": false }
+},
+
+{
+    "label": "Deploy Vita eboot.bin",
+    "detail": "Upload latest eboot.bin to the Vita via FTP (vitacompanion)",
+    "type": "shell",
+    "command": "VITA_PRESET='${input:vitaPreset}' bash '${workspaceFolder}/tools/vita-companion.sh' deploy-eboot",
+    "problemMatcher": [],
+    "group": "build",
+    "presentation": { "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
+},
+
+{
+    "label": "Deploy & Launch Vita",
+    "detail": "Upload eboot.bin + kill + relaunch KeeperFX on Vita",
+    "type": "shell",
+    "command": "VITA_PRESET='${input:vitaPreset}' bash '${workspaceFolder}/tools/vita-companion.sh' deploy-launch",
+    "problemMatcher": [],
+    "group": "build",
+    "presentation": { "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
+},
+
+{
+    "label": "Build & Deploy Vita",
+    "detail": "Build → deploy → launch on Vita",
+    "type": "shell",
+    "command": "cmake --preset ${input:vitaPreset} && cmake --build --preset ${input:vitaPreset} && VITA_PRESET='${input:vitaPreset}' bash '${workspaceFolder}/tools/vita-companion.sh' deploy-launch",
+    "problemMatcher": "$gcc",
+    "group": "build",
+    "presentation": { "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
+},
+
+{
+    "label": "Reboot Vita",
+    "detail": "Send reboot command to Vita via vitacompanion",
+    "type": "shell",
+    "command": "bash '${workspaceFolder}/tools/vita-companion.sh' reboot",
+    "problemMatcher": [],
+    "group": "build",
+    "presentation": { "reveal": "always", "focus": false, "panel": "shared", "showReuseMessage": false }
+},
+
+{
+    "label": "Fetch Vita Logs",
+    "detail": "Download kfx_boot.log, kfx_preinit.log, keeperfx.log, profiler.log, vitaGL.log from Vita → out/vita-logs/",
+    "type": "shell",
+    "command": "bash '${workspaceFolder}/tools/vita-companion.sh' fetch-logs",
+    "problemMatcher": [],
+    "group": "build",
+    "presentation": { "reveal": "always", "focus": true, "panel": "dedicated", "showReuseMessage": false }
+},
+
+// ── vita-uvdb GDB stub ───────────────────────────────────────────────
+//
+// vita-uvdb embeds a GDB remote stub into the vita-gdb binary.  On startup
+// the game blocks at uvdb_enter() until gdb-multiarch connects on port 1234.
+// Pre-requisites (one-time):
+//   1. Run "Setup Vita uvdb" to install kubridge.skprx on the Vita.
+//   2. Run "docker compose -f docker/compose.yml build vitasdk" to bake
+//      kubridge_stub.a into the vitasdk image.
+// Then build vita-gdb, deploy, launch, and use F5 ("Debug KeeperFX (Vita GDB)").
+
+{
+    "label": "Setup Vita uvdb",
+    "detail": "Download kubridge.skprx, upload to Vita, patch taiHEN config (one-time)",
+    "type": "shell",
+    "command": "bash '${workspaceFolder}/tools/vita-companion.sh' setup-uvdb",
+    "problemMatcher": [],
+    "group": "build",
+    "presentation": { "reveal": "always", "focus": true, "panel": "dedicated", "showReuseMessage": false }
+},
+
+{
+    "label": "Build vita-gdb",
+    "detail": "Build vita-gdb preset (embedded GDB stub, blocks at startup until debugger attaches)",
+    "type": "shell",
+    "command": "cmake --preset vita-gdb && cmake --build --preset vita-gdb",
+    "problemMatcher": "$gcc",
+    "group": "build",
+    "presentation": { "clear": true, "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
+},
+
+{
+    "label": "Build & Deploy Vita GDB",
+    "detail": "Build vita-gdb → deploy eboot.bin → launch → wait for GDB stub on port 1234",
+    "type": "shell",
+    "command": "cmake --preset vita-gdb && cmake --build --preset vita-gdb && VITA_PRESET='vita-gdb' bash '${workspaceFolder}/tools/vita-companion.sh' deploy-launch && bash '${workspaceFolder}/tools/vita-companion.sh' wait-for-gdb",
+    "problemMatcher": "$gcc",
+    "group": "build",
+    "presentation": { "clear": true, "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
+},
+
+{
+    "label": "Kill Vita App",
+    "detail": "Send destroy command to vitacompanion to kill the running app",
+    "type": "shell",
+    "command": "bash '${workspaceFolder}/tools/vita-companion.sh' kill",
+    "problemMatcher": [],
+    "group": "build",
+    "presentation": { "reveal": "silent", "panel": "shared", "showReuseMessage": false }
+},
+
+{
+    "label": "Build & Deploy Switch",
+    "detail": "Build → deploy → launch on Switch",
+    "type": "shell",
+    "command": "cmake --preset ${input:switchPreset} && cmake --build --preset ${input:switchPreset} && SWITCH_PRESET='${input:switchPreset}' bash '${workspaceFolder}/tools/switch-companion.sh' deploy-launch",
+    "problemMatcher": "$gcc",
+    "group": "build",
+    "presentation": { "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
+},
+
+// ── Fork management ──────────────────────────────────────────────────
+//
+// PowerShell scripts for keeping master/develop/feature branches in sync.
+// Run "Setup Git Hooks" once, then "Sync Repos" whenever you want upstream changes.
+
+{
+"label": "Setup Git Hooks",
+"detail": "One-time: installs hooks protecting master, adds upstream remote",
+"type": "shell",
+"command": "powershell -ExecutionPolicy Bypass -File '${workspaceFolder}\\tools\\setup-hooks.ps1'",
+"problemMatcher": [],
+"group": "build",
+"presentation": { "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
+},
+
+{
+"label": "Sync Repos",
+"detail": "Fetch upstream → ff master → merge develop → rebase vita branch",
+"type": "shell",
+"command": "powershell -ExecutionPolicy Bypass -File '${workspaceFolder}\\tools\\sync-repos.ps1'",
+"problemMatcher": [],
+"group": "build",
+"presentation": { "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
+},
+
+{
+"label": "Create Upstream PR Branch",
+"detail": "Cherry-pick commits onto a clean branch off master for upstream PRs",
+"type": "shell",
+"command": "powershell -ExecutionPolicy Bypass -File '${workspaceFolder}\\tools\\upstream-pr.ps1' -Name '${input:upstreamBranchName}' -Commits ${input:cherryPickCommits}",
+"problemMatcher": [],
+"group": "build",
+"presentation": { "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
 }
 
+],
+
+"inputs": [
+{
+    "id": "upstreamBranchName",
+    "type": "promptString",
+    "description": "Name for the upstream branch (e.g. vita-crash-tool). Will be prefixed with upstream/.",
+    "default": ""
+},
+{
+    "id": "cherryPickCommits",
+    "type": "promptString",
+    "description": "Comma-separated commit hashes to cherry-pick (e.g. abc1234, def5678)",
+    "default": ""
+},
+{
+    "id": "dumpFile",
+    "type": "promptString",
+    "description": "Path to local .psp2dmp crash dump file",
+    "default": "out/vita-dumps/"
+},
+{
+    "id": "vitaPreset",
+    "type": "pickString",
+    "description": "Vita build preset to deploy",
+    "options": ["vita-reldebug", "vita-ubsan", "vita-debug", "vita-release"],
+    "default": "vita-reldebug"
+},
+{
+    "id": "switchPreset",
+    "type": "pickString",
+    "description": "Switch build preset to deploy",
+    "options": ["switch-reldebug", "switch-debug", "switch-release"],
+    "default": "switch-reldebug"
+},
+{
+    "id": "princessLogPort",
+    "type": "promptString",
+    "description": "PrincessLog listener port (must match PrincessLog settings on Vita)",
+    "default": "8080"
+},
+{
+    "id": "dkInstallPath",
+    "type": "promptString",
+    "description": "Path to original Dungeon Keeper install root (containing data/ and sound/). Leave blank to use cached value or prompt.",
+    "default": ""
+},
+{
+    "id": "windowsBuildPreset",
+    "type": "pickString",
+    "description": "Windows preset for build/runtime assembly",
+    "options": ["windows-x86-release", "windows-x86-debug"],
+    "default": "windows-x86-release"
+}
 ]
 }

@@ -2,6 +2,8 @@
 /obj
 /sdl
 /pkg
+/gfx
+/sfx
 /tools/peresec
 /tools/png2bestpal
 /tools/png2ico
@@ -9,17 +11,11 @@
 /tools/po2ngdat
 /tools/rnctools
 /tools/sndbanker
-/tools/psp2cgc.exe
-/tools/psp2cgc.dll
-/tools/psp2core-*.bin.txt
-psp2core-*.bin.txt
 /config/fxdata/*.dat
 /config/fxdata/*.fon
 .vs/
-build*/
 /out/*
 *.cache
-.vscode
 /libexterns
 docs/html
 docs/latex
@@ -33,7 +29,6 @@ res/keeperfx_icon.ico
 /deps/zlib
 /deps/spng
 /deps/astronomy
-/deps/centijson/*.a
 /deps/ffmpeg
 /deps/openal
 /deps/luajit
@@ -41,32 +36,27 @@ res/keeperfx_icon.ico
 /deps/libnatpmp
 /deps/*.tar.gz
 /cppcheck.cache
+
+# vcpkg installed packages — build output, never committed.
+# Placed one level up (../vcpkg_installed) so all worktrees share one copy.
+vcpkg_installed/
+
 /src/ver_defs.h
 keeperfx.log
-keeperfx_vita.log
 crash_log.txt
-tools/*.log
 .local/
 .deploy/
-custom.worktrees/
 
-# Dependency build outputs
-/deps/include/
-/deps/libjson.a
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
 
-# Generated campaign level rendering assets (palette, raw image, video frames)
-campgns/*_lnd/rgmap*.pal
-campgns/*_lnd/rgmap*.raw
-campgns/*_lnd/viframe*.dat
-
-# Local-only development planning docs (not for publishing)
-docs/PHASE1_COMPLETION_SUMMARY.md
-docs/PHASE2_ASSET_PROCESSING.md
-
-# DK2 campaign symlinks (local testing only)
-/campgns/dk2_cfg
-/campgns/dk2_crtr
-/campgns/dk2_lnd
-/campgns/dk2_media
-.git-surgery/
-keeperfx.worktrees/
+# Generated documentation/audit reports
+*_AUDIT_REPORT.md
+*_DEPENDENCIES_*.md
+*_SECURITY_AUDIT.md
+VITAGL_SECURITY_AUDIT.md
+.vscode/.sonar-token

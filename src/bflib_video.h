@@ -100,6 +100,7 @@ enum TbDrawFlags {
     Lb_TEXT_HALIGN_JUSTIFY = 0x0200,
     Lb_TEXT_UNDERLINE      = 0x0400,
     Lb_TEXT_UNDERLNSHADOW  = 0x0800,
+    Lb_SPRITE_GPU_BATCH_UI = 0x1000,
 };
 
 enum TbVideoModeFlags {
