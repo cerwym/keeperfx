@@ -248,6 +248,29 @@ if(PLATFORM_VITA)
         FILE    ${CMAKE_SOURCE_DIR}/vita/sce_sys/livearea/contents/startup.png         sce_sys/livearea/contents/startup.png
         FILE    ${CMAKE_SOURCE_DIR}/vita/sce_sys/livearea/contents/template.xml        sce_sys/livearea/contents/template.xml
     )
+
+    # ━━━ vita-deploy: incremental deploy+launch target ━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    # Uses a stamp file so the FTP upload and relaunch only happen when keeperfx.self
+    # has actually changed.  The VS Code preLaunchTask drives this instead of a raw
+    # shell one-liner, keeping all deploy logic in CMake.
+    set(_VITA_SELF  "${CMAKE_CURRENT_BINARY_DIR}/keeperfx.self")
+    set(_VITA_STAMP "${CMAKE_CURRENT_BINARY_DIR}/keeperfx.deploy.stamp")
+    set(_COMPANION  "${CMAKE_SOURCE_DIR}/tools/vita-companion.sh")
+    add_custom_command(
+        OUTPUT  "${_VITA_STAMP}"
+        DEPENDS "${_VITA_SELF}"
+        COMMAND ${CMAKE_COMMAND} -E env
+                BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}
+                VITA_IP=$ENV{VITA_IP}
+                bash "${_COMPANION}" deploy-launch
+        COMMAND ${CMAKE_COMMAND} -E touch "${_VITA_STAMP}"
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        COMMENT "Deploying keeperfx.self to Vita and relaunching..."
+        VERBATIM
+    )
+    add_custom_target(vita-deploy
+        DEPENDS "${_VITA_STAMP}"
+    )
 endif()
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
