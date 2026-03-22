@@ -959,6 +959,21 @@ void reset_scroll_window(struct GuiMenu *gmnu)
     game.evntbox_scroll_window.window_height = 0;
 }
 
+void reset_tend_buttons(struct GuiMenu *gmnu)
+{
+    // Same root cause as reset_scroll_window: &game.field was evaluated at static
+    // init time when gpGame was NULL, storing only the field offset.
+    // Repair content.ptr here, after gpGame is valid, before create_button runs.
+    for (int i = 0; gmnu->buttons[i].gbtype != -1; i++)
+    {
+        struct GuiButtonInit *btn = &gmnu->buttons[i];
+        if (btn->id_num == BID_QRY_IMPRSN)
+            btn->content.ptr = &game.creatures_tend_imprison;
+        else if (btn->id_num == BID_QRY_FLEE)
+            btn->content.ptr = &game.creatures_tend_flee;
+    }
+}
+
 void gui_set_menu_mode(struct GuiButton *gbtn)
 {
     long mnu_idx = gbtn->btype_value & LbBFeF_IntValueMask;
