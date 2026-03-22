@@ -314,7 +314,7 @@
 "label": "Deploy Vita Debugger",
 "type": "shell",
 "command": [
-    "$vitaIp = '192.168.0.66';",
+    "$vitaIp = if ($env:VITA_IP) { $env:VITA_IP } else { '192.168.0.66' };" ,
     "$toolsDir = '${workspaceFolder}\\out\\vita-tools';",
     "if (!(Test-Path \"$toolsDir\\kvdb.skprx\") -or !(Test-Path \"$toolsDir\\vdbtcp.suprx\")) {",
     "  Write-Host 'ERROR: Plugins not found. Run Fetch Vita Debugger Plugins first.' -ForegroundColor Red; exit 1",

@@ -62,6 +62,7 @@ static void uvdb_unlock(void)
 /* ── Globals ───────────────────────────────────────────────────────── */
 
 static int uvdb_socket = -1;
+static int uvdb_listen_socket = -1;
 static SceUID uvdb_pipe = -1;
 
 /* ── Buffer I/O ────────────────────────────────────────────────────── */
@@ -112,6 +113,18 @@ static size_t buffer_poll(struct buffer* buf, char** pos)
     size_t chk_size = buffer_getspace(buf, pos);
     uint32_t args[6] = {uvdb_socket, (uint32_t)*pos, chk_size, 0, 0, 0};
     ssize_t ans = sceNetSyscallRecvfrom((void*)args);
+    if(ans == 0 && uvdb_listen_socket >= 0)
+    {
+        /* Peer closed (e.g. nc -z probe). Re-accept the real debugger connection. */
+        int new_sock = sceNetSyscallAccept(uvdb_listen_socket, NULL, NULL);
+        if(new_sock >= 0)
+        {
+            uvdb_socket = new_sock;
+            buf->size = 0;   /* discard any stale partial data from probe */
+            *pos = buf->buf; /* reset caller's cursor to buffer start */
+        }
+        return 0;
+    }
     if(ans < 0)
         ans = 0;
     buf->size += ans;
@@ -1316,8 +1329,16 @@ static __attribute__((used)) uint64_t real_uvdb_enter(uintptr_t lr)
         uvdb_unlock();
         return no_trap;
     }
-    if(sceNetSyscallListen(sock, 1) || (uvdb_socket = sceNetSyscallAccept(sock, NULL, NULL)) < 0)
+    if(sceNetSyscallListen(sock, 1))
     {
+        uvdb_unlock();
+        return no_trap;
+    }
+    uvdb_listen_socket = sock;
+    uvdb_socket = sceNetSyscallAccept(sock, NULL, NULL);
+    if(uvdb_socket < 0)
+    {
+        uvdb_listen_socket = -1;
         uvdb_unlock();
         return no_trap;
     }

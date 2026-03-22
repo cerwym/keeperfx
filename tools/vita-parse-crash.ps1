@@ -33,7 +33,7 @@
     .\tools\vita-parse-crash.ps1 -Dump out\vita-dumps\crash.psp2dmp
 #>
 param(
-    [string]$VitaIP = "192.168.0.66",
+    [string]$VitaIP = $(if ($env:VITA_IP) { $env:VITA_IP } else { "192.168.0.66" }),
     [int]$VitaPort = 1337,
     [string]$Dump,
     [switch]$Interactive,

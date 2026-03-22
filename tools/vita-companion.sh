@@ -248,6 +248,13 @@ cmd_launch() {
 # ── DEPLOY + LAUNCH ──────────────────────────────────────────────────
 
 cmd_deploy_launch() {
+    # If the GDB stub port is already open the game is sitting there blocked —
+    # kill it first so the FTP upload doesn't fail on a locked eboot.bin.
+    if nc -z -w1 "${VITA_IP}" 1234 2>/dev/null; then
+        warn "GDB stub already listening — killing stale instance before upload..."
+        vita_cmd "destroy"
+        sleep 2
+    fi
     cmd_deploy_eboot
     cmd_launch
 }

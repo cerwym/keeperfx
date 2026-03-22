@@ -28,6 +28,10 @@
 	"workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/${localWorkspaceFolderBasename},type=bind",
 	"workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
 
+	"remoteEnv": {
+		"VITA_IP": "${localEnv:VITA_IP}"
+	},
+
 	"customizations": {
 		"vscode": {
 			"extensions": [

@@ -152,12 +152,14 @@
       //   3. Run "Build & Deploy Vita GDB" task (or F5 will trigger it automatically).
       //   4. The game starts and blocks waiting for GDB — then F5 continues it.
       // The game pauses again on any crash (data abort → uvdb → GDB).
+      // Override the IP by setting VITA_IP in your environment (devcontainer remoteEnv).
       "type": "cppdbg",
       "request": "launch",
       "program": "${workspaceFolder}/out/build/vita-gdb/keeperfx",
       "MIMode": "gdb",
       "miDebuggerPath": "gdb-multiarch",
       "miDebuggerServerAddress": "192.168.0.66:1234",
+      "launchCompleteCommand": "exec-continue",
       "stopAtEntry": false,
       "cwd": "${workspaceFolder}",
       "setupCommands": [
@@ -188,6 +190,50 @@
         }
       ],
       "preLaunchTask": "Build & Deploy Vita GDB",
+      "postDebugTask": "Kill Vita App",
+      "internalConsoleOptions": "openOnSessionStart"
+    },
+    {
+      "name": "Attach KeeperFX (Vita GDB)",
+      // Use this when the Vita is already running with the GDB stub waiting on port 1234.
+      // Skips build/deploy — just attaches gdb-multiarch directly.
+      // Override the IP by setting VITA_IP in your environment (devcontainer remoteEnv).
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/out/build/vita-gdb/keeperfx",
+      "MIMode": "gdb",
+      "miDebuggerPath": "gdb-multiarch",
+      "miDebuggerServerAddress": "192.168.0.66:1234",
+      "launchCompleteCommand": "exec-continue",
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "setupCommands": [
+        {
+          "description": "Set architecture to ARMv7",
+          "text": "-gdb-set architecture armv7",
+          "ignoreFailures": false
+        },
+        {
+          "description": "Enable pretty-printing",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        },
+        {
+          "description": "Set print pretty on",
+          "text": "-interpreter-exec console \"set print pretty on\"",
+          "ignoreFailures": true
+        },
+        {
+          "description": "Avoid truncating arrays/strings",
+          "text": "-interpreter-exec console \"set print elements 0\"",
+          "ignoreFailures": true
+        },
+        {
+          "description": "Source map: /src → workspace (for Docker-built symbols)",
+          "text": "-interpreter-exec console \"set substitute-path /src ${workspaceFolder}\"",
+          "ignoreFailures": true
+        }
+      ],
       "postDebugTask": "Kill Vita App",
       "internalConsoleOptions": "openOnSessionStart"
     }

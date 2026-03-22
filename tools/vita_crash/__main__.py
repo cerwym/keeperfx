@@ -64,8 +64,8 @@ def main():
         prog="vita_crash",
         description="PS Vita crash dump analysis tool for KeeperFX",
     )
-    parser.add_argument("--vita-ip", default="192.168.0.66",
-                        help="Vita IP address (default: 192.168.0.66)")
+    parser.add_argument("--vita-ip", default=os.environ.get("VITA_IP", "192.168.0.66"),
+                        help="Vita IP address (default: $VITA_IP env var, or 192.168.0.66)")
     parser.add_argument("--vita-port", type=int, default=1337,
                         help="Vita FTP port (default: 1337)")
     parser.add_argument("--dump", metavar="FILE",

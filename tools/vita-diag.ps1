@@ -1,7 +1,7 @@
 #!/usr/bin/env pwsh
 # Vita Diagnostics: test vdbtcp ports + FTP + GDB
 param(
-    [string]$VitaIP = "192.168.0.66"
+    [string]$VitaIP = $(if ($env:VITA_IP) { $env:VITA_IP } else { "192.168.0.66" })
 )
 
 $ErrorActionPreference = "Stop"

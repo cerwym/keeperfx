@@ -21,7 +21,7 @@ VITASDK_IMAGE="ghcr.io/$DOCKER_ORG/build-vitasdk:latest"
 TOOLS_VOLUME="keeperfx-vita-tools"
 
 # --- Parse arguments ---
-VITA_IP="192.168.0.66"
+VITA_IP="${VITA_IP:-192.168.0.66}"
 VITA_PORT=1337
 DUMP=""
 INTERACTIVE=false
