@@ -13,8 +13,8 @@
     {
       "kind": "git",
       "repository": "https://github.com/cerwym/keeperfx-vcpkg-registry",
-      "baseline": "ced522c52c9c310ea2a1cc4985ff2643f03c7ff7",
-      "packages": ["astronomy", "enet6", "libnatpmp"]
+      "baseline": "dcb6b8df162cf6925237292ab5471d4cc7b4987d",
+      "packages": ["astronomy", "centijson", "enet6", "libnatpmp"]
     }
   ]
 }
