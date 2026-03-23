@@ -54,6 +54,14 @@ if(NOT PLATFORM_VITA AND NOT PLATFORM_3DS AND NOT PLATFORM_SWITCH)
     else()
         kfx_status("DEPS" "FFmpeg not yet in vcpkg — will use fallback from deps/ tarballs")
     endif()
+
+    # ━━━ JSON (centijson) ━━━
+    find_package(centijson CONFIG QUIET)
+    if(centijson_FOUND)
+        kfx_status("DEPS" "centijson found (vcpkg)")
+    else()
+        kfx_status("DEPS" "centijson not found via vcpkg — will build from deps/ sources")
+    endif()
     
 else()
     # ━━━ Homebrew platforms (Vita, 3DS, Switch) ━━━

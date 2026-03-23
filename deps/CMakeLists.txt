@@ -54,10 +54,13 @@ if( NOT EXISTS ${CMAKE_SOURCE_DIR}/deps/astronomy/libastronomy.a )
 endif()
 
 if( NOT EXISTS ${CMAKE_SOURCE_DIR}/deps/centijson/libjson.a )
-	file(MAKE_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/centijson)
-	kfx_resolve_dep_archive("centijson-mingw32.tar.gz" "https://github.com/dkfans/kfx-deps/releases/download/initial/centijson-mingw32.tar.gz")
+	# Skip tarball extraction if centijson is found via vcpkg (MSVC builds)
+	if(NOT centijson_FOUND)
+		file(MAKE_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/centijson)
+		kfx_resolve_dep_archive("centijson-mingw32.tar.gz" "https://github.com/dkfans/kfx-deps/releases/download/initial/centijson-mingw32.tar.gz")
 
-	execute_process(COMMAND ${CMAKE_COMMAND} -E tar xzf ${CMAKE_SOURCE_DIR}/deps/centijson-mingw32.tar.gz WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/centijson)
+		execute_process(COMMAND ${CMAKE_COMMAND} -E tar xzf ${CMAKE_SOURCE_DIR}/deps/centijson-mingw32.tar.gz WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/centijson)
+	endif()
 endif()
 
 if(NOT EXISTS ${CMAKE_SOURCE_DIR}/deps/ffmpeg/libavcodec/libavcodec.a)
@@ -130,15 +133,9 @@ endif()
 
 ## centijson
 if(MSVC)
-    add_library(centijson_static STATIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/centijson/json.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/centijson/json-dom.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/centijson/json-ptr.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/centijson/value.c
-    )
-    target_include_directories(centijson_static PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/centijson/include)
-    target_link_libraries(keeperfx PUBLIC centijson_static)
-    target_link_libraries(keeperfx_hvlog PUBLIC centijson_static)
+    find_package(centijson CONFIG REQUIRED)
+    target_link_libraries(keeperfx PUBLIC centijson::centijson)
+    target_link_libraries(keeperfx_hvlog PUBLIC centijson::centijson)
 else()
     add_library(centijson_static STATIC IMPORTED)
     set_target_properties(centijson_static PROPERTIES IMPORTED_LOCATION ${CMAKE_CURRENT_SOURCE_DIR}/centijson/libjson.a)
@@ -189,7 +186,11 @@ endif()
 
 ## centitoml.
 add_library(centitoml OBJECT "centitoml/toml_api.c")
-target_link_libraries(centitoml PUBLIC centijson_static)
+if(MSVC)
+    target_link_libraries(centitoml PUBLIC centijson::centijson)
+else()
+    target_link_libraries(centitoml PUBLIC centijson_static)
+endif()
 target_include_directories(centitoml INTERFACE "centitoml")
 target_link_libraries(keeperfx PUBLIC centitoml)
 target_link_libraries(keeperfx_hvlog PUBLIC centitoml)
