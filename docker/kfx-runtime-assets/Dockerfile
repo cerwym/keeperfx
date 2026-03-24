@@ -14,12 +14,6 @@ COPY config/mods/ /kfx/mods/
 COPY campgns/ /kfx/campgns/
 COPY levels/ /kfx/levels/
 
-# SDL runtime DLLs used by the MinGW Windows build
-COPY sdl/for_final_package/SDL2.dll /kfx/SDL2.dll
-COPY sdl/for_final_package/SDL2_image.dll /kfx/SDL2_image.dll
-COPY sdl/for_final_package/SDL2_mixer.dll /kfx/SDL2_mixer.dll
-COPY sdl/for_final_package/SDL2_net.dll /kfx/SDL2_net.dll
-
 # Generated package assets (produced in Docker by pkg-* targets)
 COPY pkg/data/ /kfx/data/
 COPY pkg/ldata/ /kfx/ldata/
