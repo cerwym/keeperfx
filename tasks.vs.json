@@ -11,7 +11,7 @@
             "args": [
                 "-ExecutionPolicy", "Bypass",
                 "-Command",
-                "cmake --build --preset x86-windows-static-debug; if ($LASTEXITCODE -ne 0) { exit 1 }; Copy-Item '${workspaceRoot}\\out\\build\\x86-windows-static-debug\\keeperfx.exe' '${workspaceRoot}\\.deploy\\keeperfx.exe' -Force; Write-Host 'keeperfx.exe deployed to .deploy/' -ForegroundColor Green"
+                "if (-not (Test-Path '${workspaceRoot}\\.deploy\\data\\main.pal')) { Write-Host 'ERROR: .deploy is not initialized. Run the Init .deploy/ task first.' -ForegroundColor Red; exit 1 }; cmake --build --preset x86-windows-static-debug; if ($LASTEXITCODE -ne 0) { exit 1 }; Copy-Item '${workspaceRoot}\\out\\build\\x86-windows-static-debug\\keeperfx.exe' '${workspaceRoot}\\.deploy\\keeperfx.exe' -Force; Write-Host 'keeperfx.exe deployed to .deploy/' -ForegroundColor Green"
             ],
             "workingDirectory": "${workspaceRoot}",
             "output": "${workspaceRoot}\\out\\build\\x86-windows-static-debug"
