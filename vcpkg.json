@@ -17,6 +17,7 @@
         "minizip",
         "luajit",
         "miniupnpc",
-        "centijson"
+        "centijson",
+        "glad"
     ]
 }

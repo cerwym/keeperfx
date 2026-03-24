@@ -14,6 +14,8 @@
 #include "renderer/backends/SoftwareTextRenderer.h"
 #ifdef RENDERER_OPENGL_ENABLED
 #  include "renderer/RendererOpenGL.h"
+#  include "renderer/opengl/GLTileAtlas.h"
+#  include "renderer/opengl/GLWorldViewRenderer.h"
 #endif
 #ifdef PLATFORM_VITA
 #  include "renderer/RendererVita.h"
@@ -67,10 +69,25 @@ static IRenderer* create_renderer(RendererType type)
 }
 
 /** Allocates the appropriate IWorldViewRenderer for the given renderer type.
- *  Currently all non-Vita platforms use the software rasterizer. */
+ *  OpenGL uses GLWorldViewRenderer (GPU geometry); all others use software. */
 static IWorldViewRenderer* create_world_view_renderer(RendererType type)
 {
-    (void)type; // reserved for future GPU dispatch
+#ifdef RENDERER_OPENGL_ENABLED
+    if (type == RENDERER_OPENGL)
+    {
+        // Inject shared GPU resources from the already-initialised RendererOpenGL
+        RendererOpenGL* ogl = dynamic_cast<RendererOpenGL*>(s_activeRenderer);
+        if (ogl && ogl->GetTileAtlas())
+        {
+            return new GLWorldViewRenderer(
+                ogl->GetTileAtlas(),
+                (GLuint)ogl->GetFadeTex(),
+                (GLuint)ogl->GetPaletteTex());
+        }
+        WARNLOG("RendererManager: GLWorldViewRenderer requested but resources not ready — using software fallback");
+    }
+#endif
+    (void)type;
     return new SoftwareWorldViewRenderer();
 }
 

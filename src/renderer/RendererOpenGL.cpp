@@ -12,8 +12,10 @@
 /******************************************************************************/
 #include "pre_inc.h"
 #include "renderer/RendererOpenGL.h"
+#include "renderer/opengl/GLTileAtlas.h"
 
 #include "bflib_video.h"    // lbDisplay, lbPaletteColors, MyScreenWidth/Height
+#include "bflib_render.h"   // render_fade_tables
 #include "platform.h"       // platform_create_gl_context / swap / destroy
 
 #include <glad/glad.h>
@@ -111,7 +113,7 @@ bool RendererOpenGL::Init()
         return false;
     }
 
-    // Fullscreen quad VAO/VBO
+    // ── Phase 1: fullscreen quad ─────────────────────────────────────────────
     glGenVertexArrays(1, &m_vao);
     glGenBuffers(1, &m_vbo);
     glBindVertexArray(m_vao);
@@ -147,11 +149,26 @@ bool RendererOpenGL::Init()
     glUniform1i(glGetUniformLocation(m_shader, "u_index"),   0);
     glUniform1i(glGetUniformLocation(m_shader, "u_palette"), 1);
 
+    // ── Phase 2: shared world-geometry resources ─────────────────────────────
+    if (!init_fade_table_texture())
+    {
+        WARNLOG("RendererOpenGL: fade table texture init failed — world GPU renderer disabled");
+        // Non-fatal: Phase 1 blit still works
+    }
+
+    if (!init_tile_atlas())
+    {
+        WARNLOG("RendererOpenGL: tile atlas init failed — world GPU renderer disabled");
+    }
+
     return true;
 }
 
 void RendererOpenGL::Shutdown()
 {
+    delete m_tile_atlas;
+    m_tile_atlas = nullptr;
+
     delete[] m_stagingBuf;
     m_stagingBuf = nullptr;
 
@@ -160,6 +177,7 @@ void RendererOpenGL::Shutdown()
     if (m_shader)  { glDeleteProgram(m_shader);          m_shader = 0; }
     if (m_texIndex)   { glDeleteTextures(1, &m_texIndex);   m_texIndex = 0; }
     if (m_texPalette) { glDeleteTextures(1, &m_texPalette); m_texPalette = 0; }
+    if (m_texFade)    { glDeleteTextures(1, &m_texFade);    m_texFade = 0; }
 
     platform_destroy_gl_context();
 }
@@ -251,17 +269,48 @@ bool RendererOpenGL::compile_shaders()
 
 void RendererOpenGL::upload_palette_texture()
 {
-    // lbPaletteColors is an SDL_Color[256] (r, g, b, unused)
-    // Convert to RGBA bytes for the GL texture
+    // lbPalette is unsigned char[768] (R, G, B per entry, 6-bit values)
     uint8_t rgba[256 * 4];
     for (int i = 0; i < 256; ++i)
     {
-        rgba[i * 4 + 0] = lbPaletteColors[i].r;
-        rgba[i * 4 + 1] = lbPaletteColors[i].g;
-        rgba[i * 4 + 2] = lbPaletteColors[i].b;
+        rgba[i * 4 + 0] = (uint8_t)(lbPalette[i * 3 + 0] << 2);
+        rgba[i * 4 + 1] = (uint8_t)(lbPalette[i * 3 + 1] << 2);
+        rgba[i * 4 + 2] = (uint8_t)(lbPalette[i * 3 + 2] << 2);
         rgba[i * 4 + 3] = 255;
     }
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_1D, m_texPalette);
     glTexSubImage1D(GL_TEXTURE_1D, 0, 0, 256, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+}
+
+bool RendererOpenGL::init_fade_table_texture()
+{
+    if (!render_fade_tables)
+    {
+        WARNLOG("RendererOpenGL::init_fade_table_texture — render_fade_tables not ready");
+        return false;
+    }
+
+    glGenTextures(1, &m_texFade);
+    glBindTexture(GL_TEXTURE_2D, m_texFade);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    // 256 palette indices × 256 shade levels = 65536 bytes
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, 256, 256, 0,
+                 GL_RED, GL_UNSIGNED_BYTE, render_fade_tables);
+    return true;
+}
+
+bool RendererOpenGL::init_tile_atlas()
+{
+    m_tile_atlas = new GLTileAtlas();
+    if (!m_tile_atlas->Init())
+    {
+        delete m_tile_atlas;
+        m_tile_atlas = nullptr;
+        return false;
+    }
+    return true;
 }

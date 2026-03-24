@@ -28,6 +28,7 @@ list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/platform/WindowSystemVita\\.c
 if(NOT KEEPERFX_RENDERER_OPENGL)
     list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/renderer/RendererOpenGL\\.cpp$")
     list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/platform_gl_sdl2\\.cpp$")
+    list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/renderer/opengl/.*\\.cpp$")
 endif()
 
 # ━━━ Networking Exclusions ━━━
@@ -205,6 +206,11 @@ macro(kfx_link_sdl2_target TARGET_NAME)
 endmacro()
 kfx_link_sdl2_target(keeperfx)
 
+# Link glad for OpenGL renderer (MSVC/vcpkg path; MinGW deferred to keeperfx-deps)
+if(KEEPERFX_RENDERER_OPENGL AND TARGET glad::glad)
+    target_link_libraries(keeperfx PRIVATE glad::glad)
+endif()
+
 add_executable(keeperfx_hvlog ${KEEPERFX_SOURCES_C} ${KEEPERFX_SOURCES_CXX})
 target_include_directories(keeperfx_hvlog PRIVATE src deps/centitoml deps/centijson/include)
 target_compile_definitions(keeperfx_hvlog PUBLIC BFDEBUG_LEVEL=10)
@@ -216,6 +222,11 @@ apply_keeperfx_link_flags(keeperfx_hvlog)
 apply_windows_system_libs(keeperfx_hvlog)
 
 kfx_link_sdl2_target(keeperfx_hvlog)
+
+# Link glad for OpenGL renderer (hvlog target mirrors keeperfx)
+if(KEEPERFX_RENDERER_OPENGL AND TARGET glad::glad)
+    target_link_libraries(keeperfx_hvlog PRIVATE glad::glad)
+endif()
 
 # ━━━ Dependent Platform Libraries ━━━
 # Linked AFTER targets are created (see `add_subdirectory(deps)` in root CMakeLists.txt)
