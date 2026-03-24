@@ -125,7 +125,7 @@
             "command": "powershell.exe",
             "args": [
                 "-ExecutionPolicy", "Bypass",
-                "-File", "${workspaceRoot}\\.vscode\\init_layered_deploy.ps1",
+                "-File", "${workspaceRoot}\\tools\\init-deploy.ps1",
                 "-WorkspaceFolder", "${workspaceRoot}"
             ],
             "workingDirectory": "${workspaceRoot}"

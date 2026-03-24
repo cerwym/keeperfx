@@ -9,6 +9,7 @@
       "project": "CMakeLists.txt",
       "projectTarget": "keeperfx.exe",
       "name": "keeperfx.exe",
+      "preLaunchTask": "Build & Deploy Windows MSVC Debug",
       "currentDir": "${workspaceRoot}\\.deploy",
       "args": [ "-level", "00001", "-campaign", "personal", "-nointro", "-alex" ]
     },
@@ -17,8 +18,9 @@
       "project": "CMakeLists.txt",
       "projectTarget": "keeperfx_hvlog.exe",
       "name": "keeperfx_hvlog.exe",
+      "preLaunchTask": "Build & Deploy Windows MSVC Debug",
       "currentDir": "${workspaceRoot}\\.deploy",
-      "args": "-level 00001 -campaign personal -nointro -alex"
+      "args": [ "-level", "00001", "-campaign", "personal", "-nointro", "-alex" ]
     }
   ]
 }
