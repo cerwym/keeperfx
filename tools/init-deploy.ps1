@@ -176,7 +176,7 @@ function Build-RuntimeAssetsInDocker {
     param([string]$ComposeFilePath)
 
     Write-Host "Generating pkg runtime assets in docker/linux ..." -ForegroundColor Cyan
-    docker compose -f $ComposeFilePath run --rm linux bash -lc "make pkg-gfx && make pkg-sfx && make pkg-languages"
+    docker compose -f $ComposeFilePath run --rm --remove-orphans linux bash -lc "make pkg-gfx && make pkg-sfx && make pkg-languages"
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to generate pkg assets (pkg-gfx/pkg-sfx/pkg-languages)."
     }
