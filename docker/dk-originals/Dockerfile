@@ -1,6 +1,6 @@
-# LOCAL-ONLY IMAGE — never pushed to any registry.
+# LOCAL-ONLY IMAGE -- never pushed to any registry.
 # Caches the 16 original Dungeon Keeper files required by KeeperFX.
-# Built once per machine by .vscode/init_dk_layer.ps1.
+# Built once per machine by tools/init-deploy.ps1 as keeperfx/dk-originals:local.
 #
 # Build command (run by init_dk_layer.ps1):
 #   docker build \

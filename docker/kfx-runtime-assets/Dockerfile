@@ -1,12 +1,6 @@
 # LOCAL-ONLY IMAGE -- never pushed to any registry.
 # Caches KeeperFX runtime assets used by local debug runs.
-#
-# This image is expected to be rebuilt locally after asset regeneration:
-#   - make pkg-gfx
-#   - make pkg-sfx
-#   - make pkg-languages
-#
-# Built by tools/init-deploy.ps1 as keeperfx-runtime-assets:local.
+# Built by tools/init-deploy.ps1 as keeperfx/runtime-assets:local.
 
 FROM scratch
 

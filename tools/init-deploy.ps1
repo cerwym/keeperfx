@@ -29,8 +29,8 @@ $requiredDkList = Join-Path $ws "docs\files_required_from_original_dk.txt"
 $dkDockerfile = Join-Path $ws "docker\dk-originals\Dockerfile"
 $runtimeDockerfile = Join-Path $ws "docker\kfx-runtime-assets\Dockerfile"
 
-$dkImage = "keeperfx-dk-originals:local"
-$runtimeImage = "keeperfx-runtime-assets:local"
+$dkImage = "keeperfx/dk-originals:local"
+$runtimeImage = "keeperfx/runtime-assets:local"
 
 function Test-DockerImageExists {
     param([string]$ImageName)
