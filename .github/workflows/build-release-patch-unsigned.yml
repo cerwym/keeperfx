@@ -59,7 +59,19 @@ jobs:
       env:
         CMAKE_BUILD_PARALLEL_LEVEL: 4
 
+    - name: Get gfx submodule SHA for cache key
+      id: gfx-sha
+      run: echo "sha=$(git ls-tree HEAD gfx | awk '{print $3}')" >> $GITHUB_OUTPUT
+
+    - name: Restore pkg-enginegfx cache
+      id: pkg-cache
+      uses: actions/cache@v4
+      with:
+        path: pkg/
+        key: pkg-enginegfx-${{ hashFiles('build/make/pkg_gfx.mk') }}-${{ steps.gfx-sha.outputs.sha }}
+
     - name: Package graphics data
+      if: steps.pkg-cache.outputs.cache-hit != 'true'
       run: |
         set -eux
         make BUILD_NUMBER=$BUILD_NUMBER PACKAGE_SUFFIX=$PACKAGE_SUFFIX pkg-enginegfx
