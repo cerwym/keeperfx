@@ -6503,6 +6503,81 @@ void display_drawlist(void) // Draws isometric and 1st person view. Not frontvie
       WARNLOG("Incurred %lu rendering problems; last was with poly kind %ld",render_problems,render_prob_kind);
 }
 
+/** Draws only the sprite/UI bucket types to the CPU framebuffer.
+ *  Called by the GPU world renderer after flushing geometry to the VBO so that
+ *  creatures, shadows, status icons, room flags, etc. are composited on top of
+ *  the GPU-rendered tiles during EndFrame. */
+void display_drawlist_sprites_only(void)
+{
+    struct PlayerInfo *player;
+    const struct Camera *cam;
+    union {
+        struct BasicQ *b;
+        struct BucketKindJontySprite *jontySprite;
+        struct BucketKindCreatureShadow *creatureShadow;
+        struct BucketKindSlabSelector *slabSelector;
+        struct BucketKindCreatureStatus *creatureStatus;
+        struct BucketKindFloatingGoldText *floatingGoldText;
+        struct BucketKindRoomFlag *roomFlag;
+    } item;
+    long bucket_num;
+    render_fade_tables = pixmap.fade_tables;
+    render_ghost = pixmap.ghost;
+    render_alpha = (unsigned char *)&alpha_sprite_table;
+    for (bucket_num = BUCKETS_COUNT-1; bucket_num > 0; bucket_num--)
+    {
+        for (item.b = buckets[bucket_num]; item.b != NULL; item.b = item.b->next)
+        {
+            switch (item.b->kind)
+            {
+            case QK_JontySprite:
+                draw_jonty_mapwho(item.jontySprite);
+                break;
+            case QK_JontyISOSprite:
+                player = get_my_player();
+                cam = get_local_camera(player->acamera);
+                if (cam != NULL)
+                {
+                    if (cam->view_mode == PVM_IsoWibbleView || cam->view_mode == PVM_IsoStraightView) {
+                        draw_jonty_mapwho(item.jontySprite);
+                    }
+                }
+                break;
+            case QK_CreatureShadow:
+                draw_keepsprite_unscaled_in_buffer(item.creatureShadow->anim_sprite, item.creatureShadow->angle, item.creatureShadow->current_frame, big_scratch);
+                vec_map = big_scratch;
+                vec_mode = VM_SpriteTranslucent;
+                vec_colour = item.creatureShadow->vertex_first.S;
+                trig(&item.creatureShadow->vertex_first, &item.creatureShadow->vertex_second, &item.creatureShadow->vertex_third);
+                trig(&item.creatureShadow->vertex_first, &item.creatureShadow->vertex_third, &item.creatureShadow->vertex_fourth);
+                break;
+            case QK_SlabSelector:
+                draw_clipped_line(
+                    item.slabSelector->p.X,
+                    item.slabSelector->p.Y,
+                    item.slabSelector->p.U,
+                    item.slabSelector->p.V,
+                    item.slabSelector->p.S);
+                break;
+            case QK_CreatureStatus:
+                draw_status_sprites(item.creatureStatus->x, item.creatureStatus->y, item.creatureStatus->thing);
+                break;
+            case QK_FloatingGoldText:
+                draw_engine_number(item.floatingGoldText);
+                break;
+            case QK_RoomFlagBottomPole:
+                draw_engine_room_flagpole(item.roomFlag);
+                break;
+            case QK_RoomFlagStatusBox:
+                draw_engine_room_flag_top(item.roomFlag);
+                break;
+            default:
+                break;
+            }
+        }
+    }
+}
+
 static void prepare_draw_plane_of_engine_columns(struct Camera *cam, long aposc, long bposc, long xcell, long ycell, struct MinMax *mm)
 {
     apos = aposc;

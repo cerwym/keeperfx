@@ -153,6 +153,7 @@ void draw_frontview_engine(struct Camera *cam);
 
 /** Bucket-list flush — called by SoftwareWorldViewRenderer. */
 void display_drawlist(void);
+void display_drawlist_sprites_only(void);
 void display_fast_drawlist(struct Camera *cam);
 /******************************************************************************/
 #ifdef __cplusplus

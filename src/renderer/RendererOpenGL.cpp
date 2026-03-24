@@ -13,6 +13,7 @@
 #include "pre_inc.h"
 #include "renderer/RendererOpenGL.h"
 #include "renderer/opengl/GLTileAtlas.h"
+#include "renderer/opengl/GLWorldViewRenderer.h"
 
 #include "bflib_video.h"    // lbDisplay, lbPaletteColors, MyScreenWidth/Height
 #include "bflib_render.h"   // render_fade_tables
@@ -47,7 +48,9 @@ void main() {
 }
 )";
 
-// Fragment shader: sample 8-bit index texture, look up palette
+// Fragment shader: sample 8-bit index texture, look up palette.
+// Palette index 0 is the transparent key used in the 3D viewport background,
+// so GPU world geometry shows through where no CPU-drawn pixels exist.
 static const char* k_fragSrc = R"(
 #version 330 core
 in  vec2 v_uv;
@@ -57,6 +60,8 @@ uniform sampler1D u_palette;  // RGBA8 — 256-entry palette
 void main() {
     float idx = texture(u_index, v_uv).r;
     fragColor  = texture(u_palette, idx);
+    // Suppress palette index 0 so GPU tiles show through in the 3D viewport.
+    fragColor.a = step(0.5 / 256.0, idx);
 }
 )";
 
@@ -192,21 +197,32 @@ void RendererOpenGL::EndFrame()
     // Upload palette (may have changed this frame via LbPaletteSet)
     upload_palette_texture();
 
-    // Upload index texture from staging buffer
+    // Upload CPU framebuffer to index texture
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_texIndex);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_stagingW, m_stagingH, GL_RED, GL_UNSIGNED_BYTE, m_stagingBuf);
 
-    // Bind palette texture
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    // Flush GPU world geometry first (tiles rendered beneath CPU overlay)
+    if (m_world_renderer)
+        m_world_renderer->GPUFlushNow();
+
+    // CPU framebuffer blit ON TOP — creatures, UI, sprites.
+    // Palette index 0 is transparent so GPU tiles show through in the 3D
+    // viewport where the CPU staging buffer was zeroed by BeginWorldPass.
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_texIndex);
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_1D, m_texPalette);
 
-    // Draw fullscreen quad
-    glClear(GL_COLOR_BUFFER_BIT);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glUseProgram(m_shader);
     glBindVertexArray(m_vao);
     glDrawArrays(GL_TRIANGLES, 0, 6);
     glBindVertexArray(0);
+    glDisable(GL_BLEND);
 
     platform_swap_gl_buffers(lbWindow);
 }

@@ -79,10 +79,12 @@ static IWorldViewRenderer* create_world_view_renderer(RendererType type)
         RendererOpenGL* ogl = dynamic_cast<RendererOpenGL*>(s_activeRenderer);
         if (ogl && ogl->GetTileAtlas())
         {
-            return new GLWorldViewRenderer(
+            auto* glwr = new GLWorldViewRenderer(
                 ogl->GetTileAtlas(),
                 (GLuint)ogl->GetFadeTex(),
                 (GLuint)ogl->GetPaletteTex());
+            ogl->SetWorldRenderer(glwr);
+            return glwr;
         }
         WARNLOG("RendererManager: GLWorldViewRenderer requested but resources not ready — using software fallback");
     }

@@ -11,6 +11,7 @@
 #include "IRenderer.h"
 
 class GLTileAtlas;
+class GLWorldViewRenderer;
 
 /******************************************************************************/
 
@@ -42,6 +43,10 @@ public:
     unsigned int  GetFadeTex()    const { return m_texFade; }
     unsigned int  GetPaletteTex() const { return m_texPalette; }
 
+    // Wired by RendererManager after GLWorldViewRenderer is created so that
+    // EndFrame() can flush GPU geometry before the CPU blit overlay.
+    void SetWorldRenderer(GLWorldViewRenderer* wr) { m_world_renderer = wr; }
+
 private:
     bool compile_shaders();
     void upload_palette_texture();
@@ -63,6 +68,9 @@ private:
     // Shared GPU resources (owned here, injected into world renderer)
     unsigned int m_texFade      = 0; // R8 256×256: render_fade_tables lighting LUT
     GLTileAtlas* m_tile_atlas   = nullptr;
+
+    // Not owned — set by RendererManager after world renderer creation
+    GLWorldViewRenderer* m_world_renderer = nullptr;
 };
 
 /******************************************************************************/

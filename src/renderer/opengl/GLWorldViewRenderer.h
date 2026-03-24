@@ -51,19 +51,26 @@ public:
     void FlushFrontView(struct Camera* cam) override;
     const char* GetName() const override { return "GLWorldViewRenderer"; }
 
+    // Called by RendererOpenGL::EndFrame() to issue the accumulated draw call
+    // after glClear() and before the CPU framebuffer blit overlay.
+    void GPUFlushNow();
+
 private:
     bool init_gl_resources();
     void free_gl_resources();
-    bool load_shader_source(const char* path, char** out_src);
     bool compile_world_shaders();
 
-    // Append one triangle (3 PolyPoint vertices) to the VBO staging array
-    // Returns false if the buffer is full (forces a mid-frame flush)
+    // Append one triangle (3 PolyPoint vertices, fixed-point 16:16) to the staging array
     bool append_triangle(const struct PolyPoint* p0,
                          const struct PolyPoint* p1,
                          const struct PolyPoint* p2);
 
-    // Flush whatever is in the staging array to the GPU and draw
+    // Append one triangle from compact-format fields (unsigned short xy, unsigned char uv/shade)
+    bool append_triangle_compact(int sx0, int sy0, int u0, int v0, int shade0,
+                                 int sx1, int sy1, int u1, int v1, int shade1,
+                                 int sx2, int sy2, int u2, int v2, int shade2);
+
+    // Upload staged vertices and issue glDrawArrays; resets m_vert_count
     void gpu_flush();
 
     // Injected resources (not owned)
@@ -82,8 +89,10 @@ private:
     GLint  m_loc_palette     = -1;
 
     // Per-frame state
-    int   m_screen_w = 0;
-    int   m_screen_h = 0;
+    int            m_screen_w   = 0;
+    int            m_screen_h   = 0;
+    unsigned char* m_framebuf   = nullptr; // viewport start in staging buffer
+    int            m_pitch      = 0;       // staging buffer row stride (bytes)
 
     // CPU-side vertex staging buffer (dynamic VBO)
     static const int k_max_verts = 65536;   // ~21000 triangles per frame

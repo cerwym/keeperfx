@@ -15,24 +15,47 @@
 #include "renderer/ITileAtlas.h"
 
 #include "engine_buckets.h"   // QKinds enum, BasicQ, BucketKind* structs, buckets[]
+#include "engine_render.h"    // display_drawlist_sprites_only()
 #include "bflib_render.h"      // PolyPoint, render_fade_tables
 #include "bflib_basics.h"      // ERRORLOG / SYNCLOG / WARNLOG
-#include "engine_textures.h"   // TEXTURE_VARIATIONS_COUNT
 
 #include <glad/glad.h>
-#include <cstddef>
 #include <cstdlib>
 #include <cstring>
 #include "post_inc.h"
 
 /******************************************************************************/
-// render_fade_tables declared in bflib_render.h (256×256 lighting LUT)
-// lbPaletteColors / lbDisplay.Palette declared in bflib_video.h
 
-/******************************************************************************/
-// Shader file paths (relative to working directory — game data root)
-static const char* k_vert_path = "src/renderer/opengl/shaders/world_vert.glsl";
-static const char* k_frag_path = "src/renderer/opengl/shaders/world_frag.glsl";
+static const char* k_world_vert_src = R"glsl(
+#version 100
+attribute vec2  a_pos;
+attribute vec2  a_uv;
+attribute float a_shade;
+varying vec2  v_uv;
+varying float v_shade;
+void main()
+{
+    gl_Position = vec4(a_pos, 0.0, 1.0);
+    v_uv        = a_uv;
+    v_shade     = a_shade;
+}
+)glsl";
+
+static const char* k_world_frag_src = R"glsl(
+#version 100
+precision mediump float;
+varying vec2  v_uv;
+varying float v_shade;
+uniform sampler2D u_tile_atlas;
+uniform sampler2D u_fade_table;
+uniform sampler2D u_palette;
+void main()
+{
+    float raw_idx    = texture2D(u_tile_atlas, v_uv).r;
+    float shaded_idx = texture2D(u_fade_table, vec2(raw_idx, v_shade)).r;
+    gl_FragColor     = texture2D(u_palette, vec2(shaded_idx, 0.5));
+}
+)glsl";
 
 /******************************************************************************/
 
@@ -143,68 +166,35 @@ void GLWorldViewRenderer::free_gl_resources()
     m_initialized = false;
 }
 
-bool GLWorldViewRenderer::load_shader_source(const char* path, char** out_src)
-{
-    FILE* f = fopen(path, "rb");
-    if (!f)
-    {
-        ERRORLOG("GLWorldViewRenderer: cannot open shader '%s'", path);
-        return false;
-    }
-    fseek(f, 0, SEEK_END);
-    long sz = ftell(f);
-    rewind(f);
-    *out_src = (char*)malloc((size_t)sz + 1);
-    if (!*out_src) { fclose(f); return false; }
-    fread(*out_src, 1, (size_t)sz, f);
-    (*out_src)[sz] = '\0';
-    fclose(f);
-    return true;
-}
-
 bool GLWorldViewRenderer::compile_world_shaders()
 {
-    char* vert_src = nullptr;
-    char* frag_src = nullptr;
-    bool ok = false;
-
-    if (!load_shader_source(k_vert_path, &vert_src)) goto cleanup;
-    if (!load_shader_source(k_frag_path, &frag_src)) goto cleanup;
-
+    GLuint vert = compile_shader_src(GL_VERTEX_SHADER,   k_world_vert_src, "world_vert");
+    GLuint frag = compile_shader_src(GL_FRAGMENT_SHADER, k_world_frag_src, "world_frag");
+    if (!vert || !frag)
     {
-        GLuint vert = compile_shader_src(GL_VERTEX_SHADER,   vert_src, k_vert_path);
-        GLuint frag = compile_shader_src(GL_FRAGMENT_SHADER, frag_src, k_frag_path);
-        if (!vert || !frag)
-        {
-            if (vert) glDeleteShader(vert);
-            if (frag) glDeleteShader(frag);
-            goto cleanup;
-        }
-        m_shader = glCreateProgram();
-        glAttachShader(m_shader, vert);
-        glAttachShader(m_shader, frag);
-        glLinkProgram(m_shader);
-        glDeleteShader(vert);
-        glDeleteShader(frag);
-
-        GLint linked = 0;
-        glGetProgramiv(m_shader, GL_LINK_STATUS, &linked);
-        if (!linked)
-        {
-            char log[512];
-            glGetProgramInfoLog(m_shader, sizeof(log), nullptr, log);
-            ERRORLOG("GLWorldViewRenderer: shader link error: %s", log);
-            glDeleteProgram(m_shader);
-            m_shader = 0;
-            goto cleanup;
-        }
-        ok = true;
+        if (vert) glDeleteShader(vert);
+        if (frag) glDeleteShader(frag);
+        return false;
     }
+    m_shader = glCreateProgram();
+    glAttachShader(m_shader, vert);
+    glAttachShader(m_shader, frag);
+    glLinkProgram(m_shader);
+    glDeleteShader(vert);
+    glDeleteShader(frag);
 
-cleanup:
-    free(vert_src);
-    free(frag_src);
-    return ok;
+    GLint linked = 0;
+    glGetProgramiv(m_shader, GL_LINK_STATUS, &linked);
+    if (!linked)
+    {
+        char log[512];
+        glGetProgramInfoLog(m_shader, sizeof(log), nullptr, log);
+        ERRORLOG("GLWorldViewRenderer: shader link error: %s", log);
+        glDeleteProgram(m_shader);
+        m_shader = 0;
+        return false;
+    }
+    return true;
 }
 
 /******************************************************************************/
@@ -214,7 +204,18 @@ void GLWorldViewRenderer::BeginWorldPass(unsigned char* framebuf, int pitch,
 {
     m_screen_w   = w;
     m_screen_h   = h;
+    m_framebuf   = framebuf;
+    m_pitch      = pitch;
     m_vert_count = 0;
+
+    // Zero the viewport area in the CPU staging buffer so palette index 0
+    // acts as transparent in the compositing blit, letting GPU-rendered tiles
+    // show through.
+    if (framebuf)
+    {
+        for (int row = 0; row < h; row++)
+            memset(framebuf + (long)row * pitch, 0, (size_t)w);
+    }
 
     // Lazy initialise GL resources on first use (GL context must be current)
     if (!m_initialized)
@@ -245,12 +246,28 @@ bool GLWorldViewRenderer::append_triangle(const struct PolyPoint* p0,
     return true;
 }
 
+bool GLWorldViewRenderer::append_triangle_compact(
+    int sx0, int sy0, int u0, int v0, int shade0,
+    int sx1, int sy1, int u1, int v1, int shade1,
+    int sx2, int sy2, int u2, int v2, int shade2)
+{
+    if (m_vert_count + 3 > k_max_verts)
+        gpu_flush();
+
+    WorldVertex* v = &m_verts[m_vert_count];
+    COMPACT_UV_TO_WORLDVERTEX(&v[0], sx0, sy0, u0, v0, shade0, m_screen_w, m_screen_h);
+    COMPACT_UV_TO_WORLDVERTEX(&v[1], sx1, sy1, u1, v1, shade1, m_screen_w, m_screen_h);
+    COMPACT_UV_TO_WORLDVERTEX(&v[2], sx2, sy2, u2, v2, shade2, m_screen_w, m_screen_h);
+    m_vert_count += 3;
+    return true;
+}
+
 void GLWorldViewRenderer::gpu_flush()
 {
     if (m_vert_count == 0 || !m_initialized)
         return;
 
-    // Use variation 0 for now; full player-colour variation selection is TODO
+    // Variation 0 matches the software path (block_ptrs[] uses raw tile_id)
     const int variation = 0;
     GLuint atlas_tex = (m_atlas && m_atlas->IsInitialized())
                        ? m_atlas->GetAtlasTexture(variation)
@@ -279,6 +296,11 @@ void GLWorldViewRenderer::gpu_flush()
     m_vert_count = 0;
 }
 
+void GLWorldViewRenderer::GPUFlushNow()
+{
+    gpu_flush();
+}
+
 /******************************************************************************/
 
 void GLWorldViewRenderer::FlushIsometricView()
@@ -289,15 +311,17 @@ void GLWorldViewRenderer::FlushIsometricView()
         return;
     }
 
-    // Walk the depth-sorted bucket list (front-to-back = bucket 0 first)
-    for (int bi = 0; bi < BUCKETS_COUNT; bi++)
+    // Walk the depth-sorted bucket list back-to-front (painter's algorithm).
+    // Geometry types are emitted to the VBO; sprite/UI types write directly to
+    // the CPU staging buffer (zeroed in BeginWorldPass) for the overlay blit.
+    for (int bi = BUCKETS_COUNT - 1; bi > 0; bi--)
     {
         struct BasicQ* q = buckets[bi];
         while (q != nullptr)
         {
             switch (q->kind)
             {
-                // ── Textured triangles with PolyPoint vertices ──────────────
+                // ── Full PolyPoint (fixed-point 16:16) geometry ─────────────
                 case QK_PolygonStandard:
                 {
                     auto* p = (struct BucketKindPolygonStandard*)q;
@@ -331,13 +355,54 @@ void GLWorldViewRenderer::FlushIsometricView()
                     break;
                 }
 
-                // ── Deferred: compact-format variants ───────────────────────
-                // QK_TrigMode2/3/6, QK_PolyMode0/4/5 use unsigned short x/y
-                // and unsigned char UV — different conversion path needed.
-                // QK_RotableSprite, QK_JontySprite, QK_JontyISOSprite,
-                // QK_CreatureShadow, QK_SlabSelector, QK_CreatureStatus,
-                // QK_TextureQuad, QK_FloatingGoldText, QK_RoomFlag* —
-                // sprite/UI types, not yet ported to GPU path.
+                // ── Compact types (unsigned short x/y, unsigned char uv) ────
+                case QK_TrigMode2:
+                {
+                    auto* p = (struct BucketKindTrigMode2*)q;
+                    append_triangle_compact(
+                        p->vertex_first_x,  p->vertex_first_y,  p->texture_u_first,  p->texture_v_first,  255,
+                        p->vertex_second_x, p->vertex_second_y, p->texture_u_second, p->texture_v_second, 255,
+                        p->vertex_third_x,  p->vertex_third_y,  p->texture_u_third,  p->texture_v_third,  255);
+                    break;
+                }
+                case QK_TrigMode3:
+                {
+                    auto* p = (struct BucketKindTrigMode3*)q;
+                    append_triangle_compact(
+                        p->vertex_first_x,  p->vertex_first_y,  p->texture_u_first,  p->texture_v_first,  255,
+                        p->vertex_second_x, p->vertex_second_y, p->texture_u_second, p->texture_v_second, 255,
+                        p->vertex_third_x,  p->vertex_third_y,  p->texture_u_third,  p->texture_v_third,  255);
+                    break;
+                }
+                case QK_TrigMode6:
+                {
+                    auto* p = (struct BucketKindTrigMode6*)q;
+                    append_triangle_compact(
+                        p->vertex_first_x,  p->vertex_first_y,  p->texture_u_first,  p->texture_v_first,  p->texture_w_first,
+                        p->vertex_second_x, p->vertex_second_y, p->texture_u_second, p->texture_v_second, p->texture_w_second,
+                        p->vertex_third_x,  p->vertex_third_y,  p->texture_u_third,  p->texture_v_third,  p->texture_w_third);
+                    break;
+                }
+                case QK_PolyMode5:
+                {
+                    auto* p = (struct BucketKindPolyMode5*)q;
+                    append_triangle_compact(
+                        p->vertex_first_x,  p->vertex_first_y,  p->texture_u_first,  p->texture_v_first,  p->texture_w_first,
+                        p->vertex_second_x, p->vertex_second_y, p->texture_u_second, p->texture_v_second, p->texture_w_second,
+                        p->vertex_third_x,  p->vertex_third_y,  p->texture_u_third,  p->texture_v_third,  p->texture_w_third);
+                    break;
+                }
+
+                // ── Flat-colour types (no UV, different shader needed) ───────
+                // QK_PolyMode0 / QK_PolyMode4: silently skipped for now
+                case QK_PolyMode0:
+                case QK_PolyMode4:
+                    break;
+
+                // ── Sprite / UI types: handled by CPU software overlay ───────
+                // display_drawlist_sprites_only() is called below; these bucket
+                // kinds write to the zeroed CPU staging buffer, which is then
+                // alpha-blended over the GPU geometry in RendererOpenGL::EndFrame.
                 default:
                     break;
             }
@@ -345,8 +410,10 @@ void GLWorldViewRenderer::FlushIsometricView()
         }
     }
 
-    // Issue the accumulated triangles in one draw call
-    gpu_flush();
+    // Draw sprites and UI to the CPU staging buffer (zeroed in BeginWorldPass).
+    // GPUFlushNow() is called by RendererOpenGL::EndFrame() BEFORE the blit, so
+    // the GPU geometry is already below the CPU overlay in the final frame.
+    display_drawlist_sprites_only();
 }
 
 void GLWorldViewRenderer::FlushFrontView(struct Camera* cam)
