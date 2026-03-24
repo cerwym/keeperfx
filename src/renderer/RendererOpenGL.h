@@ -2,7 +2,7 @@
 // Dungeon Keeper - Renderer Abstraction Layer
 /******************************************************************************/
 /** @file RendererOpenGL.h
- *     OpenGL framebuffer blit renderer backend (Phase 1) + world shader resources.
+ *     OpenGL framebuffer blit renderer backend + world shader resources.
  */
 /******************************************************************************/
 #ifndef RENDERER_OPENGL_H
@@ -17,10 +17,10 @@ class GLTileAtlas;
 /**
  * OpenGL renderer backend.
  *
- * Phase 1: CPU-rendered 8-bit paletted framebuffer blitted to screen via a
+ * The CPU-rendered 8-bit paletted framebuffer is blitted to screen via a
  * fullscreen palette-decode shader (index texture → RGBA via 1D palette).
  *
- * Phase 2: Also owns the shared GPU resources (fade table texture, tile atlas,
+ * Also owns the shared GPU resources (fade table texture, tile atlas,
  * palette texture) injected into GLWorldViewRenderer by RendererManager.
  */
 class RendererOpenGL : public IRenderer {
@@ -37,7 +37,7 @@ public:
     const char* GetName() const override;
     bool     SupportsRuntimeSwitch() const override;
 
-    // Phase 2 accessors — used by RendererManager to inject into GLWorldViewRenderer
+    // Accessors — used by RendererManager to inject into GLWorldViewRenderer
     GLTileAtlas*  GetTileAtlas()  const { return m_tile_atlas; }
     unsigned int  GetFadeTex()    const { return m_texFade; }
     unsigned int  GetPaletteTex() const { return m_texPalette; }
@@ -53,14 +53,14 @@ private:
     int      m_stagingW    = 0;
     int      m_stagingH    = 0;
 
-    // Phase 1 GL objects — fullscreen palette-blit quad
+    // GL objects — fullscreen palette-blit quad
     unsigned int m_vao          = 0;
     unsigned int m_vbo          = 0;
     unsigned int m_shader       = 0;
     unsigned int m_texIndex     = 0; // R8: 8-bit index texture (staging upload)
     unsigned int m_texPalette   = 0; // RGBA8 256-entry 1D palette
 
-    // Phase 2 shared GPU resources (owned here, injected into world renderer)
+    // Shared GPU resources (owned here, injected into world renderer)
     unsigned int m_texFade      = 0; // R8 256×256: render_fade_tables lighting LUT
     GLTileAtlas* m_tile_atlas   = nullptr;
 };

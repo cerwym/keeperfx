@@ -6,8 +6,7 @@
  * @par Purpose:
  *     Wraps the 8-bit palette-indexed blit shader:
  *       index_tex   (GL_LUMINANCE 640×480) → palette_tex (GL_RGBA 256×1) → RGBA
- *     Used in RendererVita::EndFrame() to decode lbDrawSurface to a scene FBO
- *     (Phase B+) or directly to the screen (Phase A).
+ *     Used in RendererVita::EndFrame() to decode lbDrawSurface to screen.
  */
 /******************************************************************************/
 #ifndef VITA_BLIT_SHADER_H

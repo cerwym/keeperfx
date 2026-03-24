@@ -2,7 +2,7 @@
 // Dungeon Keeper - Renderer Abstraction Layer
 /******************************************************************************/
 /** @file GLWorldViewRenderer.cpp
- *     Desktop OpenGL world-geometry renderer (Phase 2).
+ *     Desktop OpenGL world-geometry renderer.
  */
 /******************************************************************************/
 #include "pre_inc.h"
@@ -250,7 +250,7 @@ void GLWorldViewRenderer::gpu_flush()
     if (m_vert_count == 0 || !m_initialized)
         return;
 
-    // Use variation 0 for now; variation selection is Phase 2b
+    // Use variation 0 for now; full player-colour variation selection is TODO
     const int variation = 0;
     GLuint atlas_tex = (m_atlas && m_atlas->IsInitialized())
                        ? m_atlas->GetAtlasTexture(variation)
@@ -331,13 +331,13 @@ void GLWorldViewRenderer::FlushIsometricView()
                     break;
                 }
 
-                // ── Deferred: compact-format variants (Phase 2b) ────────────
+                // ── Deferred: compact-format variants ───────────────────────
                 // QK_TrigMode2/3/6, QK_PolyMode0/4/5 use unsigned short x/y
                 // and unsigned char UV — different conversion path needed.
                 // QK_RotableSprite, QK_JontySprite, QK_JontyISOSprite,
                 // QK_CreatureShadow, QK_SlabSelector, QK_CreatureStatus,
                 // QK_TextureQuad, QK_FloatingGoldText, QK_RoomFlag* —
-                // sprite/UI types handled separately in Phase 2b/2c.
+                // sprite/UI types, not yet ported to GPU path.
                 default:
                     break;
             }
@@ -352,7 +352,6 @@ void GLWorldViewRenderer::FlushIsometricView()
 void GLWorldViewRenderer::FlushFrontView(struct Camera* cam)
 {
     // Front-view uses the same bucket mechanism; delegate to software for now.
-    // Phase 2b: port front-view polygons to GPU path.
     if (m_sw_fallback)
         m_sw_fallback->FlushFrontView(cam);
 }

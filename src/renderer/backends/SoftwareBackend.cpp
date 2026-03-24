@@ -17,7 +17,7 @@ TbResult SoftwareBackend::SubmitSprite(long x, long y, const struct TbSprite* sp
         return Lb_FAIL;
     }
     
-    // Phase 2B: Route to CPU software blitter
+    // Route to CPU software blitter
     // Save the original draw flags and clear the GPU batch flag to prevent recursion
     unsigned int saved_flags = lbDisplay.DrawFlags;
     lbDisplay.DrawFlags = draw_flags & ~Lb_SPRITE_GPU_BATCH_UI;
@@ -38,7 +38,7 @@ TbResult SoftwareBackend::SubmitSpriteOneColour(long x, long y, const struct TbS
         return Lb_FAIL;
     }
     
-    // Phase 2B: Route to CPU software blitter with color tint
+    // Route to CPU software blitter with color tint
     unsigned int saved_flags = lbDisplay.DrawFlags;
     lbDisplay.DrawFlags = draw_flags & ~Lb_SPRITE_GPU_BATCH_UI;
     
@@ -55,7 +55,7 @@ TbResult SoftwareBackend::SubmitSpriteRemap(long x, long y, const struct TbSprit
         return Lb_FAIL;
     }
     
-    // Phase 2B: Route to CPU software blitter with color remapping
+    // Route to CPU software blitter with color remapping
     unsigned int saved_flags = lbDisplay.DrawFlags;
     lbDisplay.DrawFlags = draw_flags & ~Lb_SPRITE_GPU_BATCH_UI;
     

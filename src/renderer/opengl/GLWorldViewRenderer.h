@@ -2,7 +2,7 @@
 // Dungeon Keeper - Renderer Abstraction Layer
 /******************************************************************************/
 /** @file GLWorldViewRenderer.h
- *     Desktop OpenGL world-geometry renderer (Phase 2).
+ *     Desktop OpenGL world-geometry renderer.
  * @par Purpose:
  *     Implements IWorldViewRenderer for the desktop OpenGL path.
  *     FlushIsometricView() walks the engine bucket list, converts each
@@ -14,8 +14,8 @@
  *     loop: palette-index lookup + fade-table lighting = two texture samples.
  *
  *     Unrecognised bucket kinds fall back to SoftwareWorldViewRenderer for
- *     that primitive, maintaining visual correctness during Phase 2a while
- *     not all QKinds are ported.
+ *     that primitive, maintaining visual correctness while not all QKinds
+ *     are ported.
  */
 /******************************************************************************/
 #ifndef GL_WORLD_VIEW_RENDERER_H

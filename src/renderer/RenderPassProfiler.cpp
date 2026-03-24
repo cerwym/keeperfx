@@ -76,7 +76,7 @@ void RenderPassProfiler::EndFrame()
 
 const RenderPassProfiler::FrameStats& RenderPassProfiler::GetAverageStats(int frame_window) const
 {
-    // Phase 4 TODO: Implement rolling average over frame_window frames
+    // TODO: Implement rolling average over frame_window frames
     return m_average_stats;
 }
 
@@ -112,13 +112,13 @@ void RenderPassProfiler::PrintStats() const
 RenderPassTimer::RenderPassTimer(const char* name)
     : m_name(name), m_start_us(0)
 {
-    // Phase 4 TODO: Capture start time using platform timer (e.g., sceKernelGetProcessTimeFrequencyMhz)
+    // TODO: Capture start time using platform timer (e.g., sceKernelGetProcessTimeFrequencyMhz)
     // For now, placeholder only
 }
 
 RenderPassTimer::~RenderPassTimer()
 {
-    // Phase 4 TODO: Calculate elapsed time, record to profiler
+    // TODO: Calculate elapsed time, record to profiler
     // RenderPassProfiler& prof = RenderPassProfiler::GetInstance();
     // unsigned long elapsed_us = get_elapsed_us(m_start_us);
     // prof.RecordSubmissionTime(elapsed_us);

@@ -2,7 +2,7 @@
 // Dungeon Keeper - Renderer Abstraction Layer
 /******************************************************************************/
 /** @file RendererOpenGL.cpp
- *     OpenGL framebuffer blit renderer backend (Phase 1).
+ *     OpenGL renderer backend.
  * @par Purpose:
  *     Presents the software-rendered 8-bit paletted framebuffer via OpenGL
  *     3.3 Core.  Uses a two-texture approach: an 8-bit index texture and a
@@ -113,7 +113,7 @@ bool RendererOpenGL::Init()
         return false;
     }
 
-    // ── Phase 1: fullscreen quad ─────────────────────────────────────────────
+    // ── Fullscreen palette-blit quad ─────────────────────────────────────────
     glGenVertexArrays(1, &m_vao);
     glGenBuffers(1, &m_vbo);
     glBindVertexArray(m_vao);
@@ -149,11 +149,11 @@ bool RendererOpenGL::Init()
     glUniform1i(glGetUniformLocation(m_shader, "u_index"),   0);
     glUniform1i(glGetUniformLocation(m_shader, "u_palette"), 1);
 
-    // ── Phase 2: shared world-geometry resources ─────────────────────────────
+    // ── World-geometry GPU resources ─────────────────────────────────────────
     if (!init_fade_table_texture())
     {
         WARNLOG("RendererOpenGL: fade table texture init failed — world GPU renderer disabled");
-        // Non-fatal: Phase 1 blit still works
+        // Non-fatal: framebuffer blit still works
     }
 
     if (!init_tile_atlas())

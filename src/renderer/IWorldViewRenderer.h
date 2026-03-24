@@ -5,9 +5,9 @@
  *     Abstract interface for 3D world-view rendering.
  * @par Purpose:
  *     Separates the 3D world-view rendering pipeline (bucket flush + rasterizer)
- *     from the rest of the game. The bucket-fill phase (geometry walk, column
+ *     from the rest of the game. The bucket-fill step (geometry walk, column
  *     traversal, polygon-add calls) is platform-neutral and stays unchanged.
- *     Only the flush phase — what is done with the accumulated bucket list —
+ *     Only the flush step — what is done with the accumulated bucket list —
  *     is abstracted here.
  *
  * @par Design:
