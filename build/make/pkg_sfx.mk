@@ -85,7 +85,7 @@ define define_campaign_speeches_rule
 pkg/campgns/$(1)_$(2): sfx/campgns/$(1)_$(2)/filelist.txt
 	-$(ECHO) 'Copying campaign SFX: $$@'
 	@$(MKDIR) "$$@"
-	tail -n +2 "$$<" | cut -f1 | xargs -d '\n' -I {} $(CP) "$$(<D)/{}" "$$@/"
+	tail -n +2 "$$<" | cut -f1 | tr -d '\r' | xargs -d '\n' -I {} $(CP) "$$(<D)/{}" "$$@/"
 	-$(ECHO) 'Finished copying: $$@'
 	-$(ECHO) ' '
 
@@ -97,14 +97,14 @@ convert-sfx: $(patsubst %,convert-speech-sfx-%,$(NGSPEECHBANKS)) $(patsubst %,co
 
 convert-speech-sfx-%: sfx/%/filelist.txt
 	-$(ECHO) 'Converting speech samples in list: $<'
-	tail -n +2 "$<" | cut -f1 | xargs -d '\n' -I {} sox "$(<D)/design/{}" -c 1 -b 8 -r 22050 -e unsigned-integer "$(<D)/{}" compand 0.02,0.20 5:-40,-40,-35,-20,-10 -6 -90 0.1 gain -n -0.1
+	tail -n +2 "$<" | cut -f1 | tr -d '\r' | xargs -d '\n' -I {} sox "$(<D)/design/{}" -c 1 -b 8 -r 22050 -e unsigned-integer "$(<D)/{}" compand 0.02,0.20 5:-40,-40,-35,-20,-10 -6 -90 0.1 gain -n -0.1
 #	best would be "compand 0.02,0.20 5:-60,-40,-10 -6 -90 0.1", modification is to skip noise
 	-$(ECHO) 'Finished converting list: $<'
 	-$(ECHO) ' '
 
 convert-campaign-sfx-%: sfx/campgns/%/filelist.txt
 	-$(ECHO) 'Converting campaign speeches in list: $<'
-	tail -n +2 "$<" | cut -f1 | xargs -d '\n' -I {} sox "$(<D)/design/{}" -c 1 -r 22050 -e ms-adpcm "$(<D)/{}" compand 0.02,0.20 5:-40,-40,-35,-20,-10 -6 -90 0.1 gain -n -0.1
+	tail -n +2 "$<" | cut -f1 | tr -d '\r' | xargs -d '\n' -I {} sox "$(<D)/design/{}" -c 1 -r 22050 -e ms-adpcm "$(<D)/{}" compand 0.02,0.20 5:-40,-40,-35,-20,-10 -6 -90 0.1 gain -n -0.1
 #	best would be "compand 0.02,0.20 5:-60,-40,-10 -6 -90 0.1", modification is to skip noise
 	-$(ECHO) 'Finished converting list: $<'
 	-$(ECHO) ' '
