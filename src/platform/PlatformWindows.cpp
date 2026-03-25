@@ -261,9 +261,24 @@ void PlatformWindows::ErrorParachuteUpdate()
 
 void PlatformWindows::VideoInit()
 {
+    // Allow the screensaver: SDL2 by default disables it via
+    // SystemParametersInfo(SPI_SETSCREENSAVEACTIVE, FALSE), which tells Windows
+    // the app wants exclusive display handling and can disrupt the HDR compositor.
+    SDL_SetHint(SDL_HINT_VIDEO_ALLOW_SCREENSAVER, "1");
+
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK) < 0)
         fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
     atexit(SDL_Quit);
+
+    // Set GL pixel-format attributes BEFORE the first SDL_CreateWindow call.
+    // On Windows, SDL2 calls SetPixelFormat inside SDL_CreateWindow itself
+    // (WIN_GL_SetupWindow), so these values must be established here, not in
+    // platform_create_gl_context which runs after the window already exists.
+    SDL_GL_SetAttribute(SDL_GL_RED_SIZE,    10);
+    SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE,  10);
+    SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE,   10);
+    SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE,   2);
+    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 }
 
 // ----- File system helpers -----

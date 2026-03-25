@@ -360,7 +360,18 @@ static TbBool LbHwCheckIsModeAvailable(TbScreenMode mode, unsigned short display
     {
         if (mdinfo->VideoFlags & Lb_VF_BORDERLESS)
         {
-            // bordeless window - do nothing
+            // borderless window at desktop resolution
+            if (mdinfo->Width == 0 || mdinfo->Height == 0)
+            {
+                SDL_DisplayMode desktop;
+                if (SDL_GetDesktopDisplayMode(display, &desktop) != 0)
+                {
+                    ERRORLOG("SDL_GetDesktopDisplayMode failed: %s", SDL_GetError());
+                    return false;
+                }
+                mdinfo->Width = desktop.w;
+                mdinfo->Height = desktop.h;
+            }
         }
         else
         {
@@ -494,7 +505,7 @@ static void LbRegisterModernVideoModes(void)
     LbRegisterVideoMode("DESKTOP",      0, 0, 32, Lb_VF_RGBCOLOR|Lb_VF_BORDERLESS|Lb_VF_DESKTOP); // borderless fullscreen window mode
     LbRegisterVideoMode("DESKTOP_FULL", 0, 0, 32, Lb_VF_RGBCOLOR|Lb_VF_DESKTOP); // normal fullscreen mode (at desktop resolution)
     //LbRegisterVideoMode("WINDOW",       0, 0, 32, Lb_VF_RGBCOLOR|Lb_VF_WINDOWED); // normal bordered window at any resolution, remebers previous set size (defaults to 640x480?)
-    //LbRegisterVideoMode("BORDERLESS",   0, 0, 32, Lb_VF_RGBCOLOR|Lb_VF_BORDERLESS|Lb_VF_WINDOWED); // borderless window at any resolution
+    LbRegisterVideoMode("BORDERLESS",   0, 0, 32, Lb_VF_RGBCOLOR|Lb_VF_BORDERLESS|Lb_VF_WINDOWED); // borderless window at desktop resolution
     LbRegisterVideoMode("ALL",          0, 0, 32, Lb_VF_RGBCOLOR|Lb_VF_FILLALL); // span all displays with a borderless window
 }
 
@@ -605,7 +616,8 @@ TbResult LbScreenSetup(TbScreenMode mode, TbScreenCoord width, TbScreenCoord hei
     if (!PlatformManager_OwnsDisplay())
     {
         if (lbWindow == NULL) {
-            lbWindow = SDL_CreateWindow(lbDrawAreaTitle, mdinfo->window_pos_x, mdinfo->window_pos_y, mdinfo->Width, mdinfo->Height, mdinfo->sdlFlags);
+            // I'm a lazy POS, but right now we only ever try to set an OpenGL surface.
+            lbWindow = SDL_CreateWindow(lbDrawAreaTitle, mdinfo->window_pos_x, mdinfo->window_pos_y, mdinfo->Width, mdinfo->Height, mdinfo->sdlFlags | SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN);
         }
         if (lbWindow == NULL) {
             ERRORLOG("SDL_CreateWindow failed for mode %d (%s): %s", (int)mode, mdinfo->Desc, SDL_GetError());
@@ -1037,6 +1049,11 @@ TbScreenMode LbRegisterVideoModeString(const char *desc)
     if (strncasecmp(desc, "DESKTOP", 7) == 0)
     {
         return LbRecogniseVideoModeString("DESKTOP");
+    }
+    // check for the borderless windowed mode
+    if (strncasecmp(desc, "BORDERLESS", 10) == 0)
+    {
+        return LbRecogniseVideoModeString("BORDERLESS");
     }
     // modern patterns not matched - maybe it's fullscreen mode
     width = 0; height = 0; bpp = 0; flags = Lb_VF_DEFAULT;
