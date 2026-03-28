@@ -135,6 +135,20 @@ extern unsigned char temp_cluedo_mode;
 /******************************************************************************/
 
 extern TbSpriteData keepersprite_add[KEEPERSPRITE_ADD_NUM];
+
+/** GPU hook for keeper-sprite rendering.  When non-NULL, called from
+ *  draw_keepersprite() instead of the CPU scaling blitter.
+ *  dst_x/y/w/h  = screen destination rect (pixels).
+ *  sprite_data  = raw RLE palette-index data.
+ *  src_w/h      = sprite source dimensions.
+ *  draw_flags   = lbDisplay.DrawFlags at time of call (flip, transpar, remap).
+ *  remap        = lbSpriteReMapPtr at time of call (may be NULL).
+ *  Returns 1 if the GPU handled the sprite (CPU blit skipped), 0 to fall back. */
+typedef int (*KeeperSpriteGPUHook)(long dst_x, long dst_y, long dst_w, long dst_h,
+                                    const unsigned char *sprite_data, int src_w, int src_h,
+                                    unsigned int draw_flags, const unsigned char *remap);
+extern KeeperSpriteGPUHook g_kspr_gpu_hook;
+
 /*****************************************************************************/
 float interpolate(float variable_to_interpolate, long previous, long current);
 float interpolate_angle(float variable_to_interpolate, float previous, float current);
@@ -155,6 +169,22 @@ void draw_frontview_engine(struct Camera *cam);
 void display_drawlist(void);
 void display_drawlist_sprites_only(void);
 void display_fast_drawlist(struct Camera *cam);
+
+/** Draw only depth-positioned 3D entity sprites for one bucket.
+ *  Called by GLWorldViewRenderer between gpu_flush() and RenderPass_FlushNow(). */
+void draw_3d_sprites_for_bucket(long bucket_num);
+
+/** Draw all non-spatial sprites (shadows, selector, status, text, room flags)
+ *  across all buckets into the CPU staging buffer. */
+void draw_nonspatial_sprites(void);
+
+/** Same as draw_nonspatial_sprites() but skips QK_CreatureShadow entries.
+ *  Used by the GL renderer which handles shadows via its own GPU path. */
+void draw_nonspatial_sprites_no_shadows(void);
+
+/** Rasterize a keeper sprite frame into a 256×256 byte scratch buffer.
+ *  Non-zero bytes indicate shadow silhouette pixels. */
+void draw_keepsprite_unscaled_in_buffer(unsigned short kspr_n, short angle, unsigned char current_frame, unsigned char *outbuf);
 /******************************************************************************/
 #ifdef __cplusplus
 }

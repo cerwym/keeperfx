@@ -1,0 +1,183 @@
+/******************************************************************************/
+// Dungeon Keeper - Renderer Abstraction Layer
+/******************************************************************************/
+/** @file GLSpriteAtlas.cpp
+ *     Desktop OpenGL sprite texture atlas — implementation.
+ */
+/******************************************************************************/
+#include "pre_inc.h"
+#include "renderer/opengl/GLSpriteAtlas.h"
+
+#ifdef RENDERER_OPENGL_ENABLED
+
+#include <cstring>
+#include "bflib_basics.h"
+#include "bflib_sprite.h"
+#include "post_inc.h"
+
+/******************************************************************************/
+
+bool GLSpriteAtlas::Init()
+{
+    m_pixels.assign((size_t)k_atlas_w * k_atlas_h, 0u);
+
+    glGenTextures(1, &m_texture);
+    glBindTexture(GL_TEXTURE_2D, m_texture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, k_atlas_w, k_atlas_h, 0,
+                 GL_RED, GL_UNSIGNED_BYTE, m_pixels.data());
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    m_cursor_x   = 0;
+    m_shelf_y    = 0;
+    m_shelf_h    = 0;
+    m_dirty_y_min = k_atlas_h;
+    m_dirty_y_max = -1;
+
+    SYNCLOG("GLSpriteAtlas: initialised %dx%d R8 texture", k_atlas_w, k_atlas_h);
+    return true;
+}
+
+void GLSpriteAtlas::Free()
+{
+    if (m_texture) {
+        glDeleteTextures(1, &m_texture);
+        m_texture = 0;
+    }
+    m_pixels.clear();
+    m_uvs.clear();
+}
+
+/******************************************************************************/
+
+void GLSpriteAtlas::decode_rle(uint8_t* dst, int dst_stride, const struct TbSprite* spr)
+{
+    // Zero out the sprite area (index 0 == transparent)
+    for (int y = 0; y < spr->SHeight; ++y)
+        memset(dst + y * dst_stride, 0, spr->SWidth);
+
+    const signed char* sp = reinterpret_cast<const signed char*>(spr->Data);
+    for (int y = 0; y < spr->SHeight; ++y) {
+        uint8_t* row = dst + y * dst_stride;
+        int x = 0;
+        while (true) {
+            signed char cmd = *sp++;
+            if (cmd == 0) break;            // end of row
+            if (cmd < 0) {
+                x += (int)(-cmd);           // transparent run — skip pixels
+            } else {
+                int count = (int)cmd;
+                for (int i = 0; i < count; ++i) {
+                    if (x < spr->SWidth)
+                        row[x] = (uint8_t)(*sp);
+                    ++sp;
+                    ++x;
+                }
+            }
+        }
+    }
+}
+
+bool GLSpriteAtlas::pack_sprite(const struct TbSprite* spr, SpriteUV& out)
+{
+    const int w = spr->SWidth;
+    const int h = spr->SHeight;
+    if (w <= 0 || h <= 0) return false;
+
+    const int alloc_w = w + 1; // 1-pixel margin
+    const int alloc_h = h + 1;
+
+    // Advance to next shelf if the sprite doesn't fit horizontally
+    if (m_cursor_x + alloc_w > k_atlas_w) {
+        m_shelf_y += m_shelf_h;
+        m_cursor_x = 0;
+        m_shelf_h  = 0;
+    }
+
+    if (m_shelf_y + alloc_h > k_atlas_h) {
+        ERRORLOG("GLSpriteAtlas: atlas full — cannot pack %dx%d sprite", w, h);
+        return false;
+    }
+
+    if (alloc_h > m_shelf_h) m_shelf_h = alloc_h;
+
+    // Decode RLE into the CPU pixel buffer
+    uint8_t* dst = m_pixels.data() + m_shelf_y * k_atlas_w + m_cursor_x;
+    decode_rle(dst, k_atlas_w, spr);
+
+    // UV in normalised [0,1] atlas space
+    out.u0 = (float) m_cursor_x       / (float)k_atlas_w;
+    out.v0 = (float) m_shelf_y        / (float)k_atlas_h;
+    out.u1 = (float)(m_cursor_x + w)  / (float)k_atlas_w;
+    out.v1 = (float)(m_shelf_y  + h)  / (float)k_atlas_h;
+
+    // Expand dirty region for the upload in flush_dirty()
+    if (m_shelf_y < m_dirty_y_min)     m_dirty_y_min = m_shelf_y;
+    if (m_shelf_y + h > m_dirty_y_max) m_dirty_y_max = m_shelf_y + h;
+
+    m_cursor_x += alloc_w;
+    return true;
+}
+
+void GLSpriteAtlas::flush_dirty()
+{
+    if (m_dirty_y_min > m_dirty_y_max) return;
+    int h = m_dirty_y_max - m_dirty_y_min;
+    if (h <= 0) return;
+
+    glBindTexture(GL_TEXTURE_2D, m_texture);
+    glTexSubImage2D(GL_TEXTURE_2D, 0,
+                    0, m_dirty_y_min,
+                    k_atlas_w, h,
+                    GL_RED, GL_UNSIGNED_BYTE,
+                    m_pixels.data() + (size_t)m_dirty_y_min * k_atlas_w);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    m_dirty_y_min = k_atlas_h;
+    m_dirty_y_max = -1;
+}
+
+/******************************************************************************/
+
+void GLSpriteAtlas::AddSheet(const struct TbSpriteSheet* sheet)
+{
+    if (!sheet) return;
+    long n = num_sprites(sheet);
+    int packed = 0;
+    for (long i = 0; i < n; ++i) {
+        const struct TbSprite* spr = get_sprite(sheet, i);
+        if (!spr || !spr->Data || spr->SWidth == 0 || spr->SHeight == 0) continue;
+        if (m_uvs.count(spr)) continue; // already present (sheet re-added)
+        SpriteUV uv;
+        if (pack_sprite(spr, uv)) {
+            m_uvs[spr] = uv;
+            ++packed;
+        }
+    }
+    flush_dirty();
+    SYNCDBG(8, "GLSpriteAtlas: packed %d/%ld sprites from sheet", packed, n);
+}
+
+void GLSpriteAtlas::RemoveSheet(const struct TbSpriteSheet* sheet)
+{
+    if (!sheet) return;
+    long n = num_sprites(sheet);
+    for (long i = 0; i < n; ++i) {
+        const struct TbSprite* spr = get_sprite(sheet, i);
+        if (spr) m_uvs.erase(spr);
+    }
+    // Note: atlas pixels not reclaimed; space is lost until full reinit.
+}
+
+bool GLSpriteAtlas::GetUV(const struct TbSprite* spr, SpriteUV& out) const
+{
+    auto it = m_uvs.find(spr);
+    if (it == m_uvs.end()) return false;
+    out = it->second;
+    return true;
+}
+
+#endif // RENDERER_OPENGL_ENABLED

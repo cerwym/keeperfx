@@ -50,8 +50,11 @@ public:
      *                   (same pointer returned by RendererLockFramebuffer).
      *  @param pitch     Row stride in bytes (may be wider than width).
      *  @param w         Viewport width in pixels.
-     *  @param h         Viewport height in pixels. */
-    virtual void BeginWorldPass(uint8_t* framebuf, int pitch, int w, int h) = 0;
+     *  @param h         Viewport height in pixels.
+     *  @param vp_x      Viewport left edge in screen pixels (0 if no sidebar).
+     *  @param vp_y      Viewport top edge in screen pixels (0 if no sidebar). */
+    virtual void BeginWorldPass(uint8_t* framebuf, int pitch, int w, int h,
+                                int vp_x, int vp_y) = 0;
 
     // =========================================================================
     // Flush

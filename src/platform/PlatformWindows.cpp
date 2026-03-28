@@ -279,6 +279,7 @@ void PlatformWindows::VideoInit()
     SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE,   10);
     SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE,   2);
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE,  24);
 }
 
 // ----- File system helpers -----

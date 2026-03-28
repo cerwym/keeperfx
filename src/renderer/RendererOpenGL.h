@@ -54,9 +54,10 @@ private:
     bool init_tile_atlas();
 
     // Staging buffer (CPU-side, 8-bit paletted, width * height bytes)
-    uint8_t* m_stagingBuf  = nullptr;
-    int      m_stagingW    = 0;
-    int      m_stagingH    = 0;
+    uint8_t* m_stagingBuf     = nullptr;
+    int      m_stagingW       = 0;
+    int      m_stagingH       = 0;
+    bool     m_staging_cleared = false; // true after first LockFramebuffer clears for this frame
 
     // GL objects — fullscreen palette-blit quad
     unsigned int m_vao          = 0;
@@ -64,6 +65,7 @@ private:
     unsigned int m_shader       = 0;
     unsigned int m_texIndex     = 0; // R8: 8-bit index texture (staging upload)
     unsigned int m_texPalette   = 0; // RGBA8 256-entry 1D palette
+    int          m_uTintFactor  = -1; // uniform location for u_tint_factor
 
     // Shared GPU resources (owned here, injected into world renderer)
     unsigned int m_texFade      = 0; // R8 256×256: render_fade_tables lighting LUT

@@ -1374,6 +1374,12 @@ int LbTextSetWindow(int posx, int posy, int width, int height)
     return 1;
 }
 
+void LbTextGetJustifyWindowOrigin(int *x, int *y)
+{
+    if (x) *x = lbTextJustifyWindow.x;
+    if (y) *y = lbTextJustifyWindow.y;
+}
+
 TbBool change_dbcfont(int nfont)
 {
     const long fonts_count = dbc_fonts_count();

@@ -4,12 +4,20 @@
 #if defined(__VITA__)
 #include "backends/VitaGPUBackend.h"
 #endif
+#ifdef RENDERER_OPENGL_ENABLED
+#include "backends/OpenGLSpriteBackend.h"
+#endif
 #include "RenderPassProfiler.h"
 #include "bflib_basics.h"
 #include <cstdio>
 
 // Static instance
 RenderPassSystem* RenderPassSystem::s_instance = nullptr;
+
+// C-visible flag read by bflib_vidraw.c — 1 when a backend is active, 0 otherwise
+extern "C" {
+    int g_render_pass_active = 0;
+}
 
 RenderPassSystem::RenderPassSystem()
     : m_backend(nullptr)
@@ -52,6 +60,15 @@ bool RenderPassSystem::Initialize(BackendType backend)
             m_backend = new SoftwareBackend();
             break;
             
+        case BACKEND_OPENGL:
+#ifdef RENDERER_OPENGL_ENABLED
+            m_backend = new OpenGLSpriteBackend();
+            break;
+#else
+            ERRORLOG("RenderPassSystem: OPENGL backend not available in this build");
+            return false;
+#endif
+
         case BACKEND_AUTO:
 #if defined(__VITA__)
             m_backend = new VitaGPUBackend();
@@ -59,7 +76,7 @@ bool RenderPassSystem::Initialize(BackendType backend)
             m_backend = new SoftwareBackend();
 #endif
             break;
-            
+
         default:
             ERRORLOG("RenderPassSystem: Unknown backend type: %d", backend);
             return false;
@@ -82,12 +99,25 @@ bool RenderPassSystem::Initialize(BackendType backend)
         }
     }
 #endif
+#ifdef RENDERER_OPENGL_ENABLED
+    if (backend == BACKEND_OPENGL) {
+        OpenGLSpriteBackend* gl_backend = dynamic_cast<OpenGLSpriteBackend*>(m_backend);
+        if (gl_backend && !gl_backend->Initialize()) {
+            ERRORLOG("RenderPassSystem: OpenGL sprite backend initialization failed");
+            delete m_backend;
+            m_backend = nullptr;
+            return false;
+        }
+    }
+#endif
     
+    g_render_pass_active = 1;
     return true;
 }
 
 void RenderPassSystem::Shutdown()
 {
+    g_render_pass_active = 0;
     if (m_backend) {
         delete m_backend;
         m_backend = nullptr;
@@ -160,6 +190,22 @@ void RenderPassSystem::EndFrame()
     RenderPassProfiler::GetInstance().EndFrame();
 }
 
+void RenderPassSystem::FlushNow()
+{
+    if (!m_backend) {
+        return;
+    }
+    m_backend->FlushNow();
+}
+
+void RenderPassSystem::SetScreenSize(int w, int h)
+{
+    if (!m_backend) {
+        return;
+    }
+    m_backend->SetScreenSize(w, h);
+}
+
 void RenderPassSystem::OnSpriteSheetLoaded(const struct TbSpriteSheet* sheet)
 {
     if (!m_backend || !sheet) {
@@ -200,6 +246,7 @@ TbBool RenderPass_Initialize(int backend_type)
         case 0: bt = RenderPassSystem::BACKEND_AUTO; break;
         case 1: bt = RenderPassSystem::BACKEND_GPU_VITA; break;
         case 2: bt = RenderPassSystem::BACKEND_SOFTWARE; break;
+        case 3: bt = RenderPassSystem::BACKEND_OPENGL; break;
         default:
             return 0; // FALSE
     }
@@ -242,6 +289,11 @@ void RenderPass_BeginFrame(void)
 void RenderPass_EndFrame(void)
 {
     RenderPassSystem::GetInstance().EndFrame();
+}
+
+void RenderPass_FlushNow(void)
+{
+    RenderPassSystem::GetInstance().FlushNow();
 }
 
 void RenderPass_OnSpriteSheetLoaded(const struct TbSpriteSheet* sheet)

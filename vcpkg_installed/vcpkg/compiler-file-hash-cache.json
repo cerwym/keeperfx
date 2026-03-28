@@ -1,4 +1,28 @@
 {
+  "/usr/bin/c++" : 
+  {
+    "hash" : "5685f35c387c986e48389fa170601ba471805ec3",
+    "size" : 932680,
+    "timestamp" : 1766043084
+  },
+  "/usr/bin/cc" : 
+  {
+    "hash" : "176075db61a900c1c4c9fe02eb1ca37928773194",
+    "size" : 928584,
+    "timestamp" : 1766043084
+  },
+  "/usr/bin/i686-w64-mingw32-g++" : 
+  {
+    "hash" : "45d9e9c56bc929c749b53541289f8dbe73d78076",
+    "size" : 1263456,
+    "timestamp" : 1644596746
+  },
+  "/usr/bin/i686-w64-mingw32-gcc" : 
+  {
+    "hash" : "0d370be7fe02faa05d59725202a58ae974916f10",
+    "size" : 1168664,
+    "timestamp" : 1644596746
+  },
   "C:/Program Files/Microsoft Visual Studio/18/Community/VC/Tools/MSVC/14.50.35717/bin/Hostx64/x64/cl.exe" : 
   {
     "hash" : "82651775b7e2582693ef40017450d1ddfefa35a9",

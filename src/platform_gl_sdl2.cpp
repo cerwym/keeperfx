@@ -182,6 +182,7 @@ extern "C" int platform_create_gl_context(void *sdl_window)
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE,   24);
     SDL_GL_SetAttribute(SDL_GL_RED_SIZE,   10);
     SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 10);
     SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE,  10);

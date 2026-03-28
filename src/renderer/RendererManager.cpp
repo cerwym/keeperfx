@@ -16,6 +16,7 @@
 #  include "renderer/RendererOpenGL.h"
 #  include "renderer/opengl/GLTileAtlas.h"
 #  include "renderer/opengl/GLWorldViewRenderer.h"
+#  include "renderer/opengl/GLTextRenderer.h"
 #endif
 #ifdef PLATFORM_VITA
 #  include "renderer/RendererVita.h"
@@ -27,6 +28,7 @@
 #include "bflib_basics.h"
 #include "globals.h"
 #include "bflib_video.h"
+#include "renderer/RenderPass_C.h"
 #include "post_inc.h"
 
 /******************************************************************************/
@@ -77,7 +79,7 @@ static IWorldViewRenderer* create_world_view_renderer(RendererType type)
     {
         // Inject shared GPU resources from the already-initialised RendererOpenGL
         RendererOpenGL* ogl = dynamic_cast<RendererOpenGL*>(s_activeRenderer);
-        if (ogl && ogl->GetTileAtlas())
+        if (ogl)
         {
             auto* glwr = new GLWorldViewRenderer(
                 ogl->GetTileAtlas(),
@@ -86,7 +88,7 @@ static IWorldViewRenderer* create_world_view_renderer(RendererType type)
             ogl->SetWorldRenderer(glwr);
             return glwr;
         }
-        WARNLOG("RendererManager: GLWorldViewRenderer requested but resources not ready — using software fallback");
+        WARNLOG("RendererManager: GLWorldViewRenderer requested but no RendererOpenGL active");
     }
 #endif
     (void)type;
@@ -103,7 +105,8 @@ static IMapFadePass* create_map_fade_pass(RendererType type)
 /** Allocates the appropriate ITextRenderer for the given renderer type. */
 static ITextRenderer* create_text_renderer(RendererType type)
 {
-    (void)type; // reserved for future GPU dispatch
+    // GLTextRenderer is currently disabled — always use software fallback.
+    (void)type;
     return new SoftwareTextRenderer();
 }
 
@@ -155,6 +158,19 @@ int RendererInit(RendererType type)
 
     s_textRenderer = create_text_renderer(type);
     SYNCLOG("TextRenderer initialised: %s", s_textRenderer->GetName());
+
+    // Wire sprite intercept backend: Vita uses GPU batch; OpenGL uses software
+    // (software backend exercises the full intercept path for testing on desktop).
+#if defined(PLATFORM_VITA)
+    if (type == RENDERER_VITA)
+        RenderPass_Initialize(1); // BACKEND_GPU_VITA
+#elif defined(RENDERER_OPENGL_ENABLED)
+    if (type == RENDERER_OPENGL)
+        RenderPass_Initialize(3); // BACKEND_OPENGL
+#endif
+    if (g_render_pass_active)
+        SYNCLOG("SpriteBackend initialised: %s", RenderPass_GetBackendName());
+
     return true;
 }
 
@@ -212,6 +228,7 @@ int RendererSwitch(RendererType type)
 
 void RendererShutdown()
 {
+    RenderPass_Shutdown();
     if (s_textRenderer)
     {
         delete s_textRenderer;
@@ -295,10 +312,11 @@ void RendererEndFrame(void)
 /* C-callable world-view renderer wrappers */
 /******************************************************************************/
 
-void WorldViewRenderer_BeginWorldPass(unsigned char* framebuf, int pitch, int w, int h)
+void WorldViewRenderer_BeginWorldPass(unsigned char* framebuf, int pitch, int w, int h,
+                                      int vp_x, int vp_y)
 {
     if (s_worldViewRenderer)
-        s_worldViewRenderer->BeginWorldPass(framebuf, pitch, w, h);
+        s_worldViewRenderer->BeginWorldPass(framebuf, pitch, w, h, vp_x, vp_y);
 }
 
 void WorldViewRenderer_FlushIsometricView(void)
@@ -340,6 +358,12 @@ TbBool TextRenderer_DrawTextResized(int posx, int posy, int units_per_px, const 
     if (s_textRenderer)
         return s_textRenderer->DrawTextResized(posx, posy, units_per_px, text);
     return false;
+}
+
+void TextRenderer_Flush(void)
+{
+    if (s_textRenderer)
+        s_textRenderer->Flush();
 }
 
 /******************************************************************************/

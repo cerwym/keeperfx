@@ -104,6 +104,7 @@ TbBool LbTextDrawResizedFmt_sw(int posx, int posy, int units_per_px, const char 
 int LbTextHeight(const char *text);
 int LbTextLineHeight(void);
 int LbTextSetWindow(int posx, int posy, int width, int height);
+void LbTextGetJustifyWindowOrigin(int *x, int *y);
 TbResult LbTextSetJustifyWindow(int pos_x, int pos_y, int width);
 TbResult LbTextSetClipWindow(int x1, int y1, int x2, int y2);
 TbBool LbTextSetFont(const struct TbSpriteSheet *font);
@@ -137,6 +138,7 @@ void LbTextUseByteCoding(TbBool is_enabled);
 long text_string_height(int units_per_px, const char *text);
 void dbc_set_language(short ilng);
 short dbc_initialize(const char *fpath);
+TbBool is_wide_charcode(unsigned long chr);
 
 /******************************************************************************/
 #ifdef __cplusplus

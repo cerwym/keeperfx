@@ -38,9 +38,17 @@ public:
     // ========== Frame Lifecycle ==========
     // Called at the start of each frame before any sprite submissions
     void BeginFrame();
-    
+
     // Called at the end of each frame after all sprite submissions
     void EndFrame();
+
+    // Immediately flush any queued sprite draws to the GPU.
+    // Used by GLWorldViewRenderer during the bucket walk to maintain depth order.
+    void FlushNow();
+
+    // Override the screen dimensions used for NDC conversion during the next flush.
+    // Pass (0, 0) to restore the default (MyScreenWidth / MyScreenHeight).
+    void SetScreenSize(int w, int h);
     
     // ========== Sheet Lifecycle ==========
     // Notifies backend when a sprite sheet is loaded (GPU may upload to VRAM)
@@ -57,7 +65,8 @@ public:
     enum BackendType { 
         BACKEND_AUTO,           // Auto-select based on platform
         BACKEND_GPU_VITA,       // Vita GPU (VitaGL + GXM)
-        BACKEND_SOFTWARE        // CPU immediate rendering
+        BACKEND_SOFTWARE,       // CPU immediate rendering
+        BACKEND_OPENGL          // Desktop OpenGL batched sprites
     };
     
     // Initializes the render system with the specified backend

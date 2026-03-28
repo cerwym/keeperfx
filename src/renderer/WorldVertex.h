@@ -9,14 +9,14 @@
  *     macro that converts a PolyPoint (fixed-point 16:16) to float NDC coords.
  *
  *     The layout maps directly to the vertex shader attributes:
- *       location 0: a_pos   (x, y) — NDC clip space [-1, 1]
- *       location 1: a_uv    (u, v) — texture coords  [0, 1]
- *       location 2: a_shade (s)    — lighting         [0, 1]
+ *       location 0: a_pos   (x, y, z) — NDC clip space [-1, 1]
+ *       location 1: a_uv    (u, v)     — texture coords  [0, 1]
+ *       location 2: a_shade (s)        — lighting         [0, 1]
  *
- *     Fixed-point conventions (from bflib_render.h / engine_render.c):
- *       X, Y  — 16:16 fixed point, integer part is screen pixel coordinate
- *       U, V  — 16:16 fixed point, integer part is texel index (0..255)
- *       S     — shade level; high byte (>> 8) is palette shade index (0..255)
+ *     Field conventions (from bflib_render.h / engine_render.c):
+ *       X, Y  — integer screen pixel coordinate (NOT 16:16; value is the pixel directly)
+ *       U, V  — 16:16 fixed-point; integer part (>> 16) is texel index 0..31 within a 32-px tile
+ *       S     — shade_intensity << 8; (S >> 16) gives shade level 0..63
  */
 /******************************************************************************/
 #ifndef WORLD_VERTEX_H
@@ -30,6 +30,7 @@
 struct WorldVertex {
     float x;      /**< NDC horizontal: [-1, 1], left = -1 */
     float y;      /**< NDC vertical:   [-1, 1], bottom = -1 */
+    float z;      /**< NDC depth:      [-1, 1], -1 = near, +1 = far (bucket-derived) */
     float u;      /**< Texture U:  [0, 1] */
     float v;      /**< Texture V:  [0, 1] */
     float shade;  /**< Lighting:   [0, 1], 0 = dark, 1 = full-bright */
@@ -49,7 +50,7 @@ struct WorldVertex {
  * @param screen_w  Render target width in pixels
  */
 #define FP_X_TO_NDC(fp, screen_w) \
-    (FP16_TO_FLOAT(fp) / (float)(screen_w) * 2.0f - 1.0f)
+    ((float)(fp) / (float)(screen_w) * 2.0f - 1.0f)
 
 /**
  * Convert a PolyPoint screen Y (fixed 16:16) to NDC vertical.
@@ -58,7 +59,7 @@ struct WorldVertex {
  * @param screen_h  Render target height in pixels
  */
 #define FP_Y_TO_NDC(fp, screen_h) \
-    (1.0f - FP16_TO_FLOAT(fp) / (float)(screen_h) * 2.0f)
+    (1.0f - (float)(fp) / (float)(screen_h) * 2.0f)
 
 /**
  * Convert a PolyPoint texture U (fixed 16:16) to normalised [0,1].
@@ -73,7 +74,7 @@ struct WorldVertex {
  * Convert a PolyPoint shade S (fixed 16:16, high byte = shade index 0–255)
  * to a normalised float shade value.
  */
-#define FP_S_TO_SHADE(fp)  ((float)(((fp) >> 8) & 0xFF) / 255.0f)
+#define FP_S_TO_SHADE(fp)  ((float)((fp) >> 16) / 63.0f)
 
 /**
  * Fill a WorldVertex from a PolyPoint struct ptr.
@@ -86,6 +87,7 @@ struct WorldVertex {
     do { \
         (wv)->x     = FP_X_TO_NDC((pp)->X, (sw)); \
         (wv)->y     = FP_Y_TO_NDC((pp)->Y, (sh)); \
+        (wv)->z     = 0.0f; \
         (wv)->u     = FP_U_TO_UV((pp)->U); \
         (wv)->v     = FP_V_TO_UV((pp)->V); \
         (wv)->shade = FP_S_TO_SHADE((pp)->S); \
@@ -108,6 +110,7 @@ struct WorldVertex {
     do { \
         (wv)->x     = ((float)(sx) / (float)(sw)) * 2.0f - 1.0f; \
         (wv)->y     = 1.0f - ((float)(sy) / (float)(sh)) * 2.0f; \
+        (wv)->z     = 0.0f; \
         (wv)->u     = (float)(u8) / 256.0f; \
         (wv)->v     = (float)(v8) / 256.0f; \
         (wv)->shade = (float)(shade8) / 255.0f; \

@@ -74,8 +74,11 @@ void RendererEndFrame(void);
 struct Camera; // forward declaration (defined in game_legacy.h)
 
 /** Bind the target framebuffer and configure the software rasterizer.
- *  Call this once per view before adding geometry to the bucket list. */
-void WorldViewRenderer_BeginWorldPass(unsigned char* framebuf, int pitch, int w, int h);
+ *  Call this once per view before adding geometry to the bucket list.
+ *  vp_x/vp_y are the viewport's top-left corner in screen pixels (0,0 when
+ *  no sidebar is present). */
+void WorldViewRenderer_BeginWorldPass(unsigned char* framebuf, int pitch, int w, int h,
+                                      int vp_x, int vp_y);
 
 /** Flush the isometric/1st-person bucket list to the framebuffer.
  *  Call this after draw_view() has filled the bucket list. */
@@ -99,8 +102,13 @@ long MapFadePass_StepFadeOut(long step);
 /* C-callable text renderer wrapper                                           */
 /******************************************************************************/
 
-/** Draw text at (posx, posy) with the given scale through the active ITextRenderer. */
+/** Draw text at (posx, posy) with the given scale through the active ITextRenderer.
+ *  GPU backends queue the draw; call TextRenderer_Flush() to emit it. */
 TbBool TextRenderer_DrawTextResized(int posx, int posy, int units_per_px, const char* text);
+
+/** Flush all deferred text draws to the framebuffer.
+ *  Must be called after the staging-buffer blit quad and before buffer swap. */
+void TextRenderer_Flush(void);
 
 /******************************************************************************/
 /* C-callable raw framebuffer blit                                            */

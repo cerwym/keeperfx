@@ -34,6 +34,7 @@
 #include "bflib_sprite.h"
 #include "bflib_mouse.h"
 #include "bflib_render.h"
+#include "renderer/RenderPass_C.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -58,11 +59,23 @@ unsigned char *vec_screen;
 unsigned char *vec_map;
 unsigned long vec_screen_width;
 long vec_window_width;
+
+/** Set to 1 while a backend submit is in-flight to prevent re-entry from SoftwareBackend. */
+static int lb_in_sprite_submit = 0;
 long vec_window_height;
 unsigned char *dither_map;
 unsigned char *dither_end;
 unsigned char *lbSpriteReMapPtr;
 long scale_up;
+
+/** Last parameters passed to LbSpriteSetScalingData — read by the GPU keeper-sprite hook
+ *  in engine_render.c to reconstruct the screen destination rect. */
+long g_sprite_scale_dst_x = 0;
+long g_sprite_scale_dst_y = 0;
+long g_sprite_scale_dst_w = 0;
+long g_sprite_scale_dst_h = 0;
+long g_sprite_scale_src_w = 0;
+long g_sprite_scale_src_h = 0;
 /******************************************************************************/
 /**  Prints horizontal or vertical line on current graphics window.
  *  Does no screen locking - screen must be lock before and unlocked
@@ -257,9 +270,11 @@ void LbDrawBoxClip(long x, long y, unsigned long width, unsigned long height, Tb
       do {
           unsigned long idxw = width;
           do {
-                glass_idx&=0xff00;
-                glass_idx |= *screen_ptr;
-                *screen_ptr = lbDisplay.GlassMap[glass_idx];
+                if (*screen_ptr != 0) {
+                    glass_idx&=0xff00;
+                    glass_idx |= *screen_ptr;
+                    *screen_ptr = lbDisplay.GlassMap[glass_idx];
+                }
                 screen_ptr++;
                 idxw--;
           } while ( idxw>0 );
@@ -273,9 +288,11 @@ void LbDrawBoxClip(long x, long y, unsigned long width, unsigned long height, Tb
       do {
             unsigned long idxw = width;
             do {
-              glass_idx&=0x00ff;
-              glass_idx |= (((unsigned short)*screen_ptr)<<8);
-              *screen_ptr = lbDisplay.GlassMap[glass_idx];
+              if (*screen_ptr != 0) {
+                  glass_idx&=0x00ff;
+                  glass_idx |= (((unsigned short)*screen_ptr)<<8);
+                  *screen_ptr = lbDisplay.GlassMap[glass_idx];
+              }
               screen_ptr++;
               idxw--;
             } while ( idxw>0 );
@@ -998,6 +1015,12 @@ TbResult LbSpriteDraw(long x, long y, const struct TbSprite *spr)
     struct TbSpriteDrawData spd;
     TbResult ret;
     SYNCDBG(19,"At (%ld,%ld)",x,y);
+    if (g_render_pass_active && !lb_in_sprite_submit) {
+        lb_in_sprite_submit = 1;
+        ret = RenderPass_SubmitSprite(x, y, spr, lbDisplay.DrawFlags);
+        lb_in_sprite_submit = 0;
+        return ret;
+    }
     ret = LbSpriteDrawPrepare(&spd, x, y, spr);
     if (ret != Lb_SUCCESS)
         return ret;
@@ -1286,6 +1309,12 @@ TbResult LbSpriteDrawOneColour(long x, long y, const struct TbSprite *spr, const
     struct TbSpriteDrawData spd;
     TbResult ret;
     SYNCDBG(19,"At (%ld,%ld)",x,y);
+    if (g_render_pass_active && !lb_in_sprite_submit) {
+        lb_in_sprite_submit = 1;
+        ret = RenderPass_SubmitSpriteOneColour(x, y, spr, colour, lbDisplay.DrawFlags);
+        lb_in_sprite_submit = 0;
+        return ret;
+    }
     ret = LbSpriteDrawPrepare(&spd, x, y, spr);
     if (ret != Lb_SUCCESS)
         return ret;
@@ -1521,6 +1550,12 @@ void LbSpriteClearScalingHeightArray(int32_t * ysteps_arr, long sheight)
  */
 void LbSpriteSetScalingData(long x, long y, long swidth, long sheight, long dwidth, long dheight)
 {
+    g_sprite_scale_dst_x = x;
+    g_sprite_scale_dst_y = y;
+    g_sprite_scale_dst_w = dwidth;
+    g_sprite_scale_dst_h = dheight;
+    g_sprite_scale_src_w = swidth;
+    g_sprite_scale_src_h = sheight;
     long gwidth = lbDisplay.GraphicsWindowWidth;
     long gheight = lbDisplay.GraphicsWindowHeight;
     scale_up = true;

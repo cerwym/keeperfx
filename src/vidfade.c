@@ -46,6 +46,7 @@ static int lbFadeDelay = 25;
 unsigned char fade_palette_in;
 unsigned char frontend_palette[768];
 TbRGBColorTable colours;
+float g_palette_possession_tint = 0.0f;
 /******************************************************************************/
 void fade_in(void)
 {
@@ -297,10 +298,12 @@ long PaletteFadePlayer(struct PlayerInfo *player)
     i = 4 * (3 * (player->palette_fade_step_pain-1));
   } else
   { // both are == 0 - no fade
+    g_palette_possession_tint = 0.0f;
     return 0;
   }
   if (i >= 120)
     i = 120;
+  g_palette_possession_tint = (float)i / 120.0f;
   long step = 120 - i;
   // Create the new palette
   for (i=0; i < PALETTE_COLORS; i++)

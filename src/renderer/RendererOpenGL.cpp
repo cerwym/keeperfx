@@ -12,17 +12,23 @@
 /******************************************************************************/
 #include "pre_inc.h"
 #include "renderer/RendererOpenGL.h"
+#include "renderer/RendererManager.h"
 #include "renderer/opengl/GLTileAtlas.h"
 #include "renderer/opengl/GLWorldViewRenderer.h"
+#include "renderer/opengl/GLShaderLoader.h"
 
 #include "bflib_video.h"    // lbDisplay, lbPaletteColors, MyScreenWidth/Height
 #include "bflib_render.h"   // render_fade_tables
 #include "platform.h"       // platform_create_gl_context / swap / destroy
+#include "renderer/RenderPass_C.h"
+#include "engine_textures.h" // update_animating_texture_maps()
 
 #include <glad/glad.h>
 #include <SDL2/SDL.h>
 #include <cstring>
 #include "post_inc.h"
+
+extern "C" { extern float g_palette_possession_tint; }
 
 /******************************************************************************/
 // Fullscreen quad: two triangles covering NDC [-1,1]
@@ -36,34 +42,6 @@ static const float k_quadVerts[] = {
      1.f,  1.f,   1.f, 0.f,
     -1.f,  1.f,   0.f, 0.f,
 };
-
-static const char* k_vertSrc = R"(
-#version 330 core
-layout(location = 0) in vec2 a_pos;
-layout(location = 1) in vec2 a_uv;
-out vec2 v_uv;
-void main() {
-    gl_Position = vec4(a_pos, 0.0, 1.0);
-    v_uv = a_uv;
-}
-)";
-
-// Fragment shader: sample 8-bit index texture, look up palette.
-// Palette index 0 is the transparent key used in the 3D viewport background,
-// so GPU world geometry shows through where no CPU-drawn pixels exist.
-static const char* k_fragSrc = R"(
-#version 330 core
-in  vec2 v_uv;
-out vec4 fragColor;
-uniform sampler2D u_index;    // R8 — 8-bit palette index
-uniform sampler1D u_palette;  // RGBA8 — 256-entry palette
-void main() {
-    float idx = texture(u_index, v_uv).r;
-    fragColor  = texture(u_palette, idx);
-    // Suppress palette index 0 so GPU tiles show through in the 3D viewport.
-    fragColor.a = step(0.5 / 256.0, idx);
-}
-)";
 
 /******************************************************************************/
 
@@ -153,6 +131,7 @@ bool RendererOpenGL::Init()
     glUseProgram(m_shader);
     glUniform1i(glGetUniformLocation(m_shader, "u_index"),   0);
     glUniform1i(glGetUniformLocation(m_shader, "u_palette"), 1);
+    m_uTintFactor = glGetUniformLocation(m_shader, "u_tint_factor");
 
     // ── World-geometry GPU resources ─────────────────────────────────────────
     if (!init_fade_table_texture())
@@ -189,6 +168,21 @@ void RendererOpenGL::Shutdown()
 
 bool RendererOpenGL::BeginFrame()
 {
+    // Lazy-retry resources that depend on game data loaded after Init().
+    if (!m_texFade && render_fade_tables)
+        init_fade_table_texture();
+    if (m_tile_atlas && !m_tile_atlas->IsInitialized())
+        init_tile_atlas();
+
+    // Re-upload the animated tile atlas rows that the game-logic tick already
+    // pointer-swapped via update_animating_texture_maps() (called in main.cpp
+    // every game turn).  Must run before any world geometry is submitted.
+    if (m_tile_atlas && m_tile_atlas->IsInitialized())
+    {
+        m_tile_atlas->UpdateAnimatedTiles();
+    }
+
+    RenderPass_BeginFrame();
     return true;
 }
 
@@ -197,16 +191,24 @@ void RendererOpenGL::EndFrame()
     // Upload palette (may have changed this frame via LbPaletteSet)
     upload_palette_texture();
 
-    // Upload CPU framebuffer to index texture
+    // Restore depth mask before clearing — GPUFlushNow() ends with
+    // glDepthMask(GL_FALSE) to protect against accidental depth writes during
+    // the overlay blit, but glClear(GL_DEPTH_BUFFER_BIT) respects the mask.
+    glDepthMask(GL_TRUE);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    // Flush GPU world geometry + depth-correct sprites.
+    // Must run BEFORE the staging buffer is uploaded so that any sprite draws
+    // that fall back to the CPU blitter (atlas miss) write into m_stagingBuf
+    // while lbDisplay.WScreen is temporarily restored to point at it.
+    if (m_world_renderer)
+        m_world_renderer->GPUFlushNow(m_stagingBuf);
+
+    // Upload CPU framebuffer to index texture (AFTER GPUFlushNow so that
+    // CPU-path sprite fallbacks written during the sprite replay are included).
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_texIndex);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_stagingW, m_stagingH, GL_RED, GL_UNSIGNED_BYTE, m_stagingBuf);
-
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    // Flush GPU world geometry first (tiles rendered beneath CPU overlay)
-    if (m_world_renderer)
-        m_world_renderer->GPUFlushNow();
 
     // CPU framebuffer blit ON TOP — creatures, UI, sprites.
     // Palette index 0 is transparent so GPU tiles show through in the 3D
@@ -219,16 +221,30 @@ void RendererOpenGL::EndFrame()
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glUseProgram(m_shader);
+    glUniform1f(m_uTintFactor, g_palette_possession_tint);
     glBindVertexArray(m_vao);
     glDrawArrays(GL_TRIANGLES, 0, 6);
     glBindVertexArray(0);
     glDisable(GL_BLEND);
 
+    // Flush deferred GPU text draws on top of the composited frame,
+    // before the swap so they are not wiped out by the blit quad above.
+    TextRenderer_Flush();
+
+    RenderPass_EndFrame();
     platform_swap_gl_buffers(lbWindow);
+    m_staging_cleared = false; // next frame's first LockFramebuffer will clear the staging buffer
 }
 
 uint8_t* RendererOpenGL::LockFramebuffer(int* out_pitch)
 {
+    // Clear once per frame on the first lock so old pixel data doesn't
+    // accumulate.  Subsequent locks within the same frame are additive.
+    if (!m_staging_cleared && m_stagingBuf)
+    {
+        memset(m_stagingBuf, 0, m_stagingW * m_stagingH);
+        m_staging_cleared = true;
+    }
     if (out_pitch)
         *out_pitch = m_stagingW;
     return m_stagingBuf;
@@ -253,8 +269,13 @@ bool RendererOpenGL::SupportsRuntimeSwitch() const
 
 bool RendererOpenGL::compile_shaders()
 {
-    unsigned int vert = compile_shader(GL_VERTEX_SHADER,   k_vertSrc);
-    unsigned int frag = compile_shader(GL_FRAGMENT_SHADER, k_fragSrc);
+    std::string vert_src = load_shader_source("palette_blit_vert.glsl");
+    std::string frag_src = load_shader_source("palette_blit_frag.glsl");
+    if (vert_src.empty() || frag_src.empty())
+        return false;
+
+    unsigned int vert = compile_shader(GL_VERTEX_SHADER,   vert_src.c_str());
+    unsigned int frag = compile_shader(GL_FRAGMENT_SHADER, frag_src.c_str());
     if (!vert || !frag)
     {
         if (vert) glDeleteShader(vert);
@@ -321,12 +342,7 @@ bool RendererOpenGL::init_fade_table_texture()
 
 bool RendererOpenGL::init_tile_atlas()
 {
-    m_tile_atlas = new GLTileAtlas();
-    if (!m_tile_atlas->Init())
-    {
-        delete m_tile_atlas;
-        m_tile_atlas = nullptr;
-        return false;
-    }
-    return true;
+    if (!m_tile_atlas)
+        m_tile_atlas = new GLTileAtlas();
+    return m_tile_atlas->Init();
 }

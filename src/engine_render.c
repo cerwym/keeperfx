@@ -237,6 +237,8 @@ short mz;
 unsigned char temp_cluedo_mode; // This is true(1) if the "short wall" have been enabled in the graphics options
 struct Thing *thing_being_displayed;
 
+KeeperSpriteGPUHook g_kspr_gpu_hook = NULL;
+
 TbSpriteData *keepsprite[KEEPSPRITE_LENGTH];
 TbSpriteData sprite_heap_handle[KEEPSPRITE_LENGTH];
 struct HeapMgrHeader *graphics_heap;
@@ -264,7 +266,7 @@ static const char splittypes[64] = {
 static void do_map_who(short tnglist_idx);
 static void (*render_sprite_debug_fn) (struct Thing*, long scrpos_x, long scrpos_y) = NULL;
 static int render_sprite_debug_level = 0;
-static void draw_keepsprite_unscaled_in_buffer(unsigned short kspr_n, short angle, unsigned char current_frame, unsigned char *outbuf);
+void draw_keepsprite_unscaled_in_buffer(unsigned short kspr_n, short angle, unsigned char current_frame, unsigned char *outbuf);
 static void draw_jonty_mapwho(struct BucketKindJontySprite *jspr);
 /******************************************************************************/
 
@@ -6578,6 +6580,155 @@ void display_drawlist_sprites_only(void)
     }
 }
 
+/** Draws only the depth-positioned 3D entity sprites (JontySprite /
+ *  JontyISOSprite) for a single bucket index.  Called by
+ *  GLWorldViewRenderer::FlushIsometricView() between gpu_flush() and
+ *  RenderPass_FlushNow() so the sprite quads are composited at the correct
+ *  depth in the painter's-algorithm bucket walk. */
+void draw_3d_sprites_for_bucket(long bucket_num)
+{
+    struct PlayerInfo *player;
+    const struct Camera *cam;
+    union {
+        struct BasicQ *b;
+        struct BucketKindJontySprite *jontySprite;
+    } item;
+
+    render_fade_tables = pixmap.fade_tables;
+    render_ghost = pixmap.ghost;
+    render_alpha = (unsigned char *)&alpha_sprite_table;
+
+    for (item.b = buckets[bucket_num]; item.b != NULL; item.b = item.b->next)
+    {
+        switch (item.b->kind)
+        {
+        case QK_JontySprite:
+            draw_jonty_mapwho(item.jontySprite);
+            break;
+        case QK_JontyISOSprite:
+            player = get_my_player();
+            cam = get_local_camera(player->acamera);
+            if (cam != NULL)
+            {
+                if (cam->view_mode == PVM_IsoWibbleView || cam->view_mode == PVM_IsoStraightView)
+                    draw_jonty_mapwho(item.jontySprite);
+            }
+            break;
+        default:
+            break;
+        }
+    }
+}
+
+/** Draws all non-spatial sprites (creature shadows, slab selector, status
+ *  icons, floating gold text, room flags) across all buckets.  These are
+ *  CPU-rasterised into the staging buffer or composited as overlay elements,
+ *  so they are drawn AFTER the depth-correct GPU tile+sprite passes. */
+void draw_nonspatial_sprites(void)
+{
+    union {
+        struct BasicQ *b;
+        struct BucketKindCreatureShadow *creatureShadow;
+        struct BucketKindSlabSelector *slabSelector;
+        struct BucketKindCreatureStatus *creatureStatus;
+        struct BucketKindFloatingGoldText *floatingGoldText;
+        struct BucketKindRoomFlag *roomFlag;
+    } item;
+    long bucket_num;
+
+    render_fade_tables = pixmap.fade_tables;
+    render_ghost = pixmap.ghost;
+    render_alpha = (unsigned char *)&alpha_sprite_table;
+
+    for (bucket_num = BUCKETS_COUNT-1; bucket_num > 0; bucket_num--)
+    {
+        for (item.b = buckets[bucket_num]; item.b != NULL; item.b = item.b->next)
+        {
+            switch (item.b->kind)
+            {
+            case QK_CreatureShadow:
+                draw_keepsprite_unscaled_in_buffer(item.creatureShadow->anim_sprite, item.creatureShadow->angle, item.creatureShadow->current_frame, big_scratch);
+                vec_map = big_scratch;
+                vec_mode = VM_SpriteTranslucent;
+                vec_colour = item.creatureShadow->vertex_first.S;
+                trig(&item.creatureShadow->vertex_first, &item.creatureShadow->vertex_second, &item.creatureShadow->vertex_third);
+                trig(&item.creatureShadow->vertex_first, &item.creatureShadow->vertex_third, &item.creatureShadow->vertex_fourth);
+                break;
+            case QK_SlabSelector:
+                draw_clipped_line(
+                    item.slabSelector->p.X,
+                    item.slabSelector->p.Y,
+                    item.slabSelector->p.U,
+                    item.slabSelector->p.V,
+                    item.slabSelector->p.S);
+                break;
+            case QK_CreatureStatus:
+                draw_status_sprites(item.creatureStatus->x, item.creatureStatus->y, item.creatureStatus->thing);
+                break;
+            case QK_FloatingGoldText:
+                draw_engine_number(item.floatingGoldText);
+                break;
+            case QK_RoomFlagBottomPole:
+                draw_engine_room_flagpole(item.roomFlag);
+                break;
+            case QK_RoomFlagStatusBox:
+                draw_engine_room_flag_top(item.roomFlag);
+                break;
+            default:
+                break;
+            }
+        }
+    }
+}
+
+void draw_nonspatial_sprites_no_shadows(void)
+{
+    union {
+        struct BasicQ *b;
+        struct BucketKindSlabSelector *slabSelector;
+        struct BucketKindCreatureStatus *creatureStatus;
+        struct BucketKindFloatingGoldText *floatingGoldText;
+        struct BucketKindRoomFlag *roomFlag;
+    } item;
+    long bucket_num;
+
+    render_fade_tables = pixmap.fade_tables;
+    render_ghost = pixmap.ghost;
+    render_alpha = (unsigned char *)&alpha_sprite_table;
+
+    for (bucket_num = BUCKETS_COUNT-1; bucket_num > 0; bucket_num--)
+    {
+        for (item.b = buckets[bucket_num]; item.b != NULL; item.b = item.b->next)
+        {
+            switch (item.b->kind)
+            {
+            case QK_SlabSelector:
+                draw_clipped_line(
+                    item.slabSelector->p.X,
+                    item.slabSelector->p.Y,
+                    item.slabSelector->p.U,
+                    item.slabSelector->p.V,
+                    item.slabSelector->p.S);
+                break;
+            case QK_CreatureStatus:
+                draw_status_sprites(item.creatureStatus->x, item.creatureStatus->y, item.creatureStatus->thing);
+                break;
+            case QK_FloatingGoldText:
+                draw_engine_number(item.floatingGoldText);
+                break;
+            case QK_RoomFlagBottomPole:
+                draw_engine_room_flagpole(item.roomFlag);
+                break;
+            case QK_RoomFlagStatusBox:
+                draw_engine_room_flag_top(item.roomFlag);
+                break;
+            default:
+                break;
+            }
+        }
+    }
+}
+
 static void prepare_draw_plane_of_engine_columns(struct Camera *cam, long aposc, long bposc, long xcell, long ycell, struct MinMax *mm)
 {
     apos = aposc;
@@ -7446,6 +7597,35 @@ static void draw_keepersprite(long x, long y, const struct KeeperSprite * kspr, 
         WARNDBG(9,"Unallocated KeeperSprite %ld can't be drawn at (%ld,%ld)",kspr_idx,x,y);
         return;
     }
+    // GPU intercept: compute the actual screen destination rect from the scaling
+    // globals saved by LbSpriteSetScalingData, then let the GPU renderer handle
+    // the sprite instead of the CPU scaling blitter.
+    if (g_kspr_gpu_hook != NULL) {
+        long screen_x, screen_y, screen_w, screen_h;
+        if (g_sprite_scale_src_w > 0 && g_sprite_scale_src_h > 0) {
+            screen_x = g_sprite_scale_dst_x + x * g_sprite_scale_dst_w / g_sprite_scale_src_w;
+            screen_y = g_sprite_scale_dst_y + y * g_sprite_scale_dst_h / g_sprite_scale_src_h;
+            screen_w = (long)kspr->SWidth   * g_sprite_scale_dst_w / g_sprite_scale_src_w;
+            screen_h = (long)clipped_height * g_sprite_scale_dst_h / g_sprite_scale_src_h;
+        } else {
+            screen_x = g_sprite_scale_dst_x;
+            screen_y = g_sprite_scale_dst_y;
+            screen_w = g_sprite_scale_dst_w;
+            screen_h = g_sprite_scale_dst_h;
+        }
+        // Fold EngineSpriteDrawUsingAlpha into draw_flags so the GPU path can
+        // choose the correct blend without knowing about this separate global.
+        // Lb_SPRITE_ALPHA_ADDITIVE signals additive (glow/fire) blending, which
+        // approximates the CPU Trans1 palette-additive path used by this flag.
+        unsigned int hook_flags = lbDisplay.DrawFlags;
+        if (EngineSpriteDrawUsingAlpha) hook_flags |= Lb_SPRITE_ALPHA_ADDITIVE;
+        if (screen_w > 0 && screen_h > 0 &&
+            g_kspr_gpu_hook(screen_x, screen_y, screen_w, screen_h,
+                            *sprite_data_ptr, kspr->SWidth, clipped_height,
+                            hook_flags, lbSpriteReMapPtr)) {
+            return;
+        }
+    }
     const struct TbSourceBuffer buffer = {
         *sprite_data_ptr,
         kspr->SWidth,
@@ -8040,7 +8220,7 @@ static void sprite_to_sbuff_xflip(const TbSpriteData sprdata, unsigned char *out
     }
 }
 
-static void draw_keepsprite_unscaled_in_buffer(unsigned short kspr_n, short angle, unsigned char current_frame, unsigned char *outbuf)
+void draw_keepsprite_unscaled_in_buffer(unsigned short kspr_n, short angle, unsigned char current_frame, unsigned char *outbuf)
 {
     struct KeeperSprite *kspr_arr;
     unsigned long kspr_idx;
@@ -8582,7 +8762,7 @@ static void do_map_who_for_thing(struct Thing *thing)
             if ( lens_mode )
               bckt_idx = (ecor.z - 64) / 16;
             else
-              bckt_idx = (ecor.z - 64) / 16 - 6;
+              bckt_idx = (ecor.z - 64) / 16;
             add_thing_sprite_to_polypool(thing, ecor.view_width, ecor.view_height, ecor.z, bckt_idx);
         }
         break;
@@ -8839,7 +9019,7 @@ void draw_frontview_engine(struct Camera *cam)
     LbScreenStoreGraphicsWindow(&grwnd);
     store_engine_window(&ewnd,pixel_size);
     LbScreenSetGraphicsWindow(ewnd.x, ewnd.y, ewnd.width, ewnd.height);
-    WorldViewRenderer_BeginWorldPass(lbDisplay.GraphicsWindowPtr, lbDisplay.GraphicsScreenWidth, ewnd.width, ewnd.height);
+    WorldViewRenderer_BeginWorldPass(lbDisplay.GraphicsWindowPtr, lbDisplay.GraphicsScreenWidth, ewnd.width, ewnd.height, ewnd.x, ewnd.y);
     clear_fast_bucket_list();
     store_engine_window(&ewnd,1);
     setup_engine_window(ewnd.x, ewnd.y, ewnd.width, ewnd.height);

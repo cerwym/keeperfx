@@ -14,6 +14,12 @@ extern "C" {
  */
 
 /**
+ * 1 when a sprite backend is active; 0 otherwise.
+ * Read directly by bflib_vidraw.c to decide whether to intercept LbSpriteDraw.
+ */
+extern int g_render_pass_active;
+
+/**
  * Initialize the render system with the specified backend.
  * @param backend_type 0=AUTO, 1=GPU_VITA, 2=SOFTWARE
  * @return TbBool: TRUE if successful, FALSE otherwise
@@ -57,6 +63,13 @@ void RenderPass_BeginFrame(void);
  * End frame (call after all sprite submissions)
  */
 void RenderPass_EndFrame(void);
+
+/**
+ * Immediately flush any queued sprite draws to the GPU framebuffer.
+ * Call after gpu_flush() and a sprite draw function to composite sprites
+ * at the correct depth during the bucket walk.
+ */
+void RenderPass_FlushNow(void);
 
 /**
  * Notify backend when sprite sheet is loaded

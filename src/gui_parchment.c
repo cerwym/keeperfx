@@ -24,7 +24,6 @@
 #include "globals.h"
 #include "bflib_basics.h"
 #include "bflib_vidraw.h"
-#include "renderer/RendererManager.h"
 #include "bflib_sprite.h"
 #include "bflib_sprfnt.h"
 #include "bflib_dernc.h"
@@ -766,7 +765,7 @@ void draw_zoom_box_terrain(long scrtop_x, long scrtop_y, int stl_x, int stl_y, P
     lbDisplay.DrawFlags = 0;
     scrtop_x += 4*units_per_pixel/16;
     scrtop_y -= 4*units_per_pixel/16;
-    WorldViewRenderer_BeginWorldPass(lbDisplay.WScreen, lbDisplay.GraphicsScreenWidth, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
+    setup_vecs(lbDisplay.WScreen, NULL, (unsigned int)lbDisplay.GraphicsScreenWidth, (unsigned int)(MyScreenWidth/pixel_size), (unsigned int)(MyScreenHeight/pixel_size));
     // Draw the actual map
     int scr_y = scrtop_y;
     for (int map_dy = 0; map_dy < draw_tiles_y; map_dy++)

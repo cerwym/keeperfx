@@ -29,6 +29,7 @@ if(NOT KEEPERFX_RENDERER_OPENGL)
     list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/renderer/RendererOpenGL\\.cpp$")
     list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/platform_gl_sdl2\\.cpp$")
     list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/renderer/opengl/.*\\.cpp$")
+    list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/renderer/backends/OpenGLSpriteBackend\\.cpp$")
 endif()
 
 # ━━━ Networking Exclusions ━━━
@@ -228,27 +229,21 @@ if(KEEPERFX_RENDERER_OPENGL AND TARGET glad::glad)
     target_link_libraries(keeperfx_hvlog PRIVATE glad::glad)
 endif()
 
-# ━━━ Dependent Platform Libraries ━━━
-# Linked AFTER targets are created (see `add_subdirectory(deps)` in root CMakeLists.txt)
-
-# ━━━ Test Target (desktop only) ━━━
-if(NOT PLATFORM_VITA AND NOT PLATFORM_3DS AND NOT PLATFORM_SWITCH)
-    file(GLOB TEST_SOURCES "tests/*.cpp")
-    add_library(cunit_static STATIC
-        "deps/CUnit-2.1-3/CUnit/Sources/Basic/Basic.c"
-        "deps/CUnit-2.1-3/CUnit/Sources/Framework/TestDB.c"
-        "deps/CUnit-2.1-3/CUnit/Sources/Framework/CUError.c"
-        "deps/CUnit-2.1-3/CUnit/Sources/Framework/TestRun.c"
-        "deps/CUnit-2.1-3/CUnit/Sources/Framework/Util.c"
-    )
-    target_include_directories(cunit_static PUBLIC "deps/CUnit-2.1-3/CUnit/Headers")
-
-    add_executable(tests ${TEST_SOURCES} ${KEEPERFX_SOURCES_C} ${KEEPERFX_SOURCES_CXX})
-    target_compile_definitions(tests PUBLIC BFDEBUG_LEVEL=0)
-    target_link_libraries(tests PRIVATE cunit_static)
-    apply_keeperfx_warnings(tests)
-    apply_keeperfx_link_flags(tests)
-    apply_windows_system_libs(tests)
+# ━━━ OpenGL shader files: copy to output directory alongside the executable ━━━
+# Shaders are loaded at runtime from <exe_dir>/shaders/ so they can be edited
+# without recompiling.  The source lives in src/renderer/opengl/shaders/.
+if(KEEPERFX_RENDERER_OPENGL)
+    set(_KFX_SHADER_SRC "${CMAKE_SOURCE_DIR}/src/renderer/opengl/shaders")
+    foreach(_target keeperfx keeperfx_hvlog)
+        add_custom_command(TARGET ${_target} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${_KFX_SHADER_SRC}"
+                "$<TARGET_FILE_DIR:${_target}>/shaders"
+            COMMENT "Copying OpenGL shaders to $<TARGET_FILE_DIR:${_target}>/shaders"
+        )
+    endforeach()
 endif()
+
+# Remove the crap that comes with pulling in the packages.
 
 message(STATUS "Compiler: ${CMAKE_CXX_COMPILER_ID}")

@@ -33,9 +33,20 @@ public:
     // ========== Frame Lifecycle ==========
     // Called at the start of each frame (may initialize batch, clear state, etc.)
     virtual void BeginFrame() = 0;
-    
+
     // Called at the end of each frame (GPU backends flush batches, software no-op)
     virtual void EndFrame() = 0;
+
+    // Immediately flush any queued sprite draws to the GPU.
+    // Used by GLWorldViewRenderer to interleave sprites at the correct bucket depth.
+    // Default is a no-op for backends that render immediately (Software, Vita).
+    virtual void FlushNow() {}
+
+    // Override the screen dimensions used for NDC conversion during the next flush.
+    // Pass (0, 0) to restore the default (MyScreenWidth / MyScreenHeight).
+    // Used by GLWorldViewRenderer when sprites are rendered inside the game viewport
+    // rather than in full-screen space.
+    virtual void SetScreenSize(int /*w*/, int /*h*/) {}
     
     // ========== Sprite Sheet Lifecycle ==========
     // Notifies backend when a sheet is loaded (GPU may upload to VRAM, software no-op)

@@ -141,18 +141,18 @@ void draw_slab64k_background(long pos_x, long pos_y, long width, long height)
         TbPixel* inp = &gui_slab[GUI_SLAB_DIMENSION * (i % GUI_SLAB_DIMENSION)];
         if (scr_w >= GUI_SLAB_DIMENSION)
         {
-            memcpy(out, inp, GUI_SLAB_DIMENSION);
+            for (int j = 0; j < GUI_SLAB_DIMENSION; j++) out[j] = inp[j] ? inp[j] : 1;
             int k;
             for (k = GUI_SLAB_DIMENSION; k < scr_w - GUI_SLAB_DIMENSION; k += GUI_SLAB_DIMENSION)
             {
-                memcpy(out + k, inp, GUI_SLAB_DIMENSION);
+                for (int j = 0; j < GUI_SLAB_DIMENSION; j++) (out + k)[j] = inp[j] ? inp[j] : 1;
             }
             if (width - k > 0) {
-                memcpy(out + k, inp, scr_w - k);
+                for (int j = 0; j < scr_w - k; j++) (out + k)[j] = inp[j] ? inp[j] : 1;
             }
         } else
         {
-            memcpy(out, inp, scr_w);
+            for (int j = 0; j < scr_w; j++) out[j] = inp[j] ? inp[j] : 1;
         }
         out += lbDisplay.GraphicsScreenWidth;
     }

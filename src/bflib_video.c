@@ -604,12 +604,27 @@ TbResult LbScreenSetup(TbScreenMode mode, TbScreenCoord width, TbScreenCoord hei
                 return Lb_FAIL;
             }
         }
-        SDL_SetWindowBordered(lbWindow, (mdinfo->sdlFlags & SDL_WINDOW_BORDERLESS) ? SDL_FALSE : SDL_TRUE);
+        // Guard against redundant SDL_SetWindow* calls: on 10-bit HDR displays each call
+        // can trigger a DWM composition pipeline reconfiguration which causes a visible flash.
+        // Only apply changes that differ from the window's current state.
+        {
+            SDL_bool new_bordered = (mdinfo->sdlFlags & SDL_WINDOW_BORDERLESS) ? SDL_FALSE : SDL_TRUE;
+            SDL_bool cur_bordered = (SDL_GetWindowFlags(lbWindow) & SDL_WINDOW_BORDERLESS) ? SDL_FALSE : SDL_TRUE;
+            if (cur_bordered != new_bordered)
+            {
+                SDL_SetWindowBordered(lbWindow, new_bordered);
+            }
+        }
         // if the new mode is windowed mode (including the special FILL ALL mode)
         if (new_fullscreen_flags == 0)
         {
-            SDL_SetWindowSize(lbWindow, mdinfo->Width, mdinfo->Height);
-            SDL_SetWindowPosition(lbWindow, mdinfo->window_pos_x, mdinfo->window_pos_y);
+            int cur_w = 0, cur_h = 0;
+            SDL_GetWindowSize(lbWindow, &cur_w, &cur_h);
+            if (cur_w != (int)mdinfo->Width || cur_h != (int)mdinfo->Height)
+            {
+                SDL_SetWindowSize(lbWindow, mdinfo->Width, mdinfo->Height);
+                SDL_SetWindowPosition(lbWindow, mdinfo->window_pos_x, mdinfo->window_pos_y);
+            }
         }
     }
     // If the game window doesn't yet exists
@@ -992,16 +1007,13 @@ TbScreenMode LbRegisterVideoMode(const char *desc, TbScreenCoord width, TbScreen
     mdinfo->VideoFlags = flags;
     // SDL flags
     mdinfo->sdlFlags = 0; // default to an normal window
+
     if ((mdinfo->VideoFlags & Lb_VF_WINDOWED))
     {
         if (mdinfo->VideoFlags & Lb_VF_BORDERLESS)
         {
             mdinfo->sdlFlags |= SDL_WINDOW_BORDERLESS; // borderless window
         }
-        /* else
-        {
-            sdlFlags |= SDL_WINDOW_RESIZABLE; // todo (allow window to be freely scaled) - needs window resize function triggered by SDL_WINDOWEVENT_SIZE_CHANGED
-        } */
     }
     else
     {

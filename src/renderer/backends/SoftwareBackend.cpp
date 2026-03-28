@@ -18,15 +18,13 @@ TbResult SoftwareBackend::SubmitSprite(long x, long y, const struct TbSprite* sp
     }
     
     // Route to CPU software blitter
-    // Save the original draw flags and clear the GPU batch flag to prevent recursion
+    // Save and restore DrawFlags so the blitter sees the correct per-call flags.
+    // Recursion back into LbSpriteDraw is prevented by lb_in_sprite_submit in bflib_vidraw.c.
     unsigned int saved_flags = lbDisplay.DrawFlags;
-    lbDisplay.DrawFlags = draw_flags & ~Lb_SPRITE_GPU_BATCH_UI;
-    
-    // Call the CPU rendering function directly
-    // Use the original unscaled LbSpriteDraw for standard sprite submission
+    lbDisplay.DrawFlags = draw_flags;
+
     TbResult ret = LbSpriteDraw(x, y, spr);
-    
-    // Restore original flags
+
     lbDisplay.DrawFlags = saved_flags;
     return ret;
 }
@@ -40,10 +38,10 @@ TbResult SoftwareBackend::SubmitSpriteOneColour(long x, long y, const struct TbS
     
     // Route to CPU software blitter with color tint
     unsigned int saved_flags = lbDisplay.DrawFlags;
-    lbDisplay.DrawFlags = draw_flags & ~Lb_SPRITE_GPU_BATCH_UI;
-    
+    lbDisplay.DrawFlags = draw_flags;
+
     TbResult ret = LbSpriteDrawOneColour(x, y, spr, colour);
-    
+
     lbDisplay.DrawFlags = saved_flags;
     return ret;
 }
@@ -57,11 +55,10 @@ TbResult SoftwareBackend::SubmitSpriteRemap(long x, long y, const struct TbSprit
     
     // Route to CPU software blitter with color remapping
     unsigned int saved_flags = lbDisplay.DrawFlags;
-    lbDisplay.DrawFlags = draw_flags & ~Lb_SPRITE_GPU_BATCH_UI;
-    
-    // LbSpriteDrawScaledRemap can be called with 1:1 scaling (16 units = 1 pixel)
+    lbDisplay.DrawFlags = draw_flags;
+
     TbResult ret = LbSpriteDrawScaledRemap(x, y, spr, spr->SWidth, spr->SHeight, colortable);
-    
+
     lbDisplay.DrawFlags = saved_flags;
     return ret;
 }

@@ -64,10 +64,10 @@ void TileAtlasPacker::GetTileUV(int tile_id,
     const float inv_h = 1.0f / (float)k_atlas_h;
     const int col = tile_id % k_atlas_cols;
     const int row = tile_id / k_atlas_cols;
-    *u0 = (float)( col      * k_tile_dim) * inv_w;
-    *v0 = (float)( row      * k_tile_dim) * inv_h;
-    *u1 = (float)((col + 1) * k_tile_dim) * inv_w;
-    *v1 = (float)((row + 1) * k_tile_dim) * inv_h;
+    *u0 = (( col      * k_tile_dim) + 0.5f) * inv_w;
+    *v0 = (( row      * k_tile_dim) + 0.5f) * inv_h;
+    *u1 = (((col + 1) * k_tile_dim) - 0.5f) * inv_w;
+    *v1 = (((row + 1) * k_tile_dim) - 0.5f) * inv_h;
 }
 
 /******************************************************************************/
@@ -84,7 +84,9 @@ void TileAtlasPacker::DecodeTile(const uint8_t* src_indexed, int tile_id)
         uint8_t* dst = dst_row0 + (size_t)(y * k_atlas_w) * 4;
         for (int x = 0; x < k_tile_dim; x++)
         {
-            const uint8_t idx = src_indexed[y * k_tile_dim + x];
+            // block_ptrs data is stored in mega-rows of block_count_per_row tiles;
+            // each pixel row spans block_count_per_row * k_tile_dim bytes.
+            const uint8_t idx = src_indexed[(size_t)y * (block_count_per_row * k_tile_dim) + x];
             // lbPalette stores 6-bit R,G,B components — shift left by 2 to 8-bit
             dst[x * 4 + 0] = (uint8_t)(lbPalette[idx * 3 + 0] << 2);
             dst[x * 4 + 1] = (uint8_t)(lbPalette[idx * 3 + 1] << 2);
@@ -134,7 +136,7 @@ void TileAtlasPacker::BuildAnimatedStrip(int variation)
             uint8_t* dst = dst_row0 + (size_t)(y * k_atlas_w) * 4;
             for (int x = 0; x < k_tile_dim; x++)
             {
-                const uint8_t idx = src[y * k_tile_dim + x];
+                const uint8_t idx = src[(size_t)y * (block_count_per_row * k_tile_dim) + x];
                 dst[x * 4 + 0] = (uint8_t)(lbPalette[idx * 3 + 0] << 2);
                 dst[x * 4 + 1] = (uint8_t)(lbPalette[idx * 3 + 1] << 2);
                 dst[x * 4 + 2] = (uint8_t)(lbPalette[idx * 3 + 2] << 2);

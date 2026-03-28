@@ -4,17 +4,20 @@
         "sdl2-image",
         "sdl2-mixer",
         "sdl2-net",
+        {
+            "name": "ffmpeg",
+            "features": ["avcodec", "avformat", "swresample"]
+        },
         "openal-soft",
         "enet6",
-        "libspng",
-        "centijson",
         "astronomy",
-        "minizip",
-        "miniupnpc",
         "libnatpmp",
-        "ffmpeg",
-        "luajit",
+        "libspng",
         "zlib",
+        "minizip",
+        "luajit",
+        "miniupnpc",
+        "centijson",
         "glad"
     ]
 }

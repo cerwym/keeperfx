@@ -887,6 +887,13 @@ TbScreenMode setup_screen_mode_zero(TbScreenMode nmode)
   {
     display_id = LbGetCurrentDisplayIndex(); // get current display
   }
+  // Skip full setup when already in the requested mode to avoid redundant
+  // surface recreation and refresh-rate redetection on a visible window.
+  if (old_mode == nmode)
+  {
+    force_video_mode_reset = true;
+    return nmode;
+  }
   // Check that the desired mode is available for the current display
   if (!LbScreenIsModeAvailable(nmode, display_id))
   {
