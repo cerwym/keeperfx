@@ -2,12 +2,13 @@
 // Dungeon Keeper - Renderer Abstraction Layer
 /******************************************************************************/
 /** @file GLShaderLoader.cpp
- *     Loads GLSL shader source files from the shaders/ directory adjacent
- *     to the running executable, enabling runtime shader modification.
+ *     Provides access to embedded GLSL shader sources, with fallback
+ *     to loading shader files from the shaders/ directory for development.
  */
 /******************************************************************************/
 #include "pre_inc.h"
 #include "renderer/opengl/GLShaderLoader.h"
+#include "renderer/opengl/GLShaders.h"
 
 #include "bflib_basics.h"  // LbErrorLog
 #include "globals.h"       // ERRORLOG
@@ -15,9 +16,38 @@
 #include <SDL2/SDL.h>
 #include <fstream>
 #include <sstream>
+#include <unordered_map>
 #include "post_inc.h"
 
 /******************************************************************************/
+
+std::string get_embedded_shader_source(const char* shader_name)
+{
+    static const std::unordered_map<std::string, const char*> shader_map = {
+        {"text_vert.glsl", TEXT_VERTEX_SHADER},
+        {"text_frag.glsl", TEXT_FRAGMENT_SHADER},
+        {"kspr_vert.glsl", KSPR_VERTEX_SHADER},
+        {"kspr_frag.glsl", KSPR_FRAGMENT_SHADER},
+        {"kspr_glow_frag.glsl", KSPR_GLOW_FRAGMENT_SHADER},
+        {"palette_blit_vert.glsl", PALETTE_BLIT_VERTEX_SHADER},
+        {"palette_blit_frag.glsl", PALETTE_BLIT_FRAGMENT_SHADER},
+        {"shadow_vert.glsl", SHADOW_VERTEX_SHADER},
+        {"shadow_frag.glsl", SHADOW_FRAGMENT_SHADER},
+        {"world_vert.glsl", WORLD_VERTEX_SHADER},
+        {"world_frag.glsl", WORLD_FRAGMENT_SHADER},
+        {"flatpoly_vert.glsl", FLATPOLY_VERTEX_SHADER},
+        {"flatpoly_frag.glsl", FLATPOLY_FRAGMENT_SHADER}
+    };
+
+    auto it = shader_map.find(shader_name);
+    if (it != shader_map.end())
+    {
+        return it->second;
+    }
+
+    ERRORLOG("get_embedded_shader_source: shader '%s' not found", shader_name);
+    return {};
+}
 
 std::string load_shader_source(const char* filename)
 {
