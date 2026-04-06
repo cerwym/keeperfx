@@ -212,6 +212,11 @@ if(KEEPERFX_RENDERER_OPENGL AND TARGET glad::glad)
     target_link_libraries(keeperfx PRIVATE glad::glad)
 endif()
 
+# Link Tracy profiler (FetchContent target — compiled from source, matches CRT)
+if(KEEPERFX_TRACY AND TARGET TracyClient)
+    target_link_libraries(keeperfx PRIVATE TracyClient)
+endif()
+
 add_executable(keeperfx_hvlog ${KEEPERFX_SOURCES_C} ${KEEPERFX_SOURCES_CXX})
 target_include_directories(keeperfx_hvlog PRIVATE src deps/centitoml deps/centijson/include)
 target_compile_definitions(keeperfx_hvlog PUBLIC BFDEBUG_LEVEL=10)
@@ -229,20 +234,14 @@ if(KEEPERFX_RENDERER_OPENGL AND TARGET glad::glad)
     target_link_libraries(keeperfx_hvlog PRIVATE glad::glad)
 endif()
 
-# ━━━ OpenGL shader files: copy to output directory alongside the executable ━━━
-# Shaders are loaded at runtime from <exe_dir>/shaders/ so they can be edited
-# without recompiling.  The source lives in src/renderer/opengl/shaders/.
-if(KEEPERFX_RENDERER_OPENGL)
-    set(_KFX_SHADER_SRC "${CMAKE_SOURCE_DIR}/src/renderer/opengl/shaders")
-    foreach(_target keeperfx keeperfx_hvlog)
-        add_custom_command(TARGET ${_target} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "${_KFX_SHADER_SRC}"
-                "$<TARGET_FILE_DIR:${_target}>/shaders"
-            COMMENT "Copying OpenGL shaders to $<TARGET_FILE_DIR:${_target}>/shaders"
-        )
-    endforeach()
+# Link Tracy profiler (hvlog mirrors keeperfx)
+if(KEEPERFX_TRACY AND TARGET TracyClient)
+    target_link_libraries(keeperfx_hvlog PRIVATE TracyClient)
 endif()
+
+# ━━━ OpenGL shaders are now embedded in the executable ━━━
+# Previously copied from src/renderer/opengl/shaders/ but now included as constants
+# in src/renderer/opengl/GLShaders.h for easier distribution.
 
 # Remove the crap that comes with pulling in the packages.
 

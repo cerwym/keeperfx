@@ -85,6 +85,8 @@ endif()
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Sanitizers (AddressSanitizer + UndefinedBehaviorSanitizer)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+option(KEEPERFX_TRACY "Enable Tracy profiler instrumentation (MSVC debug builds)" OFF)
+
 option(KEEPERFX_SANITIZERS "Enable AddressSanitizer (+ UBSan on GCC/Clang)" OFF)
 # ASan requires shadow memory (~1:8 address space ratio). On constrained 32-bit
 # platforms (Vita/3DS/Switch) the ~32 MB shadow region would exhaust the process

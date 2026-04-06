@@ -153,7 +153,8 @@
             "description": "Windows x86 Debug build with MSVC, static runtime linking",
             "inherits": [ "MSVC-x86-Base", "Debug" ],
             "cacheVariables": {
-                "CMAKE_EXPORT_COMPILE_COMMANDS": "on"
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "on",
+                "KEEPERFX_TRACY": "ON"
             }
         },
 
@@ -173,7 +174,8 @@
             "description": "Windows x64 Debug build with MSVC, static runtime linking",
             "inherits": [ "MSVC-x64-Base", "Debug" ],
             "cacheVariables": {
-                "CMAKE_EXPORT_COMPILE_COMMANDS": "on"
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "on",
+                "KEEPERFX_TRACY": "ON"
             }
         },
 

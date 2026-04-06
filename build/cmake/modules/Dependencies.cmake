@@ -63,6 +63,25 @@ if(NOT PLATFORM_VITA AND NOT PLATFORM_3DS AND NOT PLATFORM_SWITCH)
     else()
         kfx_status("DEPS" "centijson not found via vcpkg — will build from deps/ sources")
     endif()
+
+    # ━━━ Tracy Profiler (optional) — built from source via FetchContent ━━━
+    # Using FetchContent instead of vcpkg so Tracy is compiled with the same CRT
+    # as the rest of the project (MTd in Debug, MT in Release). The vcpkg
+    # pre-built lib uses MT regardless, causing LNK2038 CRT mismatch in Debug.
+    if(KEEPERFX_TRACY)
+        include(FetchContent)
+        set(TRACY_ENABLE ON CACHE BOOL "" FORCE)
+        set(TRACY_ON_DEMAND ON CACHE BOOL "" FORCE)
+        FetchContent_Declare(
+            tracy
+            GIT_REPOSITORY https://github.com/wolfpld/tracy.git
+            GIT_TAG        v0.13.1
+            GIT_SHALLOW    TRUE
+            GIT_PROGRESS   TRUE
+        )
+        FetchContent_MakeAvailable(tracy)
+        kfx_status("PROFILER" "Tracy profiler v0.13.1 fetched from source (TRACY_ENABLE + TRACY_ON_DEMAND)")
+    endif()
     
 else()
     # ━━━ Homebrew platforms (Vita, 3DS, Switch) ━━━

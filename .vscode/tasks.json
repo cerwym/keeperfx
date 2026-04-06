@@ -15,8 +15,12 @@
 "type": "shell",
 "windows": {
 "command": [
-"cmake --build --preset x86-windows-static-debug;",
-"if ($LASTEXITCODE -ne 0) { exit 1 };",
+"$vcvars = 'C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Auxiliary\\Build\\vcvars32.bat';",
+"$bat = [System.IO.Path]::GetTempFileName() + '.bat';",
+"Set-Content $bat \"@call `\"$vcvars`\" >nul 2>&1`r`ncmake --build --preset x86-windows-static-debug\" -Encoding ascii;",
+"cmd /c $bat;",
+"if ($LASTEXITCODE -ne 0) { Remove-Item $bat; exit 1 };",
+"Remove-Item $bat;",
 "Copy-Item '${workspaceFolder}\\out\\build\\x86-windows-static-debug\\keeperfx.exe' '${workspaceFolder}\\.deploy\\keeperfx.exe' -Force;",
 "Write-Host 'keeperfx.exe deployed to .deploy/' -ForegroundColor Green;",
 "powershell -ExecutionPolicy Bypass -File '${workspaceFolder}\\.vscode\\validate_runtime_assets.ps1' -WorkspaceFolder '${workspaceFolder}' -DeploySubdir '.deploy'"
