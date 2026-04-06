@@ -68,6 +68,7 @@
 #include "kjm_input.h"
 #include "custom_sprites.h"
 #include "sprites.h"
+#include "renderer/RendererManager.h"
 #include "post_inc.h"
 #include "room_workshop.h"
 
@@ -2531,68 +2532,80 @@ void gui_switch_players_visible(struct GuiButton *gbtn)
 void draw_gold_total(PlayerNumber plyr_idx, int32_t scr_x, int32_t scr_y, int32_t units_per_px, long long value)
 {
     long long i;
-    unsigned int flg_mem = lbDisplay.DrawFlags;
     int ndigits = 0;
-    int val_width = 0;
     for (i = value; i > 0; i /= 10) {
         ndigits++;
     }
-    const struct TbSprite* spr = get_button_sprite(GBS_fontchars_number_dig0);
-    val_width = scale_value_for_resolution_with_upp(spr->SWidth, units_per_px) * ndigits;
+    // Use the digit-0 sprite width to derive per-digit pixel advance (all digit sprites are equal width)
+    int digit_w = scale_value_for_resolution_with_upp(get_button_sprite(GBS_fontchars_number_dig0)->SWidth, units_per_px);
     if (ndigits > 0)
     {
-        long pos_x = scr_x + val_width / 2;
+        long pos_x = scr_x + (digit_w * ndigits) / 2;
         for (i = value; i > 0; i /= 10)
         {
-            // Make space for the character first, as we're drawing right char towards left
-            pos_x -= scale_value_for_resolution_with_upp(spr->SWidth, units_per_px);
-            spr = get_button_sprite(i % 10 + GBS_fontchars_number_dig0);
-            LbSpriteDrawResized(pos_x, scr_y, units_per_px, spr);
+            // Step right-to-left: move position left then draw the digit
+            pos_x -= digit_w;
+            UIRenderer_SubmitButtonSprite(pos_x, scr_y, units_per_px, (short)(i % 10 + GBS_fontchars_number_dig0));
         }
     } else
     {
         // Just draw zero
-        spr = get_button_sprite(GBS_fontchars_number_dig0);
-        LbSpriteDrawResized(scr_x, scr_y, units_per_px, spr);
+        UIRenderer_SubmitButtonSprite(scr_x, scr_y, units_per_px, GBS_fontchars_number_dig0);
     }
-    lbDisplay.DrawFlags = flg_mem;
 }
 
-void draw_whole_status_panel(void)
+static void draw_status_background(int fs_units_per_px)
 {
-    long mmzoom;
-    struct PlayerInfo* player = get_my_player();
-    struct Dungeon* dungeon = get_players_dungeon(player);
-    // Get the menu scale
-    struct GuiMenu *gmnu;
-    int fs_units_per_px;
-    int mm_units_per_px;
-    {
-        int mnu_num = menu_id_to_number(GMnu_MAIN);
-        gmnu = get_active_menu(mnu_num);
-        mm_units_per_px = (gmnu->width * 16 + 140/2) / 140;
-        if (mm_units_per_px < 1)
-            mm_units_per_px = 1;
-        fs_units_per_px = (gmnu->height * 16 + 8) / LbTiledSpriteHeight(&status_panel);
-    }
     lbDisplay.DrawColour = colours[15][15][15];
     lbDisplay.DrawFlags = 0;
-    LbTiledSpriteDraw(0, 0, fs_units_per_px, &status_panel);
+    UIRenderer_SubmitTiledSprite(0, 0, fs_units_per_px, &status_panel);
+}
+
+static void draw_status_gold(struct PlayerInfo* player, struct Dungeon* dungeon,
+                              struct GuiMenu* gmnu, int fs_units_per_px)
+{
     // Draws gold amount; note that button_sprite[] is used instead of full font
-    draw_gold_total(player->id_number, gmnu->pos_x + gmnu->width/2, gmnu->pos_y + gmnu->height*67/200, fs_units_per_px, dungeon->total_money_owned);
-    if (16/mm_units_per_px < 3)
-        mmzoom = (player->minimap_zoom) / scale_value_for_resolution_with_upp(2,mm_units_per_px);
+    draw_gold_total(player->id_number,
+        gmnu->pos_x + gmnu->width / 2,
+        gmnu->pos_y + gmnu->height * 67 / 200,
+        fs_units_per_px, dungeon->total_money_owned);
+}
+
+static void draw_status_minimap(struct PlayerInfo* player, int mm_units_per_px)
+{
+    long mmzoom;
+    if (16 / mm_units_per_px < 3)
+        mmzoom = (player->minimap_zoom) / scale_value_for_resolution_with_upp(2, mm_units_per_px);
     else
         mmzoom = player->minimap_zoom;
     panel_map_draw_slabs(player->minimap_pos_x, player->minimap_pos_y, mm_units_per_px, mmzoom);
     long basic_zoom = player->minimap_zoom;
     panel_map_draw_overlay_things(mm_units_per_px, mmzoom, basic_zoom);
+    panel_map_submit_to_renderer();
     reset_all_minimap_interpolation = false; // Done resetting
+}
+
+static void draw_status_placefiller(struct GuiMenu* gmnu, int fs_units_per_px)
+{
     unsigned char placefill_threshold = (LbScreenHeight() >= 400) ? 80 : 40;
     if (LbScreenHeight() - gmnu->height >= placefill_threshold)
-    {
         draw_placefiller(0, gmnu->pos_y + gmnu->height, fs_units_per_px);
-    }
+}
+
+void draw_whole_status_panel(void)
+{
+    struct PlayerInfo* player = get_my_player();
+    struct Dungeon* dungeon = get_players_dungeon(player);
+    struct GuiMenu* gmnu = get_active_menu(menu_id_to_number(GMnu_MAIN));
+    int mm_units_per_px = (gmnu->width * 16 + 140 / 2) / 140;
+    if (mm_units_per_px < 1)
+        mm_units_per_px = 1;
+    int fs_units_per_px = (gmnu->height * 16 + 8) / LbTiledSpriteHeight(&status_panel);
+
+    draw_status_background(fs_units_per_px);
+    draw_status_gold(player, dungeon, gmnu, fs_units_per_px);
+    draw_status_minimap(player, mm_units_per_px);
+    draw_status_placefiller(gmnu, fs_units_per_px);
 }
 
 void gui_set_button_flashing(long btn_idx, long gameturns)
@@ -2804,8 +2817,7 @@ void update_powers_tab_to_config(void)
 
 void draw_placefiller(long scr_x, long scr_y, long units_per_px)
 {
-    const struct TbSprite* spr = get_panel_sprite(GPS_rpanel_rpanel_extra);
-    LbSpriteDrawResized(scr_x, scr_y, units_per_px, spr);
+    UIRenderer_SubmitPanelSprite(scr_x, scr_y, (int)units_per_px, GPS_rpanel_rpanel_extra);
 }
 
 void gui_query_next_creature_of_owner_and_model(struct GuiButton *gbtn)

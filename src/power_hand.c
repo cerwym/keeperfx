@@ -57,6 +57,7 @@
 #include "frontend.h"
 #include "gui_draw.h"
 #include "engine_render.h"
+#include "renderer/RendererManager.h"
 #include "engine_arrays.h"
 #include "sounds.h"
 #include "game_legacy.h"
@@ -567,7 +568,7 @@ void draw_power_hand(void)
         {
             roomst = get_room_kind_stats(room->kind);
 
-            draw_gui_panel_sprite_centered(GetMouseX()+scale_ui_value(24*global_hand_scale), GetMouseY()+scale_ui_value(32*global_hand_scale), ps_units_per_px, roomst->medsym_sprite_idx);
+            UIRenderer_SubmitPanelSpriteCentered(GetMouseX()+scale_ui_value(24*global_hand_scale), GetMouseY()+scale_ui_value(32*global_hand_scale), ps_units_per_px, roomst->medsym_sprite_idx);
         }
         if ((!power_hand_is_empty(player)) && (game.small_map_state == 1))
         {
@@ -587,7 +588,7 @@ void draw_power_hand(void)
     if (player->hand_busy_until_turn > game.play_gameturn)
     {
         SYNCDBG(7,"Drawing hand %s index %d, busy state", thing_model_name(thing), (int)thing->index);
-        process_keeper_sprite(GetMouseX()+scale_ui_value(60*global_hand_scale), GetMouseY()+scale_ui_value(40*global_hand_scale),
+        UIRenderer_SubmitKeeperSprite(GetMouseX()+scale_ui_value(60*global_hand_scale), GetMouseY()+scale_ui_value(40*global_hand_scale),
           thing->anim_sprite, 0, thing->current_frame, scale_ui_value(64*global_hand_scale));
         draw_mini_things_in_hand(GetMouseX()+scale_ui_value(60*global_hand_scale), GetMouseY());
         return;
@@ -607,7 +608,7 @@ void draw_power_hand(void)
         {
           if (player->work_state == PSt_Slap)
           {
-            process_keeper_sprite(GetMouseX() + scale_ui_value(70*global_hand_scale), GetMouseY() + scale_ui_value(46*global_hand_scale),
+            UIRenderer_SubmitKeeperSprite(GetMouseX() + scale_ui_value(70*global_hand_scale), GetMouseY() + scale_ui_value(46*global_hand_scale),
                 thing->anim_sprite, 0, thing->current_frame, scale_ui_value(64*global_hand_scale));
           } else
           if (player->work_state == PSt_CtrlDungeon)
@@ -651,7 +652,7 @@ void draw_power_hand(void)
                     EngineSpriteDrawUsingAlpha = 1;
                 }
 
-                process_keeper_sprite(inputpos_x / pixel_size, inputpos_y / pixel_size,
+                UIRenderer_SubmitKeeperSprite(inputpos_x / pixel_size, inputpos_y / pixel_size,
                     picktng->anim_sprite, 0, picktng->current_frame, scale_ui_value(64*global_hand_scale));
                 lbDisplay.DrawFlags = 0;
                 EngineSpriteDrawUsingAlpha = 0;
@@ -659,7 +660,7 @@ void draw_power_hand(void)
             {
                 inputpos_x = GetMouseX() + scale_ui_value(11*global_hand_scale);
                 inputpos_y = GetMouseY() + scale_ui_value(56*global_hand_scale);
-                process_keeper_sprite(inputpos_x / pixel_size, inputpos_y / pixel_size,
+                UIRenderer_SubmitKeeperSprite(inputpos_x / pixel_size, inputpos_y / pixel_size,
                     picktng->anim_sprite, 0, picktng->current_frame, scale_ui_value(64*global_hand_scale));
             }
             break;
@@ -668,7 +669,7 @@ void draw_power_hand(void)
             {
               inputpos_x = GetMouseX() + scale_ui_value(11*global_hand_scale);
               inputpos_y = GetMouseY() + scale_ui_value(56*global_hand_scale);
-              process_keeper_sprite(inputpos_x / pixel_size, inputpos_y / pixel_size,
+              UIRenderer_SubmitKeeperSprite(inputpos_x / pixel_size, inputpos_y / pixel_size,
                   picktng->anim_sprite, 0, picktng->current_frame, scale_ui_value(64*global_hand_scale));
               break;
             } else
@@ -681,14 +682,14 @@ void draw_power_hand(void)
                 pickoffs = get_object_picked_up_offset(picktng);
                 inputpos_x = GetMouseX() + scale_ui_value(pickoffs->delta_x * global_hand_scale);
                 inputpos_y = GetMouseY() + scale_ui_value(pickoffs->delta_y * global_hand_scale);
-                process_keeper_sprite(inputpos_x / pixel_size, inputpos_y / pixel_size,
+                UIRenderer_SubmitKeeperSprite(inputpos_x / pixel_size, inputpos_y / pixel_size,
                     picktng->anim_sprite, 0, picktng->current_frame, scale_ui_value(64 * global_hand_scale));
             }
             break;
         default:
             inputpos_x = GetMouseX();
             inputpos_y = GetMouseY();
-            process_keeper_sprite(inputpos_x / pixel_size, inputpos_y / pixel_size,
+            UIRenderer_SubmitKeeperSprite(inputpos_x / pixel_size, inputpos_y / pixel_size,
                   picktng->anim_sprite, 0, picktng->current_frame, scale_ui_value(64*global_hand_scale));
             break;
         }
@@ -697,14 +698,14 @@ void draw_power_hand(void)
     {
         inputpos_x = GetMouseX() + scale_ui_value(58*global_hand_scale);
         inputpos_y = GetMouseY() +  scale_ui_value(6*global_hand_scale);
-        process_keeper_sprite(inputpos_x / pixel_size, inputpos_y / pixel_size,
+        UIRenderer_SubmitKeeperSprite(inputpos_x / pixel_size, inputpos_y / pixel_size,
             thing->anim_sprite, 0, thing->current_frame, scale_ui_value(64*global_hand_scale));
         draw_mini_things_in_hand(GetMouseX()+scale_ui_value(60*global_hand_scale), GetMouseY());
     } else
     {
         inputpos_x = GetMouseX() + scale_ui_value(60*global_hand_scale);
         inputpos_y = GetMouseY() + scale_ui_value(40*global_hand_scale);
-        process_keeper_sprite(inputpos_x / pixel_size, inputpos_y / pixel_size,
+        UIRenderer_SubmitKeeperSprite(inputpos_x / pixel_size, inputpos_y / pixel_size,
             thing->anim_sprite, 0, thing->current_frame, scale_ui_value(64*global_hand_scale));
         draw_mini_things_in_hand(GetMouseX()+scale_ui_value(60*global_hand_scale), GetMouseY());
     }
@@ -1187,12 +1188,12 @@ void draw_mini_things_in_hand(long x, long y)
                 scrpos_x = scrbase_x + scale_ui_value(16) * icol;
                 scrpos_y = scrbase_y + scale_ui_value(18) * irow;
                 // Draw creature symbol
-                draw_gui_panel_sprite_left(scrpos_x, scrpos_y, ps_units_per_px, spr_idx);
+                UIRenderer_SubmitPanelSprite(scrpos_x, scrpos_y, ps_units_per_px, spr_idx);
                 char ownshift_y;
                 if (MyScreenHeight < 400)
                 {
                     char expshift_y = (irow > 0) ? 32 : -6;
-                    draw_button_sprite_left(scrpos_x, scrpos_y + scale_ui_value(expshift_y), ps_units_per_px, expspr_idx);
+                    UIRenderer_SubmitButtonSprite(scrpos_x, scrpos_y + scale_ui_value(expshift_y), ps_units_per_px, expspr_idx);
                     if (thing->owner != my_player_number)
                     {
                         ownshift_y = (irow == 0) ? 1 : 56;
@@ -1238,7 +1239,7 @@ void draw_mini_things_in_hand(long x, long y)
                         }
                     }
                     // Draw exp level
-                    draw_button_sprite_left(scrpos_x + expshift_x, scrpos_y + scale_ui_value(shift_y), ps_units_per_px, expspr_idx);
+                    UIRenderer_SubmitButtonSprite(scrpos_x + expshift_x, scrpos_y + scale_ui_value(shift_y), ps_units_per_px, expspr_idx);
                 }
             }
         } else
@@ -1251,7 +1252,7 @@ void draw_mini_things_in_hand(long x, long y)
                 shift_y = 0;
             scrpos_x = scrbase_x + scale_ui_value(16) * icol;
             scrpos_y = scrbase_y + scale_ui_value(14) * irow;
-            draw_gui_panel_sprite_left(scrpos_x - 2, scrpos_y + scale_ui_value(shift_y), ps_units_per_px, spr_idx);
+            UIRenderer_SubmitPanelSprite(scrpos_x - 2, scrpos_y + scale_ui_value(shift_y), ps_units_per_px, spr_idx);
         } else
         if ((thing->class_id == TCls_Object))
         {
@@ -1262,7 +1263,7 @@ void draw_mini_things_in_hand(long x, long y)
                 shift_y = 0;
             scrpos_x = scrbase_x + scale_ui_value(16) * icol;
             scrpos_y = scrbase_y + scale_ui_value(14) * irow;
-            draw_gui_panel_sprite_left(scrpos_x - 2, scrpos_y + scale_ui_value(shift_y), ps_units_per_px, spr_idx);
+            UIRenderer_SubmitPanelSprite(scrpos_x - 2, scrpos_y + scale_ui_value(shift_y), ps_units_per_px, spr_idx);
         } else
         {
             spr_idx = GPS_room_hatchery_std_s;
@@ -1272,7 +1273,7 @@ void draw_mini_things_in_hand(long x, long y)
                 shift_y = 0;
             scrpos_x = scrbase_x + scale_ui_value(16) * icol;
             scrpos_y = scrbase_y + scale_ui_value(14) * irow;
-            draw_gui_panel_sprite_left(scrpos_x - 2, scrpos_y + scale_ui_value(shift_y), ps_units_per_px, spr_idx);
+            UIRenderer_SubmitPanelSprite(scrpos_x - 2, scrpos_y + scale_ui_value(shift_y), ps_units_per_px, spr_idx);
         }
     }
 }

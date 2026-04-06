@@ -647,7 +647,9 @@ void redraw_creature_view(void)
         draw_creature_view(thing);
     remove_explored_flags_for_power_sight(player);
     if ((game.operation_flags & GOF_ShowGui) != 0) {
+        UIRenderer_SetLayer(0);  // sidebar background must land before the staging blit
         draw_whole_status_panel();
+        UIRenderer_SetLayer(1);  // restore front layer for all other GUI draws
     }
     draw_gui();
     if ((game.operation_flags & GOF_ShowGui) != 0) {
@@ -700,7 +702,9 @@ void redraw_frontview(void)
 // after 3D rendering is done.  
 void draw_2d_elements(struct PlayerInfo* player) {
     if (flag_is_set(game.operation_flags, GOF_ShowGui)) {
+        UIRenderer_SetLayer(0);  // sidebar background must land before the staging blit
         draw_whole_status_panel();
+        UIRenderer_SetLayer(1);  // restore front layer for all other GUI draws
     }
     draw_gui();
     if (flag_is_set(game.operation_flags, GOF_ShowGui)) {

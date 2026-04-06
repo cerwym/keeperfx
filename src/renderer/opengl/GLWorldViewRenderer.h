@@ -62,8 +62,12 @@ public:
     // occur during depth-correct sprite replay.
     void GPUFlushNow(unsigned char* staging_buf = nullptr);
 
-    // Render one keeper sprite quad GPU-side (called by the C hook kspr_hook_cb).
-    // Public because kspr_hook_cb is a C-linkage static function.
+    // IWorldViewRenderer: submit a keeper-sprite through the GPU path.
+    int SubmitKeeperSprite(long dst_x, long dst_y, long dst_w, long dst_h,
+                           const unsigned char* data, int src_w, int src_h,
+                           unsigned int draw_flags, const unsigned char* remap) override;
+
+    // Internal implementation used by SubmitKeeperSprite.
     int render_keepersprite_gpu(long dst_x, long dst_y, long dst_w, long dst_h,
                                 const unsigned char* data, int src_w, int src_h,
                                 unsigned int draw_flags, const unsigned char* remap);
@@ -78,12 +82,20 @@ public:
     void AddWorldText(float world_x, float world_y, float world_z,
                      const char* text, int color, float scale, int bucket_num);
 
+    // Called by GLUIRenderer::Flush() (via UIRenderer_Flush) to render power-hand
+    // keeper sprites after glClear() with full-screen NDC coordinates.
+    // Saves m_screen_w/h and m_current_sprite_z, sets them to MyScreenWidth/Height
+    // and z=-1 (near plane, always on top), restores in EndHandSpriteRendering().
+    void BeginHandSpriteRendering();
+    void EndHandSpriteRendering();
+
 private:
     bool init_gl_resources();
     void free_gl_resources();
     bool compile_world_shaders();
     bool init_shadow_shader();
     bool init_keeper_sprite_shader();
+    bool init_flatpoly_shader();
 
     // Append one triangle (3 PolyPoint vertices, integer screen pixels) to the staging array.
     // tile_id is the flat block_ptrs[] index from p->block;
@@ -103,9 +115,12 @@ private:
     // in GPUFlushNow() after glClear().
     void gpu_flush();
 
+    // Setup world sprite processing for a bucket (replaces global hook approach)
+    void setup_world_sprite_processing(long bucket_num);
+
     // Deferred draw command (built during FlushIsometricView, executed by GPUFlushNow)
     struct DrawCmd {
-        enum Type { CMD_TILES, CMD_SPRITES, CMD_SHADOWS, CMD_WORLDTEXT } type;
+        enum Type { CMD_TILES, CMD_SPRITES, CMD_SHADOWS, CMD_WORLDTEXT, CMD_FLAT_POLYS } type;
         // CMD_TILES fields
         int vert_start  = 0;
         int vert_count  = 0;
@@ -137,6 +152,16 @@ private:
         float scale;                     // Text scale factor
     };
 
+    // Saved viewport state during hand sprite rendering (see BeginHandSpriteRendering)
+    int   m_saved_screen_w   = 0;
+    int   m_saved_screen_h   = 0;
+    float m_saved_sprite_z   = 0.0f;
+
+    // Flat-colour polygon vertex: screen-pixel XY, NDC Z depth, linear RGB.
+    // Built during FlushIsometricView for QK_PolyMode0/4/BasicPolygon,
+    // uploaded once in GPUFlushNow and drawn with the flat-poly shader.
+    struct FlatPolyVertex { float x, y, z, r, g, b; };
+
     // Injected resources (not owned)
     ITileAtlas* m_atlas       = nullptr;
     GLuint      m_fade_tex    = 0;
@@ -161,8 +186,15 @@ private:
     GLuint m_kspr_vao           = 0;
     GLuint m_kspr_vbo           = 0;
 
+    // Flat-colour polygon GL objects (QK_PolyMode0/4/BasicPolygon — full GPU path)
+    GLuint m_flatpoly_shader        = 0;
+    GLuint m_flatpoly_vao           = 0;
+    GLuint m_flatpoly_vbo           = 0;
+    GLint  m_flatpoly_loc_viewport  = -1;
+
     // Uniform locations (cached at shader compile time)
     GLint  m_loc_tile_atlas  = -1;
+    GLint  m_loc_palette     = -1;   // sampler1D u_palette (unit 1)
 
     // Shadow uniform locations
     GLint  m_shadow_loc_viewport   = -1;
@@ -191,6 +223,7 @@ private:
     unsigned char* m_framebuf   = nullptr; // viewport start in staging buffer
     int            m_pitch      = 0;       // staging buffer row stride (bytes)
     int            m_current_bucket = 0;   // bucket index being processed (used for depth z)
+    float          m_current_sprite_z = 0.0f; // NDC depth for current bucket sprites
 
     // CPU-side vertex staging buffer (dynamic VBO)
     static const int k_max_verts = 65536;   // ~21000 triangles per frame
@@ -203,6 +236,7 @@ private:
     std::vector<DrawCmd>      m_draw_cmds;
     std::vector<ShadowCmd>    m_shadow_cmds;
     std::vector<WorldTextCmd> m_worldtext_cmds;
+    std::vector<FlatPolyVertex> m_flatpoly_verts;  // flat-colour polygon vertices, GPU-only
 
     // Software fallback for unported QKinds
     SoftwareWorldViewRenderer* m_sw_fallback = nullptr;

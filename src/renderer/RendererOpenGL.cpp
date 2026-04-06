@@ -14,6 +14,7 @@
 #include "renderer/RendererOpenGL.h"
 #include "renderer/RendererManager.h"
 #include "renderer/opengl/GLTileAtlas.h"
+#include "renderer/opengl/GLSpriteAtlas.h"
 #include "renderer/opengl/GLWorldViewRenderer.h"
 #include "renderer/opengl/GLShaderLoader.h"
 
@@ -145,6 +146,16 @@ bool RendererOpenGL::Init()
         WARNLOG("RendererOpenGL: tile atlas init failed — world GPU renderer disabled");
     }
 
+    // Sprite atlas for UI panel sprites (gui_panel_sprites, button_sprites).
+    // Sheets are added in create_ui_renderer() after this returns.
+    m_sprite_atlas = new GLSpriteAtlas();
+    if (!m_sprite_atlas->Init())
+    {
+        WARNLOG("RendererOpenGL: UI sprite atlas init failed — panel sprites will use staging buffer");
+        delete m_sprite_atlas;
+        m_sprite_atlas = nullptr;
+    }
+
     return true;
 }
 
@@ -152,6 +163,9 @@ void RendererOpenGL::Shutdown()
 {
     delete m_tile_atlas;
     m_tile_atlas = nullptr;
+
+    delete m_sprite_atlas;
+    m_sprite_atlas = nullptr;
 
     delete[] m_stagingBuf;
     m_stagingBuf = nullptr;
@@ -168,27 +182,42 @@ void RendererOpenGL::Shutdown()
 
 bool RendererOpenGL::BeginFrame()
 {
+    // Idempotent: multiple LbScreenLock calls per frame must not clear the UI queue again.
+    // The staging buffer has the same guard via m_staging_cleared / LockFramebuffer().
+    if (m_frame_begun) return true;
+    m_frame_begun = true;
+
     // Lazy-retry resources that depend on game data loaded after Init().
     if (!m_texFade && render_fade_tables)
         init_fade_table_texture();
     if (m_tile_atlas && !m_tile_atlas->IsInitialized())
         init_tile_atlas();
 
-    // Re-upload the animated tile atlas rows that the game-logic tick already
-    // pointer-swapped via update_animating_texture_maps() (called in main.cpp
-    // every game turn).  Must run before any world geometry is submitted.
+    // Re-upload the animated tile atlas rows only when the game-logic tick has
+    // actually advanced the animation (update_animating_texture_maps() called from
+    // main.cpp swaps block_ptrs pointers, changing the sentinel value).
+    // This avoids expensive palette→RGBA8 decodes + GPU uploads at the render
+    // frame rate (60 fps); uploads now happen at the game-tick rate only.
     if (m_tile_atlas && m_tile_atlas->IsInitialized())
     {
-        m_tile_atlas->UpdateAnimatedTiles();
+        const uint8_t* anim_sentinel = block_ptrs[TEXTURE_BLOCKS_STAT_COUNT_A];
+        if (anim_sentinel != m_last_anim_sentinel)
+        {
+            m_tile_atlas->UpdateAnimatedTiles();
+            m_last_anim_sentinel = anim_sentinel;
+        }
     }
 
     RenderPass_BeginFrame();
+    UIRenderer_Clear();
     return true;
 }
 
 void RendererOpenGL::EndFrame()
 {
-    // Upload palette (may have changed this frame via LbPaletteSet)
+    // Upload palette unconditionally — it may have changed this frame via LbPaletteSet.
+    // Palette switches happen rarely (level load, possession), so the overhead of a
+    // 1 KB CPU expand + glTexSubImage1D is negligible compared to other frame work.
     upload_palette_texture();
 
     // Restore depth mask before clearing — GPUFlushNow() ends with
@@ -204,15 +233,20 @@ void RendererOpenGL::EndFrame()
     if (m_world_renderer)
         m_world_renderer->GPUFlushNow(m_stagingBuf);
 
+    // Flush layer-0 (back) GPU UI elements — sidebar background panels that must land
+    // beneath the CPU staging-buffer blit so that CPU-drawn text, gold digits, and
+    // portraits composite on top of them.
+    UIRenderer_FlushBack();
+
     // Upload CPU framebuffer to index texture (AFTER GPUFlushNow so that
     // CPU-path sprite fallbacks written during the sprite replay are included).
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_texIndex);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_stagingW, m_stagingH, GL_RED, GL_UNSIGNED_BYTE, m_stagingBuf);
 
-    // CPU framebuffer blit ON TOP — creatures, UI, sprites.
-    // Palette index 0 is transparent so GPU tiles show through in the 3D
-    // viewport where the CPU staging buffer was zeroed by BeginWorldPass.
+    // CPU framebuffer blit — palette index 0 is transparent so the GPU back-layer
+    // sidebar panels show through in transparent regions, while non-zero CPU pixels
+    // (text, digits, portraits on the sidebar) composite correctly on top.
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_texIndex);
     glActiveTexture(GL_TEXTURE1);
@@ -227,13 +261,18 @@ void RendererOpenGL::EndFrame()
     glBindVertexArray(0);
     glDisable(GL_BLEND);
 
-    // Flush deferred GPU text draws on top of the composited frame,
-    // before the swap so they are not wiped out by the blit quad above.
+    // Flush layer-1 (front) GPU UI elements — escape menu icons/buttons, minimap,
+    // slab selectors, power-hand — on top of the staging blit so they appear over
+    // CPU-drawn panel backgrounds rather than underneath them.
+    UIRenderer_FlushFront();
+
+    // Flush GPU text on top of everything.
     TextRenderer_Flush();
 
     RenderPass_EndFrame();
     platform_swap_gl_buffers(lbWindow);
     m_staging_cleared = false; // next frame's first LockFramebuffer will clear the staging buffer
+    m_frame_begun     = false; // allow BeginFrame to run fully on the next frame
 }
 
 uint8_t* RendererOpenGL::LockFramebuffer(int* out_pitch)
@@ -265,12 +304,33 @@ bool RendererOpenGL::SupportsRuntimeSwitch() const
     return true;
 }
 
+IWorldViewRenderer* RendererOpenGL::GetWorldViewRenderer()
+{
+    return RendererGetWorldViewRenderer();
+}
+
+IMapFadePass* RendererOpenGL::GetMapFadePass()
+{
+    return RendererGetMapFadePass();
+}
+
+ITextRenderer* RendererOpenGL::GetTextRenderer()
+{
+    return RendererGetTextRenderer();
+}
+
+IUIRenderer* RendererOpenGL::GetUIRenderer()
+{
+    return RendererGetUIRenderer();
+}
+
 /******************************************************************************/
+
 
 bool RendererOpenGL::compile_shaders()
 {
-    std::string vert_src = load_shader_source("palette_blit_vert.glsl");
-    std::string frag_src = load_shader_source("palette_blit_frag.glsl");
+    std::string vert_src = get_embedded_shader_source("palette_blit_vert.glsl");
+    std::string frag_src = get_embedded_shader_source("palette_blit_frag.glsl");
     if (vert_src.empty() || frag_src.empty())
         return false;
 
@@ -345,4 +405,13 @@ bool RendererOpenGL::init_tile_atlas()
     if (!m_tile_atlas)
         m_tile_atlas = new GLTileAtlas();
     return m_tile_atlas->Init();
+}
+
+void RendererOpenGL::InvalidateTileAtlas()
+{
+    if (m_tile_atlas)
+        m_tile_atlas->Free();
+    // Also reset the anim sentinel so the rebuilt atlas is immediately populated
+    // with the animated tile strip on the next BeginFrame().
+    m_last_anim_sentinel = nullptr;
 }

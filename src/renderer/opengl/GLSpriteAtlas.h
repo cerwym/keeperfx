@@ -21,10 +21,13 @@
 #include <glad/glad.h>
 #include <unordered_map>
 #include <vector>
+#include <cstdint>
 #include "bflib_sprite.h"
+#include "renderer/SpriteHandle.h"
 
 struct SpriteUV {
     float u0, v0, u1, v1;
+    uint16_t pixel_w, pixel_h;  // original sprite pixel dimensions
 };
 
 class GLSpriteAtlas {
@@ -47,10 +50,17 @@ public:
     /** Invalidate UV entries for all sprites in a sheet. */
     void RemoveSheet(const struct TbSpriteSheet* sheet);
 
-    /** Look up precomputed UV for a sprite pointer.  Returns false if not found. */
+    /** Look up the opaque handle assigned to spr.  Returns kInvalidSpriteHandle if not found. */
+    SpriteHandle GetHandle(const struct TbSprite* spr) const;
+
+    /** Look up precomputed UV by handle.  Returns false if out of range. */
+    bool GetUV(SpriteHandle h, SpriteUV& out) const;
+
+    /** Look up precomputed UV by sprite pointer (convenience overload for legacy callers). */
     bool GetUV(const struct TbSprite* spr, SpriteUV& out) const;
 
     GLuint GetTexture() const { return m_texture; }
+    size_t GetRegisteredCount() const { return m_sprite_to_handle.size(); }
 
 private:
     bool pack_sprite(const struct TbSprite* spr, SpriteUV& out);
@@ -69,7 +79,9 @@ private:
     int m_dirty_y_min = k_atlas_h;
     int m_dirty_y_max = -1;
 
-    std::unordered_map<const struct TbSprite*, SpriteUV> m_uvs;
+    std::unordered_map<const struct TbSprite*, SpriteHandle> m_sprite_to_handle;
+    std::vector<SpriteUV>                                    m_handle_uvs;  // indexed by SpriteHandle
+    uint32_t                                                 m_next_handle = 0;
 };
 
 #endif // RENDERER_OPENGL_ENABLED

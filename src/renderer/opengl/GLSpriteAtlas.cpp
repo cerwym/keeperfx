@@ -48,7 +48,9 @@ void GLSpriteAtlas::Free()
         m_texture = 0;
     }
     m_pixels.clear();
-    m_uvs.clear();
+    m_sprite_to_handle.clear();
+    m_handle_uvs.clear();
+    m_next_handle = 0;
 }
 
 /******************************************************************************/
@@ -113,6 +115,8 @@ bool GLSpriteAtlas::pack_sprite(const struct TbSprite* spr, SpriteUV& out)
     out.v0 = (float) m_shelf_y        / (float)k_atlas_h;
     out.u1 = (float)(m_cursor_x + w)  / (float)k_atlas_w;
     out.v1 = (float)(m_shelf_y  + h)  / (float)k_atlas_h;
+    out.pixel_w = (uint16_t)w;
+    out.pixel_h = (uint16_t)h;
 
     // Expand dirty region for the upload in flush_dirty()
     if (m_shelf_y < m_dirty_y_min)     m_dirty_y_min = m_shelf_y;
@@ -150,10 +154,12 @@ void GLSpriteAtlas::AddSheet(const struct TbSpriteSheet* sheet)
     for (long i = 0; i < n; ++i) {
         const struct TbSprite* spr = get_sprite(sheet, i);
         if (!spr || !spr->Data || spr->SWidth == 0 || spr->SHeight == 0) continue;
-        if (m_uvs.count(spr)) continue; // already present (sheet re-added)
+        if (m_sprite_to_handle.count(spr)) continue; // already present (sheet re-added)
         SpriteUV uv;
         if (pack_sprite(spr, uv)) {
-            m_uvs[spr] = uv;
+            SpriteHandle h = m_next_handle++;
+            m_sprite_to_handle[spr] = h;
+            m_handle_uvs.push_back(uv);
             ++packed;
         }
     }
@@ -167,17 +173,27 @@ void GLSpriteAtlas::RemoveSheet(const struct TbSpriteSheet* sheet)
     long n = num_sprites(sheet);
     for (long i = 0; i < n; ++i) {
         const struct TbSprite* spr = get_sprite(sheet, i);
-        if (spr) m_uvs.erase(spr);
+        if (spr) m_sprite_to_handle.erase(spr);
     }
-    // Note: atlas pixels not reclaimed; space is lost until full reinit.
+    // Note: atlas pixels and handle slots not reclaimed; space is lost until full reinit.
+}
+
+SpriteHandle GLSpriteAtlas::GetHandle(const struct TbSprite* spr) const
+{
+    auto it = m_sprite_to_handle.find(spr);
+    return (it != m_sprite_to_handle.end()) ? it->second : kInvalidSpriteHandle;
+}
+
+bool GLSpriteAtlas::GetUV(SpriteHandle h, SpriteUV& out) const
+{
+    if (h >= (SpriteHandle)m_handle_uvs.size()) return false;
+    out = m_handle_uvs[h];
+    return true;
 }
 
 bool GLSpriteAtlas::GetUV(const struct TbSprite* spr, SpriteUV& out) const
 {
-    auto it = m_uvs.find(spr);
-    if (it == m_uvs.end()) return false;
-    out = it->second;
-    return true;
+    return GetUV(GetHandle(spr), out);
 }
 
 #endif // RENDERER_OPENGL_ENABLED

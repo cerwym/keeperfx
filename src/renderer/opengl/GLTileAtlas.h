@@ -36,12 +36,17 @@ public:
     unsigned int GetAtlasTexture(int variation) const override;
 
 protected:
+    // TileAtlasPacker build overrides — use R8 raw index copy instead of RGBA8 decode
+    void BuildVariation(int variation) override;
+    void BuildAnimatedStrip(int variation) override;
+
     // TileAtlasPacker upload hooks
     void UploadFull(int variation) override;
     void UploadAnimatedStrip(int variation, int y_offset, int h_pixels) override;
 
 private:
-    GLuint m_textures[k_max_variations] = {};
+    GLuint   m_textures[k_max_variations] = {};
+    uint8_t* m_r8_scratch = nullptr;  // R8 (1 byte/pixel) CPU scratch; replaces m_rgba_scratch
 };
 
 #endif // RENDERER_OPENGL_ENABLED

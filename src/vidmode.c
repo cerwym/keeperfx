@@ -48,6 +48,7 @@
 #include "game_legacy.h"
 #include "creature_graphics.h"
 #include "keeperfx.hpp"
+#include "renderer/RendererManager.h"
 #include "custom_sprites.h"
 #include "sprites.h"
 #include "post_inc.h"
@@ -128,6 +129,7 @@ short LoadVRes256Data(long scrbuf_size)
     if (!winfont || !font_sprites || !button_sprites || !gui_panel_sprites || LbDataLoadAll(gui_load_files_640)) {
         return 0;
     }
+    RendererNotifySpritesReloaded();
     return 1;
 }
 
@@ -200,7 +202,11 @@ short LoadMcgaData(void)
   winfont = load_font("data/font2-32.dat", "data/font2-32.tab");
   font_sprites = load_font("data/font1-32.dat", "data/font1-32.tab");
   gui_panel_sprites = load_spritesheet("data/gui2-32.dat", "data/gui2-32.tab");
-  return button_sprites && winfont && font_sprites && gui_panel_sprites && (ferror == 0);
+  if (button_sprites && winfont && font_sprites && gui_panel_sprites && (ferror == 0)) {
+      RendererNotifySpritesReloaded();
+      return 1;
+  }
+  return 0;
 }
 
 void FreeMcgaData(void)

@@ -239,6 +239,14 @@ TbResult OpenGLSpriteBackend::SubmitSprite(long x, long y, const struct TbSprite
     q.mode = 0.0f;
     q.z = s_sprite_z_ndc;
 
+    // Debug logging to understand coordinate system
+    static int debug_count = 0;
+    if (debug_count < 5) {
+        SYNCLOG("OpenGLSpriteBackend::SubmitSprite: pos=(%ld,%ld) size=(%d,%d) override_screen=(%d,%d) z=%.3f", 
+                x, y, spr->SWidth, spr->SHeight, m_override_w, m_override_h, s_sprite_z_ndc);
+        debug_count++;
+    }
+
     if (draw_flags & Lb_SPRITE_FLIP_HORIZ)
         std::swap(q.u0, q.u1);
 
@@ -359,6 +367,21 @@ void OpenGLSpriteBackend::flush()
 
     const int flush_w = (m_override_w > 0) ? m_override_w : (int)MyScreenWidth;
     const int flush_h = (m_override_h > 0) ? m_override_h : (int)MyScreenHeight;
+
+    // Debug logging for coordinate conversion
+    static int flush_debug_count = 0;
+    if (flush_debug_count < 3) {
+        SYNCLOG("OpenGLSpriteBackend::flush: screen_dims=(%d,%d) override=(%d,%d) inv_screen=(%.4f,%.4f) quads=%d", 
+                (int)MyScreenWidth, (int)MyScreenHeight, m_override_w, m_override_h, 
+                1.0f / (float)flush_w, 1.0f / (float)flush_h, (int)m_quads.size());
+        if (!m_quads.empty()) {
+            const auto& first = m_quads[0];
+            SYNCLOG("  First quad: pos=(%.1f,%.1f)-(%.1f,%.1f) z=%.3f", 
+                    first.x0, first.y0, first.x1, first.y1, first.z);
+        }
+        flush_debug_count++;
+    }
+
     glUseProgram(m_shader);
     glUniform2f(m_loc_inv_screen,
                 1.0f / (float)flush_w,

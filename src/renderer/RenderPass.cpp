@@ -192,6 +192,13 @@ void RenderPassSystem::EndFrame()
 
 void RenderPassSystem::FlushNow()
 {
+    static int flush_debug_count = 0;
+    if (flush_debug_count < 5) {
+        SYNCLOG("RenderPassSystem::FlushNow: backend=%s active=%d", 
+                m_backend ? m_backend->GetName() : "nullptr", g_render_pass_active);
+        flush_debug_count++;
+    }
+
     if (!m_backend) {
         return;
     }

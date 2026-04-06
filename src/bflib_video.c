@@ -116,6 +116,7 @@ TbResult LbScreenLock(void)
     if (!lbScreenInitialised)
         return Lb_FAIL;
 
+    RendererBeginFrame();
     int pitch = 0;
     unsigned char *pixels = RendererLockFramebuffer(&pitch);
     if (!pixels) {

@@ -253,6 +253,14 @@ void setup_stuff(void)
     setup_texture_block_mem();
     init_fades_table();
     init_alpha_table();
+
+    // Initialize global transparency mapping tables for sprite rendering
+    render_fade_tables = pixmap.fade_tables;
+    render_ghost = pixmap.ghost;
+    render_alpha = (unsigned char*)&alpha_sprite_table;
+
+    SYNCLOG("Initialized transparency tables: render_fade_tables=%p, render_ghost=%p, render_alpha=%p", 
+            render_fade_tables, render_ghost, render_alpha);
 }
 
 TbBool should_use_delta_time_on_menu()
@@ -775,6 +783,7 @@ void init_keeper(void)
     // Load configs which may have per-campaign part, and even be modified within a level
     recheck_all_mod_exist();
     init_custom_sprites(SPRITE_LAST_LEVEL);
+    RendererNotifyCustomSpritesReloaded();
     load_stats_files();
     check_and_auto_fix_stats();
     init_creature_scores();

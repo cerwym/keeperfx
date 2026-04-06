@@ -50,6 +50,7 @@
 #include "engine_render.h"
 #include "gui_draw.h"
 #include "local_camera.h"
+#include "renderer/RendererManager.h"
 #include "post_inc.h"
 
 // Local constants
@@ -101,6 +102,15 @@ enum TbPixelsColours
 static unsigned char *MapBackground = NULL;
 static int32_t *MapShapeStart = NULL;
 static int32_t *MapShapeEnd = NULL;
+/**
+ * Frame-scoped pointer to the renderer-owned minimap pixel buffer.
+ * Set by panel_map_draw_slabs() via UIRenderer_AcquireMinimapBuffer() and
+ * cleared by panel_map_submit_to_renderer() after the data is handed off.
+ * Non-NULL only when the GPU renderer successfully allocated a buffer; NULL in
+ * software mode (or if allocation failed). Always test this pointer directly —
+ * not UIRenderer_IsGpuActive() — before writing minimap pixels into it.
+ */
+static unsigned char *s_minimap_pixels = NULL;
 
 static long PanelMapY;
 static long PanelMapX;
@@ -122,14 +132,21 @@ TbBool reset_all_minimap_interpolation = false;
 
 /******************************************************************************/
 
-// RENDER-BYPASS: direct write to lbDisplay.WScreen for minimap rendering — pending IMinimapRenderer migration.
+// Writes a single minimap pixel.
+// If the renderer provided a pixel buffer (s_minimap_pixels != NULL), writes
+// into it at (x, y) with stride = MapDiagonalLength.
+// Otherwise writes directly to lbDisplay.WScreen (software mode).
 void panel_map_draw_pixel(RealScreenCoord x, RealScreenCoord y, TbPixel col)
 {
     if ((y >= 0) && (y < MapDiagonalLength))
     {
         if ((x >= MapShapeStart[y]) && (x < MapShapeEnd[y]))
         {
-            lbDisplay.WScreen[(PanelMapY + y) * lbDisplay.GraphicsScreenWidth + (PanelMapX + x)] = col;
+            if (s_minimap_pixels != NULL) {
+                s_minimap_pixels[y * MapDiagonalLength + x] = col;
+            } else {
+                lbDisplay.WScreen[(PanelMapY + y) * lbDisplay.GraphicsScreenWidth + (PanelMapX + x)] = col;
+            }
         }
     }
 }
@@ -1272,6 +1289,9 @@ void panel_map_draw_slabs(long x, long y, long units_per_px, long zoom)
 {
     PanelMapX = scale_value_for_resolution_with_upp(x,units_per_px);
     PanelMapY = scale_value_for_resolution_with_upp(y,units_per_px);
+    // In GPU mode, acquire a renderer-owned pixel buffer for this frame.
+    // In software mode, AcquireMinimapBuffer returns NULL and pixels go directly to WScreen.
+    s_minimap_pixels = UIRenderer_AcquireMinimapBuffer(MapDiagonalLength);
     auto_gen_tables(units_per_px);
     update_panel_colors();
     struct PlayerInfo *player = get_my_player();
@@ -1314,7 +1334,15 @@ void panel_map_draw_slabs(long x, long y, long units_per_px, long zoom)
     TbPixel *bkgnd_line;
     bkgnd_line = MapBackground;
     TbPixel *out_line;
-    out_line = &lbDisplay.WScreen[PanelMapX + lbDisplay.GraphicsScreenWidth * PanelMapY];
+    long out_stride;
+    if (s_minimap_pixels != NULL) {
+        // Buffer was already zeroed by AcquireMinimapBuffer; use it as output.
+        out_line   = s_minimap_pixels;
+        out_stride = MapDiagonalLength;
+    } else {
+        out_line   = &lbDisplay.WScreen[PanelMapX + lbDisplay.GraphicsScreenWidth * PanelMapY];
+        out_stride = lbDisplay.GraphicsScreenWidth;
+    }
     int h;
     for (h = 0; h < MapDiagonalLength; h++)
     {
@@ -1366,10 +1394,25 @@ void panel_map_draw_slabs(long x, long y, long units_per_px, long zoom)
             out++;
             bkgnd++;
         }
-        out_line += lbDisplay.GraphicsScreenWidth;
+        out_line += out_stride;
         bkgnd_line += MapDiagonalLength;
         shift_stl_x += shift_x;
         shift_stl_y += shift_y;
     }
+}
+
+/**
+ * After panel_map_draw_slabs + panel_map_draw_overlay_things have finished
+ * writing into the renderer-owned pixel buffer (GPU mode) or lbDisplay.WScreen (software mode),
+ * submit the minimap data to the UIRenderer so it appears in the frame.
+ *
+ * In GPU mode: triggers GLUIRenderer to upload the buffer to a GL_R8 texture and
+ * queue a palette-lookup quad at (PanelMapX, PanelMapY).
+ * In software mode: no-op — the draws already went directly to WScreen.
+ */
+void panel_map_submit_to_renderer(void)
+{
+    UIRenderer_SubmitMinimap(PanelMapX, PanelMapY, MapDiagonalLength);
+    s_minimap_pixels = NULL;
 }
 /******************************************************************************/

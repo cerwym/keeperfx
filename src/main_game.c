@@ -49,6 +49,7 @@
 #include "vidfade.h"
 #include "vidmode.h"
 #include "custom_sprites.h"
+#include "renderer/RendererManager.h"
 #include "gui_boxmenu.h"
 #include "sounds.h"
 #include "api.h"
@@ -175,6 +176,7 @@ static void init_level(void)
     // Load configs which may have per-campaign part, and can even be modified within a level
     recheck_all_mod_exist();
     init_custom_sprites(get_selected_level_number());
+    RendererNotifyCustomSpritesReloaded();
     load_stats_files();
     check_and_auto_fix_stats();
 

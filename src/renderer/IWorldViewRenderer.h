@@ -73,6 +73,26 @@ public:
 
     /** Human-readable backend name (e.g. "SOFTWARE", "VITA_GPU"). */
     virtual const char* GetName() const = 0;
+
+    // =========================================================================
+    // Keeper sprite (world-space billboarded sprites)
+
+    /** Submit a keeper-sprite (creature/object/shadow) for GPU rendering.
+     *  dst_x/y/w/h = screen destination rect (pixels).
+     *  data        = raw RLE palette-index sprite data.
+     *  src_w/h     = sprite source dimensions.
+     *  draw_flags  = lbDisplay.DrawFlags at time of call (flip, transpar, remap, additive).
+     *  remap       = colour remap table (may be NULL).
+     *  Returns 1 if the GPU handled it (CPU blit should be skipped), 0 to fall back. */
+    virtual int SubmitKeeperSprite(long dst_x, long dst_y, long dst_w, long dst_h,
+                                   const unsigned char* data, int src_w, int src_h,
+                                   unsigned int draw_flags, const unsigned char* remap)
+    {
+        (void)dst_x; (void)dst_y; (void)dst_w; (void)dst_h;
+        (void)data;  (void)src_w; (void)src_h;
+        (void)draw_flags; (void)remap;
+        return 0;
+    }
 };
 
 /******************************************************************************/

@@ -39,6 +39,10 @@ extern "C" {
 #define KEEPERSPRITE_ADD_OFFSET 16384
 #define KEEPERSPRITE_ADD_NUM 16383
 
+// Depth calculation function for consistent GPU depth buffer usage
+float calculate_normalized_depth(long z_value);
+float bucket_index_to_normalized_depth(long bucket_idx);
+
 struct EngineCoord { // sizeof = 28
   long view_width; // X screen position, probably not a width
   long view_height; // Y screen position, probably not a height
@@ -136,18 +140,11 @@ extern unsigned char temp_cluedo_mode;
 
 extern TbSpriteData keepersprite_add[KEEPERSPRITE_ADD_NUM];
 
-/** GPU hook for keeper-sprite rendering.  When non-NULL, called from
- *  draw_keepersprite() instead of the CPU scaling blitter.
- *  dst_x/y/w/h  = screen destination rect (pixels).
- *  sprite_data  = raw RLE palette-index data.
- *  src_w/h      = sprite source dimensions.
- *  draw_flags   = lbDisplay.DrawFlags at time of call (flip, transpar, remap).
- *  remap        = lbSpriteReMapPtr at time of call (may be NULL).
- *  Returns 1 if the GPU handled the sprite (CPU blit skipped), 0 to fall back. */
-typedef int (*KeeperSpriteGPUHook)(long dst_x, long dst_y, long dst_w, long dst_h,
-                                    const unsigned char *sprite_data, int src_w, int src_h,
-                                    unsigned int draw_flags, const unsigned char *remap);
-extern KeeperSpriteGPUHook g_kspr_gpu_hook;
+/** Try to submit a keeper sprite through IWorldViewRenderer::SubmitKeeperSprite.
+ *  Returns 1 if successfully submitted (CPU blit skipped), 0 to fall back. */
+int try_submit_keepersprite_to_render_system(long screen_x, long screen_y, long screen_w, long screen_h,
+                                           const unsigned char *sprite_data, int src_w, int src_h,
+                                           unsigned int draw_flags, const unsigned char *remap);
 
 /*****************************************************************************/
 float interpolate(float variable_to_interpolate, long previous, long current);
@@ -181,6 +178,10 @@ void draw_nonspatial_sprites(void);
 /** Same as draw_nonspatial_sprites() but skips QK_CreatureShadow entries.
  *  Used by the GL renderer which handles shadows via its own GPU path. */
 void draw_nonspatial_sprites_no_shadows(void);
+
+/** GPU-accelerated version of draw_nonspatial_sprites_no_shadows().
+ *  Submits UI elements to the hardware renderer for GPU batching instead of CPU rasterization. */
+void draw_nonspatial_sprites_gpu(void);
 
 /** Rasterize a keeper sprite frame into a 256×256 byte scratch buffer.
  *  Non-zero bytes indicate shadow silhouette pixels. */

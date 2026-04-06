@@ -203,6 +203,16 @@ extern "C" int platform_create_gl_context(void *sdl_window)
 
     SDL_GL_MakeCurrent(window, s_glContext);
 
+    // Enable VSync to prevent tearing and flickering during camera movements
+    // -1 = adaptive vsync (tear-free when possible, allow tearing when needed)
+    // 1  = strict vsync (always synchronized)
+    // 0  = no vsync
+    int vsync_result = SDL_GL_SetSwapInterval(-1); // Try adaptive first
+    if (vsync_result != 0) {
+        // Fallback to strict vsync if adaptive not supported
+        SDL_GL_SetSwapInterval(1);
+    }
+
     // The window was created with SDL_WINDOW_HIDDEN so that SDL2's internal
     // SetPixelFormat does not trigger a visible DWM composition-pipeline
     // reconfiguration on HDR displays.  Show it now that the GL context is

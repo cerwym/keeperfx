@@ -11,6 +11,8 @@
 #include "IRenderer.h"
 
 class GLTileAtlas;
+class GLSpriteAtlas;
+class GLFontAtlas;
 class GLWorldViewRenderer;
 
 /******************************************************************************/
@@ -22,9 +24,15 @@ class GLWorldViewRenderer;
  * fullscreen palette-decode shader (index texture → RGBA via 1D palette).
  *
  * Also owns the shared GPU resources (fade table texture, tile atlas,
- * palette texture) injected into GLWorldViewRenderer by RendererManager.
+ * palette texture) and manages all sub-renderers internally.
  */
 class RendererOpenGL : public IRenderer {
+private:
+    class IWorldViewRenderer* m_worldViewRenderer = nullptr;
+    class IMapFadePass* m_mapFadePass = nullptr;
+    class ITextRenderer* m_textRenderer = nullptr;
+    class IUIRenderer* m_uiRenderer = nullptr;
+
 public:
     RendererOpenGL();
     ~RendererOpenGL() override;
@@ -38,10 +46,22 @@ public:
     const char* GetName() const override;
     bool     SupportsRuntimeSwitch() const override;
 
-    // Accessors — used by RendererManager to inject into GLWorldViewRenderer
+    // Sub-renderer access
+    IWorldViewRenderer* GetWorldViewRenderer() override;
+    IMapFadePass* GetMapFadePass() override;
+    ITextRenderer* GetTextRenderer() override;
+    IUIRenderer* GetUIRenderer() override;
+
+    // Legacy accessors for internal resource sharing - TODO: Remove these
     GLTileAtlas*  GetTileAtlas()  const { return m_tile_atlas; }
+    GLSpriteAtlas* GetSpriteAtlas() const { return m_sprite_atlas; }
+    GLFontAtlas*  GetFontAtlas()  const { return m_font_atlas; }
     unsigned int  GetFadeTex()    const { return m_texFade; }
     unsigned int  GetPaletteTex() const { return m_texPalette; }
+
+    /** Discard the tile atlas so it is rebuilt next frame with fresh block_mem data.
+     *  Call after load_texture_map_file() loads new level textures. */
+    void InvalidateTileAtlas();
 
     // Wired by RendererManager after GLWorldViewRenderer is created so that
     // EndFrame() can flush GPU geometry before the CPU blit overlay.
@@ -58,6 +78,7 @@ private:
     int      m_stagingW       = 0;
     int      m_stagingH       = 0;
     bool     m_staging_cleared = false; // true after first LockFramebuffer clears for this frame
+    bool     m_frame_begun     = false; // true after first BeginFrame; reset by EndFrame
 
     // GL objects — fullscreen palette-blit quad
     unsigned int m_vao          = 0;
@@ -70,9 +91,16 @@ private:
     // Shared GPU resources (owned here, injected into world renderer)
     unsigned int m_texFade      = 0; // R8 256×256: render_fade_tables lighting LUT
     GLTileAtlas* m_tile_atlas   = nullptr;
+    GLSpriteAtlas* m_sprite_atlas = nullptr;  // UI sprite atlas
+    GLFontAtlas* m_font_atlas   = nullptr;    // UI font atlas
 
     // Not owned — set by RendererManager after world renderer creation
     GLWorldViewRenderer* m_world_renderer = nullptr;
+
+    // Sentinel for skipping redundant animated-tile atlas rebuilds.
+    // block_ptrs[TEXTURE_BLOCKS_STAT_COUNT_A] changes exactly when
+    // update_animating_texture_maps() advances the animation counter.
+    const uint8_t* m_last_anim_sentinel = nullptr;
 };
 
 /******************************************************************************/

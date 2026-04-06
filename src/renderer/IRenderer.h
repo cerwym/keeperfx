@@ -21,6 +21,14 @@
 
 /******************************************************************************/
 
+// Forward declarations
+class IWorldViewRenderer;
+class IMapFadePass;
+class ITextRenderer;
+class IUIRenderer;
+
+/******************************************************************************/
+
 /** Identifies the available renderer backends. */
 enum RendererType {
     RENDERER_INVALID  = -1,
@@ -97,6 +105,25 @@ public:
      *  When true, RendererVita runs GPU passes in EndFrame() and LensManager
      *  skips the corresponding CPU Draw() calls. */
     virtual bool SupportsGPUPasses() const { return false; }
+
+    // -------------------------------------------------------------------------
+    // Sub-renderer access (managed internally by each backend)
+
+    /** Returns the world view renderer managed by this backend.
+     *  Each renderer type creates the appropriate implementation internally. */
+    virtual class IWorldViewRenderer* GetWorldViewRenderer() = 0;
+
+    /** Returns the map fade pass managed by this backend.
+     *  Each renderer type creates the appropriate implementation internally. */
+    virtual class IMapFadePass* GetMapFadePass() = 0;
+
+    /** Returns the text renderer managed by this backend.
+     *  Each renderer type creates the appropriate implementation internally. */
+    virtual class ITextRenderer* GetTextRenderer() = 0;
+
+    /** Returns the UI renderer managed by this backend.
+     *  Each renderer type creates the appropriate implementation internally. */
+    virtual class IUIRenderer* GetUIRenderer() = 0;
 };
 
 /******************************************************************************/

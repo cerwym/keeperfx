@@ -1,0 +1,684 @@
+/******************************************************************************/
+// Dungeon Keeper - Renderer Abstraction Layer
+/******************************************************************************/
+/** @file GLUIRenderer.cpp
+ *     OpenGL hardware-accelerated UI element renderer implementation.
+ */
+/******************************************************************************/
+#include "pre_inc.h"
+#include "renderer/opengl/GLUIRenderer.h"
+
+#ifdef RENDERER_OPENGL_ENABLED
+
+#include "renderer/opengl/GLShaders.h"
+#include "renderer/opengl/GLSpriteAtlas.h"
+#include "renderer/opengl/GLFontAtlas.h"
+#include "renderer/opengl/GLWorldViewRenderer.h"
+#include "engine_render.h"   // process_keeper_sprite
+#include "bflib_basics.h"
+#include "bflib_video.h"       // lbDisplay.DrawFlags
+#include "globals.h"
+
+#include <glad/glad.h>
+#include <cstring>
+#include <algorithm>
+#include <cmath>
+#include <cstddef>
+#include "post_inc.h"
+
+/******************************************************************************/
+
+GLUIRenderer::GLUIRenderer()
+    : m_prog_sprite(0)
+    , m_prog_font(0)
+    , m_prog_solid(0)
+    , m_loc_screen_sprite(-1)
+    , m_loc_screen_font(-1)
+    , m_loc_screen_solid(-1)
+    , m_vao(0)
+    , m_vbo(0)
+    , m_uniform_mvp(0)
+    , m_uniform_texture(0)
+    , m_screen_width(0)
+    , m_screen_height(0)
+    , m_sprite_atlas(nullptr)
+    , m_font_atlas(nullptr)
+    , m_palette_texture(0)
+    , m_palette_texture_target(GL_TEXTURE_2D)
+    , m_world_view_renderer(nullptr)
+    , m_minimap_cpu_buf(nullptr)
+    , m_minimap_cpu_size(0)
+    , m_minimap_texture(0)
+    , m_minimap_tex_size(0)
+    , m_minimap_x(0)
+    , m_minimap_y(0)
+    , m_minimap_size(0)
+    , m_minimap_pending(false)
+{
+    m_ui_quads.reserve(512);   // Reserve space for UI elements
+    m_ui_lines.reserve(256);   // Reserve space for slab selectors
+    m_vertices.reserve(3072);  // Reserve space for vertices (512 quads * 6 vertices)
+}
+
+GLUIRenderer::~GLUIRenderer()
+{
+    Shutdown();
+}
+
+bool GLUIRenderer::Init()
+{
+    // Create the three independent shader programs.
+    if (!CreateShaders())
+    {
+        ERRORLOG("GLUIRenderer: Failed to create shaders");
+        return false;
+    }
+
+    // Create vertex arrays and buffers (shared across all three programs,
+    // same VAO layout for UI_VERTEX_SHADER).
+    CreateVertexArrays();
+    return true;
+}
+
+void GLUIRenderer::Shutdown()
+{
+    delete[] m_minimap_cpu_buf;
+    m_minimap_cpu_buf  = nullptr;
+    m_minimap_cpu_size = 0;
+    if (m_minimap_texture) {
+        glDeleteTextures(1, &m_minimap_texture);
+        m_minimap_texture = 0;
+        m_minimap_tex_size = 0;
+    }
+    if (m_vbo) {
+        glDeleteBuffers(1, &m_vbo);
+        m_vbo = 0;
+    }
+    if (m_vao) {
+        glDeleteVertexArrays(1, &m_vao);
+        m_vao = 0;
+    }
+    if (m_prog_sprite) { glDeleteProgram(m_prog_sprite); m_prog_sprite = 0; }
+    if (m_prog_font)   { glDeleteProgram(m_prog_font);   m_prog_font   = 0; }
+    if (m_prog_solid)  { glDeleteProgram(m_prog_solid);  m_prog_solid  = 0; }
+}
+
+void GLUIRenderer::SetScreenDimensions(int width, int height)
+{
+    m_screen_width = width;
+    m_screen_height = height;
+}
+
+void GLUIRenderer::SetWorldViewRenderer(GLWorldViewRenderer* wvr)
+{
+    m_world_view_renderer = wvr;
+}
+
+bool GLUIRenderer::SetSpriteAtlas(GLSpriteAtlas* atlas)
+{
+    m_sprite_atlas = atlas;
+    return true;
+}
+
+bool GLUIRenderer::SetFontAtlas(GLFontAtlas* atlas)
+{
+    m_font_atlas = atlas;
+    return true;
+}
+
+bool GLUIRenderer::SetPaletteTexture(GLuint palette_texture_id, GLenum target)
+{
+    m_palette_texture        = palette_texture_id;
+    m_palette_texture_target = target;
+    return true;
+}
+
+void GLUIRenderer::SubmitSlabSelector(int x1, int y1, int x2, int y2, unsigned char color, float z_depth)
+{
+    // Convert color index to RGB
+    float r = 1.0f, g = 1.0f, b = 1.0f, a = 1.0f;
+    // TODO: Proper palette color lookup for line color
+    
+    SubmitLine((float)x1, (float)y1, (float)x2, (float)y2, r, g, b, a, z_depth, 2.0f);
+}
+
+extern "C" unsigned char EngineSpriteDrawUsingAlpha;
+
+void GLUIRenderer::SubmitKeeperSprite(short x, short y, unsigned short kspr_base,
+                                       short angle, unsigned char sprgroup, long scale)
+{
+    // Capture draw state at submission time and defer to Flush() which runs
+    // after frame setup (glClear), so the sprites aren't wiped.
+    PendingHandSprite spr;
+    spr.x          = x;
+    spr.y          = y;
+    spr.kspr_base  = kspr_base;
+    spr.angle      = angle;
+    spr.sprgroup   = sprgroup;
+    spr.scale      = scale;
+    spr.draw_flags = lbDisplay.DrawFlags;
+    spr.draw_alpha = EngineSpriteDrawUsingAlpha;
+    m_pending_hand_sprites.push_back(spr);
+}
+
+void GLUIRenderer::SubmitPanelSprite(long x, long y, int units_per_px, SpriteHandle spr, bool flip_horiz)
+{
+    if (spr == kInvalidSpriteHandle || !m_sprite_atlas) return;
+    SpriteUV uv;
+    if (!m_sprite_atlas->GetUV(spr, uv)) return;
+    // Reproduce the LbSpriteDrawResized rounding: (w * upp + 8) / 16
+    float w = (float)((uv.pixel_w * units_per_px + 8) / 16);
+    float h = (float)((uv.pixel_h * units_per_px + 8) / 16);
+    float u0 = flip_horiz ? uv.u1 : uv.u0;
+    float u1 = flip_horiz ? uv.u0 : uv.u1;
+    SubmitQuad((float)x, (float)y, w, h,
+               u0, uv.v0, u1, uv.v1,
+               1.0f, 1.0f, 1.0f, 1.0f, 0.5f, 0.0f);
+}
+
+void GLUIRenderer::SubmitScaledSprite(long x, long y, long w, long h, SpriteHandle spr)
+{
+    if (spr == kInvalidSpriteHandle || !m_sprite_atlas) return;
+    SpriteUV uv;
+    if (!m_sprite_atlas->GetUV(spr, uv)) return;
+    SubmitQuad((float)x, (float)y, (float)w, (float)h,
+               uv.u0, uv.v0, uv.u1, uv.v1,
+               1.0f, 1.0f, 1.0f, 1.0f, 0.5f, 0.0f);
+}
+
+void GLUIRenderer::SubmitSolidBox(long x, long y, long w, long h, uint8_t color_idx)
+{
+    float r = lbPalette[color_idx * 3 + 0] / 63.0f;
+    float g = lbPalette[color_idx * 3 + 1] / 63.0f;
+    float b = lbPalette[color_idx * 3 + 2] / 63.0f;
+    SubmitQuad((float)x, (float)y, (float)w, (float)h,
+               0.0f, 0.0f, 1.0f, 1.0f,
+               r, g, b, 1.0f, 0.5f, 3.0f);
+}
+
+uint8_t* GLUIRenderer::AcquireMinimapBuffer(int size)
+{
+    if (size <= 0) return nullptr;
+
+    // Grow the CPU buffer if the minimap size changed
+    if (size != m_minimap_cpu_size)
+    {
+        delete[] m_minimap_cpu_buf;
+        m_minimap_cpu_buf  = new uint8_t[size * size];
+        m_minimap_cpu_size = size;
+    }
+    memset(m_minimap_cpu_buf, 0, (size_t)size * size);
+    return m_minimap_cpu_buf;
+}
+
+void GLUIRenderer::SubmitMinimap(int screen_x, int screen_y, int size)
+{
+    if (size <= 0 || !m_minimap_cpu_buf) return;
+
+    // Create or re-create the GL texture when size changes
+    if (size != m_minimap_tex_size)
+    {
+        if (m_minimap_texture)
+            glDeleteTextures(1, &m_minimap_texture);
+        glGenTextures(1, &m_minimap_texture);
+        glBindTexture(GL_TEXTURE_2D, m_minimap_texture);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, size, size, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
+        m_minimap_tex_size = size;
+    }
+    else
+    {
+        glBindTexture(GL_TEXTURE_2D, m_minimap_texture);
+    }
+
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, size, size, GL_RED, GL_UNSIGNED_BYTE, m_minimap_cpu_buf);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 4); // restore default
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    m_minimap_x       = screen_x;
+    m_minimap_y       = screen_y;
+    m_minimap_size    = size;
+    m_minimap_pending = true;
+}
+
+void GLUIRenderer::SetLayer(int layer)
+{
+    m_current_layer = layer;
+}
+
+void GLUIRenderer::FlushBack()
+{
+    // Render only layer-0 (back) quads — the sidebar background panels that must land
+    // beneath the CPU staging-buffer blit.  No hand sprites, minimap, or lines here.
+    if (m_ui_quads.empty()) return;
+
+    if (MyScreenWidth > 0 && MyScreenHeight > 0) {
+        m_screen_width  = MyScreenWidth;
+        m_screen_height = MyScreenHeight;
+    }
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+
+    FlushQuads(0);
+
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+    glUseProgram(0);
+}
+
+void GLUIRenderer::FlushFront()
+{
+    if (m_ui_quads.empty() && m_ui_lines.empty() && !m_minimap_pending
+        && m_pending_hand_sprites.empty())
+        return;
+
+    if (MyScreenWidth > 0 && MyScreenHeight > 0) {
+        m_screen_width  = MyScreenWidth;
+        m_screen_height = MyScreenHeight;
+    }
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+
+    // Flush all remaining (layer-1 / front) quads.
+    FlushQuads(1);
+
+    // Minimap: palette-indexed R8 texture — front layer.
+    if (m_minimap_pending && m_minimap_texture)
+    {
+        float mx = (float)m_minimap_x;
+        float my = (float)m_minimap_y;
+        float ms = (float)m_minimap_size;
+
+        glUseProgram(m_prog_sprite);
+        glUniform2f(m_loc_screen_sprite, (float)m_screen_width, (float)m_screen_height);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, m_minimap_texture);
+        if (m_palette_texture) {
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(m_palette_texture_target, m_palette_texture);
+        }
+
+        GLUIVertex verts[6] = {
+            {mx,      my,      0.0f, 0.0f, 1,1,1,1, 0.49f, 0.0f},
+            {mx,      my + ms, 0.0f, 1.0f, 1,1,1,1, 0.49f, 0.0f},
+            {mx + ms, my,      1.0f, 0.0f, 1,1,1,1, 0.49f, 0.0f},
+            {mx + ms, my,      1.0f, 0.0f, 1,1,1,1, 0.49f, 0.0f},
+            {mx,      my + ms, 0.0f, 1.0f, 1,1,1,1, 0.49f, 0.0f},
+            {mx + ms, my + ms, 1.0f, 1.0f, 1,1,1,1, 0.49f, 0.0f},
+        };
+        glBindVertexArray(m_vao);
+        glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(verts), verts);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+        glBindVertexArray(0);
+        m_minimap_pending = false;
+    }
+
+    // Flush slab-selector lines and other line geometry (front layer).
+    FlushLines(1);
+
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+    glUseProgram(0);
+
+    // Drain deferred hand sprites LAST — the cursor must appear above all other
+    // UI elements including escape menus, minimap, and status icons.
+    if (!m_pending_hand_sprites.empty() && m_world_view_renderer)
+    {
+        m_world_view_renderer->BeginHandSpriteRendering();
+        unsigned int  saved_flags = lbDisplay.DrawFlags;
+        unsigned char saved_alpha = EngineSpriteDrawUsingAlpha;
+        for (const auto& spr : m_pending_hand_sprites)
+        {
+            lbDisplay.DrawFlags        = spr.draw_flags;
+            EngineSpriteDrawUsingAlpha = spr.draw_alpha;
+            process_keeper_sprite(spr.x, spr.y, spr.kspr_base,
+                                  spr.angle, spr.sprgroup, spr.scale);
+        }
+        lbDisplay.DrawFlags        = saved_flags;
+        EngineSpriteDrawUsingAlpha = saved_alpha;
+        m_world_view_renderer->EndHandSpriteRendering();
+        m_pending_hand_sprites.clear();
+    }
+}
+
+void GLUIRenderer::Flush()
+{
+    // Full flush: back layer then front layer.
+    FlushBack();
+    FlushFront();
+}
+
+void GLUIRenderer::Clear()
+{
+    m_ui_quads.clear();
+    m_ui_lines.clear();
+    m_vertices.clear();
+    m_pending_hand_sprites.clear();
+    m_minimap_pending = false;
+    m_current_layer = 1;  // Reset to front layer (default) each frame
+}
+
+// Helper: compile one shader stage. Returns 0 on failure (error already logged).
+static GLuint CompileStage(GLenum type, const char* src, const char* label)
+{
+    GLuint sh = glCreateShader(type);
+    glShaderSource(sh, 1, &src, nullptr);
+    glCompileShader(sh);
+    GLint ok;
+    glGetShaderiv(sh, GL_COMPILE_STATUS, &ok);
+    if (!ok) {
+        char log[512];
+        glGetShaderInfoLog(sh, 512, nullptr, log);
+        ERRORLOG("Shader compile error (%s): %s", label, log);
+        glDeleteShader(sh);
+        return 0;
+    }
+    return sh;
+}
+
+// Helper: link vert+frag into a program, set sampler uniforms, return program or 0 on error.
+struct SamplerBinding { const char* name; int unit; };
+static GLuint LinkProgram(GLuint vert, GLuint frag, const char* label,
+                          const SamplerBinding* bindings, int nBindings)
+{
+    GLuint prog = glCreateProgram();
+    glAttachShader(prog, vert);
+    glAttachShader(prog, frag);
+    glLinkProgram(prog);
+    GLint ok;
+    glGetProgramiv(prog, GL_LINK_STATUS, &ok);
+    if (!ok) {
+        char log[512];
+        glGetProgramInfoLog(prog, 512, nullptr, log);
+        ERRORLOG("Shader link error (%s): %s", label, log);
+        glDeleteProgram(prog);
+        return 0;
+    }
+    glUseProgram(prog);
+    for (int i = 0; i < nBindings; ++i)
+        glUniform1i(glGetUniformLocation(prog, bindings[i].name), bindings[i].unit);
+    glUseProgram(0);
+    return prog;
+}
+
+bool GLUIRenderer::CreateShaders()
+{
+    // Compile shared vertex shader once.
+    GLuint vert = CompileStage(GL_VERTEX_SHADER, UI_VERTEX_SHADER, "UI_VERTEX");
+    if (!vert) return false;
+
+    bool ok = true;
+
+    // --- Sprite program (palette-indexed atlas) ---
+    {
+        GLuint frag = CompileStage(GL_FRAGMENT_SHADER, UI_SPRITE_FRAGMENT_SHADER, "UI_SPRITE_FRAG");
+        if (!frag) { ok = false; }
+        else {
+            SamplerBinding bindings[] = {{"u_sprite_atlas", 0}, {"u_palette", 1}};
+            m_prog_sprite = LinkProgram(vert, frag, "UI_SPRITE", bindings, 2);
+            glDeleteShader(frag);
+            if (!m_prog_sprite) ok = false;
+            else m_loc_screen_sprite = glGetUniformLocation(m_prog_sprite, "u_screen_size");
+        }
+    }
+
+    // --- Font program (RGBA glyph atlas) ---
+    if (ok) {
+        GLuint frag = CompileStage(GL_FRAGMENT_SHADER, UI_FONT_FRAGMENT_SHADER, "UI_FONT_FRAG");
+        if (!frag) { ok = false; }
+        else {
+            SamplerBinding bindings[] = {{"u_font_atlas", 0}};
+            m_prog_font = LinkProgram(vert, frag, "UI_FONT", bindings, 1);
+            glDeleteShader(frag);
+            if (!m_prog_font) ok = false;
+            else m_loc_screen_font = glGetUniformLocation(m_prog_font, "u_screen_size");
+        }
+    }
+
+    // --- Solid program (no textures) ---
+    if (ok) {
+        GLuint frag = CompileStage(GL_FRAGMENT_SHADER, UI_SOLID_FRAGMENT_SHADER, "UI_SOLID_FRAG");
+        if (!frag) { ok = false; }
+        else {
+            m_prog_solid = LinkProgram(vert, frag, "UI_SOLID", nullptr, 0);
+            glDeleteShader(frag);
+            if (!m_prog_solid) ok = false;
+            else m_loc_screen_solid = glGetUniformLocation(m_prog_solid, "u_screen_size");
+        }
+    }
+
+    glDeleteShader(vert);
+    return ok;
+}
+
+void GLUIRenderer::CreateVertexArrays()
+{
+    glGenVertexArrays(1, &m_vao);
+    glGenBuffers(1, &m_vbo);
+    
+    glBindVertexArray(m_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
+    
+    // Allocate dynamic buffer
+    glBufferData(GL_ARRAY_BUFFER, sizeof(GLUIVertex) * 6144, nullptr, GL_DYNAMIC_DRAW);
+    
+    // Vertex attributes matching UI_VERTEX_SHADER layout
+    // Position (vec2) - location 0
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(GLUIVertex), (void*)0);
+    glEnableVertexAttribArray(0);
+
+    // UV coordinates (vec2) - location 1
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(GLUIVertex), (void*)(2 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+
+    // Color (vec4) - location 2  
+    glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(GLUIVertex), (void*)(4 * sizeof(float)));
+    glEnableVertexAttribArray(2);
+
+    // Z-depth (float) - location 3
+    glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(GLUIVertex), (void*)(8 * sizeof(float)));
+    glEnableVertexAttribArray(3);
+
+    // Mode (float) - location 4
+    glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, sizeof(GLUIVertex), (void*)(9 * sizeof(float)));
+    glEnableVertexAttribArray(4);
+    
+    glBindVertexArray(0);
+}
+
+void GLUIRenderer::FlushQuads(int layer)
+{
+    // Partition: quads matching 'layer' first, preserving submission order.
+    auto mid = std::stable_partition(m_ui_quads.begin(), m_ui_quads.end(),
+        [layer](const UIQuad& q) { return (int)q.layer == layer; });
+    if (mid == m_ui_quads.begin()) return;  // nothing for this layer
+
+    glBindVertexArray(m_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
+
+    // ---- Pass 1: palette-indexed sprite quads (mode 0) ----
+    m_vertices.clear();
+    for (auto it = m_ui_quads.begin(); it != mid; ++it)
+        if (it->mode < 0.5f) ExpandQuadToVertices(*it);
+    if (!m_vertices.empty()) {
+        glUseProgram(m_prog_sprite);
+        glUniform2f(m_loc_screen_sprite, (float)m_screen_width, (float)m_screen_height);
+        if (m_sprite_atlas) {
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, m_sprite_atlas->GetTexture());
+        }
+        if (m_palette_texture) {
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(m_palette_texture_target, m_palette_texture);
+        }
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(GLUIVertex) * m_vertices.size(), m_vertices.data());
+        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_vertices.size());
+    }
+
+    // ---- Pass 2: font glyph quads (mode 1) ----
+    m_vertices.clear();
+    for (auto it = m_ui_quads.begin(); it != mid; ++it)
+        if (it->mode >= 0.5f && it->mode < 1.5f) ExpandQuadToVertices(*it);
+    if (!m_vertices.empty()) {
+        glUseProgram(m_prog_font);
+        glUniform2f(m_loc_screen_font, (float)m_screen_width, (float)m_screen_height);
+        if (m_font_atlas) {
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, m_font_atlas->GetTextureID());
+        }
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(GLUIVertex) * m_vertices.size(), m_vertices.data());
+        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_vertices.size());
+    }
+
+    // ---- Pass 3: solid-colour quads (modes 2+) ----
+    m_vertices.clear();
+    for (auto it = m_ui_quads.begin(); it != mid; ++it)
+        if (it->mode >= 1.5f) ExpandQuadToVertices(*it);
+    if (!m_vertices.empty()) {
+        glUseProgram(m_prog_solid);
+        glUniform2f(m_loc_screen_solid, (float)m_screen_width, (float)m_screen_height);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(GLUIVertex) * m_vertices.size(), m_vertices.data());
+        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_vertices.size());
+    }
+
+    glBindVertexArray(0);
+    m_ui_quads.erase(m_ui_quads.begin(), mid);  // Remove flushed layer-N quads
+}
+
+void GLUIRenderer::FlushLines(int layer)
+{
+    auto mid = std::stable_partition(m_ui_lines.begin(), m_ui_lines.end(),
+        [layer](const UILine& l) { return (int)l.layer == layer; });
+    if (mid == m_ui_lines.begin()) return;
+
+    m_vertices.clear();
+    for (auto it = m_ui_lines.begin(); it != mid; ++it)
+        ExpandLineToVertices(*it);
+
+    if (!m_vertices.empty()) {
+        glUseProgram(m_prog_solid);
+        glUniform2f(m_loc_screen_solid, (float)m_screen_width, (float)m_screen_height);
+
+        glBindVertexArray(m_vao);
+        glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(GLUIVertex) * m_vertices.size(), m_vertices.data());
+        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_vertices.size());
+        glBindVertexArray(0);
+    }
+    m_ui_lines.erase(m_ui_lines.begin(), mid);
+}
+
+void GLUIRenderer::ExpandQuadToVertices(const UIQuad& quad)
+{
+    // Create two triangles for the quad
+    GLUIVertex v[6];
+    
+    // Triangle 1: top-left, bottom-left, top-right
+    v[0] = {quad.x0, quad.y0, quad.u0, quad.v0, quad.r, quad.g, quad.b, quad.a, quad.z, quad.mode};
+    v[1] = {quad.x0, quad.y1, quad.u0, quad.v1, quad.r, quad.g, quad.b, quad.a, quad.z, quad.mode};
+    v[2] = {quad.x1, quad.y0, quad.u1, quad.v0, quad.r, quad.g, quad.b, quad.a, quad.z, quad.mode};
+    
+    // Triangle 2: top-right, bottom-left, bottom-right
+    v[3] = {quad.x1, quad.y0, quad.u1, quad.v0, quad.r, quad.g, quad.b, quad.a, quad.z, quad.mode};
+    v[4] = {quad.x0, quad.y1, quad.u0, quad.v1, quad.r, quad.g, quad.b, quad.a, quad.z, quad.mode};
+    v[5] = {quad.x1, quad.y1, quad.u1, quad.v1, quad.r, quad.g, quad.b, quad.a, quad.z, quad.mode};
+    
+    // Add vertices to buffer
+    for (int i = 0; i < 6; ++i) {
+        m_vertices.push_back(v[i]);
+    }
+}
+
+void GLUIRenderer::ExpandLineToVertices(const UILine& line)
+{
+    // Convert line to thick rectangle
+    float dx = line.x2 - line.x1;
+    float dy = line.y2 - line.y1;
+    float len = std::sqrt(dx*dx + dy*dy);
+
+    if (len < 0.001f) return;
+    
+    // Normalize and create perpendicular
+    dx /= len;
+    dy /= len;
+    float perp_x = -dy * line.thickness * 0.5f;
+    float perp_y = dx * line.thickness * 0.5f;
+    
+    // Create quad vertices
+    GLUIVertex v[6];
+    
+    // Triangle 1
+    v[0] = {line.x1 + perp_x, line.y1 + perp_y, 0.0f, 0.0f, line.r, line.g, line.b, line.a, line.z, 2.0f};
+    v[1] = {line.x1 - perp_x, line.y1 - perp_y, 0.0f, 0.0f, line.r, line.g, line.b, line.a, line.z, 2.0f};
+    v[2] = {line.x2 + perp_x, line.y2 + perp_y, 0.0f, 0.0f, line.r, line.g, line.b, line.a, line.z, 2.0f};
+    
+    // Triangle 2
+    v[3] = {line.x2 + perp_x, line.y2 + perp_y, 0.0f, 0.0f, line.r, line.g, line.b, line.a, line.z, 2.0f};
+    v[4] = {line.x1 - perp_x, line.y1 - perp_y, 0.0f, 0.0f, line.r, line.g, line.b, line.a, line.z, 2.0f};
+    v[5] = {line.x2 - perp_x, line.y2 - perp_y, 0.0f, 0.0f, line.r, line.g, line.b, line.a, line.z, 2.0f};
+    
+    // Add vertices to buffer
+    for (int i = 0; i < 6; ++i) {
+        m_vertices.push_back(v[i]);
+    }
+}
+
+void GLUIRenderer::SubmitQuad(float x, float y, float w, float h, float u0, float v0, float u1, float v1, 
+                             float r, float g, float b, float a, float z, float mode, uint32_t texture_id)
+{
+    UIQuad quad;
+    quad.x0 = x;
+    quad.y0 = y;
+    quad.x1 = x + w;
+    quad.y1 = y + h;
+    quad.u0 = u0;
+    quad.v0 = v0;
+    quad.u1 = u1;
+    quad.v1 = v1;
+    quad.r = r;
+    quad.g = g;
+    quad.b = b;
+    quad.a = a;
+    quad.z = z;
+    quad.mode = mode;
+    quad.texture_id = texture_id;
+    quad.layer = static_cast<uint8_t>(m_current_layer);
+    
+    m_ui_quads.push_back(quad);
+}
+
+void GLUIRenderer::SubmitLine(float x1, float y1, float x2, float y2, float r, float g, float b, float a, 
+                             float z, float thickness)
+{
+    UILine line;
+    line.x1 = x1;
+    line.y1 = y1;
+    line.x2 = x2;
+    line.y2 = y2;
+    line.r = r;
+    line.g = g;
+    line.b = b;
+    line.a = a;
+    line.z = z;
+    line.thickness = thickness;
+    line.layer = static_cast<uint8_t>(m_current_layer);
+    
+    m_ui_lines.push_back(line);
+}
+
+
+
+/******************************************************************************/
+
+#endif // RENDERER_OPENGL_ENABLED

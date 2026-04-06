@@ -23,6 +23,12 @@
  * This backend is the zero-risk baseline — the game renders exactly as before.
  */
 class RendererSoftware : public IRenderer {
+private:
+    class IWorldViewRenderer* m_worldViewRenderer = nullptr;
+    class IMapFadePass* m_mapFadePass = nullptr;
+    class ITextRenderer* m_textRenderer = nullptr;
+    class IUIRenderer* m_uiRenderer = nullptr;
+
 public:
     bool     Init() override;
     void     Shutdown() override;
@@ -32,6 +38,12 @@ public:
     void     UnlockFramebuffer() override;
     const char* GetName() const override;
     bool     SupportsRuntimeSwitch() const override;
+
+    // Sub-renderer access
+    IWorldViewRenderer* GetWorldViewRenderer() override;
+    IMapFadePass* GetMapFadePass() override;
+    ITextRenderer* GetTextRenderer() override;
+    IUIRenderer* GetUIRenderer() override;
 };
 
 /******************************************************************************/

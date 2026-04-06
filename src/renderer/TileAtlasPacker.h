@@ -58,14 +58,16 @@ protected:
 
     // ── Pixel build helpers ──────────────────────────────────────────────────
 
-    /** Decode all tiles for one variation into m_rgba_scratch, then call
-     *  UploadFull(variation).  Call once per variation inside Init(). */
-    void BuildVariation(int variation);
+    /** Build atlas pixel data for one variation and call UploadFull(variation).
+     *  Default implementation decodes palette indices to RGBA8 via lbPalette.
+     *  Platform subclasses may override to use a different pixel format. */
+    virtual void BuildVariation(int variation);
 
-    /** Decode only the animated tile strip into m_rgba_scratch, then call
+    /** Build animated tile strip pixel data for one variation and call
      *  UploadAnimatedStrip(variation, y_offset, h_pixels).
-     *  Call once per variation per tick inside UpdateAnimatedTiles(). */
-    void BuildAnimatedStrip(int variation);
+     *  Default implementation decodes palette indices to RGBA8 via lbPalette.
+     *  Platform subclasses may override to use a different pixel format. */
+    virtual void BuildAnimatedStrip(int variation);
 
     // ── GPU upload hooks — platform must implement ───────────────────────────
 

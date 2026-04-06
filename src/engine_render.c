@@ -67,6 +67,9 @@
 
 #include "platform/PlatformManager.h"
 #include "renderer/RendererManager.h"
+#ifdef __cplusplus
+#include "renderer/RenderPass.h"  // RenderPassSystem (C++ only)
+#endif
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -237,8 +240,6 @@ short mz;
 unsigned char temp_cluedo_mode; // This is true(1) if the "short wall" have been enabled in the graphics options
 struct Thing *thing_being_displayed;
 
-KeeperSpriteGPUHook g_kspr_gpu_hook = NULL;
-
 TbSpriteData *keepsprite[KEEPSPRITE_LENGTH];
 TbSpriteData sprite_heap_handle[KEEPSPRITE_LENGTH];
 struct HeapMgrHeader *graphics_heap;
@@ -257,6 +258,41 @@ static const char splittypes[64] = {
     0, 2, 6, 6, 3, 4, 9, 9, 7, 10, 11, 11, 7, 10, 11, 11,
     0, 2, 6, 6, 3, 4, 9, 9, 7, 10, 11, 11, 7, 10, 11, 11
 };
+
+/******************************************************************************/
+// Unified depth calculation for consistent GPU depth buffer usage
+// Converts z-values and bucket indices to normalized depth values [0.0, 1.0]
+// where 0.0 is near plane and 1.0 is far plane
+float calculate_normalized_depth(long z_value)
+{
+    // Clamp z_value to valid range
+    if (z_value <= 0) {
+        return 0.0f; // Near plane
+    }
+    if (z_value >= Z_DRAW_DISTANCE_MAX) {
+        return 1.0f; // Far plane
+    }
+
+    // Convert to normalized depth [0.0, 1.0]
+    // Note: GPU depth buffer typically uses reverse-Z for better precision
+    // where 1.0 = near, 0.0 = far, but we'll use standard for now
+    float normalized = (float)z_value / (float)Z_DRAW_DISTANCE_MAX;
+
+    // Ensure we stay within valid range
+    if (normalized < 0.0f) normalized = 0.0f;
+    if (normalized > 1.0f) normalized = 1.0f;
+
+    return normalized;
+}
+
+// Convert bucket index to normalized depth for GPU rendering
+float bucket_index_to_normalized_depth(long bucket_idx)
+{
+    // Bucket indices run from 0 to BUCKETS_COUNT-1
+    // Convert to z_value first, then normalize
+    long z_value = bucket_idx * BUCKETS_STEP;
+    return calculate_normalized_depth(z_value);
+}
 
 /******************************************************************************/
 #ifdef __cplusplus
@@ -4843,7 +4879,7 @@ static void draw_engine_number(struct BucketKindFloatingGoldText *num)
             for (remaining_digits = num->lvl; remaining_digits > 0; remaining_digits /= 10)
             {
                 spr = get_button_sprite((remaining_digits%10) + GBS_fontchars_number_dig0);
-                LbSpriteDrawScaled(pos_x, num->y - h, spr, w, h);
+                UIRenderer_SubmitScaledSprite(pos_x, num->y - h, w, h, spr);
 
                 pos_x -= w;
             }
@@ -4884,12 +4920,12 @@ static void draw_engine_room_flagpole(struct BucketKindRoomFlag *rflg)
                 height = (2 * (71 * zoom_factor) >> 13) + 8;
             }
 
-            LbDrawBox(rflg->x,
+            UIRenderer_SubmitSolidBox(rflg->x,
                       rflg->y - deltay,
                       ((4*scale_by_zoom) * units_per_pixel_ui + 8) / 16,
                       height,
                       colours[3][1][0]);
-            LbDrawBox(rflg->x + (2*scale_by_zoom) * (units_per_pixel_ui) / 16,
+            UIRenderer_SubmitSolidBox(rflg->x + (2*scale_by_zoom) * (units_per_pixel_ui) / 16,
                       rflg->y - deltay,
                       ((2*scale_by_zoom) * units_per_pixel_ui + 8) / 16,
                       height,
@@ -5101,7 +5137,7 @@ void draw_status_sprites(long scrpos_x, long scrpos_y, struct Thing *thing)
         spr = get_button_sprite(GBS_creature_states_cloud);
         w = (base_size * spr->SWidth * bs_units_per_px / 16) >> 13;
         h = (base_size * spr->SHeight * bs_units_per_px / 16) >> 13;
-        LbSpriteDrawScaled(scrpos_x - w / 2, scrpos_y - h, spr, w, h);
+        UIRenderer_SubmitScaledSprite(scrpos_x - w / 2, scrpos_y - h, w, h, spr);
     }
 
     lbDisplay.DrawFlags &= ~Lb_SPRITE_TRANSPAR8;
@@ -5111,7 +5147,7 @@ void draw_status_sprites(long scrpos_x, long scrpos_y, struct Thing *thing)
         spr = get_button_sprite(anger_spridx);
         w = (base_size * spr->SWidth * bs_units_per_px / 16) >> 13;
         h = (base_size * spr->SHeight * bs_units_per_px / 16) >> 13;
-        LbSpriteDrawScaled(scrpos_x - w / 2, scrpos_y - h, spr, w, h);
+        UIRenderer_SubmitScaledSprite(scrpos_x - w / 2, scrpos_y - h, w, h, spr);
         spr = get_button_sprite_for_player(state_spridx, thing->owner);
         h_add += spr->SHeight * bs_units_per_px / 16;
     }
@@ -5120,7 +5156,7 @@ void draw_status_sprites(long scrpos_x, long scrpos_y, struct Thing *thing)
         spr = get_button_sprite_for_player(state_spridx, thing->owner);
         w = (base_size * spr->SWidth * bs_units_per_px / 16) >> 13;
         h = (base_size * spr->SHeight * bs_units_per_px / 16) >> 13;
-        LbSpriteDrawScaled(scrpos_x - w / 2, scrpos_y - h, spr, w, h);
+        UIRenderer_SubmitScaledSprite(scrpos_x - w / 2, scrpos_y - h, w, h, spr);
         h_add += h;
     }
 
@@ -5134,7 +5170,8 @@ void draw_status_sprites(long scrpos_x, long scrpos_y, struct Thing *thing)
         spr = get_button_sprite_for_player(health_spridx, thing->owner);
         w = (base_size * spr->SWidth * bs_units_per_px / 16) >> 13;
         h = (base_size * spr->SHeight * bs_units_per_px / 16) >> 13;
-        LbSpriteDrawScaledOneColour(scrpos_x - w / 2, scrpos_y - h - h_add, spr, w, h, player_flash_colours[flash_color]);
+        // Flash effect not yet implemented on GPU; render normal health sprite.
+        UIRenderer_SubmitScaledSprite(scrpos_x - w / 2, scrpos_y - h - h_add, w, h, spr);
     }
     else
     {
@@ -5183,12 +5220,12 @@ void draw_status_sprites(long scrpos_x, long scrpos_y, struct Thing *thing)
                 spr = get_button_sprite_for_player(health_spridx, thing->owner);
                 w = (base_size * spr->SWidth * bs_units_per_px / 16) >> 13;
                 h = (base_size * spr->SHeight * bs_units_per_px / 16) >> 13;
-                LbSpriteDrawScaled(scrpos_x - w / 2, scrpos_y - h - h_add, spr, w, h);
+                UIRenderer_SubmitScaledSprite(scrpos_x - w / 2, scrpos_y - h - h_add, w, h, spr);
             }
             spr = get_button_sprite(GBS_creature_flower_level_01 + exp_level);
             w = (base_size * spr->SWidth * bs_units_per_px / 16) >> 13;
             h = (base_size * spr->SHeight * bs_units_per_px / 16) >> 13;
-            LbSpriteDrawScaled(scrpos_x - w / 2, scrpos_y - h - h_add, spr, w, h);
+            UIRenderer_SubmitScaledSprite(scrpos_x - w / 2, scrpos_y - h - h_add, w, h, spr);
         }
     }
     lbDisplay.DrawFlags = flg_mem;
@@ -5211,13 +5248,21 @@ static void draw_room_flag_top(long x, long y, int units_per_px, const struct Ro
     int ps_units_per_px;
     spr = get_panel_sprite(GPS_rpanel_room_ensign_filled);
     ps_units_per_px = 36*units_per_px/spr->SHeight;
-    LbSpriteDrawScaled(x, y, spr, spr->SWidth * ps_units_per_px / 16, spr->SHeight * ps_units_per_px / 16);
+    {
+        long fw = spr->SWidth * ps_units_per_px / 16;
+        long fh = spr->SHeight * ps_units_per_px / 16;
+        UIRenderer_SubmitScaledSprite(x, y, fw, fh, spr);
+    }
     struct RoomConfigStats *roomst;
     roomst = &game.conf.slab_conf.room_cfgstats[room->kind];
     int barpos_x;
     barpos_x = x + spr->SWidth * ps_units_per_px / 16 - (8 * units_per_px - 8) / 16;
     spr = get_panel_sprite(roomst->medsym_sprite_idx);
-    LbSpriteDrawResized(x - 2*units_per_px/16, y - 4*units_per_px/16, ps_units_per_px, spr);
+    {
+        long sw = spr->SWidth * ps_units_per_px / 16;
+        long sh = spr->SHeight * ps_units_per_px / 16;
+        UIRenderer_SubmitScaledSprite(x - 2*units_per_px/16, y - 4*units_per_px/16, sw, sh, spr);
+    }
     bar_fill = ROOM_FLAG_PROGRESS_BAR_WIDTH;
     bar_empty = 0;
     if (room->slabs_count > 0)
@@ -5230,7 +5275,7 @@ static void draw_room_flag_top(long x, long y, int units_per_px, const struct Ro
     bar_width = (2 * bar_empty * units_per_px + 8) / 16;
     // Compute height in a way which will assure covering whole bar area
     bar_height = (5 * units_per_px - 8) / 16;
-    LbDrawBox(barpos_x - bar_width, y +  (8 * units_per_px + 8) / 16, bar_width, bar_height, colours[0][0][0]);
+    UIRenderer_SubmitSolidBox(barpos_x - bar_width, y +  (8 * units_per_px + 8) / 16, bar_width, bar_height, colours[0][0][0]);
     bar_empty = 0;
     if (room->total_capacity > 0)
     {
@@ -5238,14 +5283,14 @@ static void draw_room_flag_top(long x, long y, int units_per_px, const struct Ro
         bar_empty = ROOM_FLAG_PROGRESS_BAR_WIDTH - bar_fill;
     }
     bar_width = (2 * bar_empty * units_per_px + 8) / 16;
-    LbDrawBox(barpos_x - bar_width, y + (16 * units_per_px + 8) / 16, bar_width, bar_height, colours[0][0][0]);
+    UIRenderer_SubmitSolidBox(barpos_x - bar_width, y + (16 * units_per_px + 8) / 16, bar_width, bar_height, colours[0][0][0]);
     bar_empty = 0;
     {
         bar_fill = ROOM_FLAG_PROGRESS_BAR_WIDTH * room->efficiency / ROOM_EFFICIENCY_MAX;
         bar_empty = ROOM_FLAG_PROGRESS_BAR_WIDTH - bar_fill;
     }
     bar_width = (2 * bar_empty * units_per_px + 8) / 16;
-    LbDrawBox(barpos_x - bar_width, y + (24 * units_per_px + 8) / 16, bar_width, bar_height, colours[0][0][0]);
+    UIRenderer_SubmitSolidBox(barpos_x - bar_width, y + (24 * units_per_px + 8) / 16, bar_width, bar_height, colours[0][0][0]);
     lbDisplay.DrawFlags = flg_mem;
 }
 #undef ROOM_FLAG_PROGRESS_BAR_WIDTH
@@ -6729,6 +6774,66 @@ void draw_nonspatial_sprites_no_shadows(void)
     }
 }
 
+/** GPU-accelerated version of draw_nonspatial_sprites_no_shadows().
+ *  Submits UI elements to the hardware renderer for GPU batching instead of CPU rasterization. */
+void draw_nonspatial_sprites_gpu(void)
+{
+    union {
+        struct BasicQ *b;
+        struct BucketKindSlabSelector *slabSelector;
+        struct BucketKindCreatureStatus *creatureStatus;
+        struct BucketKindFloatingGoldText *floatingGoldText;
+        struct BucketKindRoomFlag *roomFlag;
+    } item;
+    long bucket_num;
+
+    // Bucket coordinates are viewport-relative (project_point_helper uses engine_window_width
+    // as the [0..w] range). The UI renderer works in full-screen pixel space, so add the
+    // viewport origin to all submitted coordinates.
+    struct PlayerInfo *player = get_my_player();
+    const int vp_x = player->engine_window_x;
+    const int vp_y = player->engine_window_y;
+
+    for (bucket_num = BUCKETS_COUNT-1; bucket_num > 0; bucket_num--)
+    {
+        // Convert bucket Z to normalized depth for GPU rendering
+        float z_depth = (float)(bucket_num * BUCKETS_STEP) / (float)Z_DRAW_DISTANCE_MAX;
+
+        for (item.b = buckets[bucket_num]; item.b != NULL; item.b = item.b->next)
+        {
+            switch (item.b->kind)
+            {
+            case QK_SlabSelector:
+                UIRenderer_SubmitSlabSelector(
+                    item.slabSelector->p.X + vp_x,
+                    item.slabSelector->p.Y + vp_y,
+                    item.slabSelector->p.U + vp_x,
+                    item.slabSelector->p.V + vp_y,
+                    item.slabSelector->p.S,
+                    z_depth);
+                break;
+            case QK_CreatureStatus:
+                draw_status_sprites(
+                    item.creatureStatus->x + vp_x,
+                    item.creatureStatus->y + vp_y,
+                    item.creatureStatus->thing);
+                break;
+            case QK_FloatingGoldText:
+                draw_engine_number(item.floatingGoldText);
+                break;
+            case QK_RoomFlagBottomPole:
+                draw_engine_room_flagpole(item.roomFlag);
+                break;
+            case QK_RoomFlagStatusBox:
+                draw_engine_room_flag_top(item.roomFlag);
+                break;
+            default:
+                break;
+            }
+        }
+    }
+}
+
 static void prepare_draw_plane_of_engine_columns(struct Camera *cam, long aposc, long bposc, long xcell, long ycell, struct MinMax *mm)
 {
     apos = aposc;
@@ -7597,10 +7702,9 @@ static void draw_keepersprite(long x, long y, const struct KeeperSprite * kspr, 
         WARNDBG(9,"Unallocated KeeperSprite %ld can't be drawn at (%ld,%ld)",kspr_idx,x,y);
         return;
     }
-    // GPU intercept: compute the actual screen destination rect from the scaling
-    // globals saved by LbSpriteSetScalingData, then let the GPU renderer handle
-    // the sprite instead of the CPU scaling blitter.
-    if (g_kspr_gpu_hook != NULL) {
+    // GPU intercept: compute the screen destination rect from the scaling globals
+    // saved by LbSpriteSetScalingData and route through IWorldViewRenderer.
+    {
         long screen_x, screen_y, screen_w, screen_h;
         if (g_sprite_scale_src_w > 0 && g_sprite_scale_src_h > 0) {
             screen_x = g_sprite_scale_dst_x + x * g_sprite_scale_dst_w / g_sprite_scale_src_w;
@@ -7614,15 +7718,12 @@ static void draw_keepersprite(long x, long y, const struct KeeperSprite * kspr, 
             screen_h = g_sprite_scale_dst_h;
         }
         // Fold EngineSpriteDrawUsingAlpha into draw_flags so the GPU path can
-        // choose the correct blend without knowing about this separate global.
-        // Lb_SPRITE_ALPHA_ADDITIVE signals additive (glow/fire) blending, which
-        // approximates the CPU Trans1 palette-additive path used by this flag.
-        unsigned int hook_flags = lbDisplay.DrawFlags;
-        if (EngineSpriteDrawUsingAlpha) hook_flags |= Lb_SPRITE_ALPHA_ADDITIVE;
-        if (screen_w > 0 && screen_h > 0 &&
-            g_kspr_gpu_hook(screen_x, screen_y, screen_w, screen_h,
-                            *sprite_data_ptr, kspr->SWidth, clipped_height,
-                            hook_flags, lbSpriteReMapPtr)) {
+        // choose the correct blend (Lb_SPRITE_ALPHA_ADDITIVE = glow/fire additive).
+        unsigned int gpu_flags = lbDisplay.DrawFlags;
+        if (EngineSpriteDrawUsingAlpha) gpu_flags |= Lb_SPRITE_ALPHA_ADDITIVE;
+        if (try_submit_keepersprite_to_render_system(screen_x, screen_y, screen_w, screen_h,
+                                                     *sprite_data_ptr, kspr->SWidth, clipped_height,
+                                                     gpu_flags, lbSpriteReMapPtr)) {
             return;
         }
     }
@@ -9167,6 +9268,14 @@ void render_set_sprite_debug(int level)
         default:
             render_sprite_debug_fn = &render_sprite_debug_id;
     }
+}
+
+int try_submit_keepersprite_to_render_system(long screen_x, long screen_y, long screen_w, long screen_h,
+                                           const unsigned char *sprite_data, int src_w, int src_h,
+                                           unsigned int draw_flags, const unsigned char *remap)
+{
+    return WorldViewRenderer_SubmitKeeperSprite(screen_x, screen_y, screen_w, screen_h,
+                                               sprite_data, src_w, src_h, draw_flags, remap);
 }
 
 /******************************************************************************/

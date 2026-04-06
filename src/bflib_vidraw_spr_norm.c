@@ -1265,6 +1265,18 @@ TbResult LbSpriteDrawUsingScalingData(long posx, long posy, const struct TbSourc
         else
         if ((lbDisplay.DrawFlags & Lb_SPRITE_TRANSPAR4) != 0)
         {
+          if (render_ghost == NULL) {
+              // Fallback to solid rendering if transparency table not available
+              WARNLOG("render_ghost transparency table not initialized, falling back to solid rendering");
+              if ((lbDisplay.DrawFlags & Lb_SPRITE_FLIP_HORIZ) != 0)
+              {
+                  return LbSpriteDrawUsingScalingUpDataSolidRL(outbuf, scanline, outheight, xstep, ystep, src_buf);
+              }
+              else
+              {
+                  return LbSpriteDrawUsingScalingUpDataSolidLR(outbuf, scanline, outheight, xstep, ystep, src_buf);
+              }
+          }
           if ((lbDisplay.DrawFlags & Lb_SPRITE_FLIP_HORIZ) != 0)
           {
               return LbSpriteDrawUsingScalingUpDataTrans1RL(outbuf, scanline, outheight, xstep, ystep, src_buf, render_ghost);
@@ -1277,6 +1289,18 @@ TbResult LbSpriteDrawUsingScalingData(long posx, long posy, const struct TbSourc
         else
         if ((lbDisplay.DrawFlags & Lb_SPRITE_TRANSPAR8) != 0)
         {
+          if (render_ghost == NULL) {
+              // Fallback to solid rendering if transparency table not available
+              WARNLOG("render_ghost transparency table not initialized, falling back to solid rendering");
+              if ((lbDisplay.DrawFlags & Lb_SPRITE_FLIP_HORIZ) != 0)
+              {
+                  return LbSpriteDrawUsingScalingUpDataSolidRL(outbuf, scanline, outheight, xstep, ystep, src_buf);
+              }
+              else
+              {
+                  return LbSpriteDrawUsingScalingUpDataSolidLR(outbuf, scanline, outheight, xstep, ystep, src_buf);
+              }
+          }
           if ((lbDisplay.DrawFlags & Lb_SPRITE_FLIP_HORIZ) != 0)
           {
               return LbSpriteDrawUsingScalingUpDataTrans2RL(outbuf, scanline, outheight, xstep, ystep, src_buf, render_ghost);
@@ -1314,6 +1338,18 @@ TbResult LbSpriteDrawUsingScalingData(long posx, long posy, const struct TbSourc
         else
         if ((lbDisplay.DrawFlags & Lb_SPRITE_TRANSPAR4) != 0)
         {
+          if (render_ghost == NULL) {
+              // Fallback to solid rendering if transparency table not available
+              WARNLOG("render_ghost transparency table not initialized, falling back to solid rendering");
+              if ((lbDisplay.DrawFlags & Lb_SPRITE_FLIP_HORIZ) != 0)
+              {
+                  return LbSpriteDrawUsingScalingDownDataSolidRL(outbuf, scanline, outheight, xstep, ystep, src_buf);
+              }
+              else
+              {
+                  return LbSpriteDrawUsingScalingDownDataSolidLR(outbuf, scanline, outheight, xstep, ystep, src_buf);
+              }
+          }
           if ((lbDisplay.DrawFlags & Lb_SPRITE_FLIP_HORIZ) != 0)
           {
               return LbSpriteDrawUsingScalingDownDataTrans1RL(outbuf, scanline, outheight, xstep, ystep, src_buf, render_ghost);
@@ -1326,6 +1362,18 @@ TbResult LbSpriteDrawUsingScalingData(long posx, long posy, const struct TbSourc
         else
         if ((lbDisplay.DrawFlags & Lb_SPRITE_TRANSPAR8) != 0)
         {
+          if (render_ghost == NULL) {
+              // Fallback to solid rendering if transparency table not available
+              WARNLOG("render_ghost transparency table not initialized, falling back to solid rendering");
+              if ((lbDisplay.DrawFlags & Lb_SPRITE_FLIP_HORIZ) != 0)
+              {
+                  return LbSpriteDrawUsingScalingDownDataSolidRL(outbuf, scanline, outheight, xstep, ystep, src_buf);
+              }
+              else
+              {
+                  return LbSpriteDrawUsingScalingDownDataSolidLR(outbuf, scanline, outheight, xstep, ystep, src_buf);
+              }
+          }
           if ((lbDisplay.DrawFlags & Lb_SPRITE_FLIP_HORIZ) != 0)
           {
               return LbSpriteDrawUsingScalingDownDataTrans2RL(outbuf, scanline, outheight, xstep, ystep, src_buf, render_ghost);
@@ -1362,7 +1410,13 @@ TbResult LbSpriteDrawUsingScalingData(long posx, long posy, const struct TbSourc
 TbResult DrawAlphaSpriteUsingScalingData(long posx, long posy, const struct TbSourceBuffer * src_buf)
 {
     SYNCDBG(17,"Drawing at (%ld,%ld)",posx,posy);
-    assert(render_alpha != NULL);
+
+    // Check if alpha transparency table is available
+    if (render_alpha == NULL) {
+        WARNLOG("render_alpha transparency table not initialized, falling back to solid rendering");
+        return LbSpriteDrawUsingScalingData(posx, posy, src_buf);
+    }
+
     int32_t *xstep;
     int32_t *ystep;
     int scanline;

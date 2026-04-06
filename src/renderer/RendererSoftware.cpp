@@ -13,10 +13,17 @@
 #include "pre_inc.h"
 #include "renderer/RendererSoftware.h"
 
+#include "renderer/backends/SoftwareWorldViewRenderer.h"
+#include "renderer/backends/SoftwareMapFadePass.h"
+#include "renderer/backends/SoftwareTextRenderer.h"
+#include "renderer/backends/SoftwareUIRenderer.h"
+
 #include "bflib_video.h"
 #include "bflib_vidsurface.h"
+#include "bflib_render.h"
 
 #include <SDL2/SDL.h>
+#include <cstring>
 #include "post_inc.h"
 
 /******************************************************************************/
@@ -45,17 +52,78 @@ bool RendererSoftware::Init()
         }
     }
 
+    // Initialize transparency mapping tables for sprite rendering
+    if (render_ghost == nullptr) {
+        render_ghost = static_cast<unsigned char*>(KfxAlloc(65536)); // 256x256 table
+        if (render_ghost == nullptr) {
+            ERRORLOG("RendererSoftware: Failed to allocate render_ghost transparency table");
+            return false;
+        }
+        // Initialize with default transparency mapping (similar to GlassMap)
+        // This creates a 50% transparency effect
+        for (int i = 0; i < 256; i++) {
+            for (int j = 0; j < 256; j++) {
+                render_ghost[i * 256 + j] = (i + j) / 2;
+            }
+        }
+    }
+
+    if (render_alpha == nullptr) {
+        render_alpha = static_cast<unsigned char*>(KfxAlloc(65536)); // 256x256 table
+        if (render_alpha == nullptr) {
+            ERRORLOG("RendererSoftware: Failed to allocate render_alpha transparency table");
+            KfxFree(render_ghost);
+            render_ghost = nullptr;
+            return false;
+        }
+        // Initialize with alpha blending transparency mapping
+        // This creates an additive alpha blending effect
+        for (int i = 0; i < 256; i++) {
+            for (int j = 0; j < 256; j++) {
+                int result = i + (j * 3) / 4; // 75% source, 25% destination
+                render_alpha[i * 256 + j] = (result > 255) ? 255 : result;
+            }
+        }
+    }
+
+    // Initialize sub-renderers
+    m_worldViewRenderer = new SoftwareWorldViewRenderer();
+    m_mapFadePass = new SoftwareMapFadePass();
+    m_textRenderer = new SoftwareTextRenderer();
+    m_uiRenderer = new SoftwareUIRenderer();
+
     return true;
 }
 
 void RendererSoftware::Shutdown()
 {
+    // Free transparency mapping tables
+    if (render_ghost) {
+        KfxFree(render_ghost);
+        render_ghost = nullptr;
+    }
+
+    if (render_alpha) {
+        KfxFree(render_alpha);
+        render_alpha = nullptr;
+    }
+
     if (lbScaleSurface) {
         SDL_FreeSurface(lbScaleSurface);
         lbScaleSurface = NULL;
     }
     // lbScreenSurface is owned by SDL (window surface); do not free it.
     lbScreenSurface = NULL;
+
+    // Clean up sub-renderers
+    delete m_worldViewRenderer;
+    m_worldViewRenderer = nullptr;
+    delete m_mapFadePass;
+    m_mapFadePass = nullptr;
+    delete m_textRenderer;
+    m_textRenderer = nullptr;
+    delete m_uiRenderer;
+    m_uiRenderer = nullptr;
 }
 
 bool RendererSoftware::BeginFrame()
@@ -131,4 +199,24 @@ const char* RendererSoftware::GetName() const
 bool RendererSoftware::SupportsRuntimeSwitch() const
 {
     return true;
+}
+
+IWorldViewRenderer* RendererSoftware::GetWorldViewRenderer()
+{
+    return m_worldViewRenderer;
+}
+
+IMapFadePass* RendererSoftware::GetMapFadePass()
+{
+    return m_mapFadePass;
+}
+
+ITextRenderer* RendererSoftware::GetTextRenderer()
+{
+    return m_textRenderer;
+}
+
+IUIRenderer* RendererSoftware::GetUIRenderer()
+{
+    return m_uiRenderer;
 }

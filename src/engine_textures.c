@@ -29,6 +29,7 @@
 #include "config.h"
 #include "game_legacy.h"
 #include "kfx/memory_system_c.h"
+#include "renderer/RendererManager.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -272,6 +273,10 @@ TbBool load_texture_map_file(unsigned long tmapidx, LevelNumber lvnum, short fgr
         load_letter_one_file(i, 'b', dst, lvnum, fgroup);
         dst += (TEXTURE_BLOCKS_STAT_COUNT_B * 32 * 32);
     }
+    // Notify the GPU renderer that block_mem now contains new level texture data.
+    // This discards any atlas built from zeroed/stale memory during the loading
+    // screen so the next frame rebuilds with the correct palette indices.
+    RendererNotifyTexturesReloaded();
     return true;
 }
 /******************************************************************************/

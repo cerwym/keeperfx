@@ -15,6 +15,8 @@
 #include "renderer/opengl/GLTextRenderer.h"
 #include "renderer/backends/SoftwareWorldViewRenderer.h"
 #include "renderer/ITileAtlas.h"
+#include "renderer/RendererManager.h"  // for RendererGetActive/RendererGetActiveType
+#include "renderer/RendererOpenGL.h"   // for RendererOpenGL class
 
 #include "engine_buckets.h"   // QKinds enum, BasicQ, BucketKind* structs, buckets[]
 #include "engine_textures.h"  // TEXTURE_BLOCKS_COUNT
@@ -27,6 +29,8 @@
 #include "renderer/RenderPass_C.h" // RenderPass_FlushNow()
 #include "renderer/RenderPass.h"    // RenderPassSystem::SetScreenSize()
 #include "renderer/backends/OpenGLSpriteBackend.h" // SetCurrentBucketZ()
+#include "creature_graphics.h" // KeeperSprite structure
+#include "bflib_sprite.h"      // TbSprite structure
 
 #include <glad/glad.h>
 #include <cstdlib>
@@ -59,12 +63,6 @@ static GLuint compile_shader_src(GLenum type, const char* src, const char* debug
  *  Stride is always 256 so glTexSubImage2D can use GL_UNPACK_ROW_LENGTH. */
 static uint8_t s_kspr_decode_buf[256 * 256];
 
-/** Active renderer during draw_3d_sprites_for_bucket — set/cleared around the call. */
-static GLWorldViewRenderer* s_kspr_active_renderer = nullptr;
-
-/** NDC depth assigned to keeper sprites in the current bucket. */
-static float s_kspr_z_ndc = 0.0f;
-
 /** Decode keeper-sprite RLE into a stride-256 palette-index buffer.
  *  Format is identical to TbSprite.Data: negative cmd = transparent skip,
  *  positive cmd = run of palette bytes, 0 = end of row. */
@@ -92,16 +90,6 @@ static void decode_keeper_rle(uint8_t* dst, const uint8_t* data, int w, int h)
             }
         }
     }
-}
-
-/** C-compatible hook registered with g_kspr_gpu_hook while flushing a sprite bucket. */
-static int kspr_hook_cb(long dst_x, long dst_y, long dst_w, long dst_h,
-                         const unsigned char* data, int src_w, int src_h,
-                         unsigned int draw_flags, const unsigned char* remap)
-{
-    if (!s_kspr_active_renderer) return 0;
-    return s_kspr_active_renderer->render_keepersprite_gpu(
-        dst_x, dst_y, dst_w, dst_h, data, src_w, src_h, draw_flags, remap);
 }
 
 /******************************************************************************/
@@ -168,10 +156,12 @@ bool GLWorldViewRenderer::init_gl_resources()
         return false;
     }
 
-    // Cache uniform locations and bind sampler to texture unit 0
+    // Cache uniform locations and bind samplers to fixed texture units
     glUseProgram(m_shader);
     m_loc_tile_atlas = glGetUniformLocation(m_shader, "u_tile_atlas");
-    glUniform1i(m_loc_tile_atlas, 0);   // GL_TEXTURE0
+    glUniform1i(m_loc_tile_atlas, 0);   // GL_TEXTURE0 — R8 palette-index atlas
+    m_loc_palette = glGetUniformLocation(m_shader, "u_palette");
+    glUniform1i(m_loc_palette, 1);      // GL_TEXTURE1 — 1D RGBA8 palette
     glUseProgram(0);
 
     if (!init_shadow_shader())
@@ -184,6 +174,13 @@ bool GLWorldViewRenderer::init_gl_resources()
     if (!init_keeper_sprite_shader())
     {
         ERRORLOG("GLWorldViewRenderer: failed to initialise keeper-sprite shader");
+        free_gl_resources();
+        return false;
+    }
+
+    if (!init_flatpoly_shader())
+    {
+        ERRORLOG("GLWorldViewRenderer: failed to initialise flat-colour polygon shader");
         free_gl_resources();
         return false;
     }
@@ -223,6 +220,10 @@ void GLWorldViewRenderer::free_gl_resources()
     if (m_kspr_sprite_tex)  { glDeleteTextures(1, &m_kspr_sprite_tex);      m_kspr_sprite_tex = 0; }
     if (m_kspr_palette_tex) { glDeleteTextures(1, &m_kspr_palette_tex);     m_kspr_palette_tex = 0; }
 
+    if (m_flatpoly_vao)    { glDeleteVertexArrays(1, &m_flatpoly_vao); m_flatpoly_vao = 0; }
+    if (m_flatpoly_vbo)    { glDeleteBuffers(1, &m_flatpoly_vbo);       m_flatpoly_vbo = 0; }
+    if (m_flatpoly_shader) { glDeleteProgram(m_flatpoly_shader);        m_flatpoly_shader = 0; }
+
     if (m_text_renderer)    { m_text_renderer->Shutdown(); }
 
     m_initialized = false;
@@ -230,8 +231,8 @@ void GLWorldViewRenderer::free_gl_resources()
 
 bool GLWorldViewRenderer::compile_world_shaders()
 {
-    std::string vert_src = load_shader_source("world_vert.glsl");
-    std::string frag_src = load_shader_source("world_frag.glsl");
+    std::string vert_src = get_embedded_shader_source("world_vert.glsl");
+    std::string frag_src = get_embedded_shader_source("world_frag.glsl");
     if (vert_src.empty() || frag_src.empty())
         return false;
 
@@ -266,8 +267,8 @@ bool GLWorldViewRenderer::compile_world_shaders()
 
 bool GLWorldViewRenderer::init_shadow_shader()
 {
-    std::string sv_src = load_shader_source("shadow_vert.glsl");
-    std::string sf_src = load_shader_source("shadow_frag.glsl");
+    std::string sv_src = get_embedded_shader_source("shadow_vert.glsl");
+    std::string sf_src = get_embedded_shader_source("shadow_frag.glsl");
     if (sv_src.empty() || sf_src.empty())
         return false;
 
@@ -334,8 +335,8 @@ bool GLWorldViewRenderer::init_shadow_shader()
 
 bool GLWorldViewRenderer::init_keeper_sprite_shader()
 {
-    std::string sv_src = load_shader_source("kspr_vert.glsl");
-    std::string sf_src = load_shader_source("kspr_frag.glsl");
+    std::string sv_src = get_embedded_shader_source("kspr_vert.glsl");
+    std::string sf_src = get_embedded_shader_source("kspr_frag.glsl");
     if (sv_src.empty() || sf_src.empty())
         return false;
 
@@ -379,7 +380,7 @@ bool GLWorldViewRenderer::init_keeper_sprite_shader()
     // Compile the additive glow shader (same vertex shader, glow fragment shader).
     // Uses u_sprite (GL_TEXTURE0), u_viewport, and u_z_ndc only — no palette needed.
     {
-        std::string gf_src = load_shader_source("kspr_glow_frag.glsl");
+        std::string gf_src = get_embedded_shader_source("kspr_glow_frag.glsl");
         if (gf_src.empty())
         {
             ERRORLOG("GLWorldViewRenderer: failed to load glow shaders");
@@ -453,6 +454,105 @@ bool GLWorldViewRenderer::init_keeper_sprite_shader()
 
     SYNCLOG("GLWorldViewRenderer: keeper-sprite shader initialised");
     return true;
+}
+
+bool GLWorldViewRenderer::init_flatpoly_shader()
+{
+    std::string sv_src = get_embedded_shader_source("flatpoly_vert.glsl");
+    std::string sf_src = get_embedded_shader_source("flatpoly_frag.glsl");
+    if (sv_src.empty() || sf_src.empty())
+        return false;
+
+    GLuint sv = compile_shader_src(GL_VERTEX_SHADER,   sv_src.c_str(), "flatpoly_vert.glsl");
+    GLuint sf = compile_shader_src(GL_FRAGMENT_SHADER, sf_src.c_str(), "flatpoly_frag.glsl");
+    if (!sv || !sf)
+    {
+        if (sv) glDeleteShader(sv);
+        if (sf) glDeleteShader(sf);
+        return false;
+    }
+    m_flatpoly_shader = glCreateProgram();
+    glAttachShader(m_flatpoly_shader, sv);
+    glAttachShader(m_flatpoly_shader, sf);
+    glLinkProgram(m_flatpoly_shader);
+    glDeleteShader(sv);
+    glDeleteShader(sf);
+
+    GLint linked = 0;
+    glGetProgramiv(m_flatpoly_shader, GL_LINK_STATUS, &linked);
+    if (!linked)
+    {
+        char log[512];
+        glGetProgramInfoLog(m_flatpoly_shader, sizeof(log), nullptr, log);
+        ERRORLOG("GLWorldViewRenderer: flat-poly shader link error: %s", log);
+        glDeleteProgram(m_flatpoly_shader);
+        m_flatpoly_shader = 0;
+        return false;
+    }
+
+    glUseProgram(m_flatpoly_shader);
+    m_flatpoly_loc_viewport = glGetUniformLocation(m_flatpoly_shader, "u_viewport");
+    glUseProgram(0);
+
+    // VAO + dynamic VBO: 6 floats per vertex (x, y, z, r, g, b)
+    glGenVertexArrays(1, &m_flatpoly_vao);
+    glGenBuffers(1, &m_flatpoly_vbo);
+    glBindVertexArray(m_flatpoly_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, m_flatpoly_vbo);
+    // layout(location=0) vec3 a_pos  (x, y = screen px; z = NDC)
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    // layout(location=1) vec3 a_color (linear RGB)
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+    glBindVertexArray(0);
+
+    return true;
+}
+
+/******************************************************************************/
+
+void GLWorldViewRenderer::BeginHandSpriteRendering()
+{
+    // Save current viewport params used by render_keepersprite_gpu()
+    m_saved_screen_w  = m_screen_w;
+    m_saved_screen_h  = m_screen_h;
+    m_saved_sprite_z  = m_current_sprite_z;
+
+    // Hand sprites are at mouse position in full-screen pixel coordinates.
+    // Override viewport to full screen so the kspr shader converts them correctly.
+    m_screen_w = (int)MyScreenWidth;
+    m_screen_h = (int)MyScreenHeight;
+
+    // z = -1.0 maps to depth 0.0 (near plane); always passes GL_LEQUAL against
+    // any world geometry that was written at depth >= 0.0.
+    m_current_sprite_z = -1.0f;
+
+    // Ensure the GL viewport covers the full window (same as post-GPUFlushNow state).
+    glViewport(0, 0, (int)MyScreenWidth, (int)MyScreenHeight);
+
+    // Hand sprites must always appear on top — disable depth testing so world-pass
+    // depth values never cull them.
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+}
+
+void GLWorldViewRenderer::EndHandSpriteRendering()
+{
+    m_screen_w         = m_saved_screen_w;
+    m_screen_h         = m_saved_screen_h;
+    m_current_sprite_z = m_saved_sprite_z;
+}
+
+/******************************************************************************/
+
+int GLWorldViewRenderer::SubmitKeeperSprite(
+    long dst_x, long dst_y, long dst_w, long dst_h,
+    const unsigned char* data, int src_w, int src_h,
+    unsigned int draw_flags, const unsigned char* remap)
+{
+    return render_keepersprite_gpu(dst_x, dst_y, dst_w, dst_h,
+                                   data, src_w, src_h, draw_flags, remap);
 }
 
 /******************************************************************************/
@@ -548,7 +648,7 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
         // Pure additive blend: adds glow RGB delta to framebuffer contents.
         glUseProgram(m_kspr_glow_shader);
         glUniform2f(m_kspr_glow_loc_viewport, (float)m_screen_w, (float)m_screen_h);
-        glUniform1f(m_kspr_glow_loc_z_ndc,    s_kspr_z_ndc);
+        glUniform1f(m_kspr_glow_loc_z_ndc,    m_current_sprite_z);
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, m_kspr_sprite_tex);
@@ -560,7 +660,7 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
         glUseProgram(m_kspr_shader);
         glUniform2f(m_kspr_loc_viewport, (float)m_screen_w, (float)m_screen_h);
         glUniform1f(m_kspr_loc_alpha,    alpha);
-        glUniform1f(m_kspr_loc_z_ndc,    s_kspr_z_ndc);
+        glUniform1f(m_kspr_loc_z_ndc,    m_current_sprite_z);
 
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, m_kspr_palette_tex);
@@ -610,6 +710,21 @@ void GLWorldViewRenderer::AddWorldText(float world_x, float world_y, float world
 
 /******************************************************************************/
 
+// Simple bridge function to maintain existing sprite logic while using proper abstraction
+void GLWorldViewRenderer::setup_world_sprite_processing(long bucket_num)
+{
+    if (!m_initialized) return;
+
+    // Set up depth for this bucket
+    const float sprite_z = 2.0f * (float)bucket_num / (float)(BUCKETS_COUNT - 1) - 1.0f;
+    OpenGLSpriteBackend::SetCurrentBucketZ(sprite_z);
+
+    // Store the depth for keeper sprite rendering
+    m_current_sprite_z = sprite_z;
+}
+
+/******************************************************************************/
+
 void GLWorldViewRenderer::BeginWorldPass(unsigned char* framebuf, int pitch,
                                           int w, int h, int vp_x, int vp_y)
 {
@@ -628,22 +743,36 @@ void GLWorldViewRenderer::BeginWorldPass(unsigned char* framebuf, int pitch,
     m_worldtext_cmds.clear();
     m_kspr_palette_dirty = true;
 
-    // Zero the viewport area in the CPU staging buffer so palette index 0
-    // acts as transparent in the compositing blit, letting GPU-rendered tiles
-    // show through.
-    if (framebuf)
-    {
-        for (int row = 0; row < h; row++)
-            memset(framebuf + (long)row * pitch, 0, (size_t)w);
-    }
-
     // Lazy initialise GL resources on first use (GL context must be current)
     if (!m_initialized)
         init_gl_resources();
 
     // Lazy-retry atlas upload once block_mem is populated by the game data loader.
     if (m_atlas && !m_atlas->IsInitialized() && block_mem != nullptr)
+    {
         m_atlas->Init();
+        if (!m_atlas->IsInitialized())
+            WARNLOG("GLWorldViewRenderer: tile atlas not yet ready on BeginWorldPass");
+    }
+
+    // Zero the viewport area in the CPU staging buffer so palette index 0
+    // acts as transparent in the compositing blit, letting GPU-rendered tiles
+    // show through.
+    //
+    // Only zero when the GPU tile atlas is actually ready.  If the atlas hasn't
+    // initialised yet this frame, leave the staging buffer intact so software-
+    // rendered tiles (written by the CPU path) remain visible rather than going
+    // black.
+    //
+    // Clear only the exact viewport region to avoid interference with UI elements
+    // that may have been rendered outside the viewport bounds (like sidebar).
+    // The framebuf pointer is already offset to the viewport area by LbScreenSetGraphicsWindow.
+    const bool atlas_ready = m_atlas && m_atlas->IsInitialized();
+    if (framebuf && atlas_ready)
+    {
+        for (int row = 0; row < h; row++)
+            memset(framebuf + (long)row * pitch, 0, (size_t)w);
+    }
 
     // Set screen size for text renderer
     if (m_text_renderer)
@@ -773,7 +902,8 @@ void GLWorldViewRenderer::GPUFlushNow(unsigned char* staging_buf)
     glDepthFunc(GL_LEQUAL);
     glDepthMask(GL_TRUE);
 
-    int bound_variation = -1;
+    int  bound_variation   = -1;
+    bool flatpoly_uploaded = false;  // flat-poly VBO uploaded on first CMD_FLAT_POLYS
 
     for (const auto& cmd : m_draw_cmds)
     {
@@ -788,6 +918,11 @@ void GLWorldViewRenderer::GPUFlushNow(unsigned char* staging_buf)
                 glBindTexture(GL_TEXTURE_2D, atlas_tex);
                 bound_variation = cmd.variation;
             }
+            // Always rebind the 1D palette at unit 1 — keeper-sprite and other
+            // passes bind their own textures to unit 1 (GL_TEXTURE_2D), which
+            // causes sampler1D u_palette to return black for subsequent tile draws.
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(GL_TEXTURE_1D, m_palette_tex);
             glDrawArrays(GL_TRIANGLES, cmd.vert_start, cmd.vert_count);
         }
         else if (cmd.type == DrawCmd::CMD_SHADOWS)
@@ -861,17 +996,18 @@ void GLWorldViewRenderer::GPUFlushNow(unsigned char* staging_buf)
             const float sprite_z = 2.0f * (float)cmd.bucket_num / (float)(BUCKETS_COUNT - 1) - 1.0f;
             OpenGLSpriteBackend::SetCurrentBucketZ(sprite_z);
 
-            // Register the GPU keeper-sprite hook so draw_keepersprite()
-            // routes to render_keepersprite_gpu() instead of the CPU blitter.
-            s_kspr_active_renderer = this;
-            s_kspr_z_ndc           = sprite_z;
-            g_kspr_gpu_hook        = kspr_hook_cb;
+            // Store depth for world sprite submission through proper RenderPassSystem
+            m_current_sprite_z = sprite_z;
 
             // By the time GPUFlushNow() runs, LbScreenLoadGraphicsWindow() has
             // already restored GraphicsWindowX/Y to 0 (full-screen bounds).
             // We must use the stored viewport origin (m_vp_x, m_vp_y) so that
             // CPU-blitted sprite fallbacks land at the correct offset inside the
             // staging buffer, not at the top-left corner over the sidebar.
+            //
+            // CRITICAL FIX: To prevent UI flickering, we must ensure that sprite
+            // fallbacks only render within the 3D viewport area and don't overwrite
+            // UI elements outside the viewport (like sidebar, messages).
             TbPixel* saved_wscreen = lbDisplay.WScreen;
             TbPixel* saved_gwptr   = lbDisplay.GraphicsWindowPtr;
             long saved_gw_x = lbDisplay.GraphicsWindowX;
@@ -880,22 +1016,47 @@ void GLWorldViewRenderer::GPUFlushNow(unsigned char* staging_buf)
             long saved_gw_h = lbDisplay.GraphicsWindowHeight;
             if (staging_buf != nullptr)
             {
+                // Set up graphics window to point to the VIEWPORT AREA ONLY
+                // This prevents sprite fallbacks from corrupting UI areas
+                // 
+                // CRITICAL FIX: Ensure sprite fallbacks are strictly contained within
+                // the 3D viewport and cannot overwrite UI elements in the staging buffer.
+                // Use a separate viewport-only buffer region to prevent pixel conflicts.
                 lbDisplay.WScreen              = (TbPixel*)staging_buf;
-                lbDisplay.GraphicsWindowX      = m_vp_x;
-                lbDisplay.GraphicsWindowY      = m_vp_y;
+                lbDisplay.GraphicsWindowX = m_vp_x;  // Restored: use viewport coordinates
+                lbDisplay.GraphicsWindowY = m_vp_y;  // Restored: use viewport coordinates
                 lbDisplay.GraphicsWindowWidth  = m_screen_w;
                 lbDisplay.GraphicsWindowHeight = m_screen_h;
-                lbDisplay.GraphicsWindowPtr    = (TbPixel*)staging_buf
-                    + m_vp_x
-                    + lbDisplay.GraphicsScreenWidth * m_vp_y;
+
+                // Calculate viewport offset more carefully to ensure proper bounds
+                const long viewport_offset = (long)m_vp_x + (long)lbDisplay.GraphicsScreenWidth * (long)m_vp_y;
+
+                // Validate viewport bounds to prevent buffer overruns
+                if (viewport_offset >= 0 && 
+                    (viewport_offset + m_screen_w + (long)lbDisplay.GraphicsScreenWidth * (m_screen_h - 1)) 
+                    <= (long)lbDisplay.GraphicsScreenWidth * (long)lbDisplay.GraphicsScreenHeight)
+                {
+                    // Point to the viewport area within the staging buffer
+                    lbDisplay.GraphicsWindowPtr = (TbPixel*)staging_buf + viewport_offset;
+                }
+                else
+                {
+                    // Fallback: point to start of staging buffer if bounds are invalid
+                    lbDisplay.GraphicsWindowPtr = (TbPixel*)staging_buf;
+                    WARNLOG("Viewport bounds validation failed: offset=%ld, viewport=%dx%d, screen=%dx%d",
+                            viewport_offset, m_screen_w, m_screen_h, 
+                            (int)lbDisplay.GraphicsScreenWidth, (int)lbDisplay.GraphicsScreenHeight);
+                }
             }
 
+            // Use proper RenderPassSystem approach - no more global hook needed
+            setup_world_sprite_processing(cmd.bucket_num);
+
             draw_3d_sprites_for_bucket(cmd.bucket_num);
+
             RenderPass_FlushNow();
 
-            // Unregister the GPU hook before restoring CPU-render state.
-            g_kspr_gpu_hook        = nullptr;
-            s_kspr_active_renderer = nullptr;
+            // Restore default screen size for the render system
 
             RenderPassSystem::GetInstance().SetScreenSize(0, 0);
 
@@ -946,6 +1107,30 @@ void GLWorldViewRenderer::GPUFlushNow(unsigned char* staging_buf)
                 bound_variation = -1;
             }
         }
+        else if (cmd.type == DrawCmd::CMD_FLAT_POLYS)
+        {
+            // Flat-colour polygons: all vertices already converted to screen-px + linear RGB.
+            // Upload the entire flat-poly buffer once on first encounter, draw sub-range.
+            if (!m_flatpoly_verts.empty())
+            {
+                if (!flatpoly_uploaded)
+                {
+                    glBindBuffer(GL_ARRAY_BUFFER, m_flatpoly_vbo);
+                    glBufferData(GL_ARRAY_BUFFER,
+                                 (GLsizeiptr)(m_flatpoly_verts.size() * sizeof(FlatPolyVertex)),
+                                 m_flatpoly_verts.data(), GL_STREAM_DRAW);
+                    flatpoly_uploaded = true;
+                }
+                glUseProgram(m_flatpoly_shader);
+                glBindVertexArray(m_flatpoly_vao);
+                glUniform2f(m_flatpoly_loc_viewport, (float)m_screen_w, (float)m_screen_h);
+                glDrawArrays(GL_TRIANGLES, cmd.vert_start, cmd.vert_count);
+                // Restore tile shader state for subsequent CMD_TILES.
+                glUseProgram(m_shader);
+                glBindVertexArray(m_vao);
+                bound_variation = -1;
+            }
+        }
     }
 
     glBindVertexArray(0);
@@ -958,6 +1143,7 @@ void GLWorldViewRenderer::GPUFlushNow(unsigned char* staging_buf)
     m_draw_cmds.clear();
     m_shadow_cmds.clear();
     m_worldtext_cmds.clear();
+    m_flatpoly_verts.clear();
     m_vert_count     = 0;
     m_cmd_vert_start = 0;
 }
@@ -984,7 +1170,10 @@ void GLWorldViewRenderer::FlushIsometricView()
     for (int bi = BUCKETS_COUNT - 1; bi > 0; bi--)
     {
         m_current_bucket = bi;
+        const float z_ndc = 2.0f * (float)bi / (float)(BUCKETS_COUNT - 1) - 1.0f;
         bool bucket_has_3d_sprites = false;
+        bool bucket_has_flat_polys = false;
+        const int flatpoly_vert_start = (int)m_flatpoly_verts.size();
 
         struct BasicQ* q = buckets[bi];
         while (q != nullptr)
@@ -1019,10 +1208,6 @@ void GLWorldViewRenderer::FlushIsometricView()
                                     &p->vertex_third);
                     break;
                 }
-                case QK_BasicPolygon:
-                    // Flat-colour polygon (no block/UV); not rendered in the GPU path.
-                    break;
-
                 // ── Compact types (unsigned short x/y, unsigned char uv) ────
                 case QK_TrigMode2:
                 {
@@ -1061,9 +1246,11 @@ void GLWorldViewRenderer::FlushIsometricView()
                     break;
                 }
 
-                // ── Flat-colour types (silently skipped) ─────────────────────
+                // ── Flat-colour types: defer to CPU via staging buffer ───────
                 case QK_PolyMode0:
                 case QK_PolyMode4:
+                case QK_BasicPolygon:
+                    bucket_has_flat_polys = true;
                     break;
 
                 // ── 3D entity sprites: mark for depth-correct flush below ────
@@ -1116,12 +1303,24 @@ void GLWorldViewRenderer::FlushIsometricView()
             cmd.bucket_num = bi;
             m_draw_cmds.push_back(cmd);
         }
+
+        // Flat-colour polygons: GPU triangle draw via flat-poly shader.
+        if (bucket_has_flat_polys)
+        {
+            gpu_flush();
+
+            DrawCmd cmd;
+            cmd.type       = DrawCmd::CMD_FLAT_POLYS;
+            cmd.vert_start = flatpoly_vert_start;
+            cmd.vert_count = (int)m_flatpoly_verts.size() - flatpoly_vert_start;
+            m_draw_cmds.push_back(cmd);
+        }
     }
 
     // Draw non-spatial elements (slab selector, status icons, floating gold text,
-    // room flags) into the CPU staging buffer.  Creature shadows are handled
-    // above via CMD_SHADOWS and rendered GPU-side in GPUFlushNow().
-    draw_nonspatial_sprites_no_shadows();
+    // room flags) using GPU-accelerated UI renderer instead of CPU staging buffer.
+    // Creature shadows are handled above via CMD_SHADOWS and rendered GPU-side.
+    draw_nonspatial_sprites_gpu();
 }
 
 void GLWorldViewRenderer::FlushFrontView(struct Camera* cam)

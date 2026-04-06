@@ -30,6 +30,7 @@
 #include "config_creature.h"
 #include "config_compp.h"
 #include "custom_sprites.h"
+#include "renderer/RendererManager.h"
 #include "front_simple.h"
 #include "frontend.h"
 #include "frontmenu_ingame_tabs.h"
@@ -198,6 +199,7 @@ int load_game_chunks(TbFileHandle fhandle, struct CatalogueEntry *centry)
                 // Load configs which may have per-campaign part, and even be modified within a level
                 recheck_all_mod_exist();
                 init_custom_sprites(centry->level_num);
+                RendererNotifyCustomSpritesReloaded();
                 load_stats_files();
                 check_and_auto_fix_stats();
                 init_creature_scores();
