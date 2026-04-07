@@ -261,13 +261,14 @@ void RendererOpenGL::EndFrame()
     glBindVertexArray(0);
     glDisable(GL_BLEND);
 
+    // Flush GPU text — rendered after the staging blit so it appears over WScreen
+    // content, but before FlushFront so the front-layer UI sprites sit on top.
+    TextRenderer_Flush();
+
     // Flush layer-1 (front) GPU UI elements — escape menu icons/buttons, minimap,
     // slab selectors, power-hand — on top of the staging blit so they appear over
     // CPU-drawn panel backgrounds rather than underneath them.
     UIRenderer_FlushFront();
-
-    // Flush GPU text on top of everything.
-    TextRenderer_Flush();
 
     RenderPass_EndFrame();
     platform_swap_gl_buffers(lbWindow);

@@ -105,6 +105,9 @@ int LbTextHeight(const char *text);
 int LbTextLineHeight(void);
 int LbTextSetWindow(int posx, int posy, int width, int height);
 void LbTextGetJustifyWindowOrigin(int *x, int *y);
+void LbTextGetJustifyWindow(int *x, int *y, int *width);
+void LbTextGetClipWindow(int *x, int *y, int *width, int *height);
+int  LbTextGetSpacesPerTab(void);
 TbResult LbTextSetJustifyWindow(int pos_x, int pos_y, int width);
 TbResult LbTextSetClipWindow(int x1, int y1, int x2, int y2);
 TbBool LbTextSetFont(const struct TbSpriteSheet *font);
@@ -127,6 +130,28 @@ TbBool LbAlignMethodSet(unsigned short fdflags);
 long LbGetJustifiedCharPosX(long startx, long all_chars_width, long spr_width, long mul_width, unsigned short fdflags);
 long LbGetJustifiedCharPosY(long starty, long all_lines_height, long spr_height, unsigned short fdflags);
 long LbGetJustifiedCharWidth(long all_chars_width, long spr_width, long words_count, int units_per_px, unsigned short fdflags);
+
+/** Callback invoked by LbTextLayout once per justified line segment.
+ *  @param sbuf      Start of text segment (inclusive)
+ *  @param ebuf      End of text segment (exclusive)
+ *  @param x         X position in clip-window-relative coordinates
+ *  @param y         Y position in clip-window-relative coordinates
+ *  @param space_len Pixel width of a space for this segment (may be justify-expanded)
+ *  @param units_per_px Scale factor (16 = 100%)
+ *  @param userdata  Caller-supplied context pointer */
+typedef void (*LbTextSegmentFn)(const char* sbuf, const char* ebuf,
+                                long x, long y, long space_len,
+                                int units_per_px, void* userdata);
+
+/** Shared paragraph layout engine.
+ *  Walks the text string applying word-wrap and justification against
+ *  lbTextJustifyWindow, calling draw_fn once for each justified line segment.
+ *  Coordinates passed to draw_fn are clip-window-relative (i.e. relative to
+ *  the origin of lbTextClipWindow).
+ *  Caller must set lbFontPtr, lbDisplay.DrawFlags, lbTextJustifyWindow and
+ *  lbTextClipWindow before calling. */
+void LbTextLayout(int posx, int posy, int units_per_px, const char* text,
+                  LbTextSegmentFn draw_fn, void* userdata);
 
 // Function which require font sprites as parameter
 int LbSprFontWordWidth(const struct TbSpriteSheet * font, const char * text);

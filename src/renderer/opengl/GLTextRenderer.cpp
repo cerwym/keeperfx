@@ -243,21 +243,41 @@ TbBool GLTextRenderer::DrawTextResized(int posx, int posy, int units_per_px, con
     if (!text)
         return false;
 
-    // Queue for deferred rendering — actual GL draws happen in Flush(), which
-    // is called by RendererOpenGL::EndFrame() *after* the staging-buffer blit
-    // quad so text is not overwritten by it.
-    int wnd_x = 0, wnd_y = 0;
-    LbTextGetJustifyWindowOrigin(&wnd_x, &wnd_y);
-    m_pending.push_back({ posx, posy, units_per_px, wnd_x, wnd_y,
+    // Capture all text-window and display state at call time.
+    // Actual GL draws happen in Flush(), called by RendererOpenGL::EndFrame()
+    // after the staging-buffer blit so text composites correctly over WScreen content.
+    int wnd_x = 0, wnd_y = 0, wnd_width = 0;
+    LbTextGetJustifyWindow(&wnd_x, &wnd_y, &wnd_width);
+    int clip_x = 0, clip_y = 0, clip_w = 0, clip_h = 0;
+    LbTextGetClipWindow(&clip_x, &clip_y, &clip_w, &clip_h);
+    m_pending.push_back({ posx, posy, units_per_px,
+                          wnd_x, wnd_y, wnd_width,
+                          clip_x, clip_y, clip_w, clip_h,
                           lbDisplay.DrawColour, lbDisplay.DrawFlags,
                           text, lbFontPtr });
     return true;
 }
 
+void GLTextRenderer::gl_draw_segment(const char* sbuf, const char* ebuf,
+                                      long x, long y, long space_len,
+                                      int units_per_px, void* userdata)
+{
+    GLTextRenderer* self = static_cast<GLTextRenderer*>(userdata);
+    int clip_x = 0, clip_y = 0, clip_w = 0, clip_h = 0;
+    LbTextGetClipWindow(&clip_x, &clip_y, &clip_w, &clip_h);
+    float scale = (float)units_per_px / 16.0f;
+    self->FlushSegment(sbuf, ebuf,
+                       (float)(clip_x + x), (float)(clip_y + y),
+                       (float)space_len, scale);
+}
+
 void GLTextRenderer::Flush()
 {
     if (m_pending.empty() || !m_font_atlas)
+    {
+        m_pending.clear();
         return;
+    }
 
     if (m_screen_width <= 0 || m_screen_height <= 0)
     {
@@ -265,7 +285,7 @@ void GLTextRenderer::Flush()
         m_screen_height = MyScreenHeight;
     }
 
-    // Set up GL state once for all queued draws
+    // Set up GL state once for all draws this frame
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glDisable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
@@ -283,123 +303,151 @@ void GLTextRenderer::Flush()
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, m_palette_tex);
 
+    // Save globals that the layout engine and FlushSegment will overwrite
+    const struct TbSpriteSheet* saved_font      = lbFontPtr;
+    unsigned char               saved_colour     = lbDisplay.DrawColour;
+    unsigned short              saved_draw_flags = lbDisplay.DrawFlags;
+
     for (const DeferredDraw& d : m_pending)
     {
-        // Re-initialise atlas if the font changed
+        if (!d.font) continue;
+
+        // Switch font atlas when the font changes between queued draws.
+        // IMPORTANT: set active unit to GL_TEXTURE0 before calling Init() so that
+        // PackAndUploadAtlas's glBindTexture / final glBindTexture(0) ops do NOT
+        // disturb the palette binding on GL_TEXTURE1.
         if (d.font != m_current_font)
         {
-            if (d.font)
+            glActiveTexture(GL_TEXTURE0);
+            m_font_atlas->Shutdown();
+            if (!m_font_atlas->Init(d.font))
             {
-                m_font_atlas->Shutdown();
-                if (!m_font_atlas->Init(d.font))
-                {
-                    ERRORLOG("GLTextRenderer::Flush: failed to init atlas for new font");
-                    continue;
-                }
-                m_current_font = d.font;
+                ERRORLOG("GLTextRenderer::Flush: failed to init atlas for font");
+                continue;
             }
-            else
-            {
-                continue; // no font — skip
-            }
+            m_current_font = d.font;
         }
 
-        if (!m_font_atlas->IsInitialized())
-            continue;
+        if (!m_font_atlas->IsInitialized()) continue;
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, m_font_atlas->GetTextureID());
 
-        float scale_factor = (float)d.units_per_px / 16.0f;
-        // Apply the text window origin — posx/posy are relative to lbTextJustifyWindow
-        float screen_x = (float)(d.posx + d.wnd_x);
-        float screen_y = (float)(d.posy + d.wnd_y);
-        RenderString(d.text.c_str(), screen_x, screen_y, scale_factor,
-                     d.draw_colour, d.draw_flags);
+        // Expose draw state as globals so the layout engine and FlushSegment
+        // read/write them consistently (same as the software path).
+        lbFontPtr            = const_cast<struct TbSpriteSheet*>(d.font);
+        lbDisplay.DrawColour = d.draw_colour;
+        lbDisplay.DrawFlags  = d.draw_flags;
+        LbTextSetJustifyWindow(d.wnd_x, d.wnd_y, d.wnd_width);
+        LbTextSetClipWindow(d.clip_x, d.clip_y, d.clip_w, d.clip_h);
+
+        // Scissor to the captured clip window
+        if (d.clip_w > 0 && d.clip_h > 0)
+        {
+            glEnable(GL_SCISSOR_TEST);
+            int gl_y = m_screen_height - (d.clip_y + d.clip_h);
+            glScissor(d.clip_x, gl_y, d.clip_w, d.clip_h);
+        }
+
+        // Shared paragraph layout engine — calls gl_draw_segment once per
+        // justified line segment, which calls FlushSegment to emit quads.
+        LbTextLayout(d.posx, d.posy, d.units_per_px, d.text.c_str(),
+                     gl_draw_segment, this);
+
+        glDisable(GL_SCISSOR_TEST);
     }
 
     m_pending.clear();
 
-    // Restore state
+    // Restore globals overwritten during layout
+    lbFontPtr            = saved_font;
+    lbDisplay.DrawColour = saved_colour;
+    lbDisplay.DrawFlags  = saved_draw_flags;
+
+    // Restore GL state
     glDisable(GL_BLEND);
     glEnable(GL_DEPTH_TEST);
     glBindVertexArray(0);
     glUseProgram(0);
 }
 
-int GLTextRenderer::RenderString(const char* text, float start_x, float start_y, float scale_factor,
-                                  unsigned char draw_colour, unsigned short draw_flags)
+void GLTextRenderer::FlushSegment(const char* sbuf, const char* ebuf,
+                                   float screen_x, float screen_y,
+                                   float space_len, float scale_factor)
 {
-    if (!text)
-        return 0;
+    if (!sbuf || sbuf >= ebuf || !m_font_atlas || !m_font_atlas->IsInitialized())
+        return;
 
-    float current_x = start_x;
-    TextVertex vertices[600]; // Buffer for ~100 characters (6 vertices each)
+    // Stack buffer: 100 characters × 6 vertices each
+    TextVertex vertices[600];
     int vertex_count = 0;
 
-    // Local draw state — updated by embedded control codes in the text stream
-    unsigned char  local_colour = draw_colour;
-    unsigned short local_flags  = draw_flags;
+    float current_x = screen_x;
 
-    for (const char* c = text; *c != '\0' && vertex_count < 594; ++c)
+    for (const char* c = sbuf; c < ebuf && vertex_count <= 594; ++c)
     {
-        unsigned long chr = (unsigned char)*c;
+        unsigned char ch  = (unsigned char)*c;
+        unsigned long chr = ch;
 
-        // Handle wide characters (for Asian fonts)
-        if (is_wide_charcode(chr))
+        // Non-breaking space (UTF-8: 0xC2 0xA0) — advance like a normal space
+        if (ch == '\xc2' && (c + 1) < ebuf && (unsigned char)c[1] == '\xa0')
         {
+            current_x += space_len;
             ++c;
-            if (*c == '\0') break;
-            chr = (chr << 8) + (unsigned char)*c;
+            continue;
         }
 
-        // Process control codes — mirror put_down_simpletext_sprites_resized behaviour
-        if (chr < 15)
+        if (ch == ' ')  { current_x += space_len; continue; }
+        if (ch == '\t') { current_x += space_len * (float)LbTextGetSpacesPerTab(); continue; }
+
+        // Control codes 1–14: update lbDisplay globals (mirrors put_down_simpletext_sprites)
+        if (ch < 15)
         {
-            switch (chr)
+            switch (ch)
             {
-                case 12: local_flags ^= Lb_TEXT_ONE_COLOR; break;
+                case 1:  lbDisplay.DrawFlags ^= Lb_SPRITE_TRANSPAR4;   break;
+                case 2:  lbDisplay.DrawFlags ^= Lb_SPRITE_TRANSPAR8;   break;
+                case 3:  lbDisplay.DrawFlags ^= Lb_SPRITE_OUTLINE;     break;
+                case 4:  lbDisplay.DrawFlags ^= Lb_SPRITE_FLIP_HORIZ;  break;
+                case 5:  lbDisplay.DrawFlags ^= Lb_SPRITE_FLIP_VERTIC; break;
+                case 11: lbDisplay.DrawFlags ^= Lb_TEXT_UNDERLINE;     break;
+                case 12: lbDisplay.DrawFlags ^= Lb_TEXT_ONE_COLOR;     break;
                 case 14:
-                    // Next byte is the new draw colour — consume it
                     ++c;
-                    if (*c) local_colour = (unsigned char)*c;
+                    if (c < ebuf) lbDisplay.DrawColour = (unsigned char)*c;
                     break;
                 default: break;
             }
             continue;
         }
 
-        // Skip remaining non-printable control codes (15–31 are special-mapped
-        // glyphs in LbFontCharSprite; treat them as invisible here)
-        if (chr == ' ' || chr == '\t')
+        // Wide character (Asian fonts)
+        if (is_wide_charcode(chr))
         {
-            int space_width = 8; // TODO: get from font
-            current_x += space_width * scale_factor;
-            continue;
+            ++c;
+            if (c >= ebuf) break;
+            chr = (chr << 8) | (unsigned long)(unsigned char)*c;
         }
 
-        // Determine palette index: ONE_COLOR overrides atlas index with draw_colour
-        float forced_idx = (local_flags & Lb_TEXT_ONE_COLOR) ? (float)local_colour : -1.0f;
+        // Normal character — emit a textured quad
+        float forced_idx = (lbDisplay.DrawFlags & Lb_TEXT_ONE_COLOR)
+                         ? (float)lbDisplay.DrawColour : -1.0f;
 
-        // Generate character quad
-        int char_advance = GenerateCharQuad(chr, current_x, start_y, scale_factor,
-                                            forced_idx, &vertices[vertex_count]);
-        if (char_advance > 0)
+        int glyph_width = GenerateCharQuad(chr, current_x, screen_y, scale_factor,
+                                           forced_idx, &vertices[vertex_count]);
+        if (glyph_width > 0)
         {
-            vertex_count += 6; // Two triangles per character
-            current_x += char_advance;
+            vertex_count += 6;
+            current_x += (float)glyph_width * scale_factor;
         }
     }
 
-    // Upload vertices and draw
     if (vertex_count > 0)
     {
         glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
         glBufferSubData(GL_ARRAY_BUFFER, 0, vertex_count * sizeof(TextVertex), vertices);
         glDrawArrays(GL_TRIANGLES, 0, vertex_count);
     }
-
-    return (int)(current_x - start_x);
 }
 
 int GLTextRenderer::GenerateCharQuad(unsigned long chr, float x, float y, float scale_factor,
@@ -453,9 +501,6 @@ void GLTextRenderer::UpdatePaletteTexture()
     glBindTexture(GL_TEXTURE_2D, m_palette_tex);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 256, 1, GL_RGB, GL_UNSIGNED_BYTE, rgb_palette);
     glBindTexture(GL_TEXTURE_2D, 0);
-
-    SYNCLOG("GLTextRenderer: Updated palette texture, first color R=%d G=%d B=%d", 
-            rgb_palette[0], rgb_palette[1], rgb_palette[2]);
 }
 
 /******************************************************************************/

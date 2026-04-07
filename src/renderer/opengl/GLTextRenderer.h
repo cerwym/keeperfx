@@ -53,11 +53,12 @@ public:
 private:
     struct DeferredDraw {
         int posx, posy, units_per_px;
-        int wnd_x, wnd_y;              // lbTextJustifyWindow origin captured at queue time
-        unsigned char  draw_colour;    // lbDisplay.DrawColour at queue time
-        unsigned short draw_flags;     // lbDisplay.DrawFlags  at queue time
+        int wnd_x, wnd_y, wnd_width;        // lbTextJustifyWindow captured at queue time
+        int clip_x, clip_y, clip_w, clip_h; // lbTextClipWindow captured at queue time
+        unsigned char  draw_colour;         // lbDisplay.DrawColour at queue time
+        unsigned short draw_flags;          // lbDisplay.DrawFlags  at queue time
         std::string text;
-        const struct TbSpriteSheet* font; // lbFontPtr captured at call time
+        const struct TbSpriteSheet* font;   // lbFontPtr captured at call time
     };
 
     std::vector<DeferredDraw>  m_pending;         // Queued draws, flushed in Flush()
@@ -85,18 +86,29 @@ private:
         float forced_palette_idx; // >= 0: use this palette index (ONE_COLOR mode); < 0: use atlas
     };
 
+    /** C-linkage-compatible segment callback passed to LbTextLayout.
+     *  Casts userdata back to GLTextRenderer* and calls FlushSegment. */
+    static void gl_draw_segment(const char* sbuf, const char* ebuf,
+                                long x, long y, long space_len,
+                                int units_per_px, void* userdata);
+
     /** Compile and link text rendering shaders.
      *  @return true if successful */
     bool CompileShaders();
 
-    /** Render a text string as textured quads.
-     *  @param text String to render
-     *  @param start_x Starting X position  
-     *  @param start_y Starting Y position
-     *  @param scale_factor Text scaling factor (units_per_px / 16.0f)
-     *  @return Width of rendered text in pixels */
-    int RenderString(const char* text, float start_x, float start_y, float scale_factor,
-                     unsigned char draw_colour, unsigned short draw_flags);
+    /** Emit GPU quads for one justified line segment [sbuf, ebuf).
+     *  Mirrors put_down_simpletext_sprites_resized.  Reads lbDisplay.DrawColour
+     *  and lbDisplay.DrawFlags as globals and updates them for any control codes
+     *  embedded in the segment (consistent with the software path).
+     *  @param sbuf      Start of text segment (inclusive)
+     *  @param ebuf      End of text segment (exclusive)
+     *  @param screen_x  Screen-absolute X of the first character
+     *  @param screen_y  Screen-absolute Y of the line
+     *  @param space_len Pixel width of a space for this segment
+     *  @param scale_factor units_per_px / 16.0f */
+    void FlushSegment(const char* sbuf, const char* ebuf,
+                      float screen_x, float screen_y,
+                      float space_len, float scale_factor);
 
     /** Generate vertex data for a single character.
      *  @param chr Character code

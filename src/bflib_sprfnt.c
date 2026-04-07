@@ -1026,6 +1026,174 @@ long text_string_height(int units_per_px, const char *text)
 }
 
 /**
+ * Segment callback for the software (CPU) rendering path.
+ * Delegates directly to put_down_sprites, which writes palette indices into
+ * lbDisplay.WScreen in the active clip-window coordinate system.
+ */
+static void sw_draw_segment(const char* sbuf, const char* ebuf,
+                             long x, long y, long space_len,
+                             int units_per_px, void* userdata)
+{
+    (void)userdata;
+    put_down_sprites(sbuf, ebuf, x, y, space_len, units_per_px);
+}
+
+/**
+ * Shared paragraph layout engine used by all text rendering backends.
+ * Mirrors the layout logic of the original LbTextDrawResized_sw inner loop;
+ * replaces the put_down_sprites call with a caller-supplied draw_fn callback
+ * so GPU and CPU backends can share a single source of truth for line-breaking
+ * and justification.
+ *
+ * Coordinates passed to draw_fn are relative to the origin of lbTextClipWindow.
+ * Callers must set lbFontPtr, lbDisplay.DrawFlags, lbTextJustifyWindow and
+ * lbTextClipWindow before calling.
+ */
+void LbTextLayout(int posx, int posy, int units_per_px, const char* text,
+                  LbTextSegmentFn draw_fn, void* userdata)
+{
+    if ((lbFontPtr == NULL) || (text == NULL))
+        return;
+    const char* ebuf;
+    long x;
+    long y;
+    long len;
+    long count = 0;
+    long justifyx = lbTextJustifyWindow.x - lbTextClipWindow.x;
+    long justifyy = lbTextJustifyWindow.y - lbTextClipWindow.y;
+    posx += justifyx;
+    long startx = posx;
+    long starty  = posy + justifyy;
+    long h = LbTextLineHeight() * units_per_px / 16;
+    const char* sbuf = text;
+    for (ebuf = text; *ebuf != '\0'; ebuf++)
+    {
+        const char* text_backup_pointer = ebuf;
+        long chr = (unsigned char)*ebuf;
+        TbBool WideChar = is_wide_charcode(chr);
+        if (WideChar)
+        {
+            ebuf++;
+            if (*ebuf == '\0') break;
+            chr = (chr << 8) + (unsigned char)*ebuf;
+        } else if (ebuf[0] == '\xc2' && ebuf[1] == '\xa0') {
+            ebuf++;
+            chr = (chr << 8) + (unsigned char)*ebuf;
+            WideChar = true;
+        }
+        long w;
+        if ((chr >= 15) && (chr != 32))
+        {
+            w = LbTextCharWidthM(chr, units_per_px);
+            if (WideChar) count = 0;
+            if ((posx + w - justifyx <= lbTextJustifyWindow.width) || (count > 0) || !LbAlignMethodSet(lbDisplay.DrawFlags))
+            {
+                posx += w;
+                continue;
+            }
+            w = LbTextCharWidthM(' ', units_per_px);
+            posx += w;
+            x   = LbGetJustifiedCharPosX(startx, posx, w, 1, lbDisplay.DrawFlags);
+            y   = LbGetJustifiedCharPosY(starty, h, h, lbDisplay.DrawFlags);
+            len = LbGetJustifiedCharWidth(posx, w, count, units_per_px, lbDisplay.DrawFlags);
+            draw_fn(sbuf, text_backup_pointer, x, y, len, units_per_px, userdata);
+            posx   = startx;
+            sbuf   = text_backup_pointer;
+            ebuf   = sbuf - 1;
+            starty += h;
+            count  = 0;
+        } else
+        if (chr == ' ')
+        {
+            w   = LbTextCharWidthM(' ', units_per_px);
+            len = LbTextWordWidthM(ebuf + 1, units_per_px);
+            if (posx + w + len - justifyx <= lbTextJustifyWindow.width)
+            {
+                count++;
+                posx += w;
+                continue;
+            }
+            posx += w;
+            x   = LbGetJustifiedCharPosX(startx, posx, w, 1, lbDisplay.DrawFlags);
+            y   = LbGetJustifiedCharPosY(starty, h, h, lbDisplay.DrawFlags);
+            len = LbGetJustifiedCharWidth(posx, w, count, units_per_px, lbDisplay.DrawFlags);
+            draw_fn(sbuf, ebuf, x, y, len, units_per_px, userdata);
+            if (LbAlignMethodSet(lbDisplay.DrawFlags))
+            {
+                posx   = startx;
+                sbuf   = ebuf + 1;
+                starty += h;
+            }
+            count = 0;
+        } else
+        if (chr == '\n')
+        {
+            x   = LbGetJustifiedCharPosX(startx, posx, 0, 1, lbDisplay.DrawFlags);
+            y   = starty;
+            len = LbTextCharWidthM(' ', units_per_px);
+            draw_fn(sbuf, ebuf, x, y, len, units_per_px, userdata);
+            sbuf   = ebuf;
+            posx   = startx;
+            starty += h;
+            count  = 0;
+        } else
+        if (chr == '\t')
+        {
+            w    = LbTextCharWidthM(' ', units_per_px);
+            posx += (long)lbSpacesPerTab * w;
+            len  = LbTextWordWidthM(ebuf + 1, units_per_px);
+            if (posx + len - justifyx <= lbTextJustifyWindow.width)
+            {
+                count += lbSpacesPerTab;
+                continue;
+            }
+            x   = LbGetJustifiedCharPosX(startx, posx, w, (long)lbSpacesPerTab, lbDisplay.DrawFlags);
+            y   = LbGetJustifiedCharPosY(starty, h, h, lbDisplay.DrawFlags);
+            len = LbGetJustifiedCharWidth(posx, w, count, units_per_px, lbDisplay.DrawFlags);
+            draw_fn(sbuf, ebuf, x, y, len, units_per_px, userdata);
+            if (LbAlignMethodSet(lbDisplay.DrawFlags))
+            {
+                posx   = startx;
+                sbuf   = ebuf + 1;
+                starty += h;
+            }
+            count = 0;
+            continue;
+        } else
+        if ((chr == 6) || (chr == 7) || (chr == 8) || (chr == 9))
+        {
+            if (posx - justifyx > lbTextJustifyWindow.width)
+            {
+                x   = startx;
+                y   = starty;
+                len = LbTextCharWidthM(' ', units_per_px);
+                draw_fn(sbuf, ebuf, x, y, len, units_per_px, userdata);
+                posx   = startx;
+                sbuf   = ebuf;
+                count  = 0;
+                starty += h;
+            }
+            switch (*ebuf)
+            {
+            case 6: lbDisplay.DrawFlags ^= Lb_TEXT_HALIGN_LEFT;    break;
+            case 7: lbDisplay.DrawFlags ^= Lb_TEXT_HALIGN_RIGHT;   break;
+            case 8: lbDisplay.DrawFlags ^= Lb_TEXT_HALIGN_CENTER;  break;
+            case 9: lbDisplay.DrawFlags ^= Lb_TEXT_HALIGN_JUSTIFY; break;
+            }
+        } else
+        if (chr == 14)
+        {
+            ebuf++;
+            if (*ebuf == '\0') break;
+        }
+    }
+    x   = LbGetJustifiedCharPosX(startx, posx, 0, 1, lbDisplay.DrawFlags);
+    y   = LbGetJustifiedCharPosY(starty, h, h, lbDisplay.DrawFlags);
+    len = LbTextCharWidthM(' ', units_per_px);
+    draw_fn(sbuf, ebuf, x, y, len, units_per_px, userdata);
+}
+
+/**
  * Draws a string in the current text window in given scale.
  * @param posx Position of the text, X coord.
  * @param posy Position of the text, Y coord.
@@ -1035,175 +1203,12 @@ long text_string_height(int units_per_px, const char *text)
  */
 TbBool LbTextDrawResized_sw(int posx, int posy, int units_per_px, const char *text)
 {
-    // Counter for amount of blank characters in a line
-    const char *ebuf;
-    long x;
-    long y;
-    long len;
     if ((lbFontPtr == NULL) || (text == NULL))
         return true;
     TbGraphicsWindow grwnd;
     LbScreenStoreGraphicsWindow(&grwnd);
     LbScreenLoadGraphicsWindow(&lbTextClipWindow);
-    long count = 0;
-    long justifyx = lbTextJustifyWindow.x - lbTextClipWindow.x;
-    long justifyy = lbTextJustifyWindow.y - lbTextClipWindow.y;
-    posx += justifyx;
-    long startx = posx;
-    long starty = posy + justifyy;
-
-    long h = LbTextLineHeight() * units_per_px / 16;
-    const char* sbuf = text;
-    for (ebuf=text; *ebuf != '\0'; ebuf++)
-    {
-        const char* text_backup_pointer = ebuf;
-        long chr = (unsigned char)*ebuf;
-        TbBool WideChar = (is_wide_charcode(chr));
-        if (WideChar)
-        {
-            ebuf++;
-            if (*ebuf == '\0') break;
-            chr = (chr<<8) + (unsigned char)*ebuf;
-        } else if (ebuf[0] == '\xc2' && ebuf[1] == '\xa0') {
-            ebuf++;
-            chr = (chr<<8) + (unsigned char)*ebuf;
-            WideChar = true;
-        }
-
-        long w;
-        if ((chr >= 15) && (chr != 32))
-        {
-            // Align when ansi and unicode are mixed on one screen
-            w = LbTextCharWidthM(chr, units_per_px);
-
-            // if count>0, means that the current word has already been calculated.
-            // for letters, there must be a delimiter after the word.
-            // but not applicable to wide characters, one dbc-char/WideChar is considered as one word, can be no delimiter, so count cannot be used.
-            if (WideChar)
-                count = 0;
-
-            if ((posx+w-justifyx <= lbTextJustifyWindow.width) || (count > 0) || !LbAlignMethodSet(lbDisplay.DrawFlags))
-            {
-                posx += w;
-                continue;
-            }
-            // If the char exceeds screen, and there were no spaces in that line, and alignment is set - divide the line here
-            w = LbTextCharWidthM(' ', units_per_px);
-            posx += w;
-            x = LbGetJustifiedCharPosX(startx, posx, w, 1, lbDisplay.DrawFlags);
-            y = LbGetJustifiedCharPosY(starty, h, h, lbDisplay.DrawFlags);
-            len = LbGetJustifiedCharWidth(posx, w, count, units_per_px, lbDisplay.DrawFlags);
-            put_down_sprites(sbuf, text_backup_pointer, x, y, len, units_per_px);
-            // We already know that alignment is set - don't re-check
-            {
-                posx = startx;
-                sbuf = text_backup_pointer; // sbuf points at start of char for next loop. text_backup_pointer points at unprocessed char.
-                ebuf = sbuf - 1; // The updateStatement of for loop will auto increment 1.
-                starty += h;
-            }
-            count = 0;
-        } else
-        if (chr == ' ')
-        {
-            w = LbTextCharWidthM(' ', units_per_px);
-            len = LbTextWordWidthM(ebuf+1, units_per_px);
-            if (posx+w+len-justifyx <= lbTextJustifyWindow.width)
-            {
-                count++;
-                posx += w;
-                continue;
-            }
-            posx += w;
-            x = LbGetJustifiedCharPosX(startx, posx, w, 1, lbDisplay.DrawFlags);
-            y = LbGetJustifiedCharPosY(starty, h, h, lbDisplay.DrawFlags);
-            len = LbGetJustifiedCharWidth(posx, w, count, units_per_px, lbDisplay.DrawFlags);
-            put_down_sprites(sbuf, ebuf, x, y, len, units_per_px);
-            // End the line only if align method is set
-            if (LbAlignMethodSet(lbDisplay.DrawFlags))
-            {
-              posx = startx;
-              sbuf = ebuf + 1; // sbuf points at start of char, while ebuf points at end of char
-              starty += h;
-            }
-            count = 0;
-        } else
-        if (chr == '\n')
-        {
-            w = 0;
-            x = LbGetJustifiedCharPosX(startx, posx, w, 1, lbDisplay.DrawFlags);
-            y = LbGetJustifiedCharPosY(starty, h, h, lbDisplay.DrawFlags);
-            len = LbTextCharWidthM(' ', units_per_px);
-            y = starty;
-            put_down_sprites(sbuf, ebuf, x, y, len, units_per_px);
-            // We've got EOL sign - end the line
-            sbuf = ebuf;
-            posx = startx;
-            starty += h;
-            count = 0;
-        } else
-        if (chr == '\t')
-        {
-            w = LbTextCharWidthM(' ', units_per_px);
-            posx += lbSpacesPerTab*w;
-            len = LbSprFontWordWidth(lbFontPtr,ebuf+1) * units_per_px / 16;
-            if (posx+len-justifyx <= lbTextJustifyWindow.width)
-            {
-              count += lbSpacesPerTab;
-              continue;
-            }
-            x = LbGetJustifiedCharPosX(startx, posx, w, lbSpacesPerTab, lbDisplay.DrawFlags);
-            y = LbGetJustifiedCharPosY(starty, h, h, lbDisplay.DrawFlags);
-            len = LbGetJustifiedCharWidth(posx, w, count, units_per_px, lbDisplay.DrawFlags);
-            put_down_sprites(sbuf, ebuf, x, y, len, units_per_px);
-            if (LbAlignMethodSet(lbDisplay.DrawFlags))
-            {
-              posx = startx;
-              sbuf = ebuf + 1;
-              starty += h;
-            }
-            count = 0;
-            continue;
-        } else
-        if ((chr == 6) || (chr == 7) || (chr == 8) || (chr == 9))
-        {
-            if (posx-justifyx > lbTextJustifyWindow.width)
-            {
-              x = startx;
-              y = starty;
-              len = LbTextCharWidthM(' ', units_per_px);
-              put_down_sprites(sbuf, ebuf, x, y, len, units_per_px);
-              posx = startx;
-              sbuf = ebuf;
-              count = 0;
-              starty += h;
-            }
-            switch (*ebuf)
-            {
-            case 6:
-              lbDisplay.DrawFlags ^= Lb_TEXT_HALIGN_LEFT;
-              break;
-            case 7:
-              lbDisplay.DrawFlags ^= Lb_TEXT_HALIGN_RIGHT;
-              break;
-            case 8:
-              lbDisplay.DrawFlags ^= Lb_TEXT_HALIGN_CENTER;
-              break;
-            case 9:
-              lbDisplay.DrawFlags ^= Lb_TEXT_HALIGN_JUSTIFY;
-              break;
-            }
-        } else
-        if (chr == 14)
-        {
-            ebuf++;
-            if (*ebuf == '\0')
-              break;
-        }
-    }
-    x = LbGetJustifiedCharPosX(startx, posx, 0, 1, lbDisplay.DrawFlags);
-    y = LbGetJustifiedCharPosY(starty, h, h, lbDisplay.DrawFlags);
-    len = LbTextCharWidthM(' ', units_per_px);
-    put_down_sprites(sbuf, ebuf, x, y, len, units_per_px);
+    LbTextLayout(posx, posy, units_per_px, text, sw_draw_segment, NULL);
     LbScreenLoadGraphicsWindow(&grwnd);
     return true;
 }
@@ -1378,6 +1383,26 @@ void LbTextGetJustifyWindowOrigin(int *x, int *y)
 {
     if (x) *x = lbTextJustifyWindow.x;
     if (y) *y = lbTextJustifyWindow.y;
+}
+
+void LbTextGetJustifyWindow(int *x, int *y, int *width)
+{
+    if (x)     *x     = lbTextJustifyWindow.x;
+    if (y)     *y     = lbTextJustifyWindow.y;
+    if (width) *width = lbTextJustifyWindow.width;
+}
+
+void LbTextGetClipWindow(int *x, int *y, int *width, int *height)
+{
+    if (x)      *x      = lbTextClipWindow.x;
+    if (y)      *y      = lbTextClipWindow.y;
+    if (width)  *width  = lbTextClipWindow.width;
+    if (height) *height = lbTextClipWindow.height;
+}
+
+int LbTextGetSpacesPerTab(void)
+{
+    return (int)lbSpacesPerTab;
 }
 
 TbBool change_dbcfont(int nfont)
