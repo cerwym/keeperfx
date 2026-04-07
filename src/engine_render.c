@@ -6819,12 +6819,18 @@ void draw_nonspatial_sprites_gpu(void)
                     item.creatureStatus->thing);
                 break;
             case QK_FloatingGoldText:
+                item.floatingGoldText->x += vp_x;
+                item.floatingGoldText->y += vp_y;
                 draw_engine_number(item.floatingGoldText);
                 break;
             case QK_RoomFlagBottomPole:
+                item.roomFlag->x += vp_x;
+                item.roomFlag->y += vp_y;
                 draw_engine_room_flagpole(item.roomFlag);
                 break;
             case QK_RoomFlagStatusBox:
+                item.roomFlag->x += vp_x;
+                item.roomFlag->y += vp_y;
                 draw_engine_room_flag_top(item.roomFlag);
                 break;
             default:
