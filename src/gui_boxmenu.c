@@ -39,6 +39,7 @@
 #include "thing_data.h"
 #include "gui_draw.h"
 #include "game_legacy.h"
+#include "renderer/RendererManager.h"
 #include "vidfade.h"
 
 #include "keeperfx.hpp"
@@ -664,18 +665,8 @@ void gui_draw_box(struct GuiBox *gbox)
     long pos_x = gbox->pos_x + 8;
     if (gbox != gui_get_highest_priority_box())
     {
-        lbDisplay.DrawFlags |= Lb_SPRITE_TRANSPAR4;
-        LbDrawBox(gbox->pos_x/pixel_size, gbox->pos_y/pixel_size, gbox->width/pixel_size, gbox->height/pixel_size, colours[6][0][0]);
-        if (lbDisplay.DrawFlags & Lb_SPRITE_OUTLINE)
-        {
-          LbDrawBox(gbox->pos_x/pixel_size, gbox->pos_y/pixel_size, gbox->width/pixel_size, gbox->height/pixel_size, colours[0][0][0]);
-        } else
-        {
-          lbDisplay.DrawFlags ^= Lb_SPRITE_OUTLINE;
-          LbDrawBox(gbox->pos_x/pixel_size, gbox->pos_y/pixel_size, gbox->width/pixel_size, gbox->height/pixel_size, colours[0][0][0]);
-          lbDisplay.DrawFlags ^= Lb_SPRITE_OUTLINE;
-        }
-        lbDisplay.DrawFlags ^= Lb_SPRITE_TRANSPAR4;
+        UIRenderer_SubmitSolidBoxAlpha(gbox->pos_x/pixel_size, gbox->pos_y/pixel_size, gbox->width/pixel_size, gbox->height/pixel_size, colours[6][0][0], 0.5f);
+        UIRenderer_SubmitOutlineBox(gbox->pos_x/pixel_size, gbox->pos_y/pixel_size, gbox->width/pixel_size, gbox->height/pixel_size, colours[0][0][0]);
         lbDisplay.DrawColour = colours[3][3][3];
         goptn = gbox->optn_list;
         while (goptn->label[0] != '!')
@@ -688,27 +679,14 @@ void gui_draw_box(struct GuiBox *gbox)
             lbDisplay.DrawColour = colours[0][0][0];
           else
             lbDisplay.DrawColour = colours[3][3][3];
-          if (LbScreenIsLocked())
-          {
-            LbTextDraw(pos_x/pixel_size, pos_y/pixel_size, goptn->label);
-          }
+          LbTextDrawResized(pos_x/pixel_size, pos_y/pixel_size, 16, goptn->label);
           goptn++;
           pos_y += lnheight;
         }
     } else
     {
-        lbDisplay.DrawFlags |= Lb_SPRITE_TRANSPAR4;
-        LbDrawBox(gbox->pos_x/pixel_size, gbox->pos_y/pixel_size, gbox->width/pixel_size, gbox->height/pixel_size, colours[12][0][0]);
-        if (lbDisplay.DrawFlags & Lb_SPRITE_OUTLINE)
-        {
-            LbDrawBox(gbox->pos_x/pixel_size, gbox->pos_y/pixel_size, gbox->width/pixel_size, gbox->height/pixel_size, colours[2][0][0]);
-        } else
-        {
-            lbDisplay.DrawFlags ^= Lb_SPRITE_OUTLINE;
-            LbDrawBox(gbox->pos_x/pixel_size, gbox->pos_y/pixel_size, gbox->width/pixel_size, gbox->height/pixel_size, colours[2][0][0]);
-            lbDisplay.DrawFlags ^= Lb_SPRITE_OUTLINE;
-        }
-        lbDisplay.DrawFlags ^= Lb_SPRITE_TRANSPAR4;
+        UIRenderer_SubmitSolidBoxAlpha(gbox->pos_x/pixel_size, gbox->pos_y/pixel_size, gbox->width/pixel_size, gbox->height/pixel_size, colours[12][0][0], 0.5f);
+        UIRenderer_SubmitOutlineBox(gbox->pos_x/pixel_size, gbox->pos_y/pixel_size, gbox->width/pixel_size, gbox->height/pixel_size, colours[2][0][0]);
         goptn = gbox->optn_list;
         while (goptn->label[0] != '!')
         {
@@ -724,10 +702,7 @@ void gui_draw_box(struct GuiBox *gbox)
               lbDisplay.DrawColour = colours[15][15][15];
             else
               lbDisplay.DrawColour = colours[9][9][9];
-            if (LbScreenIsLocked())
-            {
-              LbTextDraw(pos_x/pixel_size, pos_y/pixel_size, goptn->label);
-            }
+            LbTextDrawResized(pos_x/pixel_size, pos_y/pixel_size, 16, goptn->label);
             goptn++;
             pos_y += lnheight;
         }
