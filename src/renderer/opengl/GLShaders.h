@@ -209,13 +209,16 @@ constexpr const char* WORLD_VERTEX_SHADER = R"glsl(
 layout(location = 0) in vec3  a_pos;
 layout(location = 1) in vec2  a_uv;
 layout(location = 2) in float a_shade;
+layout(location = 3) in vec2  a_stl;   // subtile coords for lightmap (mode 1)
 out vec2  v_uv;
 out float v_shade;
+out vec2  v_stl;
 void main()
 {
     gl_Position = vec4(a_pos, 1.0);
     v_uv        = a_uv;
     v_shade     = a_shade;
+    v_stl       = a_stl;
 }
 )glsl";
 
@@ -223,16 +226,41 @@ constexpr const char* WORLD_FRAGMENT_SHADER = R"glsl(
 #version 330 core
 in vec2  v_uv;
 in float v_shade;
-uniform sampler2D u_tile_atlas;  // R8 palette-index atlas (unit 0)
-uniform sampler1D u_palette;     // RGBA8 256-entry palette (unit 1)
+in vec2  v_stl;                         // subtile coords [0..511], mode 1 only
+uniform sampler2D  u_tile_atlas;        // R8 palette-index atlas (unit 0)
+uniform sampler1D  u_palette;           // RGBA8 256-entry palette (unit 1)
+uniform usampler2D u_lightmap;          // R16UI subtile_lightness map (unit 2), mode 1
+uniform float      u_fullbright;        // 0=normal shading, 1=bypass shade
+uniform float      u_ambient;           // darkness floor added to shade [0,1]
+uniform float      u_shade_scale;       // brightness multiplier (1.0=original)
+uniform float      u_shade_gamma;       // shade curve exponent  (1.0=linear)
+uniform int        u_lighting_mode;     // 0=software-accurate, 1=modern (Phase 3+)
 out vec4 fragColor;
 void main()
 {
-    // Atlas stores raw palette indices in the R channel (normalised to [0,1]).
-    // Look up the 8-bit index in the palette then apply the shade factor.
     float idx = texture(u_tile_atlas, v_uv).r;
     vec4  col = texture(u_palette, idx);
-    fragColor = vec4(col.rgb * v_shade, 1.0);
+    float shade;
+    if (u_lighting_mode == 0) {
+        // Software-accurate: per-vertex Gouraud shade from the DK fade table.
+        // The fade table reaches 100% brightness at row 32; rows 33-62 are
+        // over-bright (clamped below).  v_shade = (S>>16) / 32.0.
+        shade = mix(v_shade, 1.0, u_fullbright);
+        shade = max(shade, u_ambient);
+        shade = pow(clamp(shade * u_shade_scale, 0.0, 1.0), u_shade_gamma);
+    } else {
+        // Modern lighting: per-fragment lightmap sample (Phase 3 placeholder).
+        // Samples the subtile_lightness map at normalised coords v_stl/511.
+        // lightness range 0..16128: 16128 / (32*256) = 8192, so dividing by
+        // 8192 gives ~1.97 for max brightness, clamped to 1.0 below.
+        vec2 lm_uv  = v_stl / vec2(511.0, 511.0);
+        uint lm_raw = texture(u_lightmap, lm_uv).r;
+        shade = float(lm_raw) / 8192.0;
+        shade = mix(shade, 1.0, u_fullbright);
+        shade = max(shade, u_ambient);
+        shade = pow(clamp(shade * u_shade_scale, 0.0, 1.0), u_shade_gamma);
+    }
+    fragColor = vec4(col.rgb * shade, 1.0);
 }
 )glsl";
 
@@ -331,5 +359,47 @@ out vec4 fragColor;
 void main()
 {
     fragColor = v_color;
+}
+)glsl";
+
+// Program 5: palette-indexed atlas sprites used as a discard mask; outputs flat vertex colour.
+// Unit 0 = sprite atlas (R8 GL_TEXTURE_2D).
+// Transparent pixels (index 0) are discarded; all opaque pixels output v_color directly.
+constexpr const char* UI_SPRITE_COLORED_FRAGMENT_SHADER = R"glsl(
+#version 330 core
+in vec2 v_uv;
+in vec4 v_color;
+uniform sampler2D u_sprite_atlas;
+out vec4 fragColor;
+void main()
+{
+    float idx = texture(u_sprite_atlas, v_uv).r;
+    if (idx < (0.5 / 255.0)) discard;
+    fragColor = v_color;
+}
+)glsl";
+
+// Program 4: palette-indexed atlas sprites with a player-colour remap table.
+// Unit 0 = sprite atlas (R8 GL_TEXTURE_2D).
+// Unit 1 = palette (sampler1D, 256 RGBA entries).
+// Unit 2 = fade table (R8 GL_TEXTURE_2D, 256 columns × 256 rows).
+// uniform u_remap_row selects which row of the fade table to apply.
+constexpr const char* UI_REMAP_FRAGMENT_SHADER = R"glsl(
+#version 330 core
+in vec2 v_uv;
+in vec4 v_color;
+uniform sampler2D u_sprite_atlas;  // unit 0: R8 palette-index atlas
+uniform sampler1D u_palette;       // unit 1: RGBA8 256-entry palette
+uniform sampler2D u_fade_table;    // unit 2: R8 256x256 remap LUT
+uniform float u_remap_row;         // 0..255 — which row of the fade table
+out vec4 fragColor;
+void main()
+{
+    float idx_f = texture(u_sprite_atlas, v_uv).r;
+    if (idx_f < (0.5 / 255.0)) discard;
+    float remap_y = (u_remap_row + 0.5) / 256.0;
+    float remapped_f = texture(u_fade_table, vec2(idx_f, remap_y)).r;
+    vec4 pal = texture(u_palette, remapped_f);
+    fragColor = vec4(pal.rgb * v_color.rgb, v_color.a);
 }
 )glsl";

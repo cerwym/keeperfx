@@ -21,11 +21,10 @@
 #include "engine_buckets.h"   // QKinds enum, BasicQ, BucketKind* structs, buckets[]
 #include "engine_textures.h"  // TEXTURE_BLOCKS_COUNT
 #include "renderer/TileAtlasPacker.h" // GetTileUV
-#include "engine_render.h"    // draw_3d_sprites_for_bucket(), draw_nonspatial_sprites_no_shadows(), draw_keepsprite_unscaled_in_buffer()
+#include "engine_render.h"    // draw_3d_sprites_for_bucket(), draw_nonspatial_sprites_no_shadows()
 #include "bflib_render.h"      // PolyPoint, render_fade_tables
 #include "bflib_video.h"       // MyScreenWidth, MyScreenHeight
 #include "bflib_basics.h"      // ERRORLOG / SYNCLOG / WARNLOG
-#include "front_simple.h"      // big_scratch (256x256 silhouette scratch buffer)
 #include "renderer/RenderPass_C.h" // RenderPass_FlushNow()
 #include "renderer/RenderPass.h"    // RenderPassSystem::SetScreenSize()
 #include "renderer/backends/OpenGLSpriteBackend.h" // SetCurrentBucketZ()
@@ -144,6 +143,10 @@ bool GLWorldViewRenderer::init_gl_resources()
     glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(WorldVertex),
                           (void*)(5 * sizeof(float)));
     glEnableVertexAttribArray(2);
+    // layout(location=3) vec2 a_stl — subtile coords at byte offset 24 (after x,y,z,u,v,shade)
+    glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(WorldVertex),
+                          (void*)(6 * sizeof(float)));
+    glEnableVertexAttribArray(3);
 
     glBindVertexArray(0);
 
@@ -162,7 +165,33 @@ bool GLWorldViewRenderer::init_gl_resources()
     glUniform1i(m_loc_tile_atlas, 0);   // GL_TEXTURE0 — R8 palette-index atlas
     m_loc_palette = glGetUniformLocation(m_shader, "u_palette");
     glUniform1i(m_loc_palette, 1);      // GL_TEXTURE1 — 1D RGBA8 palette
+    // Shade / lighting uniforms — cache locations and push defaults
+    m_loc_fullbright    = glGetUniformLocation(m_shader, "u_fullbright");
+    m_loc_ambient       = glGetUniformLocation(m_shader, "u_ambient");
+    m_loc_shade_scale   = glGetUniformLocation(m_shader, "u_shade_scale");
+    m_loc_shade_gamma   = glGetUniformLocation(m_shader, "u_shade_gamma");
+    m_loc_lighting_mode = glGetUniformLocation(m_shader, "u_lighting_mode");
+    m_loc_lightmap      = glGetUniformLocation(m_shader, "u_lightmap");
+    glUniform1f(m_loc_fullbright,    0.0f);
+    glUniform1f(m_loc_ambient,       0.0f);
+    glUniform1f(m_loc_shade_scale,   1.0f);
+    glUniform1f(m_loc_shade_gamma,   1.0f);
+    glUniform1i(m_loc_lighting_mode, RENDERER_LIGHTING_SOFTWARE);
+    glUniform1i(m_loc_lightmap,      2);  // GL_TEXTURE2
+    m_tile_filter_applied = -1;  // force apply on first flush
     glUseProgram(0);
+
+    // Phase 2: lightmap texture — mirrors game.lish.subtile_lightness[] each frame.
+    // GL_R16UI stores the raw 0..16128 lightness values; the shader normalises them.
+    glGenTextures(1, &m_tex_lightmap);
+    glBindTexture(GL_TEXTURE_2D, m_tex_lightmap);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R16UI, MAX_SUBTILES_X, MAX_SUBTILES_Y,
+                 0, GL_RED_INTEGER, GL_UNSIGNED_SHORT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindTexture(GL_TEXTURE_2D, 0);
 
     if (!init_shadow_shader())
     {
@@ -223,6 +252,7 @@ void GLWorldViewRenderer::free_gl_resources()
     if (m_flatpoly_vao)    { glDeleteVertexArrays(1, &m_flatpoly_vao); m_flatpoly_vao = 0; }
     if (m_flatpoly_vbo)    { glDeleteBuffers(1, &m_flatpoly_vbo);       m_flatpoly_vbo = 0; }
     if (m_flatpoly_shader) { glDeleteProgram(m_flatpoly_shader);        m_flatpoly_shader = 0; }
+    if (m_tex_lightmap)    { glDeleteTextures(1, &m_tex_lightmap);      m_tex_lightmap = 0; }
 
     if (m_text_renderer)    { m_text_renderer->Shutdown(); }
 
@@ -562,9 +592,18 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
     const unsigned char* data, int src_w, int src_h,
     unsigned int draw_flags, const unsigned char* remap)
 {
-    if (!m_kspr_shader || !m_kspr_sprite_tex || !m_kspr_palette_tex) return 0;
-    if (src_w <= 0 || src_h <= 0 || src_w > 256 || src_h > 256)      return 0;
-    if (dst_w <= 0 || dst_h <= 0)                                      return 0;
+    // Always return 1 (handled) when GPU resources exist — never fall back
+    // to the CPU software rasteriser.  If the sprite can't be drawn (invalid
+    // dimensions, off-screen, oversized), we silently skip it.
+    if (!m_kspr_shader || !m_kspr_sprite_tex || !m_kspr_palette_tex) {
+        static int s_miss = 0;
+        if (s_miss++ < 5)
+            SYNCLOG("render_keepersprite_gpu: no kspr resources (shader=%u, sprite_tex=%u, palette_tex=%u)",
+                    m_kspr_shader, m_kspr_sprite_tex, m_kspr_palette_tex);
+        return 0;
+    }
+    if (src_w <= 0 || src_h <= 0 || src_w > 256 || src_h > 256)      return 1;
+    if (dst_w <= 0 || dst_h <= 0)                                      return 1;
 
     // Upload palette on first sprite of this frame
     if (m_kspr_palette_dirty)
@@ -759,16 +798,12 @@ void GLWorldViewRenderer::BeginWorldPass(unsigned char* framebuf, int pitch,
     // acts as transparent in the compositing blit, letting GPU-rendered tiles
     // show through.
     //
-    // Only zero when the GPU tile atlas is actually ready.  If the atlas hasn't
-    // initialised yet this frame, leave the staging buffer intact so software-
-    // rendered tiles (written by the CPU path) remain visible rather than going
-    // black.
-    //
-    // Clear only the exact viewport region to avoid interference with UI elements
-    // that may have been rendered outside the viewport bounds (like sidebar).
-    // The framebuf pointer is already offset to the viewport area by LbScreenSetGraphicsWindow.
-    const bool atlas_ready = m_atlas && m_atlas->IsInitialized();
-    if (framebuf && atlas_ready)
+    // Always zero when the GPU renderer is initialized — even if the tile atlas
+    // hasn't loaded yet.  This prevents stale CPU pixels from previous frames
+    // (creature-view lens effect, front-view rasterisation, swipe graphic) from
+    // leaking into the composited output.  If the atlas isn't ready, the GPU
+    // simply draws nothing and the viewport appears as the glClear colour.
+    if (framebuf && m_initialized)
     {
         for (int row = 0; row < h; row++)
             memset(framebuf + (long)row * pitch, 0, (size_t)w);
@@ -823,8 +858,12 @@ bool GLWorldViewRenderer::append_triangle(int tile_id,
         // U/V are 16:16; integer part (>>16) is texel 0..31 within the 32-px tile.
         wv->u = u0f + ((float)(pts[i]->U >> 16) / 32.0f) * (u1f - u0f);
         wv->v = v0f + ((float)(pts[i]->V >> 16) / 32.0f) * (v1f - v0f);
-        // S = shade_intensity<<8; (S>>16) gives shade level 0..63.
-        wv->shade = (float)(pts[i]->S >> 16) / 63.0f;
+        // S = shade_intensity<<8; (S>>16) gives shade level 0..62.
+        // The software fade table reaches 100% brightness at row 32; rows 33-62
+        // are clamped over-bright.  Dividing by 32 matches: values >1 clamp in GLSL.
+        wv->shade = (float)(pts[i]->S >> 16) / 32.0f;
+        wv->stl_x = 0.0f;  // Phase 3: fill from tile map position
+        wv->stl_y = 0.0f;
     }
     m_vert_count += 3;
     return true;
@@ -865,7 +904,7 @@ void GLWorldViewRenderer::gpu_flush()
     m_cmd_vert_start = m_vert_count;
 }
 
-void GLWorldViewRenderer::GPUFlushNow(unsigned char* staging_buf)
+void GLWorldViewRenderer::GPUFlushNow()
 {
     if (!m_initialized)
     {
@@ -877,6 +916,10 @@ void GLWorldViewRenderer::GPUFlushNow(unsigned char* staging_buf)
 
     // Flush any tile batch that hasn't been recorded yet.
     gpu_flush();
+
+    SYNCDBG(9, "GPUFlushNow: verts=%d cmds=%d vp=(%d,%d %dx%d)",
+            m_vert_count, (int)m_draw_cmds.size(),
+            m_vp_x, m_vp_y, m_screen_w, m_screen_h);
 
     if (m_draw_cmds.empty())
         return;
@@ -905,6 +948,30 @@ void GLWorldViewRenderer::GPUFlushNow(unsigned char* staging_buf)
     int  bound_variation   = -1;
     bool flatpoly_uploaded = false;  // flat-poly VBO uploaded on first CMD_FLAT_POLYS
 
+    // Push shade/lighting settings uniforms once per flush.
+    // This is the authoritative place where g_renderer_settings knobs take effect.
+    glUseProgram(m_shader);
+    glUniform1f(m_loc_fullbright,    g_renderer_settings.shade_fullbright);
+    glUniform1f(m_loc_ambient,       g_renderer_settings.shade_ambient);
+    glUniform1f(m_loc_shade_scale,   g_renderer_settings.shade_scale);
+    glUniform1f(m_loc_shade_gamma,   g_renderer_settings.shade_gamma);
+    glUniform1i(m_loc_lighting_mode, g_renderer_settings.lighting_mode);
+    glUseProgram(0);
+
+    // Upload lightmap (game.lish.subtile_lightness[]) to GL_TEXTURE2.
+    // Uploaded every frame so dynamic lighting changes (torches, spells) are
+    // reflected immediately.  511x511 x 2 bytes = ~0.5 MB, negligible cost.
+    // GL_UNPACK_ALIGNMENT must be 2: each row is 511*2=1022 bytes, which is
+    // divisible by 2 but NOT 4, so the default alignment of 4 would shift rows.
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, m_tex_lightmap);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 2);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, MAX_SUBTILES_X, MAX_SUBTILES_Y,
+                    GL_RED_INTEGER, GL_UNSIGNED_SHORT,
+                    game.lish.subtile_lightness);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);  // restore default
+    glActiveTexture(GL_TEXTURE0);  // restore default active texture unit
+
     for (const auto& cmd : m_draw_cmds)
     {
         if (cmd.type == DrawCmd::CMD_TILES)
@@ -917,6 +984,15 @@ void GLWorldViewRenderer::GPUFlushNow(unsigned char* staging_buf)
                 glActiveTexture(GL_TEXTURE0);
                 glBindTexture(GL_TEXTURE_2D, atlas_tex);
                 bound_variation = cmd.variation;
+                // Apply tile filter when the setting has changed.
+                int wanted_filter = g_renderer_settings.tile_filter;
+                if (wanted_filter != m_tile_filter_applied)
+                {
+                    GLenum gl_filter = (wanted_filter == 1) ? GL_LINEAR : GL_NEAREST;
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, gl_filter);
+                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, gl_filter);
+                    m_tile_filter_applied = wanted_filter;
+                }
             }
             // Always rebind the 1D palette at unit 1 — keeper-sprite and other
             // passes bind their own textures to unit 1 (GL_TEXTURE_2D), which
@@ -927,20 +1003,29 @@ void GLWorldViewRenderer::GPUFlushNow(unsigned char* staging_buf)
         }
         else if (cmd.type == DrawCmd::CMD_SHADOWS)
         {
-            // Render a creature shadow: rasterise the silhouette into big_scratch,
-            // upload as a 256×256 R8 texture, then draw the floor-projected quad
+            // Render a creature shadow: decode the keeper-sprite silhouette,
+            // upload as an R8 texture, then draw the floor-projected quad
             // with a multiply-darken blend (GL_ZERO / GL_ONE_MINUS_SRC_ALPHA).
             const ShadowCmd& sc = m_shadow_cmds[cmd.shadow_idx];
+            if (!sc.sprite_data) continue;
 
-            // CPU step: fill big_scratch with the sprite silhouette
-            draw_keepsprite_unscaled_in_buffer(sc.anim_sprite, sc.angle,
-                                               sc.current_frame, big_scratch);
+            // Decode RLE sprite into the local scratch buffer (stride=256).
+            // This replaces the old call to draw_keepsprite_unscaled_in_buffer
+            // so the GPU renderer never touches the global big_scratch buffer.
+            decode_keeper_rle(s_kspr_decode_buf, sc.sprite_data,
+                              sc.sprite_w, sc.sprite_h);
 
             // Upload silhouette to the reusable R8 texture
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, m_shadow_silhouette_tex);
-            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 256, 256,
-                            GL_RED, GL_UNSIGNED_BYTE, big_scratch);
+            glPixelStorei(GL_UNPACK_ROW_LENGTH, 256);
+            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, sc.sprite_w, sc.sprite_h,
+                            GL_RED, GL_UNSIGNED_BYTE, s_kspr_decode_buf);
+            glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+
+            // UV extent covers only the used sprite region of the 256x256 texture.
+            const float u_extent = (float)sc.sprite_w / 256.0f;
+            const float v_extent = (float)sc.sprite_h / 256.0f;
 
             // Build 6 float vertices: two triangles covering the quad (0,1,2) + (0,2,3)
             // PolyPoint.X/Y = integer screen pixels; U/V = 16.16 → normalise to [0,1]
@@ -951,8 +1036,11 @@ void GLWorldViewRenderer::GPUFlushNow(unsigned char* staging_buf)
                 const int idx[6] = { 0, 1, 2, 0, 2, 3 };
                 sv[t][0] = (float)vp[idx[t]].X;
                 sv[t][1] = (float)vp[idx[t]].Y;
-                sv[t][2] = (float)(vp[idx[t]].U >> 16) / 256.0f;
-                sv[t][3] = (float)(vp[idx[t]].V >> 16) / 256.0f;
+                float raw_u = (float)(vp[idx[t]].U >> 16) / 256.0f;
+                float raw_v = (float)(vp[idx[t]].V >> 16) / 256.0f;
+                // Remap UVs to the actual sprite region and apply x-flip if needed
+                sv[t][2] = sc.x_flip ? (u_extent - raw_u * u_extent) : (raw_u * u_extent);
+                sv[t][3] = raw_v * v_extent;
             }
             glBindBuffer(GL_ARRAY_BUFFER, m_shadow_vbo);
             glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(sv), sv);
@@ -981,97 +1069,28 @@ void GLWorldViewRenderer::GPUFlushNow(unsigned char* staging_buf)
         }
         else if (cmd.type == DrawCmd::CMD_SPRITES)
         {
-            // 3D sprites have positions in viewport-relative pixel space
-            // [0, m_screen_w) x [0, m_screen_h).  Keep the game viewport so
-            // NDC [-1,1] maps to that region, and tell the sprite backend to
-            // use viewport dimensions (not full-screen) for its NDC conversion.
+            // 3D sprites: all rendering goes through render_keepersprite_gpu()
+            // via the SubmitKeeperSprite intercept in draw_keepersprite().
+            // No CPU staging buffer is needed — the GPU path always claims
+            // the sprite, so the CPU fallback in draw_keepersprite never fires.
             glBindVertexArray(0);
             glUseProgram(0);
 
             RenderPassSystem::GetInstance().SetScreenSize(m_screen_w, m_screen_h);
 
-            // Assign this bucket's NDC depth to all sprites submitted during
-            // the draw call, so hardware depth testing correctly occludes
-            // sprites behind world geometry from closer buckets.
             const float sprite_z = 2.0f * (float)cmd.bucket_num / (float)(BUCKETS_COUNT - 1) - 1.0f;
             OpenGLSpriteBackend::SetCurrentBucketZ(sprite_z);
-
-            // Store depth for world sprite submission through proper RenderPassSystem
             m_current_sprite_z = sprite_z;
 
-            // By the time GPUFlushNow() runs, LbScreenLoadGraphicsWindow() has
-            // already restored GraphicsWindowX/Y to 0 (full-screen bounds).
-            // We must use the stored viewport origin (m_vp_x, m_vp_y) so that
-            // CPU-blitted sprite fallbacks land at the correct offset inside the
-            // staging buffer, not at the top-left corner over the sidebar.
-            //
-            // CRITICAL FIX: To prevent UI flickering, we must ensure that sprite
-            // fallbacks only render within the 3D viewport area and don't overwrite
-            // UI elements outside the viewport (like sidebar, messages).
-            TbPixel* saved_wscreen = lbDisplay.WScreen;
-            TbPixel* saved_gwptr   = lbDisplay.GraphicsWindowPtr;
-            long saved_gw_x = lbDisplay.GraphicsWindowX;
-            long saved_gw_y = lbDisplay.GraphicsWindowY;
-            long saved_gw_w = lbDisplay.GraphicsWindowWidth;
-            long saved_gw_h = lbDisplay.GraphicsWindowHeight;
-            if (staging_buf != nullptr)
-            {
-                // Set up graphics window to point to the VIEWPORT AREA ONLY
-                // This prevents sprite fallbacks from corrupting UI areas
-                // 
-                // CRITICAL FIX: Ensure sprite fallbacks are strictly contained within
-                // the 3D viewport and cannot overwrite UI elements in the staging buffer.
-                // Use a separate viewport-only buffer region to prevent pixel conflicts.
-                lbDisplay.WScreen              = (TbPixel*)staging_buf;
-                lbDisplay.GraphicsWindowX = m_vp_x;  // Restored: use viewport coordinates
-                lbDisplay.GraphicsWindowY = m_vp_y;  // Restored: use viewport coordinates
-                lbDisplay.GraphicsWindowWidth  = m_screen_w;
-                lbDisplay.GraphicsWindowHeight = m_screen_h;
-
-                // Calculate viewport offset more carefully to ensure proper bounds
-                const long viewport_offset = (long)m_vp_x + (long)lbDisplay.GraphicsScreenWidth * (long)m_vp_y;
-
-                // Validate viewport bounds to prevent buffer overruns
-                if (viewport_offset >= 0 && 
-                    (viewport_offset + m_screen_w + (long)lbDisplay.GraphicsScreenWidth * (m_screen_h - 1)) 
-                    <= (long)lbDisplay.GraphicsScreenWidth * (long)lbDisplay.GraphicsScreenHeight)
-                {
-                    // Point to the viewport area within the staging buffer
-                    lbDisplay.GraphicsWindowPtr = (TbPixel*)staging_buf + viewport_offset;
-                }
-                else
-                {
-                    // Fallback: point to start of staging buffer if bounds are invalid
-                    lbDisplay.GraphicsWindowPtr = (TbPixel*)staging_buf;
-                    WARNLOG("Viewport bounds validation failed: offset=%ld, viewport=%dx%d, screen=%dx%d",
-                            viewport_offset, m_screen_w, m_screen_h, 
-                            (int)lbDisplay.GraphicsScreenWidth, (int)lbDisplay.GraphicsScreenHeight);
-                }
-            }
-
-            // Use proper RenderPassSystem approach - no more global hook needed
             setup_world_sprite_processing(cmd.bucket_num);
-
             draw_3d_sprites_for_bucket(cmd.bucket_num);
-
             RenderPass_FlushNow();
 
-            // Restore default screen size for the render system
-
             RenderPassSystem::GetInstance().SetScreenSize(0, 0);
-
-            lbDisplay.GraphicsWindowX      = saved_gw_x;
-            lbDisplay.GraphicsWindowY      = saved_gw_y;
-            lbDisplay.GraphicsWindowWidth  = saved_gw_w;
-            lbDisplay.GraphicsWindowHeight = saved_gw_h;
-            lbDisplay.WScreen              = saved_wscreen;
-            lbDisplay.GraphicsWindowPtr    = saved_gwptr;
 
             // Restore the world shader and VAO for subsequent tile batches.
             glUseProgram(m_shader);
             glBindVertexArray(m_vao);
-            // Force atlas rebind on the next CMD_TILES pass — keeper-sprite
-            // rendering displaced GL_TEXTURE0 from the tile atlas.
             bound_variation = -1;
         }
         else if (cmd.type == DrawCmd::CMD_WORLDTEXT)
@@ -1263,19 +1282,57 @@ void GLWorldViewRenderer::FlushIsometricView()
                 case QK_CreatureShadow:
                 {
                     auto* s = (struct BucketKindCreatureShadow*)q;
-                    // Flush any pending tile geometry so it lands before this shadow.
+                    // Resolve the keeper-sprite data eagerly so GPUFlushNow
+                    // never calls back into engine_render C functions.
+                    unsigned short anim = s->anim_sprite;
+                    short angle         = (short)s->angle;
+                    unsigned char frame = s->current_frame;
+
+                    bool flip = ((angle & ANGLE_MASK) > 1151) && ((angle & ANGLE_MASK) < 1919);
+                    int quarter = abs(4 - (((angle + DEGREES_22_5) & ANGLE_MASK) >> 8));
+
+                    unsigned long kspr_idx = keepersprite_index(anim);
+                    struct KeeperSprite* kspr_arr = keepersprite_array(anim);
+                    if (!kspr_arr) break;
+
+                    const unsigned char* sprite_data = nullptr;
+                    int spr_w = 0, spr_h = 0;
+                    unsigned long kid;
+
+                    if (kspr_arr->Rotable == 0) {
+                        kid = frame + kspr_idx;
+                        struct KeeperSprite* ks = &kspr_arr[frame];
+                        spr_w = ks->SWidth;
+                        spr_h = ks->SHeight;
+                    } else if (kspr_arr->Rotable == 2) {
+                        struct KeeperSprite* ks = &kspr_arr[frame + quarter * kspr_arr->FramesCount];
+                        kid = frame + quarter * ks->FramesCount + kspr_idx;
+                        spr_w = ks->SWidth;
+                        spr_h = ks->SHeight;
+                    } else {
+                        break;  // unsupported rotable type
+                    }
+
+                    // Look up the resolved sprite data pointer.
+                    if (kid >= KEEPERSPRITE_ADD_OFFSET) {
+                        if (kid - KEEPERSPRITE_ADD_OFFSET < KEEPERSPRITE_ADD_NUM)
+                            sprite_data = keepersprite_add[kid - KEEPERSPRITE_ADD_OFFSET];
+                    } else if (kid < KEEPSPRITE_LENGTH && keepsprite[kid]) {
+                        sprite_data = *keepsprite[kid];
+                    }
+                    if (!sprite_data || spr_w <= 0 || spr_h <= 0) break;
+
                     gpu_flush();
                     ShadowCmd sc;
-                    sc.verts[0]       = s->vertex_first;
-                    sc.verts[1]       = s->vertex_second;
-                    sc.verts[2]       = s->vertex_third;
-                    sc.verts[3]       = s->vertex_fourth;
-                    sc.anim_sprite    = s->anim_sprite;
-                    sc.current_frame  = s->current_frame;
-                    sc.angle          = (short)s->angle;
-                    // darkness = 1 - shadow_factor; shadow_factor = color_value/32
-                    // color_value is 16..31: closer light → lower value → darker shadow
-                    sc.darkness = 1.0f - (float)s->color_value / 32.0f;
+                    sc.verts[0]     = s->vertex_first;
+                    sc.verts[1]     = s->vertex_second;
+                    sc.verts[2]     = s->vertex_third;
+                    sc.verts[3]     = s->vertex_fourth;
+                    sc.sprite_data  = sprite_data;
+                    sc.sprite_w     = spr_w;
+                    sc.sprite_h     = spr_h;
+                    sc.x_flip       = flip;
+                    sc.darkness     = 1.0f - (float)s->color_value / 32.0f;
                     DrawCmd cmd;
                     cmd.type       = DrawCmd::CMD_SHADOWS;
                     cmd.shadow_idx = (int)m_shadow_cmds.size();
@@ -1328,6 +1385,18 @@ void GLWorldViewRenderer::FlushFrontView(struct Camera* cam)
     // Front-view uses the same bucket mechanism; delegate to software for now.
     if (m_sw_fallback)
         m_sw_fallback->FlushFrontView(cam);
+
+    // The software fallback just drew CPU-rasterised polygons into the staging
+    // buffer.  When the GPU renderer is active those pixels would composite on
+    // top of the glClear colour in EndFrame, producing flickering artefacts
+    // (untextured geometry fighting the GPU output).  Re-zero the viewport so
+    // the staging blit is fully transparent and the front-view shows only the
+    // clear colour — a clean "not yet ported" placeholder.
+    if (m_initialized && m_framebuf)
+    {
+        for (int row = 0; row < m_screen_h; row++)
+            memset(m_framebuf + (long)row * m_pitch, 0, (size_t)m_screen_w);
+    }
 }
 
 /******************************************************************************/

@@ -74,6 +74,12 @@ public:
     /** Human-readable backend name (e.g. "SOFTWARE", "VITA_GPU"). */
     virtual const char* GetName() const = 0;
 
+    /** True when this backend renders world geometry on the GPU.
+     *  Used by game code to skip CPU staging-buffer writes (lens effects,
+     *  swipe graphic, front-view rasterisation) that would pollute the
+     *  GPU-composited frame. */
+    virtual bool IsGpuAccelerated() const { return false; }
+
     // =========================================================================
     // Keeper sprite (world-space billboarded sprites)
 

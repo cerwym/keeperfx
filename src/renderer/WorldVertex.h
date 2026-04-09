@@ -9,9 +9,11 @@
  *     macro that converts a PolyPoint (fixed-point 16:16) to float NDC coords.
  *
  *     The layout maps directly to the vertex shader attributes:
- *       location 0: a_pos   (x, y, z) — NDC clip space [-1, 1]
- *       location 1: a_uv    (u, v)     — texture coords  [0, 1]
- *       location 2: a_shade (s)        — lighting         [0, 1]
+ *       location 0: a_pos   (x, y, z)      — NDC clip space [-1, 1]
+ *       location 1: a_uv    (u, v)          — texture coords  [0, 1]
+ *       location 2: a_shade (s)             — lighting         [0, 1]
+ *       location 3: a_stl   (stl_x, stl_y) — subtile-space map coords [0..511],
+ *                                             for per-fragment lightmap sampling (mode 1)
  *
  *     Field conventions (from bflib_render.h / engine_render.c):
  *       X, Y  — integer screen pixel coordinate (NOT 16:16; value is the pixel directly)
@@ -34,6 +36,8 @@ struct WorldVertex {
     float u;      /**< Texture U:  [0, 1] */
     float v;      /**< Texture V:  [0, 1] */
     float shade;  /**< Lighting:   [0, 1], 0 = dark, 1 = full-bright */
+    float stl_x;  /**< Map subtile X [0..511]; for lightmap sampling in modern mode */
+    float stl_y;  /**< Map subtile Y [0..511]; for lightmap sampling in modern mode */
 };
 
 /******************************************************************************/
@@ -71,10 +75,14 @@ struct WorldVertex {
 #define FP_V_TO_UV(fp)   (FP16_TO_FLOAT(fp) / 256.0f)
 
 /**
- * Convert a PolyPoint shade S (fixed 16:16, high byte = shade index 0–255)
+ * Convert a PolyPoint shade S (fixed 16:16, high byte = shade index 0–62)
  * to a normalised float shade value.
+ *
+ * The software fade table reaches 100% brightness at row 32; rows 33–62
+ * are over-bright and clamp to 100% in the shader.  Dividing by 32 matches
+ * this: shade values 33–62 produce >1.0 which the GLSL clamp() handles.
  */
-#define FP_S_TO_SHADE(fp)  ((float)((fp) >> 16) / 63.0f)
+#define FP_S_TO_SHADE(fp)  ((float)((fp) >> 16) / 32.0f)
 
 /**
  * Fill a WorldVertex from a PolyPoint struct ptr.
@@ -91,6 +99,8 @@ struct WorldVertex {
         (wv)->u     = FP_U_TO_UV((pp)->U); \
         (wv)->v     = FP_V_TO_UV((pp)->V); \
         (wv)->shade = FP_S_TO_SHADE((pp)->S); \
+        (wv)->stl_x = 0.0f; \
+        (wv)->stl_y = 0.0f; \
     } while (0)
 
 /**
@@ -114,6 +124,8 @@ struct WorldVertex {
         (wv)->u     = (float)(u8) / 256.0f; \
         (wv)->v     = (float)(v8) / 256.0f; \
         (wv)->shade = (float)(shade8) / 255.0f; \
+        (wv)->stl_x = 0.0f; \
+        (wv)->stl_y = 0.0f; \
     } while (0)
 
 /******************************************************************************/

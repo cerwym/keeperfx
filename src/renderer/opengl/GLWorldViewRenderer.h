@@ -54,13 +54,11 @@ public:
     void FlushIsometricView() override;
     void FlushFrontView(struct Camera* cam) override;
     const char* GetName() const override { return "GLWorldViewRenderer"; }
+    bool IsGpuAccelerated() const override { return m_initialized; }
 
     // Called by RendererOpenGL::EndFrame() to issue the accumulated draw call
     // after glClear() and before the CPU framebuffer blit overlay.
-    // staging_buf must be the same buffer returned by LockFramebuffer(); it is
-    // used to restore lbDisplay.WScreen for any sprite CPU-path fallbacks that
-    // occur during depth-correct sprite replay.
-    void GPUFlushNow(unsigned char* staging_buf = nullptr);
+    void GPUFlushNow();
 
     // IWorldViewRenderer: submit a keeper-sprite through the GPU path.
     int SubmitKeeperSprite(long dst_x, long dst_y, long dst_w, long dst_h,
@@ -133,13 +131,16 @@ private:
         int worldtext_idx = 0;
     };
 
-    // Per-shadow data recorded during FlushIsometricView, consumed by GPUFlushNow
+    // Per-shadow data recorded during FlushIsometricView, consumed by GPUFlushNow.
+    // Sprite data is resolved eagerly during bucket walk so GPUFlushNow
+    // stays pure-GPU (no calls back into engine_render C functions).
     struct ShadowCmd {
-        struct PolyPoint verts[4];   // vertex_first..fourth (screen-px coords + 16.16 UV)
-        unsigned short   anim_sprite;
-        unsigned char    current_frame;
-        short            angle;
-        float            darkness;   // 1.0 - (color_value / 32.0); used as src_alpha for multiply-blend
+        struct PolyPoint verts[4];      // vertex_first..fourth (screen-px coords + 16.16 UV)
+        const unsigned char* sprite_data; // resolved RLE sprite data (NULL = skip)
+        int              sprite_w;      // decoded sprite width
+        int              sprite_h;      // decoded sprite height
+        bool             x_flip;        // true when silhouette needs horizontal flip
+        float            darkness;      // 1.0 - (color_value / 32.0); used as src_alpha for multiply-blend
     };
 
     // Per-world-text data recorded during FlushIsometricView, consumed by GPUFlushNow
@@ -195,6 +196,17 @@ private:
     // Uniform locations (cached at shader compile time)
     GLint  m_loc_tile_atlas  = -1;
     GLint  m_loc_palette     = -1;   // sampler1D u_palette (unit 1)
+    // Shade / lighting uniforms (world fragment shader)
+    GLint  m_loc_fullbright    = -1;  // u_fullbright
+    GLint  m_loc_ambient       = -1;  // u_ambient
+    GLint  m_loc_shade_scale   = -1;  // u_shade_scale
+    GLint  m_loc_shade_gamma   = -1;  // u_shade_gamma
+    GLint  m_loc_lighting_mode = -1;  // u_lighting_mode (0=software-accurate, 1=modern)
+    GLint  m_loc_lightmap      = -1;  // usampler2D u_lightmap (unit 2)
+    // Lightmap texture (unit 2): mirrors game.lish.subtile_lightness[] as GL_R16UI
+    GLuint m_tex_lightmap      = 0;
+    // Tile filter: last value applied to atlas textures (-1 = not yet applied)
+    int    m_tile_filter_applied = -1;
 
     // Shadow uniform locations
     GLint  m_shadow_loc_viewport   = -1;
