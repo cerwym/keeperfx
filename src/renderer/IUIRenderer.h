@@ -2,19 +2,28 @@
 // Dungeon Keeper - Renderer Abstraction Layer
 /******************************************************************************/
 /** @file IUIRenderer.h
- *     Abstract interface for GPU-accelerated UI element rendering.
+ *     Base UI renderer — CPU implementation is the default; GPU backends override.
  * @par Design:
- *     Game code in engine_render.c dispatches UI elements (status flowers,
- *     floating text, room flags, slab selectors) through this interface.
- *     
- *     The software backend falls back to CPU blitting into staging buffer.
- *     GPU backends batch UI elements into vertex buffers and render via shaders.
+ *     IUIRenderer is a concrete base class whose default method bodies perform
+ *     immediate CPU staging-buffer blitting (the original software path).
+ *     GPU backends (e.g. GLUIRenderer) override only the methods they accelerate.
+ *
+ *     This means adding a new submission method requires writing the CPU path
+ *     exactly once here, then overriding in the GPU backend.  No other file
+ *     ever holds a CPU fallback for UI rendering.
+ *
+ *     SoftwareUIRenderer is a trivial subclass that adds nothing; it exists only
+ *     so RendererSoftware can instantiate a named type.
  */
 /******************************************************************************/
 #ifndef IUI_RENDERER_H
 #define IUI_RENDERER_H
 
 #include "renderer/SpriteHandle.h"
+#include <unordered_map>
+#include <cstdint>
+
+struct TbSprite;
 
 #ifdef __cplusplus
 
@@ -33,125 +42,150 @@ enum UIElementType {
 };
 
 /**
- * Abstract UI renderer interface.
- * Allows GPU backends to render UI elements with proper batching and z-ordering.
+ * Base UI renderer.
+ *
+ * Default implementations delegate to the existing CPU staging-buffer paths
+ * (LbSpriteDrawResized, LbDrawBox, process_keeper_sprite, etc.).  GPU subclasses
+ * override whichever methods they can accelerate and leave the rest untouched —
+ * the base provides a transparent, correct fallback automatically.
  */
 class IUIRenderer {
 public:
     virtual ~IUIRenderer() = default;
 
+    // -------------------------------------------------------------------------
+    // Sprite handle registry
+    // Every sprite handle submitted via SubmitPanelSprite / SubmitScaledSprite
+    // must be registered here so the CPU default implementations can resolve it
+    // to a TbSprite*.  GPU backends also receive the registration call so they
+    // can upload the sprite to VRAM.
+    // -------------------------------------------------------------------------
+
+    /** Register a sprite handle → TbSprite* mapping.
+     *  Called from RendererManager whenever sprite sheets are loaded. */
+    void RegisterSpriteHandle(SpriteHandle h, const struct TbSprite* spr);
+
+    // -------------------------------------------------------------------------
+    // Submission API  (default = CPU; GPU backends override selectively)
+    // -------------------------------------------------------------------------
+
     /**
      * Submit slab selector outline for rendering.
-     * @param x1, y1 Start coordinates of line
-     * @param x2, y2 End coordinates of line
-     * @param color Line color
-     * @param z_depth Z-depth for proper sorting
+     * CPU default: no-op (software renderer draws selectors through its own path).
      */
-    virtual void SubmitSlabSelector(int x1, int y1, int x2, int y2, unsigned char color, float z_depth) = 0;
+    virtual void SubmitSlabSelector(int x1, int y1, int x2, int y2,
+                                    unsigned char color, float z_depth);
 
     /**
      * Submit a keeper-hand/cursor sprite for rendering.
-     * Hardware backends defer this to Flush() so it executes after frame setup (glClear).
-     * The software backend executes immediately via process_keeper_sprite().
+     * CPU default: calls process_keeper_sprite() immediately.
+     * GPU backends defer until after glClear().
      */
     virtual void SubmitKeeperSprite(short x, short y, unsigned short kspr_base,
-                                    short angle, unsigned char sprgroup, long scale) = 0;
+                                    short angle, unsigned char sprgroup, long scale);
 
     /**
-     * Submit a single panel/button sprite for GPU rendering.
-     * The sprite pointer must already be resolved (player coloring applied).
-     * Hardware backends defer until Flush(); software renders immediately.
-     * @param flip_horiz  When true, render the sprite mirrored horizontally.
+     * Submit a panel/button sprite.
+     * CPU default: LbSpriteDrawResized (with optional horizontal flip).
+     * @param flip_horiz  Mirror the sprite horizontally.
      */
     virtual void SubmitPanelSprite(long x, long y, int units_per_px,
-                                   SpriteHandle spr, bool flip_horiz = false) = 0;
+                                   SpriteHandle spr, bool flip_horiz = false);
 
     /**
-     * Submit a sprite with explicit pixel dimensions for GPU rendering.
-     * Used internally by game-logic hooks (draw_status_sprites, draw_engine_number, etc.)
-     * to redirect LbSpriteDrawScaled calls through the GPU batch when active.
-     * @param x, y  Top-left screen position in pixels
-     * @param w, h  Destination pixel dimensions
-     * @param spr   Sprite pointer (must be in the sprite atlas)
+     * Submit a panel/button sprite with palette remap (player colour tinting).
+     * CPU default: LbSpriteDrawResizedRemap using pixmap.fade_tables[remap_row].
+     * GPU backends override with a remap shader that samples the fade-table texture.
+     * @param remap_row  Row index into pixmap.fade_tables (e.g. 12, 22, 44).
+     */
+    virtual void SubmitPanelSpriteRemap(long x, long y, int units_per_px,
+                                        SpriteHandle spr, int remap_row);
+
+    /**
+     * Submit a panel/button sprite drawn entirely in a single flat colour (sprite used as a mask).
+     * CPU default: LbSpriteDrawResizedOneColour.
+     * GPU: uses the atlas R8 index as a discard mask; outputs color_idx as a flat colour.
+     * @param color_idx  DK palette index for the flat output colour.
+     */
+    virtual void SubmitPanelSpriteColored(long x, long y, int units_per_px,
+                                          SpriteHandle spr, uint8_t color_idx);
+
+    /**
+     * Submit a sprite with explicit pixel dimensions.
+     * CPU default: LbSpriteDrawScaled.
      */
     virtual void SubmitScaledSprite(long x, long y, long w, long h,
-                                    SpriteHandle spr) = 0;
+                                    SpriteHandle spr);
 
     /**
-     * Submit a solid-color rectangle for GPU rendering.
-     * Used internally by game-logic hooks to redirect LbDrawBox calls through
-     * the GPU batch when the UI renderer is active.
-     * @param x, y        Top-left screen position
-     * @param w, h        Rectangle pixel dimensions
-     * @param color_idx   DK palette index (0-255); converted to float RGB via lbPalette
+     * Submit a solid-color rectangle.
+     * CPU default: LbDrawBox.
      */
-    virtual void SubmitSolidBox(long x, long y, long w, long h, uint8_t color_idx) = 0;
+    virtual void SubmitSolidBox(long x, long y, long w, long h, uint8_t color_idx);
 
     /**
-     * Return a renderer-owned scratch buffer for the caller to draw minimap pixels into.
-     * In GPU backends: returns a zeroed size×size palette-index buffer (stride = size).
-     *   The caller writes palette indices; index 0 = transparent.
-     *   Call SubmitMinimap() once drawing is complete to upload the result.
-     * In software backends: returns NULL — the caller should write directly to
-     *   lbDisplay.WScreen at the minimap's screen position instead.
-     * @param size  Width and height of the square buffer (MapDiagonalLength)
+     * Submit a solid-color rectangle with explicit alpha (e.g. 0.5 for TRANSPAR4 darkening).
+     * CPU default: LbDrawBox with Lb_SPRITE_TRANSPAR4 when alpha < 0.75.
      */
-    virtual uint8_t* AcquireMinimapBuffer(int size) = 0;
+    virtual void SubmitSolidBoxAlpha(long x, long y, long w, long h, uint8_t color_idx, float alpha);
+
+    /**
+     * Upload the 64×64 palette-indexed gui_slab tile to the GPU.
+     * No-op in CPU mode. Call whenever gui_slab data changes.
+     */
+    virtual void UpdateSlabTexture(const uint8_t* data, int dim) {}
+
+    /**
+     * Submit a tiled slab-background quad for the given screen rect.
+     * GPU: queued as a back-layer (layer 0) R8-tiled texture quad using GL_REPEAT UVs.
+     * CPU: returns false; caller falls through to draw_slab64k_background WScreen writes.
+     * @return true if GPU path handled it (caller must skip WScreen writes).
+     */
+    virtual bool SubmitSlabBackground(int x, int y, int w, int h) { return false; }
+
+    /**
+     * Return a scratch buffer for minimap pixels.
+     * CPU default: returns nullptr (caller writes directly to lbDisplay.WScreen).
+     * GPU backends return a palette-index buffer; caller fills it then calls SubmitMinimap().
+     */
+    virtual uint8_t* AcquireMinimapBuffer(int size);
 
     /**
      * Finalise the minimap for this frame.
-     * In GPU backends: uploads the buffer filled since AcquireMinimapBuffer() and
-     *   queues a palette-lookup quad at (screen_x, screen_y).
-     * In software backends: no-op (pixels were already written to WScreen).
-     * @param screen_x  Left edge of the minimap on screen (pixels)
-     * @param screen_y  Top edge of the minimap on screen (pixels)
-     * @param size      Width and height (must match the AcquireMinimapBuffer call)
+     * CPU default: no-op (pixels were written directly to lbDisplay.WScreen).
      */
-    virtual void SubmitMinimap(int screen_x, int screen_y, int size) = 0;
+    virtual void SubmitMinimap(int screen_x, int screen_y, int size);
 
-    /**
-     * Set the render layer for subsequent submissions.
-     * @param layer  0 = back (drawn before the CPU staging blit, for GPU UI that must
-     *               appear under CPU-drawn text/numbers);
-     *               1 = front (drawn after the staging blit, for GPU UI on top of everything).
-     * Default-layer on frame start is 1 (front).  Reset to 1 after drawing layer-0 elements.
-     */
+    // -------------------------------------------------------------------------
+    // Layer / flush control (GPU-only concept; CPU default = no-op or passthrough)
+    // -------------------------------------------------------------------------
+
+    /** Set the active render layer (0=back, 1=front).  CPU default: no-op. */
     virtual void SetLayer(int /*layer*/) { }
 
-    /**
-     * Flush only layer-0 (back) GPU UI elements.
-     * Must be called before the CPU staging-buffer blit so that sidebar background
-     * panels land beneath the palette-lookup staging quad.
-     * The null/software renderer provides a default no-op.
-     */
+    /** Flush layer-0 (back) elements before the CPU staging-buffer blit.
+     *  CPU default: no-op. */
     virtual void FlushBack() { }
 
-    /**
-     * Flush all layer-1 (front) GPU UI elements, the minimap, and slab selectors.
-     * Must be called after the CPU staging-buffer blit so that menus, power-hand,
-     * and other overlay sprites appear on top of CPU-drawn content.
-     * The null/software renderer default forwards to Flush().
-     */
+    /** Flush layer-1 (front) elements after the CPU staging-buffer blit.
+     *  CPU default: calls Flush(). */
     virtual void FlushFront() { Flush(); }
 
-    /**
-     * Flush all queued UI elements to the GPU.
-     * Called at the end of each frame after world rendering.
-     */
-    virtual void Flush() = 0;
+    /** Flush all queued elements.  CPU default: no-op. */
+    virtual void Flush();
 
-    /**
-     * Clear all queued UI elements without rendering.
-     * Used when switching render modes or on errors.
-     */
-    virtual void Clear() = 0;
+    /** Discard all queued elements without rendering.  CPU default: no-op. */
+    virtual void Clear();
 
-    virtual const char* GetName() const = 0;
+    virtual const char* GetName() const;
 
-    /** Returns true when this renderer submits GPU quads (i.e. LbSpriteDrawResized
-     *  calls that have been replaced with UIRenderer_Submit* are genuinely skipped).
-     *  Software backends return false; GPU-accelerated backends return true. */
+    /** Returns true when this renderer submits GPU quads.
+     *  CPU base returns false; GPU subclasses override to return true. */
     virtual bool IsGpuAccelerated() const { return false; }
+
+protected:
+    /** Sprite handle → raw TbSprite* map, used by CPU default implementations. */
+    std::unordered_map<SpriteHandle, const struct TbSprite*> m_handle_to_sprite;
 };
 
 /******************************************************************************/

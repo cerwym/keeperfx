@@ -18,24 +18,30 @@ public:
     virtual ~IBackend() = default;
     
     // ========== Sprite Submission ==========
-    // Submit a standard sprite for rendering
+    // Submit a standard sprite for rendering.
+    // CPU default: LbSpriteDraw with DrawFlags save/restore.
     virtual TbResult SubmitSprite(long x, long y, const struct TbSprite* spr,
-                                 unsigned int draw_flags) = 0;
+                                 unsigned int draw_flags);
     
-    // Submit a sprite with single-color tint (used for creature tinting, UI highlights)
+    // Submit a sprite with single-color tint (used for creature tinting, UI highlights).
+    // CPU default: LbSpriteDrawOneColour.
     virtual TbResult SubmitSpriteOneColour(long x, long y, const struct TbSprite* spr,
-                                          unsigned char colour, unsigned int draw_flags) = 0;
+                                          unsigned char colour, unsigned int draw_flags);
     
-    // Submit a sprite with color remapping (used for paletted sprites, player colors)
+    // Submit a sprite with color remapping (used for paletted sprites, player colors).
+    // CPU default: LbSpriteDrawScaledRemap.
+    // GPU backends that cannot perform remap delegate explicitly: IBackend::SubmitSpriteRemap(...).
     virtual TbResult SubmitSpriteRemap(long x, long y, const struct TbSprite* spr,
-                                      const unsigned char* colortable, unsigned int draw_flags) = 0;
+                                      const unsigned char* colortable, unsigned int draw_flags);
     
     // ========== Frame Lifecycle ==========
-    // Called at the start of each frame (may initialize batch, clear state, etc.)
-    virtual void BeginFrame() = 0;
+    // Called at the start of each frame (may initialize batch, clear state, etc.).
+    // CPU default: no-op.
+    virtual void BeginFrame();
 
-    // Called at the end of each frame (GPU backends flush batches, software no-op)
-    virtual void EndFrame() = 0;
+    // Called at the end of each frame (GPU backends flush batches, software no-op).
+    // CPU default: no-op.
+    virtual void EndFrame();
 
     // Immediately flush any queued sprite draws to the GPU.
     // Used by GLWorldViewRenderer to interleave sprites at the correct bucket depth.
@@ -49,20 +55,23 @@ public:
     virtual void SetScreenSize(int /*w*/, int /*h*/) {}
     
     // ========== Sprite Sheet Lifecycle ==========
-    // Notifies backend when a sheet is loaded (GPU may upload to VRAM, software no-op)
-    virtual void OnSpriteSheetLoaded(const struct TbSpriteSheet* sheet) = 0;
+    // Notifies backend when a sheet is loaded (GPU may upload to VRAM).
+    // CPU default: no-op.
+    virtual void OnSpriteSheetLoaded(const struct TbSpriteSheet* sheet);
     
-    // Notifies backend when a sheet is freed (GPU may free VRAM, software no-op)
-    virtual void OnSpriteSheetFreed(const struct TbSpriteSheet* sheet) = 0;
+    // Notifies backend when a sheet is freed (GPU may free VRAM).
+    // CPU default: no-op.
+    virtual void OnSpriteSheetFreed(const struct TbSpriteSheet* sheet);
     
     // ========== Palette Management ==========
-    // Notifies backend when the game palette changes
-    // GPU backends may upload new palette to VRAM
-    virtual void OnPaletteSet(const unsigned char* lbPalette) = 0;
+    // Notifies backend when the game palette changes.
+    // GPU backends may upload new palette to VRAM. CPU default: no-op.
+    virtual void OnPaletteSet(const unsigned char* lbPalette);
     
     // ========== Backend Info ==========
-    // Returns a human-readable name for this backend (e.g., "GPU_VITA", "SOFTWARE")
-    virtual const char* GetName() const = 0;
+    // Returns a human-readable name for this backend (e.g., "GPU_VITA", "SOFTWARE").
+    // CPU default: returns "CPU".
+    virtual const char* GetName() const;
 };
 
 #endif // IBACKEND_H
