@@ -31,6 +31,7 @@
 #include "bflib_sprite.h"
 #include "bflib_vidsurface.h"
 #include "bflib_vidraw.h"
+#include "renderer/RendererManager.h"
 
 #include "keeperfx.hpp"
 #include "post_inc.h"
@@ -306,10 +307,14 @@ bool LbI_PointerHandler::OnMove(void)
     std::lock_guard<std::mutex> guard(lock);
     if (lbPointerAdvancedDraw && lbInteruptMouse)
     {
-        Undraw(true);
-        NewMousePos();
-        Backup(true);
-        Draw(true);
+        if (!WorldViewRenderer_IsGpuActive()) {
+          Undraw(true);
+          NewMousePos();
+          Backup(true);
+          Draw(true);
+        } else {
+          NewMousePos();
+        }
     } else
     {
         NewMousePos();
@@ -322,8 +327,29 @@ void LbI_PointerHandler::OnBeginSwap(void)
     std::lock_guard<std::mutex> guard(lock);
     if ( lbPointerAdvancedDraw )
     {
-        Backup(false);
-        Draw(false);
+        if (WorldViewRenderer_IsGpuActive())
+        {
+          // GPU mode + advanced draw: submit cursor through UI renderer instead
+          // of writing to WScreen (which would be lost since staging blit is skipped).
+          if (sprite != NULL) {
+            long cx = position->x - scale_ui_value_lofi(spr_offset->x);
+            long cy = position->y - scale_ui_value_lofi(spr_offset->y);
+            int units_per_px = (int)(scale_ui_value_lofi(sprite->SWidth) * 16 / sprite->SWidth);
+            UIRenderer_SubmitPanelSpriteRaw(cx, cy, units_per_px, sprite);
+          }
+        } else {
+          Backup(false);
+          Draw(false);
+        }
+    } else
+    if (WorldViewRenderer_IsGpuActive() && sprite != NULL)
+    {
+      // GPU path: submit cursor sprite through the UI renderer so it composites
+      // during EndFrame's FlushFront(), matching the software renderer's cursor.
+      long cx = position->x - scale_ui_value_lofi(spr_offset->x);
+      long cy = position->y - scale_ui_value_lofi(spr_offset->y);
+      int units_per_px = (int)(scale_ui_value_lofi(sprite->SWidth) * 16 / sprite->SWidth);
+      UIRenderer_SubmitPanelSpriteRaw(cx, cy, units_per_px, sprite);
     } else
     if (LbScreenLock() == Lb_SUCCESS)
     {
@@ -338,7 +364,9 @@ void LbI_PointerHandler::OnEndSwap(void)
     std::lock_guard<std::mutex> guard(lock);
     if ( lbPointerAdvancedDraw )
     {
-        Undraw(false);
+        if (!WorldViewRenderer_IsGpuActive()) {
+          Undraw(false);
+        }
         this->needs_redraw = true;
     }
 }

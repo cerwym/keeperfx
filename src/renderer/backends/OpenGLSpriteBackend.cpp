@@ -297,14 +297,10 @@ TbResult OpenGLSpriteBackend::SubmitSpriteRemap(long x, long y,
                                                 const unsigned char* colortable,
                                                 unsigned int draw_flags)
 {
-    // Remap sprites require per-pixel palette indirection — fall back to the
-    // CPU blitter so they appear in the RendererOpenGL staging buffer blit pass.
-    unsigned int saved_flags = lbDisplay.DrawFlags;
-    lbDisplay.DrawFlags = draw_flags;
-    TbResult ret = LbSpriteDrawScaledRemap(x, y, spr,
-                                           spr->SWidth, spr->SHeight, colortable);
-    lbDisplay.DrawFlags = saved_flags;
-    return ret;
+    // Remap sprites require per-pixel palette indirection which this backend
+    // cannot yet perform on-GPU.  Delegate to the base-class CPU fallback so
+    // they appear in the RendererOpenGL staging-buffer blit pass.
+    return IBackend::SubmitSpriteRemap(x, y, spr, colortable, draw_flags);
 }
 
 /******************************************************************************/

@@ -40,7 +40,7 @@
 #include "custom_sprites.h"    // get_button_sprite_for_player
 #include "player_data.h"       // my_player_number
 // Forward declaration to avoid pulling in frontend.h (conflicts with C++ stdlib)
-extern "C" { struct TbSpriteSheet; extern struct TbSpriteSheet *button_sprites; extern struct TbSpriteSheet *custom_sprites; }
+extern "C" { struct TbSpriteSheet; extern struct TbSpriteSheet *button_sprites; extern struct TbSpriteSheet *custom_sprites; extern struct TbSpriteSheet *pointer_sprites; }
 #include "renderer/RenderPass_C.h"
 #include <unordered_map>
 #include "post_inc.h"
@@ -107,6 +107,22 @@ void RendererNotifySpritesReloaded()
         }
     } else {
         SYNCLOG("RendererNotifySpritesReloaded: s_spriteAtlas is NULL (GL not active or not yet initialised)");
+    }
+    // Upload the slab background tile now that the palette is ready.
+    UIRenderer_SetSlabTexture();
+#endif
+}
+
+/** Append pointer_sprites into the live atlas after load_pointer_file(). */
+void RendererNotifyPointerSpritesLoaded()
+{
+#ifdef RENDERER_OPENGL_ENABLED
+    if (s_spriteAtlas && pointer_sprites && num_sprites(pointer_sprites) > 0) {
+        long before = (long)s_spriteAtlas->GetRegisteredCount();
+        s_spriteAtlas->AddSheet(pointer_sprites);
+        long after  = (long)s_spriteAtlas->GetRegisteredCount();
+        SYNCLOG("RendererNotifyPointerSpritesLoaded: pointer_sprites=%p added %ld new sprites (total %ld)",
+                (void*)pointer_sprites, after - before, after);
     }
 #endif
 }
@@ -233,7 +249,23 @@ static IMapFadePass* create_map_fade_pass(RendererType type)
 /** Allocates the appropriate ITextRenderer for the given renderer type. */
 static ITextRenderer* create_text_renderer(RendererType type)
 {
-    // GLTextRenderer is currently disabled — always use software fallback.
+#ifdef RENDERER_OPENGL_ENABLED
+    if (type == RENDERER_OPENGL)
+    {
+        RendererOpenGL* ogl = dynamic_cast<RendererOpenGL*>(s_activeRenderer);
+        if (ogl)
+        {
+            auto* glt = new GLTextRenderer();
+            if (glt->Init())
+            {
+                glt->SetScreenSize(lbDisplay.PhysicalScreenWidth, lbDisplay.PhysicalScreenHeight);
+                return glt;
+            }
+            WARNLOG("GLTextRenderer::Init() failed, falling back to software");
+            delete glt;
+        }
+    }
+#endif
     (void)type;
     return new SoftwareTextRenderer();
 }
@@ -258,6 +290,7 @@ static IUIRenderer* create_ui_renderer(RendererType type)
             glui->SetSpriteAtlas(ogl->GetSpriteAtlas());
             glui->SetFontAtlas(ogl->GetFontAtlas());
             glui->SetPaletteTexture(ogl->GetPaletteTex(), GL_TEXTURE_1D);
+            glui->SetFadeTexture(ogl->GetFadeTex());
             glui->SetScreenDimensions(lbDisplay.PhysicalScreenWidth, lbDisplay.PhysicalScreenHeight);
             glui->SetWorldViewRenderer(dynamic_cast<GLWorldViewRenderer*>(s_worldViewRenderer));
             // Populate sprite atlas with currently-loaded panel sprite sheets.
@@ -300,6 +333,15 @@ static RendererType resolve_auto()
 
 int RendererInit(RendererType type)
 {
+    // Initialise settings to defaults on first call.
+    // keeperfx.cfg parsing may override startup-only knobs (e.g. palette_mode)
+    // before this function is reached; only reset if this is the first init.
+    static int s_settings_initialised = 0;
+    if (!s_settings_initialised) {
+        RendererSettings_Reset();
+        s_settings_initialised = 1;
+    }
+
     if (type == RENDERER_AUTO)
         type = resolve_auto();
 
@@ -521,6 +563,11 @@ void WorldViewRenderer_FlushFrontView(struct Camera* cam)
         s_worldViewRenderer->FlushFrontView(cam);
 }
 
+TbBool WorldViewRenderer_IsGpuActive(void)
+{
+    return (s_worldViewRenderer && s_worldViewRenderer->IsGpuAccelerated()) ? 1 : 0;
+}
+
 int WorldViewRenderer_SubmitKeeperSprite(long dst_x, long dst_y, long dst_w, long dst_h,
                                          const unsigned char* data, int src_w, int src_h,
                                          unsigned int draw_flags, const unsigned char* remap)
@@ -618,6 +665,29 @@ void UIRenderer_SubmitPanelSpriteRaw(long x, long y, int units_per_px, const str
     s_uiRenderer->SubmitPanelSprite(x, y, units_per_px, h);
 }
 
+void UIRenderer_SubmitPanelSpriteRawColored(long x, long y, int units_per_px, const struct TbSprite* spr, unsigned char color_idx)
+{
+    if (!s_uiRenderer) return;
+    SpriteHandle h = resolve_sprite_handle(spr);
+    s_uiRenderer->SubmitPanelSpriteColored(x, y, units_per_px, h, (uint8_t)color_idx);
+}
+
+void UIRenderer_SubmitOutlineBox(long x, long y, long w, long h, unsigned char color_idx)
+{
+    // Decompose outline into four 1-pixel-thick border strips (top/bottom/left/right).
+    UIRenderer_SubmitSolidBox(x,       y,       w, 1, color_idx);  // top
+    UIRenderer_SubmitSolidBox(x,       y + h - 1, w, 1, color_idx);  // bottom
+    UIRenderer_SubmitSolidBox(x,       y,       1, h, color_idx);  // left
+    UIRenderer_SubmitSolidBox(x + w - 1, y,     1, h, color_idx);  // right
+}
+
+void UIRenderer_SubmitPanelSpriteRemap(long x, long y, int units_per_px, const struct TbSprite* spr, int remap_row)
+{
+    if (!s_uiRenderer) return;
+    SpriteHandle h = resolve_sprite_handle(spr);
+    s_uiRenderer->SubmitPanelSpriteRemap(x, y, units_per_px, h, remap_row);
+}
+
 void UIRenderer_SubmitPanelSpriteCentered(long x, long y, int units_per_px, long spridx)
 {
     if (!s_uiRenderer) return;
@@ -657,6 +727,24 @@ void UIRenderer_SubmitSolidBox(long x, long y, long w, long h, unsigned char col
 {
     if (s_uiRenderer)
         s_uiRenderer->SubmitSolidBox(x, y, w, h, color_idx);
+}
+
+void UIRenderer_SubmitSolidBoxAlpha(long x, long y, long w, long h, unsigned char color_idx, float alpha)
+{
+    if (s_uiRenderer)
+        s_uiRenderer->SubmitSolidBoxAlpha(x, y, w, h, color_idx, alpha);
+}
+
+void UIRenderer_SetSlabTexture(void)
+{
+    if (s_uiRenderer && gui_slab)
+        s_uiRenderer->UpdateSlabTexture(gui_slab, GUI_SLAB_DIMENSION);
+}
+
+TbBool UIRenderer_SubmitSlabBackground(int x, int y, int w, int h)
+{
+    if (!s_uiRenderer) return 0;
+    return s_uiRenderer->SubmitSlabBackground(x, y, w, h) ? 1 : 0;
 }
 
 unsigned char* UIRenderer_AcquireMinimapBuffer(int size)
@@ -732,4 +820,25 @@ void UIRenderer_Clear(void)
 TbBool UIRenderer_IsGpuActive(void)
 {
     return (s_uiRenderer && s_uiRenderer->IsGpuAccelerated()) ? 1 : 0;
+}
+
+void RendererApplySettings(const RendererSettings* s)
+{
+    if (!s) return;
+
+    int prev_palette_mode = g_renderer_settings.palette_mode;
+    g_renderer_settings = *s;
+
+    // If the atlas colour format changed, rebuild the sprite atlas immediately
+    // so the new format takes effect without a restart.
+    if (g_renderer_settings.palette_mode != prev_palette_mode) {
+        RendererNotifySpritesReloaded();
+    }
+
+    // TODO: push shade/filter uniforms to the active world-view renderer (Phase 2).
+}
+
+const RendererSettings* RendererGetSettings(void)
+{
+    return &g_renderer_settings;
 }

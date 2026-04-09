@@ -277,6 +277,7 @@ void load_pointer_file(short hi_res)
     pointer_sprites = load_spritesheet("data/pointer64.dat", "data/pointer64.tab");
 #endif
     if (!pointer_sprites) ERRORLOG("Unable to load pointer sprites");
+    RendererNotifyPointerSpritesLoaded();
 }
 
 TbBool set_pointer_graphic_none(void)

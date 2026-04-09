@@ -32,9 +32,12 @@ GLUIRenderer::GLUIRenderer()
     : m_prog_sprite(0)
     , m_prog_font(0)
     , m_prog_solid(0)
+    , m_prog_remap(0)
     , m_loc_screen_sprite(-1)
     , m_loc_screen_font(-1)
     , m_loc_screen_solid(-1)
+    , m_loc_screen_remap(-1)
+    , m_loc_remap_row(-1)
     , m_vao(0)
     , m_vbo(0)
     , m_uniform_mvp(0)
@@ -45,6 +48,7 @@ GLUIRenderer::GLUIRenderer()
     , m_font_atlas(nullptr)
     , m_palette_texture(0)
     , m_palette_texture_target(GL_TEXTURE_2D)
+    , m_fade_texture(0)
     , m_world_view_renderer(nullptr)
     , m_minimap_cpu_buf(nullptr)
     , m_minimap_cpu_size(0)
@@ -55,9 +59,10 @@ GLUIRenderer::GLUIRenderer()
     , m_minimap_size(0)
     , m_minimap_pending(false)
 {
-    m_ui_quads.reserve(512);   // Reserve space for UI elements
-    m_ui_lines.reserve(256);   // Reserve space for slab selectors
-    m_vertices.reserve(3072);  // Reserve space for vertices (512 quads * 6 vertices)
+    m_ui_quads.reserve(512);
+    m_ui_lines.reserve(256);
+    m_remap_quads.reserve(32);
+    m_vertices.reserve(3072);
 }
 
 GLUIRenderer::~GLUIRenderer()
@@ -99,8 +104,11 @@ void GLUIRenderer::Shutdown()
         m_vao = 0;
     }
     if (m_prog_sprite) { glDeleteProgram(m_prog_sprite); m_prog_sprite = 0; }
+    if (m_prog_sprite_colored) { glDeleteProgram(m_prog_sprite_colored); m_prog_sprite_colored = 0; }
     if (m_prog_font)   { glDeleteProgram(m_prog_font);   m_prog_font   = 0; }
     if (m_prog_solid)  { glDeleteProgram(m_prog_solid);  m_prog_solid  = 0; }
+    if (m_prog_remap)  { glDeleteProgram(m_prog_remap);  m_prog_remap  = 0; }
+    if (m_slab_texture) { glDeleteTextures(1, &m_slab_texture); m_slab_texture = 0; }
 }
 
 void GLUIRenderer::SetScreenDimensions(int width, int height)
@@ -131,6 +139,11 @@ bool GLUIRenderer::SetPaletteTexture(GLuint palette_texture_id, GLenum target)
     m_palette_texture        = palette_texture_id;
     m_palette_texture_target = target;
     return true;
+}
+
+void GLUIRenderer::SetFadeTexture(GLuint tex)
+{
+    m_fade_texture = tex;
 }
 
 void GLUIRenderer::SubmitSlabSelector(int x1, int y1, int x2, int y2, unsigned char color, float z_depth)
@@ -176,6 +189,47 @@ void GLUIRenderer::SubmitPanelSprite(long x, long y, int units_per_px, SpriteHan
                1.0f, 1.0f, 1.0f, 1.0f, 0.5f, 0.0f);
 }
 
+void GLUIRenderer::SubmitPanelSpriteRemap(long x, long y, int units_per_px,
+                                          SpriteHandle spr, int remap_row)
+{
+    if (spr == kInvalidSpriteHandle || !m_sprite_atlas || !m_fade_texture) {
+        // Fallback: no fade texture or atlas — let base class handle it via CPU path
+        IUIRenderer::SubmitPanelSpriteRemap(x, y, units_per_px, spr, remap_row);
+        return;
+    }
+    SpriteUV uv;
+    if (!m_sprite_atlas->GetUV(spr, uv)) return;
+    float w = (float)((uv.pixel_w * units_per_px + 8) / 16);
+    float h = (float)((uv.pixel_h * units_per_px + 8) / 16);
+    UIRemapQuad q;
+    q.x0 = (float)x;  q.y0 = (float)y;
+    q.x1 = (float)x + w;  q.y1 = (float)y + h;
+    q.u0 = uv.u0;  q.v0 = uv.v0;
+    q.u1 = uv.u1;  q.v1 = uv.v1;
+    q.r = 1.0f;  q.g = 1.0f;  q.b = 1.0f;  q.a = 1.0f;
+    q.z = 0.5f;
+    q.layer = (uint8_t)m_current_layer;
+    q.remap_row = remap_row;
+    m_remap_quads.push_back(q);
+}
+
+void GLUIRenderer::SubmitPanelSpriteColored(long x, long y, int units_per_px,
+                                            SpriteHandle spr, uint8_t color_idx)
+{
+    if (spr == kInvalidSpriteHandle || !m_sprite_atlas) return;
+    SpriteUV uv;
+    if (!m_sprite_atlas->GetUV(spr, uv)) return;
+    float w = (float)((uv.pixel_w * units_per_px + 8) / 16);
+    float h = (float)((uv.pixel_h * units_per_px + 8) / 16);
+    float r = lbPalette[color_idx * 3 + 0] / 63.0f;
+    float g = lbPalette[color_idx * 3 + 1] / 63.0f;
+    float b = lbPalette[color_idx * 3 + 2] / 63.0f;
+    // mode=20.0: atlas-as-mask, flat vertex colour (Pass 5 in FlushQuads)
+    SubmitQuad((float)x, (float)y, w, h,
+               uv.u0, uv.v0, uv.u1, uv.v1,
+               r, g, b, 1.0f, 0.5f, 20.0f);
+}
+
 void GLUIRenderer::SubmitScaledSprite(long x, long y, long w, long h, SpriteHandle spr)
 {
     if (spr == kInvalidSpriteHandle || !m_sprite_atlas) return;
@@ -194,6 +248,45 @@ void GLUIRenderer::SubmitSolidBox(long x, long y, long w, long h, uint8_t color_
     SubmitQuad((float)x, (float)y, (float)w, (float)h,
                0.0f, 0.0f, 1.0f, 1.0f,
                r, g, b, 1.0f, 0.5f, 3.0f);
+}
+
+void GLUIRenderer::SubmitSolidBoxAlpha(long x, long y, long w, long h, uint8_t color_idx, float alpha)
+{
+    float r = lbPalette[color_idx * 3 + 0] / 63.0f;
+    float g = lbPalette[color_idx * 3 + 1] / 63.0f;
+    float b = lbPalette[color_idx * 3 + 2] / 63.0f;
+    SubmitQuad((float)x, (float)y, (float)w, (float)h,
+               0.0f, 0.0f, 1.0f, 1.0f,
+               r, g, b, alpha, 0.5f, 3.0f);
+}
+
+void GLUIRenderer::UpdateSlabTexture(const uint8_t* data, int dim)
+{
+    if (!data || dim <= 0) return;
+    if (m_slab_texture == 0) glGenTextures(1, &m_slab_texture);
+    glBindTexture(GL_TEXTURE_2D, m_slab_texture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, dim, dim, 0, GL_RED, GL_UNSIGNED_BYTE, data);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    m_slab_dim = dim;
+}
+
+bool GLUIRenderer::SubmitSlabBackground(int x, int y, int w, int h)
+{
+    if (!m_slab_texture || m_slab_dim <= 0) return false;
+    float u1 = (float)w / (float)m_slab_dim;
+    float v1 = (float)h / (float)m_slab_dim;
+    // Always submit on layer 0 (back, rendered before the staging-buffer blit)
+    int saved_layer = m_current_layer;
+    m_current_layer = 0;
+    SubmitQuad((float)x, (float)y, (float)w, (float)h,
+               0.0f, 0.0f, u1, v1,
+               1.0f, 1.0f, 1.0f, 1.0f, 0.49f, 10.0f);
+    m_current_layer = saved_layer;
+    return true;
 }
 
 uint8_t* GLUIRenderer::AcquireMinimapBuffer(int size)
@@ -254,7 +347,17 @@ void GLUIRenderer::FlushBack()
 {
     // Render only layer-0 (back) quads — the sidebar background panels that must land
     // beneath the CPU staging-buffer blit.  No hand sprites, minimap, or lines here.
-    if (m_ui_quads.empty()) return;
+    if (m_ui_quads.empty() && m_remap_quads.empty()) return;
+
+    { // Diagnostic: count back-layer elements
+        int back_quads = 0;
+        for (auto& q : m_ui_quads) if (q.layer == 0) back_quads++;
+        int back_remap = 0;
+        for (auto& r : m_remap_quads) if (r.layer == 0) back_remap++;
+        static int s_diag_frame = 0;
+        if ((s_diag_frame++ % 300) == 0)
+            SYNCLOG("FlushBack: %d back quads, %d back remap quads", back_quads, back_remap);
+    }
 
     if (MyScreenWidth > 0 && MyScreenHeight > 0) {
         m_screen_width  = MyScreenWidth;
@@ -267,6 +370,7 @@ void GLUIRenderer::FlushBack()
     glDepthMask(GL_FALSE);
 
     FlushQuads(0);
+    FlushRemapQuads(0);
 
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
@@ -278,6 +382,17 @@ void GLUIRenderer::FlushFront()
     if (m_ui_quads.empty() && m_ui_lines.empty() && !m_minimap_pending
         && m_pending_hand_sprites.empty())
         return;
+
+    { // Diagnostic: count front-layer elements
+        int front_quads = 0;
+        for (auto& q : m_ui_quads) if (q.layer == 1) front_quads++;
+        int front_lines = 0;
+        for (auto& l : m_ui_lines) if (l.layer == 1) front_lines++;
+        static int s_diag_frame = 0;
+        if ((s_diag_frame++ % 300) == 0)
+            SYNCLOG("FlushFront: %d front quads, %d front lines, %d hand sprites, minimap=%d",
+                    front_quads, front_lines, (int)m_pending_hand_sprites.size(), (int)m_minimap_pending);
+    }
 
     if (MyScreenWidth > 0 && MyScreenHeight > 0) {
         m_screen_width  = MyScreenWidth;
@@ -291,6 +406,9 @@ void GLUIRenderer::FlushFront()
 
     // Flush all remaining (layer-1 / front) quads.
     FlushQuads(1);
+
+    // Flush player-colour remap quads (front layer).
+    FlushRemapQuads(1);
 
     // Minimap: palette-indexed R8 texture — front layer.
     if (m_minimap_pending && m_minimap_texture)
@@ -363,6 +481,7 @@ void GLUIRenderer::Clear()
 {
     m_ui_quads.clear();
     m_ui_lines.clear();
+    m_remap_quads.clear();
     m_vertices.clear();
     m_pending_hand_sprites.clear();
     m_minimap_pending = false;
@@ -433,6 +552,19 @@ bool GLUIRenderer::CreateShaders()
         }
     }
 
+    // --- Sprite-colored program (atlas as discard mask, flat vertex colour) ---
+    if (ok) {
+        GLuint frag = CompileStage(GL_FRAGMENT_SHADER, UI_SPRITE_COLORED_FRAGMENT_SHADER, "UI_SPRITE_COLORED_FRAG");
+        if (!frag) { ok = false; }
+        else {
+            SamplerBinding bindings[] = {{"u_sprite_atlas", 0}};
+            m_prog_sprite_colored = LinkProgram(vert, frag, "UI_SPRITE_COLORED", bindings, 1);
+            glDeleteShader(frag);
+            if (!m_prog_sprite_colored) ok = false;
+            else m_loc_screen_sprite_colored = glGetUniformLocation(m_prog_sprite_colored, "u_screen_size");
+        }
+    }
+
     // --- Font program (RGBA glyph atlas) ---
     if (ok) {
         GLuint frag = CompileStage(GL_FRAGMENT_SHADER, UI_FONT_FRAGMENT_SHADER, "UI_FONT_FRAG");
@@ -455,6 +587,22 @@ bool GLUIRenderer::CreateShaders()
             glDeleteShader(frag);
             if (!m_prog_solid) ok = false;
             else m_loc_screen_solid = glGetUniformLocation(m_prog_solid, "u_screen_size");
+        }
+    }
+
+    // --- Remap program (palette-indexed atlas + fade-table colour remap) ---
+    if (ok) {
+        GLuint frag = CompileStage(GL_FRAGMENT_SHADER, UI_REMAP_FRAGMENT_SHADER, "UI_REMAP_FRAG");
+        if (!frag) { ok = false; }
+        else {
+            SamplerBinding bindings[] = {{"u_sprite_atlas", 0}, {"u_palette", 1}, {"u_fade_table", 2}};
+            m_prog_remap = LinkProgram(vert, frag, "UI_REMAP", bindings, 3);
+            glDeleteShader(frag);
+            if (!m_prog_remap) ok = false;
+            else {
+                m_loc_screen_remap = glGetUniformLocation(m_prog_remap, "u_screen_size");
+                m_loc_remap_row    = glGetUniformLocation(m_prog_remap, "u_remap_row");
+            }
         }
     }
 
@@ -541,13 +689,45 @@ void GLUIRenderer::FlushQuads(int layer)
         glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_vertices.size());
     }
 
-    // ---- Pass 3: solid-colour quads (modes 2+) ----
+    // ---- Pass 3: solid-colour quads (modes 1.5 – 9.5, excludes slab mode 10) ----
     m_vertices.clear();
     for (auto it = m_ui_quads.begin(); it != mid; ++it)
-        if (it->mode >= 1.5f) ExpandQuadToVertices(*it);
+        if (it->mode >= 1.5f && it->mode < 9.5f) ExpandQuadToVertices(*it);
     if (!m_vertices.empty()) {
         glUseProgram(m_prog_solid);
         glUniform2f(m_loc_screen_solid, (float)m_screen_width, (float)m_screen_height);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(GLUIVertex) * m_vertices.size(), m_vertices.data());
+        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_vertices.size());
+    }
+
+    // ---- Pass 4: tiled slab-background quads (mode 10, range 9.5 – 19.5) ----
+    m_vertices.clear();
+    for (auto it = m_ui_quads.begin(); it != mid; ++it)
+        if (it->mode >= 9.5f && it->mode < 19.5f) ExpandQuadToVertices(*it);
+    if (!m_vertices.empty() && m_slab_texture) {
+        glUseProgram(m_prog_sprite);
+        glUniform2f(m_loc_screen_sprite, (float)m_screen_width, (float)m_screen_height);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, m_slab_texture);
+        if (m_palette_texture) {
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(m_palette_texture_target, m_palette_texture);
+        }
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(GLUIVertex) * m_vertices.size(), m_vertices.data());
+        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_vertices.size());
+    }
+
+    // ---- Pass 5: atlas-as-mask flat-colour quads (mode 20, range >= 19.5) ----
+    m_vertices.clear();
+    for (auto it = m_ui_quads.begin(); it != mid; ++it)
+        if (it->mode >= 19.5f) ExpandQuadToVertices(*it);
+    if (!m_vertices.empty() && m_prog_sprite_colored) {
+        glUseProgram(m_prog_sprite_colored);
+        glUniform2f(m_loc_screen_sprite_colored, (float)m_screen_width, (float)m_screen_height);
+        if (m_sprite_atlas) {
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, m_sprite_atlas->GetTexture());
+        }
         glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(GLUIVertex) * m_vertices.size(), m_vertices.data());
         glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_vertices.size());
     }
@@ -577,6 +757,59 @@ void GLUIRenderer::FlushLines(int layer)
         glBindVertexArray(0);
     }
     m_ui_lines.erase(m_ui_lines.begin(), mid);
+}
+
+void GLUIRenderer::FlushRemapQuads(int layer)
+{
+    // Partition matching layer to the front, preserving submission order.
+    auto mid = std::stable_partition(m_remap_quads.begin(), m_remap_quads.end(),
+        [layer](const UIRemapQuad& q) { return (int)q.layer == layer; });
+    if (mid == m_remap_quads.begin()) return;
+    if (!m_prog_remap || !m_sprite_atlas || !m_palette_texture || !m_fade_texture) {
+        m_remap_quads.erase(m_remap_quads.begin(), mid);
+        return;
+    }
+
+    // Sort the matching range by remap_row so we can batch by row.
+    std::stable_sort(m_remap_quads.begin(), mid,
+        [](const UIRemapQuad& a, const UIRemapQuad& b) { return a.remap_row < b.remap_row; });
+
+    glBindVertexArray(m_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
+    glUseProgram(m_prog_remap);
+    glUniform2f(m_loc_screen_remap, (float)m_screen_width, (float)m_screen_height);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_sprite_atlas->GetTexture());
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(m_palette_texture_target, m_palette_texture);
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, m_fade_texture);
+
+    // Emit one draw call per unique remap_row.
+    auto it = m_remap_quads.begin();
+    while (it != mid) {
+        int row = it->remap_row;
+        glUniform1f(m_loc_remap_row, (float)row);
+
+        m_vertices.clear();
+        for (auto jt = it; jt != mid && jt->remap_row == row; ++jt) {
+            GLUIVertex v[6];
+            v[0] = {jt->x0, jt->y0, jt->u0, jt->v0, jt->r, jt->g, jt->b, jt->a, jt->z, 0.0f};
+            v[1] = {jt->x0, jt->y1, jt->u0, jt->v1, jt->r, jt->g, jt->b, jt->a, jt->z, 0.0f};
+            v[2] = {jt->x1, jt->y0, jt->u1, jt->v0, jt->r, jt->g, jt->b, jt->a, jt->z, 0.0f};
+            v[3] = {jt->x1, jt->y0, jt->u1, jt->v0, jt->r, jt->g, jt->b, jt->a, jt->z, 0.0f};
+            v[4] = {jt->x0, jt->y1, jt->u0, jt->v1, jt->r, jt->g, jt->b, jt->a, jt->z, 0.0f};
+            v[5] = {jt->x1, jt->y1, jt->u1, jt->v1, jt->r, jt->g, jt->b, jt->a, jt->z, 0.0f};
+            for (int i = 0; i < 6; ++i) m_vertices.push_back(v[i]);
+            it = jt + 1;
+        }
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(GLUIVertex) * m_vertices.size(), m_vertices.data());
+        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_vertices.size());
+    }
+
+    glBindVertexArray(0);
+    m_remap_quads.erase(m_remap_quads.begin(), mid);
 }
 
 void GLUIRenderer::ExpandQuadToVertices(const UIQuad& quad)

@@ -227,48 +227,53 @@ void RendererOpenGL::EndFrame()
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     // Flush GPU world geometry + depth-correct sprites.
-    // Must run BEFORE the staging buffer is uploaded so that any sprite draws
-    // that fall back to the CPU blitter (atlas miss) write into m_stagingBuf
-    // while lbDisplay.WScreen is temporarily restored to point at it.
+    // Runs BEFORE the staging buffer upload so both layers composite correctly.
     if (m_world_renderer)
-        m_world_renderer->GPUFlushNow(m_stagingBuf);
+        m_world_renderer->GPUFlushNow();
 
-    // Flush layer-0 (back) GPU UI elements — sidebar background panels that must land
-    // beneath the CPU staging-buffer blit so that CPU-drawn text, gold digits, and
-    // portraits composite on top of them.
+    // Flush layer-0 (back) GPU UI elements — sidebar background panels.
     UIRenderer_FlushBack();
 
-    // Upload CPU framebuffer to index texture (AFTER GPUFlushNow so that
-    // CPU-path sprite fallbacks written during the sprite replay are included).
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_texIndex);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_stagingW, m_stagingH, GL_RED, GL_UNSIGNED_BYTE, m_stagingBuf);
+    // When the GPU world-view renderer is active every drawing path (status panel,
+    // GUI, text, sprites, shadows) is routed through GPU shaders / UIRenderer /
+    // GLTextRenderer.  The staging buffer is all-zeros, so uploading + blitting it
+    // is pure overhead (~1 MB upload + one draw call doing nothing).  Skip it.
+    if (!WorldViewRenderer_IsGpuActive())
+    {
+        // Upload CPU framebuffer to index texture.
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, m_texIndex);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_stagingW, m_stagingH, GL_RED, GL_UNSIGNED_BYTE, m_stagingBuf);
 
-    // CPU framebuffer blit — palette index 0 is transparent so the GPU back-layer
-    // sidebar panels show through in transparent regions, while non-zero CPU pixels
-    // (text, digits, portraits on the sidebar) composite correctly on top.
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_texIndex);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_1D, m_texPalette);
+        // CPU framebuffer blit — palette index 0 is transparent so the GPU
+        // back-layer sidebar panels show through, while non-zero CPU pixels
+        // composite on top.
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, m_texIndex);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_1D, m_texPalette);
 
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glUseProgram(m_shader);
-    glUniform1f(m_uTintFactor, g_palette_possession_tint);
-    glBindVertexArray(m_vao);
-    glDrawArrays(GL_TRIANGLES, 0, 6);
-    glBindVertexArray(0);
-    glDisable(GL_BLEND);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glUseProgram(m_shader);
+        glUniform1f(m_uTintFactor, g_palette_possession_tint);
+        glBindVertexArray(m_vao);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+        glBindVertexArray(0);
+        glDisable(GL_BLEND);
+    }
 
-    // Flush GPU text — rendered after the staging blit so it appears over WScreen
-    // content, but before FlushFront so the front-layer UI sprites sit on top.
-    TextRenderer_Flush();
-
-    // Flush layer-1 (front) GPU UI elements — escape menu icons/buttons, minimap,
-    // slab selectors, power-hand — on top of the staging blit so they appear over
-    // CPU-drawn panel backgrounds rather than underneath them.
+    // Flush layer-1 (front) GPU UI elements — escape menu, minimap, slab
+    // selectors, power-hand — on top of everything else.
     UIRenderer_FlushFront();
+
+    // Flush GPU text AFTER front-layer sprites so that text composites on top
+    // of button/panel sprite backgrounds.  In the software renderer text is
+    // interleaved with sprites; batching sprites by layer means text must come
+    // last to avoid sprite quads covering already-drawn text.  Each deferred
+    // text draw is scissor-clipped to its original clip window so it won't
+    // bleed outside its designated area.
+    TextRenderer_Flush();
 
     RenderPass_EndFrame();
     platform_swap_gl_buffers(lbWindow);

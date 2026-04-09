@@ -275,8 +275,17 @@ void GLTextRenderer::Flush()
 {
     if (m_pending.empty() || !m_font_atlas)
     {
+        static int s_diag = 0;
+        if ((s_diag++ % 300) == 0 && !m_pending.empty())
+            SYNCLOG("GLTextRenderer::Flush: %d pending draws but no font_atlas!", (int)m_pending.size());
         m_pending.clear();
         return;
+    }
+
+    { // Diagnostic
+        static int s_diag_frame = 0;
+        if ((s_diag_frame++ % 300) == 0)
+            SYNCLOG("GLTextRenderer::Flush: %d pending text draws", (int)m_pending.size());
     }
 
     if (m_screen_width <= 0 || m_screen_height <= 0)

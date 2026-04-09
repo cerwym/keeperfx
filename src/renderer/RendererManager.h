@@ -15,7 +15,8 @@
 #ifndef RENDERER_MANAGER_H
 #define RENDERER_MANAGER_H
 
-#include "bflib_video.h"   /* TbPixel */
+#include "bflib_video.h"          /* TbPixel */
+#include "renderer/RendererSettings.h" /* RendererSettings, g_renderer_settings */
 
 /* IRenderer.h and RendererType are only visible in C++ translation units */
 #ifdef __cplusplus
@@ -84,6 +85,11 @@ void RendererNotifySpritesReloaded(void);
  *  are preserved.  Safe to call whenever custom_sprites is rebuilt. */
 void RendererNotifyCustomSpritesReloaded(void);
 
+/** Append pointer_sprites into the live atlas after load_pointer_file().
+ *  pointer_sprites are loaded separately from the main GUI sprite sheets,
+ *  so they must be registered after loading completes. */
+void RendererNotifyPointerSpritesLoaded(void);
+
 /******************************************************************************/
 /* C-callable world-view renderer wrappers (safe to call from C files)        */
 /******************************************************************************/
@@ -104,6 +110,11 @@ void WorldViewRenderer_FlushIsometricView(void);
 /** Flush the front-view bucket list to the framebuffer.
  *  Call this after the front-view geometry has been added to the bucket list. */
 void WorldViewRenderer_FlushFrontView(struct Camera* cam);
+
+/** Returns non-zero when the active world-view renderer is GPU-accelerated.
+ *  Use to skip CPU staging-buffer writes (lens effects, swipe, front-view
+ *  rasterisation) that would pollute the GPU-composited frame. */
+TbBool WorldViewRenderer_IsGpuActive(void);
 
 /** Submit a keeper-sprite (creature/object) for GPU rendering during the bucket walk.
  *  Returns 1 if the GPU handled it (CPU blit should be skipped), 0 to fall back. */
@@ -165,6 +176,21 @@ void UIRenderer_SubmitPanelSprite(long x, long y, int units_per_px, long spridx)
 struct TbSprite;
 void UIRenderer_SubmitPanelSpriteRaw(long x, long y, int units_per_px, const struct TbSprite* spr);
 
+/** Submit a panel sprite drawn entirely in a single flat colour (sprite used as discard mask).
+ *  GPU: atlas R8 index used to discard transparent pixels; all opaque pixels output color_idx.
+ *  CPU fallback: LbSpriteDrawResizedOneColour. */
+void UIRenderer_SubmitPanelSpriteRawColored(long x, long y, int units_per_px, const struct TbSprite* spr, unsigned char color_idx);
+
+/** Submit a 1-pixel-thick outline rectangle (border only, no fill).
+ *  Decomposes into four thin UIRenderer_SubmitSolidBox strips.
+ *  Replaces LbDrawBox with Lb_SPRITE_OUTLINE set. */
+void UIRenderer_SubmitOutlineBox(long x, long y, long w, long h, unsigned char color_idx);
+
+/** Route a palette-remapped panel/button sprite draw through the active UI renderer.
+ *  The remap is performed by indexing pixmap.fade_tables[remap_row*256].
+ *  GPU backends override with a fall-table shader; the base uses LbSpriteDrawResizedRemap. */
+void UIRenderer_SubmitPanelSpriteRemap(long x, long y, int units_per_px, const struct TbSprite* spr, int remap_row);
+
 /** Submit a panel sprite centered on (x, y). */
 void UIRenderer_SubmitPanelSpriteCentered(long x, long y, int units_per_px, long spridx);
 
@@ -185,6 +211,21 @@ void UIRenderer_SubmitScaledSprite(long x, long y, long w, long h, const struct 
  *  Called instead of LbDrawBox when the GPU renderer is active.
  *  color_idx is a DK palette index (0-255). */
 void UIRenderer_SubmitSolidBox(long x, long y, long w, long h, unsigned char color_idx);
+
+/** Submit a semi-transparent solid-color rectangle.
+ *  alpha=0.5 approximates Lb_SPRITE_TRANSPAR4 darkening toward the given color.
+ *  GPU: solid shader with vertex alpha; CPU: GlassMap blend via Lb_SPRITE_TRANSPAR4. */
+void UIRenderer_SubmitSolidBoxAlpha(long x, long y, long w, long h, unsigned char color_idx, float alpha);
+
+/** Upload the 64×64 R8 gui_slab tile to the GPU for use by UIRenderer_SubmitSlabBackground.
+ *  Call after gui_slab data is loaded (typically inside RendererNotifySpritesReloaded). */
+void UIRenderer_SetSlabTexture(void);
+
+/** Submit a tiled slab-background quad covering (x,y,w,h).
+ *  GPU: queued as a back-layer (layer 0) palette-indexed quad with GL_REPEAT UV.
+ *  @return 1 if the GPU path handled it and the caller must NOT write to WScreen;
+ *          0 if the caller should fall through to the CPU path. */
+TbBool UIRenderer_SubmitSlabBackground(int x, int y, int w, int h);
 
 /** Acquire the renderer's minimap pixel buffer for this frame.
  *  Returns a renderer-owned size×size buffer (GPU mode) that the caller fills
@@ -215,6 +256,15 @@ void UIRenderer_Clear(void);
  *  Use to skip CPU-only fallback paths (e.g. LbSpriteDrawResized with DrawFlags) 
  *  that are redundant when GPU sprites are already submitted. */
 TbBool UIRenderer_IsGpuActive(void);
+
+/** Apply a complete RendererSettings snapshot to the active renderer.
+ *  Also copies *s into g_renderer_settings so subsequent reads are consistent.
+ *  Safe to call from C translation units. */
+void RendererApplySettings(const RendererSettings* s);
+
+/** Return a pointer to the current renderer settings.
+ *  The returned pointer is valid for the lifetime of the process. */
+const RendererSettings* RendererGetSettings(void);
 
 /******************************************************************************/
 #ifdef __cplusplus
