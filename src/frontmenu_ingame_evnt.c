@@ -38,6 +38,7 @@
 #include "gui_draw.h"
 #include "gui_frontbtns.h"
 #include "gui_frontmenu.h"
+#include "renderer/RendererManager.h"
 #include "packets.h"
 #include "frontend.h"
 #include "front_input.h"
@@ -216,13 +217,13 @@ void draw_battle_head(struct Thing *thing, long scr_x, long scr_y, int units_per
     int curscr_x = scr_x - (spr->SWidth * ps_units_per_px / 16) / 2;
     int curscr_y = scr_y - (spr->SHeight * ps_units_per_px / 16) / 2;
     if ((thing->creature.health_bar_turns) && ((game.play_gameturn % (2 * gui_blink_rate)) >= gui_blink_rate)) {
-        LbSpriteDrawResizedOneColour(curscr_x, curscr_y, ps_units_per_px, spr, player_flash_colours[get_player_color_idx(thing->owner)]);
+        UIRenderer_SubmitPanelSpriteRawColored(curscr_x, curscr_y, ps_units_per_px, spr, player_flash_colours[get_player_color_idx(thing->owner)]);
     } else {
-        LbSpriteDrawResized(curscr_x, curscr_y, ps_units_per_px, spr);
+        UIRenderer_SubmitPanelSpriteRaw(curscr_x, curscr_y, ps_units_per_px, spr);
     }
     curscr_x = scr_x - 8*units_per_px/16;
     curscr_y = scr_y - 8*units_per_px/16 + (spr->SHeight*ps_units_per_px/16)/2;
-    LbDrawBox(curscr_x, curscr_y, 16*units_per_px/16, 6*units_per_px/16, colours[0][0][0]);
+    UIRenderer_SubmitSolidBox(curscr_x, curscr_y, 16*units_per_px/16, 6*units_per_px/16, colours[0][0][0]);
     // Show health
     struct CreatureControl* cctrl = creature_control_get_from_thing(thing);
     HitPoints health = thing->health;
@@ -231,7 +232,7 @@ void draw_battle_head(struct Thing *thing, long scr_x, long scr_y, int units_per
     HitPoints max_health = cctrl->max_health;
     if (max_health < 1)
         max_health = 1;
-    LbDrawBox(curscr_x + 2*units_per_px/16, curscr_y + 2*units_per_px/16, ((12 * health)/max_health)*units_per_px/16, 2*units_per_px/16, player_room_colours[get_player_color_idx(thing->owner)]);
+    UIRenderer_SubmitSolidBox(curscr_x + 2*units_per_px/16, curscr_y + 2*units_per_px/16, ((12 * health)/max_health)*units_per_px/16, 2*units_per_px/16, player_room_colours[get_player_color_idx(thing->owner)]);
     // Draw experience level
     spr = get_button_sprite(GBS_creature_flower_level_01);
     int bs_units_per_px = (17 * units_per_px + spr->SHeight / 2) / spr->SHeight;
@@ -239,7 +240,7 @@ void draw_battle_head(struct Thing *thing, long scr_x, long scr_y, int units_per
     curscr_y = (scr_y - ((spr->SHeight*bs_units_per_px/16) >> (unsigned char)high_res));
     curscr_x = (scr_x - ((spr->SWidth*bs_units_per_px/16) >> (unsigned char)high_res));
     spr = get_button_sprite(GBS_creature_flower_level_01 + cctrl->exp_level);
-    LbSpriteDrawResized(curscr_x, curscr_y, ps_units_per_px, spr);
+    UIRenderer_SubmitPanelSpriteRaw(curscr_x, curscr_y, ps_units_per_px, spr);
 }
 
 void gui_area_friendly_battlers(struct GuiButton *gbtn)
@@ -257,10 +258,8 @@ void gui_area_friendly_battlers(struct GuiButton *gbtn)
     int units_per_px = (gbtn->width * 16 + 160 / 2) / 160;
     int wdelta = gbtn->width / 7;
     int scr_pos_x = gbtn->scr_pos_x - wdelta + gbtn->width;
-    lbDisplay.DrawFlags |= Lb_SPRITE_TRANSPAR4;
-    LbDrawBox(gbtn->scr_pos_x, gbtn->scr_pos_y,
-        gbtn->width, gbtn->height, colours[0][0][0]);
-    lbDisplay.DrawFlags &= ~Lb_SPRITE_TRANSPAR4;
+    UIRenderer_SubmitSolidBoxAlpha(gbtn->scr_pos_x, gbtn->scr_pos_y,
+        gbtn->width, gbtn->height, colours[0][0][0], 0.5f);
     for (int battlr_id = 0; battlr_id < MESSAGE_BATTLERS_COUNT-1; battlr_id++)
     {
         int i = friendly_battler_list[MESSAGE_BATTLERS_COUNT * visbtl_id + battlr_id];
@@ -273,10 +272,8 @@ void gui_area_friendly_battlers(struct GuiButton *gbtn)
               if ((game.play_gameturn % (4 * gui_blink_rate)) >= 2 * gui_blink_rate)
               {
                   TbPixel col = player_flash_colours[(game.play_gameturn % (4 * neutral_flash_rate)) / neutral_flash_rate];
-                  lbDisplay.DrawFlags |= (Lb_SPRITE_OUTLINE|0x0004);
-                  LbDrawBox(scr_pos_x, gbtn->scr_pos_y,
+                  UIRenderer_SubmitOutlineBox(scr_pos_x, gbtn->scr_pos_y,
                     wdelta, gbtn->height, col);
-                  lbDisplay.DrawFlags &= ~(Lb_SPRITE_OUTLINE|0x0004);
               }
             }
             scr_pos_x -= wdelta;
@@ -320,10 +317,8 @@ void gui_area_enemy_battlers(struct GuiButton *gbtn)
     int units_per_px = (gbtn->width * 16 + 160 / 2) / 160;
     int wdelta = gbtn->width / 7;
     int scr_pos_x = gbtn->scr_pos_x;
-    lbDisplay.DrawFlags |= Lb_SPRITE_TRANSPAR4;
-    LbDrawBox(gbtn->scr_pos_x, gbtn->scr_pos_y,
-        gbtn->width, gbtn->height, colours[0][0][0]);
-    lbDisplay.DrawFlags &= ~Lb_SPRITE_TRANSPAR4;
+    UIRenderer_SubmitSolidBoxAlpha(gbtn->scr_pos_x, gbtn->scr_pos_y,
+        gbtn->width, gbtn->height, colours[0][0][0], 0.5f);
     for (int battlr_id = 0; battlr_id < MESSAGE_BATTLERS_COUNT-1; battlr_id++)
     {
         int i = enemy_battler_list[MESSAGE_BATTLERS_COUNT * visbtl_id + battlr_id];
@@ -336,10 +331,8 @@ void gui_area_enemy_battlers(struct GuiButton *gbtn)
               if ((game.play_gameturn % (4 * gui_blink_rate)) >= 2 * gui_blink_rate)
               {
                   TbPixel col = player_flash_colours[(game.play_gameturn % (4 * neutral_flash_rate)) / neutral_flash_rate];
-                  lbDisplay.DrawFlags |= (Lb_SPRITE_OUTLINE|0x0004);
-                  LbDrawBox(scr_pos_x, gbtn->scr_pos_y,
+                  UIRenderer_SubmitOutlineBox(scr_pos_x, gbtn->scr_pos_y,
                     wdelta, gbtn->height, col);
-                  lbDisplay.DrawFlags &= ~(Lb_SPRITE_OUTLINE|0x0004);
               }
             }
             scr_pos_x += wdelta;

@@ -68,6 +68,7 @@
 #include "gui_topmsg.h"
 #include "kjm_input.h"
 #include "lens_api.h"
+#include "renderer/RendererManager.h"
 #include "light_data.h"
 #include "magic_powers.h"
 #include "map_blocks.h"
@@ -4258,9 +4259,24 @@ unsigned short find_next_annoyed_creature(PlayerNumber plyr_idx, unsigned short 
 
 void draw_creature_view(struct Thing *thing)
 {
-  // If no eye lens required - just draw on the screen, directly
   struct PlayerInfo* player = get_my_player();
   struct Camera* render_cam = get_local_camera(&player->cameras[CamIV_FirstPerson]);
+
+  // When the GPU world renderer is active, skip the CPU lens-effect and swipe
+  // paths entirely.  Both write palette-index pixels into the staging buffer
+  // (lbDisplay.WScreen) which would then composite on top of the GPU-rendered
+  // world in EndFrame, causing double-drawing and flickering.
+  //
+  // The GPU renders the first-person view through engine() → FlushIsometricView
+  // just like the isometric view.  The lens distortion and swipe overlay are
+  // purely cosmetic CPU post-effects that will be replaced by GPU shaders later.
+  if (WorldViewRenderer_IsGpuActive())
+  {
+      engine(player, render_cam);
+      return;
+  }
+
+  // If no eye lens required - just draw on the screen, directly
   if (!lens_is_ready())
   {
       engine(player, render_cam);

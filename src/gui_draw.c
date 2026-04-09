@@ -108,6 +108,9 @@ void draw_lit_bar64k(long pos_x, long pos_y, int units_per_px, long width)
 
 void draw_slab64k_background(long pos_x, long pos_y, long width, long height)
 {
+    // GPU path: submit tiled slab quad to back layer; staging buffer stays clean in that area.
+    if (UIRenderer_SubmitSlabBackground(pos_x, pos_y, width, height))
+        return;
     long i;
     long scr_x = pos_x / pixel_size;
     long scr_y = pos_y / pixel_size;
@@ -676,7 +679,7 @@ void draw_gui_panel_sprite_rmleft_player(long x, long y, int units_per_px, long 
 {
     spridx = get_player_colored_icon_idx(spridx, plyr_idx);
     const struct TbSprite* spr = get_panel_sprite(spridx);
-    LbSpriteDrawResizedRemap(x, y, units_per_px, spr, &pixmap.fade_tables[remap*256]);
+    UIRenderer_SubmitPanelSpriteRemap(x, y, units_per_px, spr, (int)remap);
 }
 
 void draw_gui_panel_sprite_centered(long x, long y, int units_per_px, long spridx)
@@ -706,7 +709,7 @@ void draw_button_sprite_left(long x, long y, int units_per_px, long spridx)
 void draw_button_sprite_rmleft(long x, long y, int units_per_px, long spridx, unsigned long remap)
 {
     const struct TbSprite* spr = get_button_sprite_for_player(spridx, my_player_number);
-    LbSpriteDrawResizedRemap(x, y, units_per_px, spr, &pixmap.fade_tables[remap*256]);
+    UIRenderer_SubmitPanelSpriteRemap(x, y, units_per_px, spr, (int)remap);
 }
 
 void draw_frontend_sprite_left(long x, long y, int units_per_px, long spridx)

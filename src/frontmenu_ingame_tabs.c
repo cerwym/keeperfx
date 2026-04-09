@@ -404,7 +404,7 @@ void gui_area_progress_bar_short(struct GuiButton *gbtn, int units_per_px, int p
     }
     int bar_fill_scaled = (bar_fill * units_per_px + units_per_px / 2) / 16;
     int bar_whole_scaled = (BAR_FULL_WIDTH * units_per_px + units_per_px / 2) / 16;
-    LbDrawBox(gbtn->scr_pos_x + (22*units_per_px + 16/2)/16 + bar_whole_scaled - bar_fill_scaled,
+    UIRenderer_SubmitSolidBox(gbtn->scr_pos_x + (22*units_per_px + 16/2)/16 + bar_whole_scaled - bar_fill_scaled,
               gbtn->scr_pos_y + (8*units_per_px + 16/2)/16,
               bar_fill_scaled, (8*units_per_px + units_per_px/2)/16, colours[0][0][0]);
 }
@@ -432,7 +432,7 @@ void gui_area_progress_bar_med1(struct GuiButton *gbtn, int units_per_px, int pr
     }
     int bar_fill_scaled = (bar_fill * units_per_px + units_per_px / 2) / 16;
     int bar_whole_scaled = (BAR_FULL_WIDTH * units_per_px + units_per_px / 2) / 16;
-    LbDrawBox(gbtn->scr_pos_x + (72*units_per_px + 16/2)/16 + bar_whole_scaled - bar_fill_scaled,
+    UIRenderer_SubmitSolidBox(gbtn->scr_pos_x + (72*units_per_px + 16/2)/16 + bar_whole_scaled - bar_fill_scaled,
               gbtn->scr_pos_y + (12*units_per_px + 16/2)/16,
               bar_fill_scaled, (6*units_per_px + units_per_px/2)/16, colours[0][0][0]);
 }
@@ -460,7 +460,7 @@ void gui_area_progress_bar_med2(struct GuiButton *gbtn, int units_per_px, int pr
     }
     int bar_fill_scaled = (bar_fill * units_per_px + units_per_px / 2) / 16;
     int bar_whole_scaled = (BAR_FULL_WIDTH * units_per_px + units_per_px / 2) / 16;
-    LbDrawBox(gbtn->scr_pos_x + (4*units_per_px + 16/2)/16 + bar_whole_scaled - bar_fill_scaled,
+    UIRenderer_SubmitSolidBox(gbtn->scr_pos_x + (4*units_per_px + 16/2)/16 + bar_whole_scaled - bar_fill_scaled,
               gbtn->scr_pos_y + (4*units_per_px + 16/2)/16,
               bar_fill_scaled, (16*units_per_px + units_per_px/2)/16, colours[0][0][0]);
 }
@@ -488,7 +488,7 @@ void gui_area_progress_bar_wide(struct GuiButton *gbtn, int units_per_px, int pr
     }
     int bar_fill_scaled = (bar_fill * units_per_px + units_per_px / 2) / 16;
     int bar_whole_scaled = (BAR_FULL_WIDTH * units_per_px + units_per_px / 2) / 16;
-    LbDrawBox(gbtn->scr_pos_x + (28*units_per_px + 16/2)/16 + bar_whole_scaled - bar_fill_scaled,
+    UIRenderer_SubmitSolidBox(gbtn->scr_pos_x + (28*units_per_px + 16/2)/16 + bar_whole_scaled - bar_fill_scaled,
               gbtn->scr_pos_y + (12*units_per_px + 16/2)/16,
               bar_fill_scaled, (8*units_per_px + units_per_px/2)/16, colours[0][0][0]);
 }
@@ -717,7 +717,7 @@ void gui_area_big_spell_button(struct GuiButton *gbtn)
     {
         draw_gui_panel_sprite_left(gbtn->scr_pos_x, gbtn->scr_pos_y, ps_units_per_px, GPS_rpanel_frame_wide_wbar);
         int fill_bar = 42 - (2 * 21 * pwage / 256);
-        LbDrawBox(
+        UIRenderer_SubmitSolidBox(
             gbtn->scr_pos_x + (114 - fill_bar)*units_per_px/16,
             gbtn->scr_pos_y + 12*units_per_px/16,
           fill_bar*units_per_px/16, 6*units_per_px/16, colours[0][0][0]);
@@ -1437,7 +1437,7 @@ void draw_name_box(long x, long y, int width, struct Thing *thing)
             if (bar_fill > 126) {
                 bar_fill = 126;
             }
-            LbDrawBox(x + ((128-bar_fill)*width + 70)/140, y + (4*width + 70)/140, (bar_fill*width + 70)/140, (14*width + 70)/140, colours[0][0][0]);
+            UIRenderer_SubmitSolidBox(x + ((128-bar_fill)*width + 70)/140, y + (4*width + 70)/140, (bar_fill*width + 70)/140, (14*width + 70)/140, colours[0][0][0]);
         }
         // Draw creature name
         const char* text = creature_own_name(thing);
@@ -1461,7 +1461,7 @@ void gui_creature_query_background1(struct GuiMenu *gmnu)
         {
             const struct TbSprite* spr = get_button_sprite_for_player(spr_idx, ctrltng->owner);
             int bs_units_per_px = (gmnu->width * 35 / 100) * 16 / spr->SWidth;
-            LbSpriteDrawResized(portrt_x + 12 * units_per_px / 16, portrt_y + 12 * units_per_px / 16, bs_units_per_px, spr);
+            UIRenderer_SubmitPanelSpriteRaw(portrt_x + 12 * units_per_px / 16, portrt_y + 12 * units_per_px / 16, bs_units_per_px, spr);
         }
     }
     {
@@ -1962,7 +1962,9 @@ void gui_activity_background(struct GuiMenu *gmnu)
         }
     }
     lbDisplay.DrawFlags |= Lb_SPRITE_TRANSPAR4;
-    LbDrawBox(gmnu->pos_x + scale_ui_value(2),gmnu->pos_y + scale_ui_value(218),scale_ui_value(134),scale_ui_value(24),colours[0][0][0]);
+    UIRenderer_SubmitSolidBoxAlpha(gmnu->pos_x + scale_ui_value(2), gmnu->pos_y + scale_ui_value(218),
+        scale_ui_value(134), scale_ui_value(24), colours[0][0][0], 0.5f);
+    lbDisplay.DrawFlags &= ~Lb_SPRITE_TRANSPAR4;
 
     lbDisplay.DrawFlags = flg_mem;
 }

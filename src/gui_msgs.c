@@ -34,6 +34,7 @@
 #include "frontmenu_ingame_evnt.h"
 #include "sprites.h"
 #include "custom_sprites.h"
+#include "renderer/RendererManager.h"
 #include "keeperfx.hpp"
 #include "post_inc.h"
 
@@ -156,7 +157,7 @@ void message_draw(void)
                 case MsgType_Creature:
                 {
                     spr = get_panel_sprite(spr_idx);
-                    LbSpriteDrawResized(x, y, ps_units_per_px, spr);
+                    UIRenderer_SubmitPanelSpriteRaw(x, y, ps_units_per_px, spr);
                     break;
                 }
                 case MsgType_CreatureSpell:
@@ -166,7 +167,7 @@ void message_draw(void)
                 case MsgType_CreatureInstance:
                 {
                     spr = get_panel_sprite(spr_idx);
-                    LbSpriteDrawResized(x, y, ps_units_per_px, spr);
+                    UIRenderer_SubmitPanelSpriteRaw(x, y, ps_units_per_px, spr);
                     break;
                 }
             }
