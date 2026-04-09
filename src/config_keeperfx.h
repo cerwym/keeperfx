@@ -117,6 +117,7 @@ extern unsigned long features_enabled;
 extern const struct NamedCommand lang_type[];
 extern const struct NamedCommand scrshot_type[];
 extern const struct NamedCommand renderer_type_names[];
+extern const struct NamedCommand renderer_palette_mode_names[];
 extern int cfg_renderer_type;
 extern char cmd_char;
 extern short api_enabled;

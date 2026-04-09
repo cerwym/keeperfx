@@ -71,6 +71,7 @@
 #include <string.h>
 #include <math.h>
 #include "lua_base.h"
+#include "renderer/RendererManager.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -2151,6 +2152,76 @@ TbBool cmd_wireframe(PlayerNumber plyr_idx, char * args)
     return true;
 }
 
+static TbBool cmd_renderer_float(PlayerNumber plyr_idx, char* args,
+                                  float* field, const char* name,
+                                  float minv, float maxv)
+{
+    char* tok = strsep(&args, " ");
+    if (tok == NULL) {
+        targeted_message_add(MsgType_Player, plyr_idx, plyr_idx, GUI_MESSAGES_DELAY,
+            "%s = %.4f", name, *field);
+        return true;
+    }
+    float v = (float)atof(tok);
+    if (v < minv) v = minv;
+    if (v > maxv) v = maxv;
+    /* Mutate the live settings struct directly, then apply so downstream
+       hooks (e.g. atlas rebuild triggered by palette_mode change) fire. */
+    *field = v;
+    RendererApplySettings(RendererGetSettings());
+    targeted_message_add(MsgType_Player, plyr_idx, plyr_idx, GUI_MESSAGES_DELAY,
+        "%s = %.4f", name, v);
+    return true;
+}
+
+TbBool cmd_renderer_fullbright(PlayerNumber plyr_idx, char* args)
+{
+    return cmd_renderer_float(plyr_idx, args,
+        &g_renderer_settings.shade_fullbright, "renderer.fullbright", 0.0f, 1.0f);
+}
+
+TbBool cmd_renderer_ambient(PlayerNumber plyr_idx, char* args)
+{
+    return cmd_renderer_float(plyr_idx, args,
+        &g_renderer_settings.shade_ambient, "renderer.ambient", 0.0f, 1.0f);
+}
+
+TbBool cmd_renderer_shade_scale(PlayerNumber plyr_idx, char* args)
+{
+    return cmd_renderer_float(plyr_idx, args,
+        &g_renderer_settings.shade_scale, "renderer.shade_scale", 0.0f, 8.0f);
+}
+
+TbBool cmd_renderer_shade_gamma(PlayerNumber plyr_idx, char* args)
+{
+    return cmd_renderer_float(plyr_idx, args,
+        &g_renderer_settings.shade_gamma, "renderer.shade_gamma", 0.01f, 8.0f);
+}
+
+TbBool cmd_renderer_palette_mode(PlayerNumber plyr_idx, char* args)
+{
+    char* tok = strsep(&args, " ");
+    if (tok == NULL) {
+        targeted_message_add(MsgType_Player, plyr_idx, plyr_idx, GUI_MESSAGES_DELAY,
+            "renderer.palette_mode = %s",
+            g_renderer_settings.palette_mode == RENDERER_PALETTE_TRUECOLOUR
+                ? "TRUECOLOUR" : "INDEXED");
+        return true;
+    }
+    int newmode;
+    if (strcasecmp(tok, "TRUECOLOUR") == 0 || strcasecmp(tok, "TRUECOLOR") == 0)
+        newmode = RENDERER_PALETTE_TRUECOLOUR;
+    else
+        newmode = RENDERER_PALETTE_INDEXED;
+    RendererSettings tmp = *RendererGetSettings();
+    tmp.palette_mode = newmode;
+    RendererApplySettings(&tmp);
+    targeted_message_add(MsgType_Player, plyr_idx, plyr_idx, GUI_MESSAGES_DELAY,
+        "renderer.palette_mode = %s",
+        newmode == RENDERER_PALETTE_TRUECOLOUR ? "TRUECOLOUR" : "INDEXED");
+    return true;
+}
+
 TbBool cmd_cheat_menu(PlayerNumber plyr_idx, char * args)
 {
     if (game.easter_eggs_enabled == false) {
@@ -2307,6 +2378,11 @@ static const struct ConsoleCommand console_commands[] = {
     { "luatypedump", cmd_luatypedump},
     { "cheat.menu", cmd_cheat_menu},
     { "wireframe", cmd_wireframe},
+    { "renderer.fullbright",    cmd_renderer_fullbright },
+    { "renderer.ambient",       cmd_renderer_ambient },
+    { "renderer.shade_scale",   cmd_renderer_shade_scale },
+    { "renderer.shade_gamma",   cmd_renderer_shade_gamma },
+    { "renderer.palette_mode",  cmd_renderer_palette_mode },
 };
 static const int console_command_count = sizeof(console_commands) / sizeof(*console_commands);
 

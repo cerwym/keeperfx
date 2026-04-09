@@ -109,6 +109,13 @@ const struct NamedCommand renderer_type_names[] = {
   {NULL, 0},
   };
 
+const struct NamedCommand renderer_palette_mode_names[] = {
+  {"INDEXED",    RENDERER_PALETTE_INDEXED},
+  {"TRUECOLOUR", RENDERER_PALETTE_TRUECOLOUR},
+  {"TRUECOLOR",  RENDERER_PALETTE_TRUECOLOUR}, // alternate spelling
+  {NULL, 0},
+  };
+
 int cfg_renderer_type = RENDERER_AUTO;
 
 const struct NamedCommand atmos_volume[] = {
@@ -168,6 +175,12 @@ const struct NamedCommand conf_commands[] = {
   {"TAG_MODE_TOGGLING"             , 40},
   {"DEFAULT_TAG_MODE"              , 41},
   {"RENDERER"                      , 42},
+  {"PALETTE_MODE"                  , 43},
+  {"RENDERER_FULLBRIGHT"           , 44},
+  {"RENDERER_AMBIENT"              , 45},
+  {"RENDERER_SHADE_SCALE"          , 46},
+  {"RENDERER_SHADE_GAMMA"          , 47},
+  {"RENDERER_TILE_FILTER"          , 48},
   {NULL,                   0},
   };
 
@@ -949,6 +962,58 @@ static void load_file_configuration(const char *fname, const char *sname, const 
               cfg_renderer_type = i;
           }
           break;
+      case 43: // PALETTE_MODE
+          i = recognize_conf_parameter(buf,&pos,len,renderer_palette_mode_names);
+          if (i < 0)
+          {
+              CONFWRNLOG("Couldn't recognize \"%s\" command parameter in %s file.",
+                COMMAND_TEXT(cmd_num),config_textname);
+          }
+          else
+          {
+              g_renderer_settings.palette_mode = i;
+          }
+          break;
+      case 44: // RENDERER_FULLBRIGHT
+      {
+          char val_buf[64];
+          if (get_conf_parameter_single(buf,&pos,len,val_buf,sizeof(val_buf)) > 0)
+              g_renderer_settings.shade_fullbright = (float)atof(val_buf);
+          break;
+      }
+      case 45: // RENDERER_AMBIENT
+      {
+          char val_buf[64];
+          if (get_conf_parameter_single(buf,&pos,len,val_buf,sizeof(val_buf)) > 0)
+              g_renderer_settings.shade_ambient = (float)atof(val_buf);
+          break;
+      }
+      case 46: // RENDERER_SHADE_SCALE
+      {
+          char val_buf[64];
+          if (get_conf_parameter_single(buf,&pos,len,val_buf,sizeof(val_buf)) > 0)
+              g_renderer_settings.shade_scale = (float)atof(val_buf);
+          break;
+      }
+      case 47: // RENDERER_SHADE_GAMMA
+      {
+          char val_buf[64];
+          if (get_conf_parameter_single(buf,&pos,len,val_buf,sizeof(val_buf)) > 0)
+              g_renderer_settings.shade_gamma = (float)atof(val_buf);
+          break;
+      }
+      case 48: // RENDERER_TILE_FILTER
+      {
+          char val_buf[64];
+          if (get_conf_parameter_single(buf,&pos,len,val_buf,sizeof(val_buf)) > 0)
+          {
+              if (strcasecmp(val_buf, "LINEAR") == 0)
+                  g_renderer_settings.tile_filter = RENDERER_FILTER_LINEAR;
+              else
+                  g_renderer_settings.tile_filter = RENDERER_FILTER_NEAREST;
+          }
+          break;
+      }
       case ccr_comment:
           break;
       case ccr_endOfFile:
