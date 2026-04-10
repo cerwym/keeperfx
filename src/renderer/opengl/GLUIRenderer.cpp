@@ -174,7 +174,7 @@ void GLUIRenderer::SubmitKeeperSprite(short x, short y, unsigned short kspr_base
     m_pending_hand_sprites.push_back(spr);
 }
 
-void GLUIRenderer::SubmitPanelSprite(long x, long y, int units_per_px, SpriteHandle spr, bool flip_horiz)
+void GLUIRenderer::SubmitPanelSprite(int32_t x, int32_t y, int units_per_px, SpriteHandle spr, bool flip_horiz)
 {
     if (spr == kInvalidSpriteHandle || !m_sprite_atlas) return;
     SpriteUV uv;
@@ -189,7 +189,7 @@ void GLUIRenderer::SubmitPanelSprite(long x, long y, int units_per_px, SpriteHan
                1.0f, 1.0f, 1.0f, 1.0f, 0.5f, 0.0f);
 }
 
-void GLUIRenderer::SubmitPanelSpriteRemap(long x, long y, int units_per_px,
+void GLUIRenderer::SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px,
                                           SpriteHandle spr, int remap_row)
 {
     if (spr == kInvalidSpriteHandle || !m_sprite_atlas || !m_fade_texture) {
@@ -213,7 +213,7 @@ void GLUIRenderer::SubmitPanelSpriteRemap(long x, long y, int units_per_px,
     m_remap_quads.push_back(q);
 }
 
-void GLUIRenderer::SubmitPanelSpriteColored(long x, long y, int units_per_px,
+void GLUIRenderer::SubmitPanelSpriteColored(int32_t x, int32_t y, int units_per_px,
                                             SpriteHandle spr, uint8_t color_idx)
 {
     if (spr == kInvalidSpriteHandle || !m_sprite_atlas) return;
@@ -230,7 +230,7 @@ void GLUIRenderer::SubmitPanelSpriteColored(long x, long y, int units_per_px,
                r, g, b, 1.0f, 0.5f, 20.0f);
 }
 
-void GLUIRenderer::SubmitScaledSprite(long x, long y, long w, long h, SpriteHandle spr)
+void GLUIRenderer::SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h, SpriteHandle spr)
 {
     if (spr == kInvalidSpriteHandle || !m_sprite_atlas) return;
     SpriteUV uv;
@@ -240,7 +240,7 @@ void GLUIRenderer::SubmitScaledSprite(long x, long y, long w, long h, SpriteHand
                1.0f, 1.0f, 1.0f, 1.0f, 0.5f, 0.0f);
 }
 
-void GLUIRenderer::SubmitSolidBox(long x, long y, long w, long h, uint8_t color_idx)
+void GLUIRenderer::SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx)
 {
     float r = lbPalette[color_idx * 3 + 0] / 63.0f;
     float g = lbPalette[color_idx * 3 + 1] / 63.0f;
@@ -250,7 +250,7 @@ void GLUIRenderer::SubmitSolidBox(long x, long y, long w, long h, uint8_t color_
                r, g, b, 1.0f, 0.5f, 3.0f);
 }
 
-void GLUIRenderer::SubmitSolidBoxAlpha(long x, long y, long w, long h, uint8_t color_idx, float alpha)
+void GLUIRenderer::SubmitSolidBoxAlpha(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx, float alpha)
 {
     float r = lbPalette[color_idx * 3 + 0] / 63.0f;
     float g = lbPalette[color_idx * 3 + 1] / 63.0f;

@@ -89,7 +89,7 @@ public:
      * CPU default: LbSpriteDrawResized (with optional horizontal flip).
      * @param flip_horiz  Mirror the sprite horizontally.
      */
-    virtual void SubmitPanelSprite(long x, long y, int units_per_px,
+    virtual void SubmitPanelSprite(int32_t x, int32_t y, int units_per_px,
                                    SpriteHandle spr, bool flip_horiz = false);
 
     /**
@@ -98,7 +98,7 @@ public:
      * GPU backends override with a remap shader that samples the fade-table texture.
      * @param remap_row  Row index into pixmap.fade_tables (e.g. 12, 22, 44).
      */
-    virtual void SubmitPanelSpriteRemap(long x, long y, int units_per_px,
+    virtual void SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px,
                                         SpriteHandle spr, int remap_row);
 
     /**
@@ -107,27 +107,27 @@ public:
      * GPU: uses the atlas R8 index as a discard mask; outputs color_idx as a flat colour.
      * @param color_idx  DK palette index for the flat output colour.
      */
-    virtual void SubmitPanelSpriteColored(long x, long y, int units_per_px,
+    virtual void SubmitPanelSpriteColored(int32_t x, int32_t y, int units_per_px,
                                           SpriteHandle spr, uint8_t color_idx);
 
     /**
      * Submit a sprite with explicit pixel dimensions.
      * CPU default: LbSpriteDrawScaled.
      */
-    virtual void SubmitScaledSprite(long x, long y, long w, long h,
+    virtual void SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h,
                                     SpriteHandle spr);
 
     /**
      * Submit a solid-color rectangle.
      * CPU default: LbDrawBox.
      */
-    virtual void SubmitSolidBox(long x, long y, long w, long h, uint8_t color_idx);
+    virtual void SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx);
 
     /**
      * Submit a solid-color rectangle with explicit alpha (e.g. 0.5 for TRANSPAR4 darkening).
      * CPU default: LbDrawBox with Lb_SPRITE_TRANSPAR4 when alpha < 0.75.
      */
-    virtual void SubmitSolidBoxAlpha(long x, long y, long w, long h, uint8_t color_idx, float alpha);
+    virtual void SubmitSolidBoxAlpha(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx, float alpha);
 
     /**
      * Upload the 64×64 palette-indexed gui_slab tile to the GPU.

@@ -17,6 +17,7 @@
 
 #include "bflib_video.h"          /* TbPixel */
 #include "renderer/RendererSettings.h" /* RendererSettings, g_renderer_settings */
+#include <stdint.h>                /* int32_t */
 
 /* IRenderer.h and RendererType are only visible in C++ translation units */
 #ifdef __cplusplus
@@ -169,53 +170,53 @@ void UIRenderer_SubmitKeeperSprite(short x, short y, unsigned short kspr_base,
 
 /** Submit a panel sprite (gui_panel_sprites) at screen-left alignment.
  *  Resolves player coloring for spridx and submits GPU quad; immediate in software mode. */
-void UIRenderer_SubmitPanelSprite(long x, long y, int units_per_px, long spridx);
+void UIRenderer_SubmitPanelSprite(int32_t x, int32_t y, int units_per_px, int32_t spridx);
 
 /** Submit a panel sprite from a pre-resolved TbSprite pointer.
  *  Use when the caller has already called get_panel_sprite(); avoids a second lookup. */
 struct TbSprite;
-void UIRenderer_SubmitPanelSpriteRaw(long x, long y, int units_per_px, const struct TbSprite* spr);
+void UIRenderer_SubmitPanelSpriteRaw(int32_t x, int32_t y, int units_per_px, const struct TbSprite* spr);
 
 /** Submit a panel sprite drawn entirely in a single flat colour (sprite used as discard mask).
  *  GPU: atlas R8 index used to discard transparent pixels; all opaque pixels output color_idx.
  *  CPU fallback: LbSpriteDrawResizedOneColour. */
-void UIRenderer_SubmitPanelSpriteRawColored(long x, long y, int units_per_px, const struct TbSprite* spr, unsigned char color_idx);
+void UIRenderer_SubmitPanelSpriteRawColored(int32_t x, int32_t y, int units_per_px, const struct TbSprite* spr, unsigned char color_idx);
 
 /** Submit a 1-pixel-thick outline rectangle (border only, no fill).
  *  Decomposes into four thin UIRenderer_SubmitSolidBox strips.
  *  Replaces LbDrawBox with Lb_SPRITE_OUTLINE set. */
-void UIRenderer_SubmitOutlineBox(long x, long y, long w, long h, unsigned char color_idx);
+void UIRenderer_SubmitOutlineBox(int32_t x, int32_t y, int32_t w, int32_t h, unsigned char color_idx);
 
 /** Route a palette-remapped panel/button sprite draw through the active UI renderer.
  *  The remap is performed by indexing pixmap.fade_tables[remap_row*256].
  *  GPU backends override with a fall-table shader; the base uses LbSpriteDrawResizedRemap. */
-void UIRenderer_SubmitPanelSpriteRemap(long x, long y, int units_per_px, const struct TbSprite* spr, int remap_row);
+void UIRenderer_SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px, const struct TbSprite* spr, int remap_row);
 
 /** Submit a panel sprite centered on (x, y). */
-void UIRenderer_SubmitPanelSpriteCentered(long x, long y, int units_per_px, long spridx);
+void UIRenderer_SubmitPanelSpriteCentered(int32_t x, int32_t y, int units_per_px, int32_t spridx);
 
 /** Submit a button sprite (button_sprites) at screen-left alignment. */
-void UIRenderer_SubmitButtonSprite(long x, long y, int units_per_px, short spridx);
+void UIRenderer_SubmitButtonSprite(int32_t x, int32_t y, int units_per_px, short spridx);
 
 /** Submit a button sprite horizontally flipped.
  *  In GPU mode: swaps U texture coordinates for a mirror effect.
  *  In software mode: temporarily sets Lb_SPRITE_FLIP_HORIZ before blitting. */
-void UIRenderer_SubmitButtonSpriteFlipped(long x, long y, int units_per_px, short spridx);
+void UIRenderer_SubmitButtonSpriteFlipped(int32_t x, int32_t y, int units_per_px, short spridx);
 
 /** Submit a sprite with explicit pixel dimensions to the GPU batch.
  *  Called by game-logic hooks (draw_status_sprites, draw_engine_number, etc.)
  *  instead of LbSpriteDrawScaled when the GPU renderer is active. */
-void UIRenderer_SubmitScaledSprite(long x, long y, long w, long h, const struct TbSprite *spr);
+void UIRenderer_SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h, const struct TbSprite *spr);
 
 /** Submit a solid-color rectangle to the GPU batch.
  *  Called instead of LbDrawBox when the GPU renderer is active.
  *  color_idx is a DK palette index (0-255). */
-void UIRenderer_SubmitSolidBox(long x, long y, long w, long h, unsigned char color_idx);
+void UIRenderer_SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, unsigned char color_idx);
 
 /** Submit a semi-transparent solid-color rectangle.
  *  alpha=0.5 approximates Lb_SPRITE_TRANSPAR4 darkening toward the given color.
  *  GPU: solid shader with vertex alpha; CPU: GlassMap blend via Lb_SPRITE_TRANSPAR4. */
-void UIRenderer_SubmitSolidBoxAlpha(long x, long y, long w, long h, unsigned char color_idx, float alpha);
+void UIRenderer_SubmitSolidBoxAlpha(int32_t x, int32_t y, int32_t w, int32_t h, unsigned char color_idx, float alpha);
 
 /** Upload the 64×64 R8 gui_slab tile to the GPU for use by UIRenderer_SubmitSlabBackground.
  *  Call after gui_slab data is loaded (typically inside RendererNotifySpritesReloaded). */
@@ -244,7 +245,7 @@ void UIRenderer_SubmitMinimap(int screen_x, int screen_y, int size);
  *  to a SpriteHandle and calling SubmitScaledSprite.  Replaces LbTiledSpriteDraw
  *  for GPU-routed rendering. */
 struct TiledSprite;
-void UIRenderer_SubmitTiledSprite(long x, long y, int units_per_px, const struct TiledSprite* bigspr);
+void UIRenderer_SubmitTiledSprite(int32_t x, int32_t y, int units_per_px, const struct TiledSprite* bigspr);
 
 void UIRenderer_SetLayer(int layer);
 void UIRenderer_FlushBack(void);

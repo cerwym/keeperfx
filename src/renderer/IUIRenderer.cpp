@@ -47,7 +47,7 @@ void IUIRenderer::SubmitKeeperSprite(short x, short y, unsigned short kspr_base,
     process_keeper_sprite(x, y, kspr_base, angle, sprgroup, scale);
 }
 
-void IUIRenderer::SubmitPanelSprite(long x, long y, int units_per_px,
+void IUIRenderer::SubmitPanelSprite(int32_t x, int32_t y, int units_per_px,
                                     SpriteHandle spr, bool flip_horiz)
 {
     auto it = m_handle_to_sprite.find(spr);
@@ -65,7 +65,7 @@ void IUIRenderer::SubmitPanelSprite(long x, long y, int units_per_px,
     }
 }
 
-void IUIRenderer::SubmitPanelSpriteRemap(long x, long y, int units_per_px,
+void IUIRenderer::SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px,
                                          SpriteHandle spr, int remap_row)
 {
     auto it = m_handle_to_sprite.find(spr);
@@ -74,7 +74,7 @@ void IUIRenderer::SubmitPanelSpriteRemap(long x, long y, int units_per_px,
                              &pixmap.fade_tables[remap_row * 256]);
 }
 
-void IUIRenderer::SubmitPanelSpriteColored(long x, long y, int units_per_px,
+void IUIRenderer::SubmitPanelSpriteColored(int32_t x, int32_t y, int units_per_px,
                                            SpriteHandle spr, uint8_t color_idx)
 {
     auto it = m_handle_to_sprite.find(spr);
@@ -82,7 +82,7 @@ void IUIRenderer::SubmitPanelSpriteColored(long x, long y, int units_per_px,
     LbSpriteDrawResizedOneColour(x, y, units_per_px, it->second, color_idx);
 }
 
-void IUIRenderer::SubmitScaledSprite(long x, long y, long w, long h,
+void IUIRenderer::SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h,
                                      SpriteHandle spr)
 {
     auto it = m_handle_to_sprite.find(spr);
@@ -90,12 +90,12 @@ void IUIRenderer::SubmitScaledSprite(long x, long y, long w, long h,
     LbSpriteDrawScaled(x, y, it->second, w, h);
 }
 
-void IUIRenderer::SubmitSolidBox(long x, long y, long w, long h, uint8_t color_idx)
+void IUIRenderer::SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx)
 {
     LbDrawBox(x, y, w, h, color_idx);
 }
 
-void IUIRenderer::SubmitSolidBoxAlpha(long x, long y, long w, long h, uint8_t color_idx, float alpha)
+void IUIRenderer::SubmitSolidBoxAlpha(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx, float alpha)
 {
     // CPU fallback: use GlassMap blending to approximate the requested transparency.
     unsigned short saved_flags = lbDisplay.DrawFlags;

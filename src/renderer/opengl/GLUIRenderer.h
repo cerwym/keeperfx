@@ -89,16 +89,16 @@ public:
     virtual void SubmitSlabSelector(int x1, int y1, int x2, int y2, unsigned char color, float z_depth) override;
     virtual void SubmitKeeperSprite(short x, short y, unsigned short kspr_base,
                                     short angle, unsigned char sprgroup, long scale) override;
-    virtual void SubmitPanelSprite(long x, long y, int units_per_px,
+    virtual void SubmitPanelSprite(int32_t x, int32_t y, int units_per_px,
                                    SpriteHandle spr, bool flip_horiz = false) override;
-    virtual void SubmitPanelSpriteRemap(long x, long y, int units_per_px,
+    virtual void SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px,
                                        SpriteHandle spr, int remap_row) override;
-    virtual void SubmitPanelSpriteColored(long x, long y, int units_per_px,
+    virtual void SubmitPanelSpriteColored(int32_t x, int32_t y, int units_per_px,
                                           SpriteHandle spr, uint8_t color_idx) override;
-    virtual void SubmitScaledSprite(long x, long y, long w, long h,
+    virtual void SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h,
                                     SpriteHandle spr) override;
-    virtual void SubmitSolidBox(long x, long y, long w, long h, uint8_t color_idx) override;
-    virtual void SubmitSolidBoxAlpha(long x, long y, long w, long h, uint8_t color_idx, float alpha) override;
+    virtual void SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx) override;
+    virtual void SubmitSolidBoxAlpha(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx, float alpha) override;
     virtual void UpdateSlabTexture(const uint8_t* data, int dim) override;
     virtual bool SubmitSlabBackground(int x, int y, int w, int h) override;
     virtual uint8_t* AcquireMinimapBuffer(int size) override;
