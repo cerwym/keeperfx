@@ -11,6 +11,7 @@
 #ifdef RENDERER_OPENGL_ENABLED
 
 #include "renderer/opengl/GLFontAtlas.h"
+#include "renderer/opengl/GLShaders.h"
 #include "bflib_sprfnt.h"
 #include "bflib_video.h"
 #include "bflib_vidraw.h"
@@ -18,13 +19,13 @@
 
 #include <glad/glad.h>
 #include <cstring>
+#include "renderer/opengl/KfxProfiling.h"
 #include "post_inc.h"
 
 /******************************************************************************/
 
 GLTextRenderer::GLTextRenderer()
-    : m_current_font(nullptr)
-    , m_font_atlas(nullptr)
+    : m_active_atlas(nullptr)
     , m_shader_program(0)
     , m_vao(0)
     , m_vbo(0)
@@ -45,13 +46,7 @@ GLTextRenderer::~GLTextRenderer()
 
 bool GLTextRenderer::Init()
 {
-    // Create font atlas
-    m_font_atlas = new GLFontAtlas();
-    if (!m_font_atlas)
-    {
-        ERRORLOG("GLTextRenderer: failed to create font atlas");
-        return false;
-    }
+    // Atlases are created lazily in Flush() per unique font pointer.
 
     // Compile shaders
     if (!CompileShaders())
@@ -114,11 +109,10 @@ bool GLTextRenderer::Init()
 
 void GLTextRenderer::Shutdown()
 {
-    if (m_font_atlas)
-    {
-        delete m_font_atlas;
-        m_font_atlas = nullptr;
-    }
+    for (auto& kv : m_atlas_cache)
+        delete kv.second;
+    m_atlas_cache.clear();
+    m_active_atlas = nullptr;
 
     if (m_shader_program) { glDeleteProgram(m_shader_program); m_shader_program = 0; }
     if (m_vao)            { glDeleteVertexArrays(1, &m_vao); m_vao = 0; }
@@ -128,47 +122,8 @@ void GLTextRenderer::Shutdown()
 
 bool GLTextRenderer::CompileShaders()
 {
-    static const char* vert_src =
-        "#version 330 core\n"
-        "layout(location = 0) in vec2 a_pos;\n"
-        "layout(location = 1) in vec2 a_uv;\n"
-        "layout(location = 2) in float a_forced_idx;\n"
-        "uniform vec2 u_viewport;\n"
-        "uniform vec4 u_text_color;\n"
-        "out vec2 v_uv;\n"
-        "out float v_forced_idx;\n"
-        "void main() {\n"
-        "    gl_Position = vec4(a_pos, 0.0, 1.0);\n"
-        "    v_uv = a_uv;\n"
-        "    v_forced_idx = a_forced_idx;\n"
-        "}\n";
-
-    static const char* frag_src =
-        "#version 330 core\n"
-        "in vec2 v_uv;\n"
-        "in float v_forced_idx;\n"
-        "uniform sampler2D u_font_atlas;\n"
-        "uniform sampler2D u_palette;\n"
-        "uniform vec4 u_text_color;\n"
-        "out vec4 FragColor;\n"
-        "void main() {\n"
-        "    vec4 atlas_sample = texture(u_font_atlas, v_uv);\n"
-        "    float alpha = atlas_sample.a;\n"
-        "    if (alpha < 0.1) discard;\n"
-        "    float palette_u;\n"
-        "    if (v_forced_idx >= 0.0) {\n"
-        "        palette_u = (v_forced_idx + 0.5) / 256.0;\n"
-        "    } else {\n"
-        "        float raw_idx = atlas_sample.r * 255.0;\n"
-        "        palette_u = (raw_idx + 0.5) / 256.0;\n"
-        "    }\n"
-        "    vec3 palette_color = texture(u_palette, vec2(palette_u, 0.5)).rgb;\n"
-        "    vec3 final_color = palette_color * u_text_color.rgb;\n"
-        "    FragColor = vec4(final_color, alpha * u_text_color.a);\n"
-        "}\n";
-
     GLuint vert = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vert, 1, &vert_src, nullptr);
+    glShaderSource(vert, 1, &TEXT_VERTEX_SHADER, nullptr);
     glCompileShader(vert);
     
     GLint vert_ok = 0;
@@ -183,7 +138,7 @@ bool GLTextRenderer::CompileShaders()
     }
 
     GLuint frag = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(frag, 1, &frag_src, nullptr);
+    glShaderSource(frag, 1, &TEXT_FRAGMENT_SHADER, nullptr);
     glCompileShader(frag);
     
     GLint frag_ok = 0;
@@ -222,14 +177,40 @@ bool GLTextRenderer::CompileShaders()
     return true;
 }
 
-bool GLTextRenderer::SetFont(const struct TbSpriteSheet* font_sheet)
+void GLTextRenderer::SetFont(const struct TbSpriteSheet* font)
 {
-    if (!m_font_atlas)
-        return false;
+    // Phase 1: delegate to the global-based path until Phase 4 owns state internally.
+    LbTextSetFont(font);
+}
 
-    // Shutdown current atlas and initialize with new font
-    m_font_atlas->Shutdown();
-    return m_font_atlas->Init(font_sheet);
+void GLTextRenderer::SetWindow(int32_t x, int32_t y, int32_t w, int32_t h)
+{
+    LbTextSetWindow(x, y, w, h);
+}
+
+void GLTextRenderer::SetJustifyWindow(int32_t x, int32_t y, int32_t w)
+{
+    LbTextSetJustifyWindow(x, y, w);
+}
+
+void GLTextRenderer::SetClipWindow(int32_t x, int32_t y, int32_t w, int32_t h)
+{
+    LbTextSetClipWindow(x, y, w, h);
+}
+
+void GLTextRenderer::GetJustifyWindow(int32_t* x, int32_t* y, int32_t* w) const
+{
+    LbTextGetJustifyWindow(reinterpret_cast<int*>(x),
+                           reinterpret_cast<int*>(y),
+                           reinterpret_cast<int*>(w));
+}
+
+void GLTextRenderer::GetClipWindow(int32_t* x, int32_t* y, int32_t* w, int32_t* h) const
+{
+    LbTextGetClipWindow(reinterpret_cast<int*>(x),
+                        reinterpret_cast<int*>(y),
+                        reinterpret_cast<int*>(w),
+                        reinterpret_cast<int*>(h));
 }
 
 void GLTextRenderer::SetScreenSize(int width, int height)
@@ -238,7 +219,7 @@ void GLTextRenderer::SetScreenSize(int width, int height)
     m_screen_height = height;
 }
 
-TbBool GLTextRenderer::DrawTextResized(int posx, int posy, int units_per_px, const char* text)
+TbBool GLTextRenderer::DrawTextResized(int32_t posx, int32_t posy, int32_t units_per_px, const char* text)
 {
     if (!text)
         return false;
@@ -258,6 +239,58 @@ TbBool GLTextRenderer::DrawTextResized(int posx, int posy, int units_per_px, con
     return true;
 }
 
+TbBool GLTextRenderer::DrawTextAt(int32_t screen_x, int32_t screen_y, int32_t units_per_px, const char* text)
+{
+    // Phase 1 stub: queue identically to DrawTextResized.
+    // Phase 4+ will implement single-line direct draw.
+    return DrawTextResized(screen_x, screen_y, units_per_px, text);
+}
+
+int32_t GLTextRenderer::LineHeight()
+{
+    return LbTextLineHeight();
+}
+
+int32_t GLTextRenderer::CharWidth(uint32_t chr)
+{
+    return LbTextCharWidth(static_cast<long>(chr));
+}
+
+int32_t GLTextRenderer::CharWidthScaled(uint32_t chr, int32_t units_per_px)
+{
+    return LbTextCharWidthM(static_cast<long>(chr), units_per_px);
+}
+
+int32_t GLTextRenderer::StringWidth(const char* text)
+{
+    return LbTextStringWidth(text);
+}
+
+int32_t GLTextRenderer::StringWidthScaled(const char* text, int32_t units_per_px)
+{
+    return LbTextStringWidthM(text, units_per_px);
+}
+
+int32_t GLTextRenderer::WordWidth(const char* str)
+{
+    return LbTextWordWidth(str);
+}
+
+int32_t GLTextRenderer::WordWidthScaled(const char* str, int32_t units_per_px)
+{
+    return LbTextWordWidthM(str, units_per_px);
+}
+
+int32_t GLTextRenderer::TextHeight(const char* text)
+{
+    return LbTextHeight(text);
+}
+
+int32_t GLTextRenderer::StringHeight(int32_t units_per_px, const char* text)
+{
+    return static_cast<int32_t>(text_string_height(units_per_px, text));
+}
+
 void GLTextRenderer::gl_draw_segment(const char* sbuf, const char* ebuf,
                                       long x, long y, long space_len,
                                       int units_per_px, void* userdata)
@@ -273,14 +306,11 @@ void GLTextRenderer::gl_draw_segment(const char* sbuf, const char* ebuf,
 
 void GLTextRenderer::Flush()
 {
-    if (m_pending.empty() || !m_font_atlas)
-    {
-        static int s_diag = 0;
-        if ((s_diag++ % 300) == 0 && !m_pending.empty())
-            SYNCLOG("GLTextRenderer::Flush: %d pending draws but no font_atlas!", (int)m_pending.size());
-        m_pending.clear();
+    KFX_ZONE("TextRenderer::Flush");
+    KFX_GPU_ZONE("TextPass");
+    KFX_GL_SCOPE(text_grp, "TextPass");
+    if (m_pending.empty())
         return;
-    }
 
     { // Diagnostic
         static int s_diag_frame = 0;
@@ -312,35 +342,82 @@ void GLTextRenderer::Flush()
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, m_palette_tex);
 
+    // CRITICAL: Reset active atlas tracker because other renderers (minimap, sprites)
+    // bind their textures to GL_TEXTURE0 between our Flush() calls, corrupting state.
+    // We must rebind the font atlas texture for the first draw of each frame.
+    m_active_atlas = nullptr;
+
     // Save globals that the layout engine and FlushSegment will overwrite
     const struct TbSpriteSheet* saved_font      = lbFontPtr;
     unsigned char               saved_colour     = lbDisplay.DrawColour;
     unsigned short              saved_draw_flags = lbDisplay.DrawFlags;
 
+    // CRITICAL FIX: Sort pending draws by font pointer to minimize atlas rebinding.
+    // Main menu uses 3 different fonts (36BC0DC8, 36BC0E18, 36BC1368) and without
+    // sorting, the code thrashes between atlases hundreds of times per frame.
+    std::sort(m_pending.begin(), m_pending.end(),
+              [](const DeferredDraw& a, const DeferredDraw& b) {
+                  return a.font < b.font;
+              });
+
     for (const DeferredDraw& d : m_pending)
     {
         if (!d.font) continue;
 
-        // Switch font atlas when the font changes between queued draws.
-        // IMPORTANT: set active unit to GL_TEXTURE0 before calling Init() so that
-        // PackAndUploadAtlas's glBindTexture / final glBindTexture(0) ops do NOT
-        // disturb the palette binding on GL_TEXTURE1.
-        if (d.font != m_current_font)
+        // Look up the cached atlas for this font; build it on first use.
+        // IMPORTANT: activate GL_TEXTURE0 before Init() so PackAndUploadAtlas's
+        // glBindTexture calls don't disturb the palette binding on GL_TEXTURE1.
+        GLFontAtlas* atlas = nullptr;
         {
-            glActiveTexture(GL_TEXTURE0);
-            m_font_atlas->Shutdown();
-            if (!m_font_atlas->Init(d.font))
+            auto it = m_atlas_cache.find(d.font);
+            if (it != m_atlas_cache.end())
             {
-                ERRORLOG("GLTextRenderer::Flush: failed to init atlas for font");
-                continue;
+                atlas = it->second;
+                // Rebuild if the sprite sheet changed since the atlas was built
+                // (font loaded/reloaded after the atlas was first created from empty data).
+                if (atlas->NeedsRebuild(d.font))
+                {
+                    SYNCLOG("GLTextRenderer: Rebuilding stale atlas for font %p (sprite count changed)", d.font);
+                    atlas->Shutdown();
+                    glActiveTexture(GL_TEXTURE0);
+                    if (!atlas->Init(d.font))
+                    {
+                        ERRORLOG("GLTextRenderer::Flush: failed to rebuild atlas for font %p", d.font);
+                        m_atlas_cache.erase(it);
+                        delete atlas;
+                        continue;
+                    }
+                    if (atlas == m_active_atlas)
+                        m_active_atlas = nullptr; // force rebind since texture was recreated
+                }
             }
-            m_current_font = d.font;
+            else
+            {
+                SYNCLOG("GLTextRenderer: Creating new atlas for font %p (cache size: %d)", 
+                       d.font, (int)m_atlas_cache.size());
+                atlas = new GLFontAtlas();
+                glActiveTexture(GL_TEXTURE0);
+                if (!atlas->Init(d.font))
+                {
+                    ERRORLOG("GLTextRenderer::Flush: failed to init atlas for font %p", d.font);
+                    delete atlas;
+                    continue;
+                }
+                m_atlas_cache[d.font] = atlas;
+            }
         }
 
-        if (!m_font_atlas->IsInitialized()) continue;
+        if (!atlas->IsInitialized()) continue;
 
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, m_font_atlas->GetTextureID());
+        // Only rebind the texture when the atlas actually changes.
+        if (atlas != m_active_atlas)
+        {
+            SYNCLOG("GLTextRenderer: Rebinding atlas from %p to %p for font %p", 
+                   m_active_atlas, atlas, d.font);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, atlas->GetTextureID());
+            m_active_atlas = atlas;
+        }
 
         // Expose draw state as globals so the layout engine and FlushSegment
         // read/write them consistently (same as the software path).
@@ -384,7 +461,8 @@ void GLTextRenderer::FlushSegment(const char* sbuf, const char* ebuf,
                                    float screen_x, float screen_y,
                                    float space_len, float scale_factor)
 {
-    if (!sbuf || sbuf >= ebuf || !m_font_atlas || !m_font_atlas->IsInitialized())
+    KFX_ZONE("TextRenderer::FlushSegment");
+    if (!sbuf || sbuf >= ebuf || !m_active_atlas || !m_active_atlas->IsInitialized())
         return;
 
     // Stack buffer: 100 characters × 6 vertices each
@@ -442,6 +520,14 @@ void GLTextRenderer::FlushSegment(const char* sbuf, const char* ebuf,
         float forced_idx = (lbDisplay.DrawFlags & Lb_TEXT_ONE_COLOR)
                          ? (float)lbDisplay.DrawColour : -1.0f;
 
+        // Log ALL characters being rendered to identify the source of black squares
+        static int debug_char_count = 0;
+        if (debug_char_count < 50) {
+            SYNCLOG("GLTextRenderer: Rendering character %lu (0x%02lX) '%c' forced_idx=%.1f", 
+                   chr, chr, (chr >= 32 && chr <= 126) ? (char)chr : '?', forced_idx);
+            debug_char_count++;
+        }
+
         int glyph_width = GenerateCharQuad(chr, current_x, screen_y, scale_factor,
                                            forced_idx, &vertices[vertex_count]);
         if (glyph_width > 0)
@@ -462,10 +548,16 @@ void GLTextRenderer::FlushSegment(const char* sbuf, const char* ebuf,
 int GLTextRenderer::GenerateCharQuad(unsigned long chr, float x, float y, float scale_factor,
                                       float forced_palette_idx, TextVertex* verts)
 {
-    const FontGlyph* glyph = m_font_atlas->GetGlyph(chr);
+    const FontGlyph* glyph = m_active_atlas->GetGlyph(chr);
     if (!glyph)
     {
-        WARNLOG("GLTextRenderer: No glyph for character %lu", chr);
+        // Log the first few missing glyphs for diagnosis
+        static int missing_glyph_count = 0;
+        if (missing_glyph_count < 10) {
+            WARNLOG("GLTextRenderer: No glyph for character %lu (0x%02lX) in font %p", 
+                    chr, chr, lbFontPtr);
+            missing_glyph_count++;
+        }
         return 0;
     }
 
@@ -497,6 +589,31 @@ void GLTextRenderer::ScreenToNDC(float screen_x, float screen_y, float* ndc_x, f
 
 void GLTextRenderer::UpdatePaletteTexture()
 {
+    // CRITICAL: Check if the game palette has been initialized.
+    // lbPalette is loaded during level/menu initialization. If all entries are zero,
+    // the palette isn't ready yet and we'd render invisible black text.
+    bool palette_valid = false;
+    for (int i = 0; i < 256 * 3; ++i)
+    {
+        if (lbPalette[i] != 0)
+        {
+            palette_valid = true;
+            break;
+        }
+    }
+
+    if (!palette_valid)
+    {
+        static bool warned = false;
+        if (!warned)
+        {
+            WARNLOG("GLTextRenderer::UpdatePaletteTexture: lbPalette is all zeros - palette not loaded yet");
+            warned = true;
+        }
+        // Don't upload an all-black palette - keep whatever was there before or skip rendering
+        return;
+    }
+
     // Convert game palette to RGB format for GPU
     unsigned char rgb_palette[256 * 3];
     for (int i = 0; i < 256; ++i)
@@ -505,6 +622,17 @@ void GLTextRenderer::UpdatePaletteTexture()
         rgb_palette[i*3 + 0] = (unsigned char)((int)lbPalette[i*3 + 0] << 2);
         rgb_palette[i*3 + 1] = (unsigned char)((int)lbPalette[i*3 + 1] << 2);  
         rgb_palette[i*3 + 2] = (unsigned char)((int)lbPalette[i*3 + 2] << 2);
+    }
+
+    // Log palette entries every frame to track corruption
+    static int palette_frame_count = 0;
+    palette_frame_count++;
+    if ((palette_frame_count % 500) == 1) {  // Log every 500 frames
+        SYNCLOG("GLTextRenderer: Palette entries at frame %d:", palette_frame_count);
+        for (int i = 0; i < 10; ++i) {
+            SYNCLOG("  [%d] = RGB(%d, %d, %d)", i,
+                   rgb_palette[i*3 + 0], rgb_palette[i*3 + 1], rgb_palette[i*3 + 2]);
+        }
     }
 
     glBindTexture(GL_TEXTURE_2D, m_palette_tex);

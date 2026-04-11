@@ -597,13 +597,56 @@ long MapFadePass_StepFadeOut(long step)
 }
 
 /******************************************************************************/
-/* C-callable text renderer wrapper */
+/* C-callable text renderer wrappers */
 /******************************************************************************/
 
-TbBool TextRenderer_DrawTextResized(int posx, int posy, int units_per_px, const char* text)
+void TextRenderer_SetFont(const struct TbSpriteSheet* font)
+{
+    if (s_textRenderer)
+        s_textRenderer->SetFont(font);
+}
+
+void TextRenderer_SetWindow(int32_t x, int32_t y, int32_t w, int32_t h)
+{
+    if (s_textRenderer)
+        s_textRenderer->SetWindow(x, y, w, h);
+}
+
+void TextRenderer_SetJustifyWindow(int32_t x, int32_t y, int32_t w)
+{
+    if (s_textRenderer)
+        s_textRenderer->SetJustifyWindow(x, y, w);
+}
+
+void TextRenderer_SetClipWindow(int32_t x, int32_t y, int32_t w, int32_t h)
+{
+    if (s_textRenderer)
+        s_textRenderer->SetClipWindow(x, y, w, h);
+}
+
+void TextRenderer_GetJustifyWindow(int32_t* x, int32_t* y, int32_t* w)
+{
+    if (s_textRenderer)
+        s_textRenderer->GetJustifyWindow(x, y, w);
+}
+
+void TextRenderer_GetClipWindow(int32_t* x, int32_t* y, int32_t* w, int32_t* h)
+{
+    if (s_textRenderer)
+        s_textRenderer->GetClipWindow(x, y, w, h);
+}
+
+TbBool TextRenderer_DrawTextResized(int32_t posx, int32_t posy, int32_t units_per_px, const char* text)
 {
     if (s_textRenderer)
         return s_textRenderer->DrawTextResized(posx, posy, units_per_px, text);
+    return false;
+}
+
+TbBool TextRenderer_DrawTextAt(int32_t screen_x, int32_t screen_y, int32_t units_per_px, const char* text)
+{
+    if (s_textRenderer)
+        return s_textRenderer->DrawTextAt(screen_x, screen_y, units_per_px, text);
     return false;
 }
 
@@ -611,6 +654,69 @@ void TextRenderer_Flush(void)
 {
     if (s_textRenderer)
         s_textRenderer->Flush();
+}
+
+int32_t TextRenderer_LineHeight(void)
+{
+    if (s_textRenderer)
+        return s_textRenderer->LineHeight();
+    return 0;
+}
+
+int32_t TextRenderer_CharWidth(uint32_t chr)
+{
+    if (s_textRenderer)
+        return s_textRenderer->CharWidth(chr);
+    return 0;
+}
+
+int32_t TextRenderer_CharWidthScaled(uint32_t chr, int32_t units_per_px)
+{
+    if (s_textRenderer)
+        return s_textRenderer->CharWidthScaled(chr, units_per_px);
+    return 0;
+}
+
+int32_t TextRenderer_StringWidth(const char* text)
+{
+    if (s_textRenderer)
+        return s_textRenderer->StringWidth(text);
+    return 0;
+}
+
+int32_t TextRenderer_StringWidthScaled(const char* text, int32_t units_per_px)
+{
+    if (s_textRenderer)
+        return s_textRenderer->StringWidthScaled(text, units_per_px);
+    return 0;
+}
+
+int32_t TextRenderer_WordWidth(const char* str)
+{
+    if (s_textRenderer)
+        return s_textRenderer->WordWidth(str);
+    return 0;
+}
+
+int32_t TextRenderer_WordWidthScaled(const char* str, int32_t units_per_px)
+{
+    if (s_textRenderer)
+        return s_textRenderer->WordWidthScaled(str, units_per_px);
+    return 0;
+}
+
+int32_t TextRenderer_TextHeight(const char* text)
+{
+    if (s_textRenderer)
+        return s_textRenderer->TextHeight(text);
+    return 0;
+}
+
+int32_t TextRenderer_StringHeight(int32_t units_per_px, const char* text)
+{
+    if (s_textRenderer)
+        return s_textRenderer->StringHeight(units_per_px, text);
+    return 0;
 }
 
 /******************************************************************************/
@@ -650,7 +756,7 @@ void UIRenderer_SubmitKeeperSprite(short x, short y, unsigned short kspr_base,
         s_uiRenderer->SubmitKeeperSprite(x, y, kspr_base, kspr_angle, sprgroup, scale);
 }
 
-void UIRenderer_SubmitPanelSprite(long x, long y, int units_per_px, long spridx)
+void UIRenderer_SubmitPanelSprite(int32_t x, int32_t y, int units_per_px, int32_t spridx)
 {
     if (!s_uiRenderer) return;
     const struct TbSprite* spr = get_panel_sprite(get_player_colored_icon_idx(spridx, my_player_number));
@@ -658,21 +764,21 @@ void UIRenderer_SubmitPanelSprite(long x, long y, int units_per_px, long spridx)
     s_uiRenderer->SubmitPanelSprite(x, y, units_per_px, h);
 }
 
-void UIRenderer_SubmitPanelSpriteRaw(long x, long y, int units_per_px, const struct TbSprite* spr)
+void UIRenderer_SubmitPanelSpriteRaw(int32_t x, int32_t y, int units_per_px, const struct TbSprite* spr)
 {
     if (!s_uiRenderer) return;
     SpriteHandle h = resolve_sprite_handle(spr);
     s_uiRenderer->SubmitPanelSprite(x, y, units_per_px, h);
 }
 
-void UIRenderer_SubmitPanelSpriteRawColored(long x, long y, int units_per_px, const struct TbSprite* spr, unsigned char color_idx)
+void UIRenderer_SubmitPanelSpriteRawColored(int32_t x, int32_t y, int units_per_px, const struct TbSprite* spr, unsigned char color_idx)
 {
     if (!s_uiRenderer) return;
     SpriteHandle h = resolve_sprite_handle(spr);
     s_uiRenderer->SubmitPanelSpriteColored(x, y, units_per_px, h, (uint8_t)color_idx);
 }
 
-void UIRenderer_SubmitOutlineBox(long x, long y, long w, long h, unsigned char color_idx)
+void UIRenderer_SubmitOutlineBox(int32_t x, int32_t y, int32_t w, int32_t h, unsigned char color_idx)
 {
     // Decompose outline into four 1-pixel-thick border strips (top/bottom/left/right).
     UIRenderer_SubmitSolidBox(x,       y,       w, 1, color_idx);  // top
@@ -681,14 +787,14 @@ void UIRenderer_SubmitOutlineBox(long x, long y, long w, long h, unsigned char c
     UIRenderer_SubmitSolidBox(x + w - 1, y,     1, h, color_idx);  // right
 }
 
-void UIRenderer_SubmitPanelSpriteRemap(long x, long y, int units_per_px, const struct TbSprite* spr, int remap_row)
+void UIRenderer_SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px, const struct TbSprite* spr, int remap_row)
 {
     if (!s_uiRenderer) return;
     SpriteHandle h = resolve_sprite_handle(spr);
     s_uiRenderer->SubmitPanelSpriteRemap(x, y, units_per_px, h, remap_row);
 }
 
-void UIRenderer_SubmitPanelSpriteCentered(long x, long y, int units_per_px, long spridx)
+void UIRenderer_SubmitPanelSpriteCentered(int32_t x, int32_t y, int units_per_px, int32_t spridx)
 {
     if (!s_uiRenderer) return;
     const struct TbSprite* spr = get_panel_sprite(get_player_colored_icon_idx(spridx, my_player_number));
@@ -699,7 +805,7 @@ void UIRenderer_SubmitPanelSpriteCentered(long x, long y, int units_per_px, long
     s_uiRenderer->SubmitPanelSprite(x - ox, y - oy, units_per_px, h);
 }
 
-void UIRenderer_SubmitButtonSprite(long x, long y, int units_per_px, short spridx)
+void UIRenderer_SubmitButtonSprite(int32_t x, int32_t y, int units_per_px, short spridx)
 {
     if (!s_uiRenderer) return;
     const struct TbSprite* spr = get_button_sprite_for_player(spridx, my_player_number);
@@ -707,7 +813,7 @@ void UIRenderer_SubmitButtonSprite(long x, long y, int units_per_px, short sprid
     s_uiRenderer->SubmitPanelSprite(x, y, units_per_px, h);
 }
 
-void UIRenderer_SubmitButtonSpriteFlipped(long x, long y, int units_per_px, short spridx)
+void UIRenderer_SubmitButtonSpriteFlipped(int32_t x, int32_t y, int units_per_px, short spridx)
 {
     if (!s_uiRenderer) return;
     const struct TbSprite* spr = get_button_sprite_for_player(spridx, my_player_number);
@@ -715,7 +821,7 @@ void UIRenderer_SubmitButtonSpriteFlipped(long x, long y, int units_per_px, shor
     s_uiRenderer->SubmitPanelSprite(x, y, units_per_px, h, true);
 }
 
-void UIRenderer_SubmitScaledSprite(long x, long y, long w, long h, const struct TbSprite *spr)
+void UIRenderer_SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h, const struct TbSprite *spr)
 {
     if (s_uiRenderer) {
         SpriteHandle hspr = resolve_sprite_handle(spr);
@@ -723,13 +829,13 @@ void UIRenderer_SubmitScaledSprite(long x, long y, long w, long h, const struct 
     }
 }
 
-void UIRenderer_SubmitSolidBox(long x, long y, long w, long h, unsigned char color_idx)
+void UIRenderer_SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, unsigned char color_idx)
 {
     if (s_uiRenderer)
         s_uiRenderer->SubmitSolidBox(x, y, w, h, color_idx);
 }
 
-void UIRenderer_SubmitSolidBoxAlpha(long x, long y, long w, long h, unsigned char color_idx, float alpha)
+void UIRenderer_SubmitSolidBoxAlpha(int32_t x, int32_t y, int32_t w, int32_t h, unsigned char color_idx, float alpha)
 {
     if (s_uiRenderer)
         s_uiRenderer->SubmitSolidBoxAlpha(x, y, w, h, color_idx, alpha);
@@ -760,7 +866,7 @@ void UIRenderer_SubmitMinimap(int screen_x, int screen_y, int size)
         s_uiRenderer->SubmitMinimap(screen_x, screen_y, size);
 }
 
-void UIRenderer_SubmitTiledSprite(long x, long y, int units_per_px, const struct TiledSprite* bigspr)
+void UIRenderer_SubmitTiledSprite(int32_t x, int32_t y, int units_per_px, const struct TiledSprite* bigspr)
 {
     if (!s_uiRenderer || !bigspr) return;
     long cur_y = y;

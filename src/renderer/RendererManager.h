@@ -134,16 +134,67 @@ long MapFadePass_StepFadeIn(long step);
 long MapFadePass_StepFadeOut(long step);
 
 /******************************************************************************/
-/* C-callable text renderer wrapper                                           */
+/* C-callable text renderer wrappers                                          */
 /******************************************************************************/
 
-/** Draw text at (posx, posy) with the given scale through the active ITextRenderer.
+struct TbSpriteSheet;
+
+/** Set the active font for subsequent text operations. */
+void TextRenderer_SetFont(const struct TbSpriteSheet* font);
+
+/** Set both justify and clip windows to the same rectangle. */
+void TextRenderer_SetWindow(int32_t x, int32_t y, int32_t w, int32_t h);
+
+/** Set the justify window (origin + width for word-wrap). */
+void TextRenderer_SetJustifyWindow(int32_t x, int32_t y, int32_t w);
+
+/** Set the clip window (visible rectangle for text clipping). */
+void TextRenderer_SetClipWindow(int32_t x, int32_t y, int32_t w, int32_t h);
+
+/** Query the current justify window. Any pointer may be NULL. */
+void TextRenderer_GetJustifyWindow(int32_t* x, int32_t* y, int32_t* w);
+
+/** Query the current clip window. Any pointer may be NULL. */
+void TextRenderer_GetClipWindow(int32_t* x, int32_t* y, int32_t* w, int32_t* h);
+
+/** Draw text at (posx, posy) relative to the text window with word-wrap.
  *  GPU backends queue the draw; call TextRenderer_Flush() to emit it. */
-TbBool TextRenderer_DrawTextResized(int posx, int posy, int units_per_px, const char* text);
+TbBool TextRenderer_DrawTextResized(int32_t posx, int32_t posy, int32_t units_per_px, const char* text);
+
+/** Draw text at absolute screen coordinates. No window setup needed.
+ *  GPU backends queue the draw; call TextRenderer_Flush() to emit it. */
+TbBool TextRenderer_DrawTextAt(int32_t screen_x, int32_t screen_y, int32_t units_per_px, const char* text);
 
 /** Flush all deferred text draws to the framebuffer.
  *  Must be called after the staging-buffer blit quad and before buffer swap. */
 void TextRenderer_Flush(void);
+
+/** Height of one line of text in the current font (unscaled). */
+int32_t TextRenderer_LineHeight(void);
+
+/** Width of a single character (unscaled). */
+int32_t TextRenderer_CharWidth(uint32_t chr);
+
+/** Width of a single character (scaled by units_per_px). */
+int32_t TextRenderer_CharWidthScaled(uint32_t chr, int32_t units_per_px);
+
+/** Width of a complete string (unscaled). */
+int32_t TextRenderer_StringWidth(const char* text);
+
+/** Width of a complete string (scaled by units_per_px). */
+int32_t TextRenderer_StringWidthScaled(const char* text, int32_t units_per_px);
+
+/** Width of the next word in a string (unscaled). */
+int32_t TextRenderer_WordWidth(const char* str);
+
+/** Width of the next word in a string (scaled by units_per_px). */
+int32_t TextRenderer_WordWidthScaled(const char* str, int32_t units_per_px);
+
+/** Height of a string (accounts for newlines, unscaled). */
+int32_t TextRenderer_TextHeight(const char* text);
+
+/** Height a string would occupy with word-wrap at the given scale. */
+int32_t TextRenderer_StringHeight(int32_t units_per_px, const char* text);
 
 /******************************************************************************/
 /* C-callable raw framebuffer blit                                            */

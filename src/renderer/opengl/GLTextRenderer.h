@@ -10,6 +10,7 @@
 
 #include "renderer/ITextRenderer.h"
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #ifdef RENDERER_OPENGL_ENABLED
@@ -27,10 +28,33 @@ public:
     GLTextRenderer();
     virtual ~GLTextRenderer();
 
-    // ITextRenderer interface
-    virtual TbBool DrawTextResized(int posx, int posy, int units_per_px, const char* text) override;
-    virtual void   Flush() override;
-    virtual const char* GetName() const override { return "OPENGL"; }
+    // ITextRenderer interface — Font
+    void SetFont(const struct TbSpriteSheet* font) override;
+
+    // ITextRenderer interface — Windowing
+    void SetWindow(int32_t x, int32_t y, int32_t w, int32_t h) override;
+    void SetJustifyWindow(int32_t x, int32_t y, int32_t w) override;
+    void SetClipWindow(int32_t x, int32_t y, int32_t w, int32_t h) override;
+    void GetJustifyWindow(int32_t* x, int32_t* y, int32_t* w) const override;
+    void GetClipWindow(int32_t* x, int32_t* y, int32_t* w, int32_t* h) const override;
+
+    // ITextRenderer interface — Drawing
+    TbBool DrawTextResized(int32_t posx, int32_t posy, int32_t units_per_px, const char* text) override;
+    TbBool DrawTextAt(int32_t screen_x, int32_t screen_y, int32_t units_per_px, const char* text) override;
+    void   Flush() override;
+
+    // ITextRenderer interface — Measurement
+    int32_t LineHeight() override;
+    int32_t CharWidth(uint32_t chr) override;
+    int32_t CharWidthScaled(uint32_t chr, int32_t units_per_px) override;
+    int32_t StringWidth(const char* text) override;
+    int32_t StringWidthScaled(const char* text, int32_t units_per_px) override;
+    int32_t WordWidth(const char* str) override;
+    int32_t WordWidthScaled(const char* str, int32_t units_per_px) override;
+    int32_t TextHeight(const char* text) override;
+    int32_t StringHeight(int32_t units_per_px, const char* text) override;
+
+    const char* GetName() const override { return "OPENGL"; }
 
     /** Initialize with OpenGL context.
      *  @return true if successful */
@@ -38,12 +62,6 @@ public:
 
     /** Clean up GPU resources. */
     void Shutdown();
-
-    /** Update font atlas when the active font changes.
-     *  Called when LbTextSetFont() is used.
-     *  @param font_sheet New font to use for rendering
-     *  @return true if successful */
-    bool SetFont(const struct TbSpriteSheet* font_sheet);
 
     /** Set screen dimensions for NDC conversion.
      *  @param width Screen width in pixels
@@ -62,9 +80,10 @@ private:
     };
 
     std::vector<DeferredDraw>  m_pending;         // Queued draws, flushed in Flush()
-    const struct TbSpriteSheet* m_current_font;   // Font currently loaded in atlas
 
-    GLFontAtlas*     m_font_atlas;       // Current font atlas
+    // Per-font atlas cache: built once per unique TbSpriteSheet*, reused every frame.
+    std::unordered_map<const struct TbSpriteSheet*, GLFontAtlas*> m_atlas_cache;
+    GLFontAtlas*     m_active_atlas;     // Atlas currently bound for the in-progress draw
     unsigned int     m_shader_program;   // Text rendering shader
     unsigned int     m_vao;              // Vertex array object
     unsigned int     m_vbo;              // Vertex buffer object
