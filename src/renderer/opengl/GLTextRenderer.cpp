@@ -14,11 +14,10 @@
 #include "renderer/opengl/GLShaders.h"
 #include "bflib_sprfnt.h"
 #include "bflib_video.h"
-#include "bflib_vidraw.h"
-#include "globals.h"
 
 #include <glad/glad.h>
 #include <cstring>
+#include <climits>
 #include "renderer/opengl/KfxProfiling.h"
 #include "post_inc.h"
 
@@ -36,6 +35,9 @@ GLTextRenderer::GLTextRenderer()
     , m_loc_font_atlas(-1)
     , m_loc_palette(-1)
     , m_loc_text_color(-1)
+    , m_font(nullptr)
+    , m_justify_window{}
+    , m_clip_window{}
 {
 }
 
@@ -179,38 +181,54 @@ bool GLTextRenderer::CompileShaders()
 
 void GLTextRenderer::SetFont(const struct TbSpriteSheet* font)
 {
-    // Phase 1: delegate to the global-based path until Phase 4 owns state internally.
-    LbTextSetFont(font);
+    m_font = font;
+    // Keep global in sync during transition
+    lbFontPtr = font;
 }
 
 void GLTextRenderer::SetWindow(int32_t x, int32_t y, int32_t w, int32_t h)
 {
-    LbTextSetWindow(x, y, w, h);
+    m_justify_window = { x, y, w, 0 };
+    SetClipWindow(x, y, w, h);
 }
 
 void GLTextRenderer::SetJustifyWindow(int32_t x, int32_t y, int32_t w)
 {
-    LbTextSetJustifyWindow(x, y, w);
+    m_justify_window.x = x;
+    m_justify_window.y = y;
+    m_justify_window.width = w;
 }
 
 void GLTextRenderer::SetClipWindow(int32_t x, int32_t y, int32_t w, int32_t h)
 {
-    LbTextSetClipWindow(x, y, w, h);
+    int32_t x0 = x, y0 = y;
+    int32_t x1 = x + w, y1 = y + h;
+    if (x0 > x1) { int32_t t = x0; x0 = x1; x1 = t; }
+    if (y0 > y1) { int32_t t = y0; y0 = y1; y1 = t; }
+    if (x0 < 0) x0 = 0;
+    if (x1 < 0) x1 = 0;
+    if (y0 < 0) y0 = 0;
+    if (y1 < 0) y1 = 0;
+    if (x0 > lbDisplay.GraphicsScreenWidth)  x0 = lbDisplay.GraphicsScreenWidth;
+    if (x1 > lbDisplay.GraphicsScreenWidth)  x1 = lbDisplay.GraphicsScreenWidth;
+    if (y0 > lbDisplay.GraphicsScreenHeight) y0 = lbDisplay.GraphicsScreenHeight;
+    if (y1 > lbDisplay.GraphicsScreenHeight) y1 = lbDisplay.GraphicsScreenHeight;
+    m_clip_window = { x0, y0, x1 - x0, y1 - y0 };
 }
 
 void GLTextRenderer::GetJustifyWindow(int32_t* x, int32_t* y, int32_t* w) const
 {
-    LbTextGetJustifyWindow(reinterpret_cast<int*>(x),
-                           reinterpret_cast<int*>(y),
-                           reinterpret_cast<int*>(w));
+    if (x) *x = m_justify_window.x;
+    if (y) *y = m_justify_window.y;
+    if (w) *w = m_justify_window.width;
 }
 
 void GLTextRenderer::GetClipWindow(int32_t* x, int32_t* y, int32_t* w, int32_t* h) const
 {
-    LbTextGetClipWindow(reinterpret_cast<int*>(x),
-                        reinterpret_cast<int*>(y),
-                        reinterpret_cast<int*>(w),
-                        reinterpret_cast<int*>(h));
+    if (x) *x = m_clip_window.x;
+    if (y) *y = m_clip_window.y;
+    if (w) *w = m_clip_window.width;
+    if (h) *h = m_clip_window.height;
 }
 
 void GLTextRenderer::SetScreenSize(int width, int height)
@@ -224,18 +242,11 @@ TbBool GLTextRenderer::DrawTextResized(int32_t posx, int32_t posy, int32_t units
     if (!text)
         return false;
 
-    // Capture all text-window and display state at call time.
-    // Actual GL draws happen in Flush(), called by RendererOpenGL::EndFrame()
-    // after the staging-buffer blit so text composites correctly over WScreen content.
-    int wnd_x = 0, wnd_y = 0, wnd_width = 0;
-    LbTextGetJustifyWindow(&wnd_x, &wnd_y, &wnd_width);
-    int clip_x = 0, clip_y = 0, clip_w = 0, clip_h = 0;
-    LbTextGetClipWindow(&clip_x, &clip_y, &clip_w, &clip_h);
     m_pending.push_back({ posx, posy, units_per_px,
-                          wnd_x, wnd_y, wnd_width,
-                          clip_x, clip_y, clip_w, clip_h,
+                          m_justify_window.x, m_justify_window.y, m_justify_window.width,
+                          m_clip_window.x, m_clip_window.y, m_clip_window.width, m_clip_window.height,
                           lbDisplay.DrawColour, lbDisplay.DrawFlags,
-                          text, lbFontPtr });
+                          text, m_font });
     return true;
 }
 
@@ -248,59 +259,135 @@ TbBool GLTextRenderer::DrawTextAt(int32_t screen_x, int32_t screen_y, int32_t un
 
 int32_t GLTextRenderer::LineHeight()
 {
-    return LbTextLineHeight();
+    return LbSprFontCharHeight(m_font, ' ');
 }
 
 int32_t GLTextRenderer::CharWidth(uint32_t chr)
 {
-    return LbTextCharWidth(static_cast<long>(chr));
+    return LbSprFontCharWidth(m_font, static_cast<unsigned char>(chr));
 }
 
 int32_t GLTextRenderer::CharWidthScaled(uint32_t chr, int32_t units_per_px)
 {
-    return LbTextCharWidthM(static_cast<long>(chr), units_per_px);
+    return LbSprFontCharWidth(m_font, static_cast<unsigned char>(chr)) * units_per_px / 16;
 }
 
 int32_t GLTextRenderer::StringWidth(const char* text)
 {
-    return LbTextStringWidth(text);
+    return LbTextStringPartWidth(text, INT_MAX);
 }
 
 int32_t GLTextRenderer::StringWidthScaled(const char* text, int32_t units_per_px)
 {
-    return LbTextStringWidthM(text, units_per_px);
+    return StringWidth(text) * units_per_px / 16;
 }
 
 int32_t GLTextRenderer::WordWidth(const char* str)
 {
-    return LbTextWordWidth(str);
+    return LbSprFontWordWidth(m_font, str);
 }
 
 int32_t GLTextRenderer::WordWidthScaled(const char* str, int32_t units_per_px)
 {
-    return LbTextWordWidthM(str, units_per_px);
+    return LbSprFontWordWidth(m_font, str) * units_per_px / 16;
 }
 
 int32_t GLTextRenderer::TextHeight(const char* text)
 {
-    return LbTextHeight(text);
+    return LineHeight();
 }
 
 int32_t GLTextRenderer::StringHeight(int32_t units_per_px, const char* text)
 {
-    return static_cast<int32_t>(text_string_height(units_per_px, text));
+    if (!m_font || !text)
+        return 0;
+
+    int32_t nlines = 0;
+    int32_t lnwidth_clip = m_justify_window.x - m_clip_window.x;
+    int32_t lnwidth = lnwidth_clip;
+
+    for (const char* pchr = text; *pchr != '\0'; pchr++)
+    {
+        int32_t chr = (unsigned char)(*pchr);
+        if (is_wide_charcode(chr))
+        {
+            pchr++;
+            if (*pchr == '\0') break;
+            chr = (chr << 8) + (unsigned char)*pchr;
+        }
+
+        if (chr > 32)
+        {
+            int32_t w = CharWidthScaled(chr, units_per_px);
+            if (lnwidth + w - lnwidth_clip > m_justify_window.width)
+            {
+                lnwidth = lnwidth_clip + w;
+                nlines++;
+            }
+            else
+            {
+                lnwidth += w;
+            }
+        }
+        else if (chr == ' ')
+        {
+            if (lnwidth > 0)
+            {
+                int32_t w = CharWidth(' ') * units_per_px / 16;
+                if (lnwidth + w + WordWidth(pchr + 1) * units_per_px / 16 - lnwidth_clip > m_justify_window.width)
+                {
+                    lnwidth = lnwidth_clip;
+                    nlines++;
+                }
+                else
+                {
+                    lnwidth += w;
+                }
+            }
+        }
+        else
+        {
+            switch (chr)
+            {
+            case '\r':
+                lnwidth = lnwidth_clip;
+                nlines++;
+                if (pchr[1] == '\n') pchr++;
+                break;
+            case '\n':
+                lnwidth = lnwidth_clip;
+                nlines++;
+                break;
+            case '\t':
+            {
+                int32_t w = CharWidth(' ') * units_per_px / 16;
+                lnwidth += LbTextGetSpacesPerTab() * w;
+                if (lnwidth + WordWidth(pchr + 1) * units_per_px / 16 - lnwidth_clip > m_justify_window.width)
+                {
+                    lnwidth = lnwidth_clip;
+                    nlines++;
+                }
+                break;
+            }
+            case 14:
+                pchr++;
+                break;
+            }
+        }
+    }
+    nlines++;
+    return nlines * (LineHeight() * units_per_px / 16);
 }
 
 void GLTextRenderer::gl_draw_segment(const char* sbuf, const char* ebuf,
-                                      long x, long y, long space_len,
-                                      int units_per_px, void* userdata)
+                                      int32_t x, int32_t y, int32_t space_len,
+                                      int32_t units_per_px, void* userdata)
 {
     GLTextRenderer* self = static_cast<GLTextRenderer*>(userdata);
-    int clip_x = 0, clip_y = 0, clip_w = 0, clip_h = 0;
-    LbTextGetClipWindow(&clip_x, &clip_y, &clip_w, &clip_h);
     float scale = (float)units_per_px / 16.0f;
     self->FlushSegment(sbuf, ebuf,
-                       (float)(clip_x + x), (float)(clip_y + y),
+                       (float)(self->m_clip_window.x + x),
+                       (float)(self->m_clip_window.y + y),
                        (float)space_len, scale);
 }
 
@@ -419,13 +506,15 @@ void GLTextRenderer::Flush()
             m_active_atlas = atlas;
         }
 
-        // Expose draw state as globals so the layout engine and FlushSegment
-        // read/write them consistently (same as the software path).
+        // Set the clip window on the renderer so gl_draw_segment can read it
+        // for absolute screen coordinate conversion.
+        m_clip_window = { d.clip_x, d.clip_y, d.clip_w, d.clip_h };
+
+        // Expose draw state as globals so FlushSegment reads/writes
+        // lbDisplay.DrawColour / DrawFlags consistently for control codes.
         lbFontPtr            = const_cast<struct TbSpriteSheet*>(d.font);
         lbDisplay.DrawColour = d.draw_colour;
         lbDisplay.DrawFlags  = d.draw_flags;
-        LbTextSetJustifyWindow(d.wnd_x, d.wnd_y, d.wnd_width);
-        LbTextSetClipWindow(d.clip_x, d.clip_y, d.clip_w, d.clip_h);
 
         // Scissor to the captured clip window
         if (d.clip_w > 0 && d.clip_h > 0)
@@ -435,10 +524,18 @@ void GLTextRenderer::Flush()
             glScissor(d.clip_x, gl_y, d.clip_w, d.clip_h);
         }
 
-        // Shared paragraph layout engine — calls gl_draw_segment once per
-        // justified line segment, which calls FlushSegment to emit quads.
-        LbTextLayout(d.posx, d.posy, d.units_per_px, d.text.c_str(),
-                     gl_draw_segment, this);
+        // Build layout context from the deferred draw's captured state
+        TextLayoutContext ctx{};
+        ctx.font           = d.font;
+        ctx.dbc_font       = nullptr;   // DBC: Phase 4
+        ctx.dbc_enabled    = false;
+        ctx.draw_flags     = d.draw_flags;
+        ctx.justify_window = { d.wnd_x, d.wnd_y, d.wnd_width, 0 };
+        ctx.clip_window    = { d.clip_x, d.clip_y, d.clip_w, d.clip_h };
+        ctx.spaces_per_tab = LbTextGetSpacesPerTab();
+
+        TextLayout(ctx, d.posx, d.posy, d.units_per_px, d.text.c_str(),
+                   gl_draw_segment, this);
 
         glDisable(GL_SCISSOR_TEST);
     }
@@ -519,15 +616,7 @@ void GLTextRenderer::FlushSegment(const char* sbuf, const char* ebuf,
         // Normal character — emit a textured quad
         float forced_idx = (lbDisplay.DrawFlags & Lb_TEXT_ONE_COLOR)
                          ? (float)lbDisplay.DrawColour : -1.0f;
-
-        // Log ALL characters being rendered to identify the source of black squares
-        static int debug_char_count = 0;
-        if (debug_char_count < 50) {
-            SYNCLOG("GLTextRenderer: Rendering character %lu (0x%02lX) '%c' forced_idx=%.1f", 
-                   chr, chr, (chr >= 32 && chr <= 126) ? (char)chr : '?', forced_idx);
-            debug_char_count++;
-        }
-
+                         
         int glyph_width = GenerateCharQuad(chr, current_x, screen_y, scale_factor,
                                            forced_idx, &vertices[vertex_count]);
         if (glyph_width > 0)

@@ -87,6 +87,9 @@ extern short dbc_language;
 extern TbBool dbc_enabled;
 extern TbBool dbc_initialized;
 extern const struct TbSpriteSheet *lbFontPtr;
+extern struct AsianFont *active_dbcfont;
+extern long dbc_colour0;
+extern long dbc_colour1;
 
 /******************************************************************************/
 
@@ -97,10 +100,6 @@ TbBool LbTextDraw(int posx, int posy, const char *text);
 #define LbTextDrawFmt(posx, posy, fmt, ...) LbTextDrawResizedFmt(posx, posy, 16, fmt, ##__VA_ARGS__)
 TbBool LbTextDrawResized(int posx, int posy, int units_per_px, const char *text);
 TbBool LbTextDrawResizedFmt(int posx, int posy, int units_per_px, const char *fmt, ...);
-/* Software text renderer implementation — do not call directly from game code */
-TbBool LbTextDraw_sw(int posx, int posy, const char *text);
-TbBool LbTextDrawResized_sw(int posx, int posy, int units_per_px, const char *text);
-TbBool LbTextDrawResizedFmt_sw(int posx, int posy, int units_per_px, const char *fmt, ...);
 int LbTextHeight(const char *text);
 int LbTextLineHeight(void);
 int LbTextSetWindow(int posx, int posy, int width, int height);
@@ -125,34 +124,6 @@ int LbTextWordWidthM(const char *str, long units_per_px);
 int LbTextNumberDraw(int pos_x, int pos_y, int units_per_px, long number, unsigned short fdflags);
 int LbTextStringDraw(int pos_x, int pos_y, int units_per_px, const char *text, unsigned short fdflags);
 
-// Sub-routines, used for drawing text strings. For use in custom drawing methods.
-TbBool LbAlignMethodSet(unsigned short fdflags);
-long LbGetJustifiedCharPosX(long startx, long all_chars_width, long spr_width, long mul_width, unsigned short fdflags);
-long LbGetJustifiedCharPosY(long starty, long all_lines_height, long spr_height, unsigned short fdflags);
-long LbGetJustifiedCharWidth(long all_chars_width, long spr_width, long words_count, int units_per_px, unsigned short fdflags);
-
-/** Callback invoked by LbTextLayout once per justified line segment.
- *  @param sbuf      Start of text segment (inclusive)
- *  @param ebuf      End of text segment (exclusive)
- *  @param x         X position in clip-window-relative coordinates
- *  @param y         Y position in clip-window-relative coordinates
- *  @param space_len Pixel width of a space for this segment (may be justify-expanded)
- *  @param units_per_px Scale factor (16 = 100%)
- *  @param userdata  Caller-supplied context pointer */
-typedef void (*LbTextSegmentFn)(const char* sbuf, const char* ebuf,
-                                long x, long y, long space_len,
-                                int units_per_px, void* userdata);
-
-/** Shared paragraph layout engine.
- *  Walks the text string applying word-wrap and justification against
- *  lbTextJustifyWindow, calling draw_fn once for each justified line segment.
- *  Coordinates passed to draw_fn are clip-window-relative (i.e. relative to
- *  the origin of lbTextClipWindow).
- *  Caller must set lbFontPtr, lbDisplay.DrawFlags, lbTextJustifyWindow and
- *  lbTextClipWindow before calling. */
-void LbTextLayout(int posx, int posy, int units_per_px, const char* text,
-                  LbTextSegmentFn draw_fn, void* userdata);
-
 // Function which require font sprites as parameter
 int LbSprFontWordWidth(const struct TbSpriteSheet * font, const char * text);
 int LbSprFontCharWidth(const struct TbSpriteSheet * font, const unsigned long chr);
@@ -161,9 +132,26 @@ const struct TbSprite * LbFontCharSprite(const struct TbSpriteSheet * font, cons
 
 void LbTextUseByteCoding(TbBool is_enabled);
 long text_string_height(int units_per_px, const char *text);
+int LbTextStringPartWidthM(const char *text, int part, long units_per_px);
+void LbDrawCharUnderline(long pos_x, long pos_y, long width, long height,
+    unsigned char draw_colr, unsigned char shadow_colr);
+int get_bit_to_array(unsigned char *arrD, int iX, int iY, int iMax);
+void set_bit_to_array(unsigned char *arrD, int iX, int iY, int iMax, int iValue);
+
+// DBC (Double Byte Coding) font support
 void dbc_set_language(short ilng);
 short dbc_initialize(const char *fpath);
 TbBool is_wide_charcode(unsigned long chr);
+long dbc_char_width(unsigned long chr);
+long dbc_char_widthM(unsigned long chr, long units_per_px);
+long dbc_char_height(unsigned long chr);
+int  dbc_get_sprite_for_char(struct AsianDraw *adraw, unsigned long chr);
+int  dbc_draw_font_sprite_text(const struct AsianFontWindow *awind,
+    const struct AsianDraw *adraw, long pos_x, long pos_y,
+    short colr1, short colr2, short colr3);
+TbBool change_dbcfont(int nfont);
+int  dbc_fonts_count(void);
+struct AsianFont *dbc_fonts_list(void);
 
 /******************************************************************************/
 #ifdef __cplusplus

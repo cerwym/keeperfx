@@ -13,38 +13,9 @@
 #include "bflib_sprfnt.h"
 #include "bflib_sprite.h"
 #include "bflib_vidraw.h"
-#include "globals.h"
 #include "frontend.h"       // frontend_font[], winfont, font_sprites, frontstory_font
 #include "front_credits.h"  // frontstory_font (may be declared here)
 #include "post_inc.h"
-
-/******************************************************************************/
-/* Externs for DBC helper functions still in bflib_sprfnt.c                   */
-/******************************************************************************/
-extern "C" {
-    long  dbc_char_width(unsigned long chr);
-    long  dbc_char_widthM(unsigned long chr, long units_per_px);
-    long  dbc_char_height(unsigned long chr);
-    int   dbc_get_sprite_for_char(struct AsianDraw* adraw, unsigned long chr);
-    int   dbc_draw_font_sprite_text(const struct AsianFontWindow* awind,
-                                    const struct AsianDraw* adraw,
-                                    long pos_x, long pos_y,
-                                    short colr1, short colr2, short colr3);
-    TbBool change_dbcfont(int nfont);
-    int    dbc_fonts_count(void);
-    struct AsianFont* dbc_fonts_list(void);
-    int    LbTextStringPartWidthM(const char* text, int part, long units_per_px);
-    void   LbDrawCharUnderline(long pos_x, long pos_y, long width, long height,
-                               unsigned char draw_colr, unsigned char shadow_colr);
-    int    get_bit_to_array(unsigned char* arrD, int iX, int iY, int iMax);
-    void   set_bit_to_array(unsigned char* arrD, int iX, int iY, int iMax, int iValue);
-
-    // Globals kept in sync during transition
-    extern struct AsianFont* active_dbcfont;
-    extern long dbc_colour0;
-    extern long dbc_colour1;
-    extern const struct TbSpriteSheet* lbFontPtr;
-}
 
 /******************************************************************************/
 
@@ -120,9 +91,6 @@ void SoftwareTextRenderer::SetWindow(int32_t x, int32_t y, int32_t w, int32_t h)
 {
     m_justify_window = { x, y, w, 0 };
     SetClipWindow(x, y, w, h);
-
-    // Keep globals in sync
-    LbTextSetWindow(x, y, w, h);
 }
 
 void SoftwareTextRenderer::SetJustifyWindow(int32_t x, int32_t y, int32_t w)
@@ -130,9 +98,6 @@ void SoftwareTextRenderer::SetJustifyWindow(int32_t x, int32_t y, int32_t w)
     m_justify_window.x = x;
     m_justify_window.y = y;
     m_justify_window.width = w;
-
-    // Keep globals in sync
-    LbTextSetJustifyWindow(x, y, w);
 }
 
 void SoftwareTextRenderer::SetClipWindow(int32_t x, int32_t y, int32_t w, int32_t h)
@@ -151,9 +116,6 @@ void SoftwareTextRenderer::SetClipWindow(int32_t x, int32_t y, int32_t w, int32_
     if (y1 > lbDisplay.GraphicsScreenHeight) y1 = lbDisplay.GraphicsScreenHeight;
 
     m_clip_window = { x0, y0, x1 - x0, y1 - y0 };
-
-    // Keep globals in sync
-    LbTextSetClipWindow(x, y, w, h);
 }
 
 void SoftwareTextRenderer::GetJustifyWindow(int32_t* x, int32_t* y, int32_t* w) const

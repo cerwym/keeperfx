@@ -105,11 +105,11 @@ private:
         float forced_palette_idx; // >= 0: use this palette index (ONE_COLOR mode); < 0: use atlas
     };
 
-    /** C-linkage-compatible segment callback passed to LbTextLayout.
+    /** Segment callback passed to TextLayout().
      *  Casts userdata back to GLTextRenderer* and calls FlushSegment. */
     static void gl_draw_segment(const char* sbuf, const char* ebuf,
-                                long x, long y, long space_len,
-                                int units_per_px, void* userdata);
+                                int32_t x, int32_t y, int32_t space_len,
+                                int32_t units_per_px, void* userdata);
 
     /** Compile and link text rendering shaders.
      *  @return true if successful */
@@ -145,6 +145,13 @@ private:
 
     /** Convert screen pixel coordinates to NDC. */
     void ScreenToNDC(float screen_x, float screen_y, float* ndc_x, float* ndc_y) const;
+
+    /**************************************************************************/
+    /* Font / window state (owned, not delegated to globals)                  */
+    /**************************************************************************/
+    const struct TbSpriteSheet* m_font;
+    TextWindow                  m_justify_window;
+    TextWindow                  m_clip_window;
 };
 
 /******************************************************************************/
