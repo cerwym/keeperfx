@@ -3,106 +3,787 @@
 /******************************************************************************/
 /** @file SoftwareTextRenderer.cpp
  *     CPU software implementation of ITextRenderer.
- *     Phase 1: Delegates to existing bflib_sprfnt.c functions.
+ *     Owns font, DBC, and window state.  Drawing functions moved from
+ *     bflib_sprfnt.c — sprite blits still go through lbDisplay globals.
  */
 /******************************************************************************/
 #include "pre_inc.h"
 #include "renderer/backends/SoftwareTextRenderer.h"
 
 #include "bflib_sprfnt.h"
+#include "bflib_sprite.h"
+#include "bflib_vidraw.h"
+#include "globals.h"
+#include "frontend.h"       // frontend_font[], winfont, font_sprites, frontstory_font
+#include "front_credits.h"  // frontstory_font (may be declared here)
 #include "post_inc.h"
 
+/******************************************************************************/
+/* Externs for DBC helper functions still in bflib_sprfnt.c                   */
+/******************************************************************************/
+extern "C" {
+    long  dbc_char_width(unsigned long chr);
+    long  dbc_char_widthM(unsigned long chr, long units_per_px);
+    long  dbc_char_height(unsigned long chr);
+    int   dbc_get_sprite_for_char(struct AsianDraw* adraw, unsigned long chr);
+    int   dbc_draw_font_sprite_text(const struct AsianFontWindow* awind,
+                                    const struct AsianDraw* adraw,
+                                    long pos_x, long pos_y,
+                                    short colr1, short colr2, short colr3);
+    TbBool change_dbcfont(int nfont);
+    int    dbc_fonts_count(void);
+    struct AsianFont* dbc_fonts_list(void);
+    int    LbTextStringPartWidthM(const char* text, int part, long units_per_px);
+    void   LbDrawCharUnderline(long pos_x, long pos_y, long width, long height,
+                               unsigned char draw_colr, unsigned char shadow_colr);
+    int    get_bit_to_array(unsigned char* arrD, int iX, int iY, int iMax);
+    void   set_bit_to_array(unsigned char* arrD, int iX, int iY, int iMax, int iValue);
+
+    // Globals kept in sync during transition
+    extern struct AsianFont* active_dbcfont;
+    extern long dbc_colour0;
+    extern long dbc_colour1;
+    extern const struct TbSpriteSheet* lbFontPtr;
+}
+
+/******************************************************************************/
+
+SoftwareTextRenderer::SoftwareTextRenderer()
+    : m_font(nullptr)
+    , m_dbc_font(nullptr)
+    , m_dbc_colour0(0)
+    , m_dbc_colour1(0)
+    , m_dbc_enabled(false)
+    , m_justify_window{}
+    , m_clip_window{}
+{
+}
+
+/******************************************************************************/
+/* Font                                                                       */
 /******************************************************************************/
 
 void SoftwareTextRenderer::SetFont(const struct TbSpriteSheet* font)
 {
-    LbTextSetFont(font);
+    m_font = font;
+
+    // Keep globals in sync during transition
+    lbFontPtr = font;
+
+    if (dbc_initialized)
+    {
+        m_dbc_colour0 = LbTextGetFontFaceColor();
+        m_dbc_colour1 = LbTextGetFontBackColor();
+
+        // Resolve DBC font index from the Western font identity
+        int dbc_idx;
+        if (font == frontend_font[0]) {
+            dbc_idx = 2;
+        } else if (font == frontend_font[1] || font == frontend_font[2] ||
+                   font == frontend_font[3] || font == winfont ||
+                   font == font_sprites || font == frontstory_font) {
+            dbc_idx = (lbDisplay.PhysicalScreenWidth < 512) ? 0 : 1;
+        } else {
+            dbc_idx = (lbDisplay.PhysicalScreenWidth < 512) ? 0 : 1;
+        }
+
+        const int32_t fonts_count = dbc_fonts_count();
+        struct AsianFont* dbcfonts = dbc_fonts_list();
+        if ((dbc_idx >= 0) && (dbc_idx < fonts_count) && (dbcfonts != nullptr))
+        {
+            m_dbc_font = &dbcfonts[dbc_idx];
+            m_dbc_enabled = true;
+        }
+        else
+        {
+            m_dbc_font = nullptr;
+            m_dbc_enabled = false;
+        }
+
+        // Keep globals in sync
+        active_dbcfont = const_cast<struct AsianFont*>(m_dbc_font);
+        dbc_colour0 = m_dbc_colour0;
+        dbc_colour1 = m_dbc_colour1;
+    }
+    else
+    {
+        m_dbc_font = nullptr;
+        m_dbc_enabled = false;
+    }
 }
+
+/******************************************************************************/
+/* Windowing                                                                  */
+/******************************************************************************/
 
 void SoftwareTextRenderer::SetWindow(int32_t x, int32_t y, int32_t w, int32_t h)
 {
+    m_justify_window = { x, y, w, 0 };
+    SetClipWindow(x, y, w, h);
+
+    // Keep globals in sync
     LbTextSetWindow(x, y, w, h);
 }
 
 void SoftwareTextRenderer::SetJustifyWindow(int32_t x, int32_t y, int32_t w)
 {
+    m_justify_window.x = x;
+    m_justify_window.y = y;
+    m_justify_window.width = w;
+
+    // Keep globals in sync
     LbTextSetJustifyWindow(x, y, w);
 }
 
 void SoftwareTextRenderer::SetClipWindow(int32_t x, int32_t y, int32_t w, int32_t h)
 {
+    int32_t x0 = x, y0 = y;
+    int32_t x1 = x + w, y1 = y + h;
+    if (x0 > x1) { int32_t t = x0; x0 = x1; x1 = t; }
+    if (y0 > y1) { int32_t t = y0; y0 = y1; y1 = t; }
+    if (x0 < 0) x0 = 0;
+    if (x1 < 0) x1 = 0;
+    if (y0 < 0) y0 = 0;
+    if (y1 < 0) y1 = 0;
+    if (x0 > lbDisplay.GraphicsScreenWidth)  x0 = lbDisplay.GraphicsScreenWidth;
+    if (x1 > lbDisplay.GraphicsScreenWidth)  x1 = lbDisplay.GraphicsScreenWidth;
+    if (y0 > lbDisplay.GraphicsScreenHeight) y0 = lbDisplay.GraphicsScreenHeight;
+    if (y1 > lbDisplay.GraphicsScreenHeight) y1 = lbDisplay.GraphicsScreenHeight;
+
+    m_clip_window = { x0, y0, x1 - x0, y1 - y0 };
+
+    // Keep globals in sync
     LbTextSetClipWindow(x, y, w, h);
 }
 
 void SoftwareTextRenderer::GetJustifyWindow(int32_t* x, int32_t* y, int32_t* w) const
 {
-    // bflib uses int, but int32_t is the same on all supported platforms
-    LbTextGetJustifyWindow(reinterpret_cast<int*>(x),
-                           reinterpret_cast<int*>(y),
-                           reinterpret_cast<int*>(w));
+    if (x) *x = m_justify_window.x;
+    if (y) *y = m_justify_window.y;
+    if (w) *w = m_justify_window.width;
 }
 
 void SoftwareTextRenderer::GetClipWindow(int32_t* x, int32_t* y, int32_t* w, int32_t* h) const
 {
-    LbTextGetClipWindow(reinterpret_cast<int*>(x),
-                        reinterpret_cast<int*>(y),
-                        reinterpret_cast<int*>(w),
-                        reinterpret_cast<int*>(h));
+    if (x) *x = m_clip_window.x;
+    if (y) *y = m_clip_window.y;
+    if (w) *w = m_clip_window.width;
+    if (h) *h = m_clip_window.height;
 }
 
-TbBool SoftwareTextRenderer::DrawTextResized(int32_t posx, int32_t posy, int32_t units_per_px, const char* text)
-{
-    return LbTextDrawResized_sw(posx, posy, units_per_px, text);
-}
-
-TbBool SoftwareTextRenderer::DrawTextAt(int32_t screen_x, int32_t screen_y, int32_t units_per_px, const char* text)
-{
-    // Phase 1 stub: set a trivial full-screen window, draw, restore nothing (caller sets window)
-    // Phase 2+ will implement single-line direct draw without touching window state
-    return LbTextDrawResized_sw(screen_x, screen_y, units_per_px, text);
-}
+/******************************************************************************/
+/* Measurement                                                                */
+/******************************************************************************/
 
 int32_t SoftwareTextRenderer::LineHeight()
 {
-    return LbTextLineHeight();
+    if (m_dbc_enabled)
+        return static_cast<int32_t>(dbc_char_height(0xFFFF));
+    return LbSprFontCharHeight(m_font, ' ');
 }
 
 int32_t SoftwareTextRenderer::CharWidth(uint32_t chr)
 {
-    return LbTextCharWidth(static_cast<long>(chr));
+    if (m_dbc_enabled)
+        return static_cast<int32_t>(dbc_char_width(chr));
+    return LbSprFontCharWidth(m_font, static_cast<unsigned char>(chr));
 }
 
 int32_t SoftwareTextRenderer::CharWidthScaled(uint32_t chr, int32_t units_per_px)
 {
-    return LbTextCharWidthM(static_cast<long>(chr), units_per_px);
+    if (m_dbc_enabled)
+        return static_cast<int32_t>(dbc_char_widthM(chr, units_per_px));
+    return LbSprFontCharWidth(m_font, static_cast<unsigned char>(chr)) * units_per_px / 16;
 }
 
 int32_t SoftwareTextRenderer::StringWidth(const char* text)
 {
-    return LbTextStringWidth(text);
+    return LbTextStringPartWidth(text, INT_MAX);
 }
 
 int32_t SoftwareTextRenderer::StringWidthScaled(const char* text, int32_t units_per_px)
 {
-    return LbTextStringWidthM(text, units_per_px);
+    if (m_dbc_enabled)
+        return LbTextStringPartWidthM(text, INT_MAX, units_per_px);
+    return StringWidth(text) * units_per_px / 16;
 }
 
 int32_t SoftwareTextRenderer::WordWidth(const char* str)
 {
-    return LbTextWordWidth(str);
+    return LbSprFontWordWidth(m_font, str);
 }
 
 int32_t SoftwareTextRenderer::WordWidthScaled(const char* str, int32_t units_per_px)
 {
-    return LbTextWordWidthM(str, units_per_px);
+    if (!str || str[0] == 0)
+        return 0;
+
+    if (m_dbc_enabled)
+    {
+        int32_t len = 0;
+        for (int i = 0; str[i] != 0; i++)
+        {
+            unsigned char c = str[i];
+            if ((c == ' ') || (c == '\t') || (c == '\0') || (c == '\r') || (c == '\n'))
+                break;
+
+            int32_t chr = (unsigned char)c;
+            TbBool WideChar = is_wide_charcode(chr);
+            if (WideChar)
+            {
+                if (str[i + 1] == '\0') break;
+                chr = (chr << 8) + (unsigned char)str[i + 1];
+            }
+            else if (str[i] == '\xc2' && str[i + 1] == '\xa0')
+            {
+                chr = (chr << 8) + (unsigned char)str[i + 1];
+                WideChar = true;
+            }
+
+            if (WideChar)
+            {
+                if (len != 0) break;
+                return static_cast<int32_t>(dbc_char_widthM(chr, units_per_px));
+            }
+            len += static_cast<int32_t>(dbc_char_widthM(chr, units_per_px));
+        }
+        return len;
+    }
+
+    return LbSprFontWordWidth(m_font, str) * units_per_px / 16;
 }
 
 int32_t SoftwareTextRenderer::TextHeight(const char* text)
 {
-    return LbTextHeight(text);
+    return LineHeight();
 }
 
 int32_t SoftwareTextRenderer::StringHeight(int32_t units_per_px, const char* text)
 {
-    return static_cast<int32_t>(text_string_height(units_per_px, text));
+    if (!m_font || !text)
+        return 0;
+
+    int32_t nlines = 0;
+    int32_t lnwidth_clip = m_justify_window.x - m_clip_window.x;
+    int32_t lnwidth = lnwidth_clip;
+
+    for (const char* pchr = text; *pchr != '\0'; pchr++)
+    {
+        int32_t chr = (unsigned char)(*pchr);
+        if (is_wide_charcode(chr))
+        {
+            pchr++;
+            if (*pchr == '\0') break;
+            chr = (chr << 8) + (unsigned char)*pchr;
+        }
+
+        if (chr > 32)
+        {
+            int32_t w = CharWidthScaled(chr, units_per_px);
+            if (lnwidth + w - lnwidth_clip > m_justify_window.width)
+            {
+                lnwidth = lnwidth_clip + w;
+                nlines++;
+            }
+            else
+            {
+                lnwidth += w;
+            }
+        }
+        else if (chr == ' ')
+        {
+            if (lnwidth > 0)
+            {
+                int32_t w = CharWidth(' ') * units_per_px / 16;
+                if (lnwidth + w + WordWidth(pchr + 1) * units_per_px / 16 - lnwidth_clip > m_justify_window.width)
+                {
+                    lnwidth = lnwidth_clip;
+                    nlines++;
+                }
+                else
+                {
+                    lnwidth += w;
+                }
+            }
+        }
+        else
+        {
+            switch (chr)
+            {
+            case '\r':
+                lnwidth = lnwidth_clip;
+                nlines++;
+                if (pchr[1] == '\n') pchr++;
+                break;
+            case '\n':
+                lnwidth = lnwidth_clip;
+                nlines++;
+                break;
+            case '\t':
+            {
+                int32_t w = CharWidth(' ') * units_per_px / 16;
+                lnwidth += LbTextGetSpacesPerTab() * w;
+                if (lnwidth + WordWidth(pchr + 1) * units_per_px / 16 - lnwidth_clip > m_justify_window.width)
+                {
+                    lnwidth = lnwidth_clip;
+                    nlines++;
+                }
+                break;
+            }
+            case 14:
+                pchr++;
+                break;
+            }
+        }
+    }
+    nlines++;
+    return nlines * (LineHeight() * units_per_px / 16);
+}
+
+/******************************************************************************/
+/* Drawing                                                                    */
+/******************************************************************************/
+
+TextLayoutContext SoftwareTextRenderer::BuildLayoutContext() const
+{
+    TextLayoutContext ctx{};
+    ctx.font           = m_font;
+    ctx.dbc_font       = m_dbc_font;
+    ctx.dbc_enabled    = m_dbc_enabled;
+    ctx.draw_flags     = lbDisplay.DrawFlags;
+    ctx.justify_window = m_justify_window;
+    ctx.clip_window    = m_clip_window;
+    ctx.spaces_per_tab = LbTextGetSpacesPerTab();
+    return ctx;
+}
+
+void SoftwareTextRenderer::SwDrawSegment(const char* sbuf, const char* ebuf,
+                                         int32_t x, int32_t y, int32_t space_len,
+                                         int32_t units_per_px, void* userdata)
+{
+    auto* self = static_cast<SoftwareTextRenderer*>(userdata);
+    self->PutDownSprites(sbuf, ebuf, x, y, space_len, units_per_px);
+}
+
+TbBool SoftwareTextRenderer::DrawTextResized(int32_t posx, int32_t posy,
+                                             int32_t units_per_px, const char* text)
+{
+    if (!m_font || !text)
+        return true;
+
+    TbGraphicsWindow grwnd;
+    LbScreenStoreGraphicsWindow(&grwnd);
+
+    // Load the clip window into the graphics window state so put_down functions
+    // write to the correct region of lbDisplay.WScreen.
+    TbGraphicsWindow clip_grwnd;
+    clip_grwnd.x      = m_clip_window.x;
+    clip_grwnd.y      = m_clip_window.y;
+    clip_grwnd.width  = m_clip_window.width;
+    clip_grwnd.height = m_clip_window.height;
+    clip_grwnd.ptr    = nullptr;
+    LbScreenLoadGraphicsWindow(&clip_grwnd);
+
+    TextLayoutContext ctx = BuildLayoutContext();
+    TextLayout(ctx, posx, posy, units_per_px, text, SwDrawSegment, this);
+
+    LbScreenLoadGraphicsWindow(&grwnd);
+    return true;
+}
+
+TbBool SoftwareTextRenderer::DrawTextAt(int32_t screen_x, int32_t screen_y,
+                                        int32_t units_per_px, const char* text)
+{
+    if (!m_font || !text)
+        return true;
+
+    TbGraphicsWindow grwnd;
+    LbScreenStoreGraphicsWindow(&grwnd);
+
+    TbGraphicsWindow clip_grwnd;
+    clip_grwnd.x      = m_clip_window.x;
+    clip_grwnd.y      = m_clip_window.y;
+    clip_grwnd.width  = m_clip_window.width;
+    clip_grwnd.height = m_clip_window.height;
+    clip_grwnd.ptr    = nullptr;
+    LbScreenLoadGraphicsWindow(&clip_grwnd);
+
+    int32_t space_w = CharWidthScaled(' ', units_per_px);
+    PutDownSprites(text, text + strlen(text), screen_x, screen_y, space_w, units_per_px);
+
+    LbScreenLoadGraphicsWindow(&grwnd);
+    return true;
+}
+
+/******************************************************************************/
+/* Sprite drawing (moved from bflib_sprfnt.c)                                 */
+/******************************************************************************/
+
+void SoftwareTextRenderer::PutDownSprites(const char* sbuf, const char* ebuf,
+                                          int32_t x, int32_t y, int32_t len,
+                                          int32_t units_per_px)
+{
+    if (units_per_px == 16)
+    {
+        if (m_dbc_enabled)
+            PutDownDbcSprites(sbuf, ebuf, x, y, len);
+        else
+            PutDownSimpleSprites(sbuf, ebuf, x, y, len);
+    }
+    else
+    {
+        if (m_dbc_enabled)
+            PutDownDbcSpritesResized(sbuf, ebuf, x, y, len, units_per_px);
+        else
+            PutDownSimpleSpritesResized(sbuf, ebuf, x, y, len, units_per_px);
+    }
+}
+
+void SoftwareTextRenderer::PutDownSimpleSprites(const char* sbuf, const char* ebuf,
+                                                int32_t x, int32_t y, int32_t len)
+{
+    for (const char* c = sbuf; c < ebuf; c++)
+    {
+        unsigned char chr = (unsigned char)(*c);
+        if (c[0] == '\xc2' && c + 1 < ebuf && c[1] == '\xa0')
+        {
+            int32_t w = len;
+            if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLINE) != 0)
+            {
+                int32_t h = LineHeight();
+                LbDrawCharUnderline(x, y, w, h, lbDisplay.DrawColour, lbDisplayEx.ShadowColour);
+            }
+            x += w;
+            c++;
+        }
+        else if (chr == ' ')
+        {
+            int32_t w = len;
+            if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLINE) != 0)
+            {
+                int32_t h = LineHeight();
+                LbDrawCharUnderline(x, y, w, h, lbDisplay.DrawColour, lbDisplayEx.ShadowColour);
+            }
+            x += w;
+        }
+        else if (chr >= 15)
+        {
+            const struct TbSprite* spr = LbFontCharSprite(m_font, chr);
+            if (spr != nullptr)
+            {
+                if ((lbDisplay.DrawFlags & Lb_TEXT_ONE_COLOR) != 0)
+                    LbSpriteDrawOneColour(x, y, spr, lbDisplay.DrawColour);
+                else
+                    LbSpriteDraw(x, y, spr);
+                int32_t w = spr->SWidth;
+                if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLINE) != 0)
+                {
+                    int32_t h = LineHeight();
+                    LbDrawCharUnderline(x, y, w, h, lbDisplay.DrawColour, lbDisplayEx.ShadowColour);
+                }
+                x += w;
+            }
+        }
+        else if (chr == '\t')
+        {
+            int32_t w = len * (int32_t)LbTextGetSpacesPerTab();
+            if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLINE) != 0)
+            {
+                int32_t h = LineHeight();
+                LbDrawCharUnderline(x, y, w, h, lbDisplay.DrawColour, lbDisplayEx.ShadowColour);
+            }
+            x += w;
+        }
+        else
+        {
+            switch (chr)
+            {
+            case 1:  lbDisplay.DrawFlags ^= Lb_SPRITE_TRANSPAR4;  break;
+            case 2:  lbDisplay.DrawFlags ^= Lb_SPRITE_TRANSPAR8;  break;
+            case 3:  lbDisplay.DrawFlags ^= Lb_SPRITE_OUTLINE;    break;
+            case 4:  lbDisplay.DrawFlags ^= Lb_SPRITE_FLIP_HORIZ; break;
+            case 5:  lbDisplay.DrawFlags ^= Lb_SPRITE_FLIP_VERTIC; break;
+            case 11: lbDisplay.DrawFlags ^= Lb_TEXT_UNDERLINE;     break;
+            case 12: lbDisplay.DrawFlags ^= Lb_TEXT_ONE_COLOR;     break;
+            case 14: c++; lbDisplay.DrawColour = (unsigned char)(*c); break;
+            default: break;
+            }
+        }
+    }
+}
+
+void SoftwareTextRenderer::PutDownSimpleSpritesResized(const char* sbuf, const char* ebuf,
+                                                       int32_t x, int32_t y,
+                                                       int32_t space_len, int32_t units_per_px)
+{
+    for (const char* c = sbuf; c < ebuf; c++)
+    {
+        unsigned char chr = (unsigned char)(*c);
+        if (c[0] == '\xc2' && c + 1 < ebuf && c[1] == '\xa0')
+        {
+            int32_t w = space_len;
+            if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLINE) != 0)
+            {
+                int32_t h = LineHeight() * units_per_px / 16;
+                LbDrawCharUnderline(x, y, w, h, lbDisplay.DrawColour, lbDisplayEx.ShadowColour);
+            }
+            x += w;
+            c++;
+        }
+        else if (chr == ' ')
+        {
+            int32_t w = space_len;
+            if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLINE) != 0)
+            {
+                int32_t h = LineHeight() * units_per_px / 16;
+                LbDrawCharUnderline(x, y, w, h, lbDisplay.DrawColour, lbDisplayEx.ShadowColour);
+            }
+            x += w;
+        }
+        else if (chr >= 15)
+        {
+            const struct TbSprite* spr = LbFontCharSprite(m_font, chr);
+            if (spr != nullptr)
+            {
+                if ((lbDisplay.DrawFlags & Lb_TEXT_ONE_COLOR) != 0)
+                    LbSpriteDrawResizedOneColour(x, y, units_per_px, spr, lbDisplay.DrawColour);
+                else
+                    LbSpriteDrawResized(x, y, units_per_px, spr);
+                int32_t w = spr->SWidth * units_per_px / 16;
+                if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLINE) != 0)
+                {
+                    int32_t h = LineHeight() * units_per_px / 16;
+                    LbDrawCharUnderline(x, y, w, h, lbDisplay.DrawColour, lbDisplayEx.ShadowColour);
+                }
+                x += w;
+            }
+        }
+        else if (chr == '\t')
+        {
+            int32_t w = space_len * (int32_t)LbTextGetSpacesPerTab();
+            if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLINE) != 0)
+            {
+                int32_t h = LineHeight() * units_per_px / 16;
+                LbDrawCharUnderline(x, y, w, h, lbDisplay.DrawColour, lbDisplayEx.ShadowColour);
+            }
+            x += w;
+        }
+        else
+        {
+            switch (chr)
+            {
+            case 1:  lbDisplay.DrawFlags ^= Lb_SPRITE_TRANSPAR4;  break;
+            case 2:  lbDisplay.DrawFlags ^= Lb_SPRITE_TRANSPAR8;  break;
+            case 3:  lbDisplay.DrawFlags ^= Lb_SPRITE_OUTLINE;    break;
+            case 4:  lbDisplay.DrawFlags ^= Lb_SPRITE_FLIP_HORIZ; break;
+            case 5:  lbDisplay.DrawFlags ^= Lb_SPRITE_FLIP_VERTIC; break;
+            case 11: lbDisplay.DrawFlags ^= Lb_TEXT_UNDERLINE;     break;
+            case 12: lbDisplay.DrawFlags ^= Lb_TEXT_ONE_COLOR;     break;
+            case 14: c++; lbDisplay.DrawColour = (unsigned char)(*c); break;
+            default: break;
+            }
+        }
+    }
+}
+
+void SoftwareTextRenderer::PutDownDbcSprites(const char* sbuf, const char* ebuf,
+                                             int32_t x, int32_t y, int32_t len)
+{
+    struct AsianFontWindow awind;
+    awind.buf_ptr = lbDisplay.GraphicsWindowPtr;
+    awind.width = lbDisplay.GraphicsWindowWidth;
+    awind.height = lbDisplay.GraphicsWindowHeight;
+    awind.scanline = lbDisplay.GraphicsScreenWidth;
+    TbBool needs_draw = false;
+    unsigned long chr = 0;
+
+    for (const char* c = sbuf; c < ebuf; c++)
+    {
+        chr = (unsigned char)(*c);
+        if (is_wide_charcode(chr))
+        {
+            c++;
+            chr = (chr << 8) | (unsigned char)(*c);
+            needs_draw = true;
+        }
+        else if (chr > 32)
+        {
+            needs_draw = true;
+        }
+        else if (chr == ' ')
+        {
+            int32_t w = len;
+            if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLINE) != 0)
+            {
+                int32_t h = static_cast<int32_t>(dbc_char_height(' '));
+                LbDrawCharUnderline(x, y, w, h, lbDisplay.DrawColour, lbDisplayEx.ShadowColour);
+            }
+            x += w;
+        }
+        else if (chr == '\t')
+        {
+            int32_t w = len * (int32_t)LbTextGetSpacesPerTab();
+            if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLINE) != 0)
+            {
+                int32_t h = static_cast<int32_t>(dbc_char_height(' '));
+                LbDrawCharUnderline(x, y, w, h, lbDisplay.DrawColour, lbDisplayEx.ShadowColour);
+            }
+            x += w;
+        }
+        else
+        {
+            switch (chr)
+            {
+            case 1:  lbDisplay.DrawFlags ^= Lb_SPRITE_TRANSPAR4;  break;
+            case 2:  lbDisplay.DrawFlags ^= Lb_SPRITE_TRANSPAR8;  break;
+            case 3:  lbDisplay.DrawFlags ^= Lb_SPRITE_OUTLINE;    break;
+            case 4:  lbDisplay.DrawFlags ^= Lb_SPRITE_FLIP_HORIZ; break;
+            case 5:  lbDisplay.DrawFlags ^= Lb_SPRITE_FLIP_VERTIC; break;
+            case 11: lbDisplay.DrawFlags ^= Lb_TEXT_UNDERLINE;     break;
+            case 12: lbDisplay.DrawFlags ^= Lb_TEXT_ONE_COLOR;     break;
+            case 14: c++; lbDisplay.DrawColour = (unsigned char)(*c); break;
+            default: break;
+            }
+        }
+
+        if (needs_draw)
+        {
+            struct AsianDraw adraw;
+            if (dbc_get_sprite_for_char(&adraw, chr) == 0)
+            {
+                unsigned long colour;
+                if ((lbDisplay.DrawFlags & Lb_TEXT_ONE_COLOR) == 0)
+                    colour = m_dbc_colour0;
+                else
+                    colour = lbDisplay.DrawColour;
+                dbc_draw_font_sprite_text(&awind, &adraw, x, y, colour, -1, m_dbc_colour1);
+                int32_t w = adraw.character_spacing + adraw.bits_width;
+                if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLINE) != 0)
+                {
+                    int32_t h = adraw.bits_height;
+                    LbDrawCharUnderline(x, y, w, h, colour, lbDisplayEx.ShadowColour);
+                }
+                x += w;
+                if (x >= awind.width)
+                    return;
+            }
+            needs_draw = false;
+        }
+    }
+}
+
+void SoftwareTextRenderer::PutDownDbcSpritesResized(const char* sbuf, const char* ebuf,
+                                                    int32_t x, int32_t y,
+                                                    int32_t space_len, int32_t units_per_px)
+{
+    struct AsianFontWindow awind;
+    awind.buf_ptr = lbDisplay.GraphicsWindowPtr;
+    awind.width = lbDisplay.GraphicsWindowWidth;
+    awind.height = lbDisplay.GraphicsWindowHeight;
+    awind.scanline = lbDisplay.GraphicsScreenWidth;
+    TbBool needs_draw = false;
+    unsigned long chr = 0;
+
+    for (const char* c = sbuf; c < ebuf; c++)
+    {
+        chr = (unsigned char)(*c);
+        if (is_wide_charcode(chr))
+        {
+            c++;
+            chr = (chr << 8) | (unsigned char)(*c);
+            needs_draw = true;
+        }
+        else if (chr > 32)
+        {
+            needs_draw = true;
+        }
+        else if (chr == ' ')
+        {
+            int32_t w = space_len;
+            if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLINE) != 0)
+            {
+                int32_t h = static_cast<int32_t>(dbc_char_height(' ')) * units_per_px / 16;
+                LbDrawCharUnderline(x, y, w, h, lbDisplay.DrawColour, lbDisplayEx.ShadowColour);
+            }
+            x += w;
+        }
+        else if (chr == '\t')
+        {
+            int32_t w = space_len * (int32_t)LbTextGetSpacesPerTab();
+            if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLINE) != 0)
+            {
+                int32_t h = static_cast<int32_t>(dbc_char_height(' ')) * units_per_px / 16;
+                LbDrawCharUnderline(x, y, w, h, lbDisplay.DrawColour, lbDisplayEx.ShadowColour);
+            }
+            x += w;
+        }
+        else
+        {
+            switch (chr)
+            {
+            case 1:  lbDisplay.DrawFlags ^= Lb_SPRITE_TRANSPAR4;  break;
+            case 2:  lbDisplay.DrawFlags ^= Lb_SPRITE_TRANSPAR8;  break;
+            case 3:  lbDisplay.DrawFlags ^= Lb_SPRITE_OUTLINE;    break;
+            case 4:  lbDisplay.DrawFlags ^= Lb_SPRITE_FLIP_HORIZ; break;
+            case 5:  lbDisplay.DrawFlags ^= Lb_SPRITE_FLIP_VERTIC; break;
+            case 11: lbDisplay.DrawFlags ^= Lb_TEXT_UNDERLINE;     break;
+            case 12: lbDisplay.DrawFlags ^= Lb_TEXT_ONE_COLOR;     break;
+            case 14: c++; lbDisplay.DrawColour = (unsigned char)(*c); break;
+            default: break;
+            }
+        }
+
+        if (needs_draw)
+        {
+            struct AsianDraw adraw;
+            if (dbc_get_sprite_for_char(&adraw, chr) == 0)
+            {
+                unsigned long colour;
+                if ((lbDisplay.DrawFlags & Lb_TEXT_ONE_COLOR) == 0)
+                    colour = m_dbc_colour0;
+                else
+                    colour = lbDisplay.DrawColour;
+
+                unsigned char dest_pixel[1024] = { 0 };
+                int32_t iDstSizeH = (units_per_px / 8) * 8;
+                int32_t iDstSizeW = iDstSizeH;
+                if (!is_wide_charcode(chr))
+                    iDstSizeW -= (8 * (iDstSizeW / 16));
+
+                float scale_factorX = (float)adraw.bits_width / (float)iDstSizeW;
+                float scale_factorY = (float)adraw.bits_height / (float)iDstSizeH;
+                for (int sY = 0; sY < iDstSizeH; sY++)
+                {
+                    for (int sX = 0; sX < iDstSizeW; sX++)
+                    {
+                        set_bit_to_array(dest_pixel, sX, sY, iDstSizeW,
+                            get_bit_to_array(adraw.sprite_data, (int)(sX * scale_factorX),
+                                             (int)(sY * scale_factorY), adraw.bits_width));
+                    }
+                }
+
+                adraw.bits_width = iDstSizeW;
+                adraw.bits_height = iDstSizeH;
+                adraw.sprite_data = dest_pixel;
+
+                dbc_draw_font_sprite_text(&awind, &adraw, x, y, colour, -1, m_dbc_colour1);
+
+                int32_t w;
+                if (adraw.bits_height == 16)
+                    w = (adraw.character_spacing + adraw.bits_width) * units_per_px / 16;
+                else
+                    w = (adraw.character_spacing + adraw.bits_width);
+
+                if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLINE) != 0)
+                {
+                    int32_t h = adraw.bits_height * units_per_px / 16;
+                    LbDrawCharUnderline(x, y, w, h, colour, lbDisplayEx.ShadowColour);
+                }
+                x += w;
+                if (x >= awind.width)
+                    return;
+            }
+            needs_draw = false;
+        }
+    }
 }

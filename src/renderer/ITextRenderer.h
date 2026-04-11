@@ -142,12 +142,16 @@ protected:
     static bool AlignMethodSet(uint16_t flags);
     static int32_t JustifiedCharPosX(int32_t startx, int32_t all_width,
                                      int32_t spr_width, int32_t mul_width,
-                                     uint16_t flags);
+                                     uint16_t flags,
+                                     const TextWindow& justify,
+                                     const TextWindow& clip);
     static int32_t JustifiedCharPosY(int32_t starty, int32_t all_height,
                                      int32_t spr_height, uint16_t flags);
     static int32_t JustifiedCharWidth(int32_t all_width, int32_t spr_width,
                                       int32_t word_count, int32_t units_per_px,
-                                      uint16_t flags);
+                                      uint16_t flags,
+                                      const TextWindow& justify,
+                                      const TextWindow& clip);
 };
 
 /******************************************************************************/

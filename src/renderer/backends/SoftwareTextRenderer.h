@@ -10,21 +10,18 @@
 
 #include "renderer/ITextRenderer.h"
 #include "renderer/TextLayoutContext.h"
+#include <stdint.h>
 
 struct TbSpriteSheet;
 struct AsianFont;
+struct AsianFontWindow;
+struct AsianDraw;
 
 /******************************************************************************/
 
-/**
- * CPU software implementation of ITextRenderer.
- *
- * Phase 1: Delegates to existing bflib_sprfnt.c functions via globals.
- * Phase 2+: Will own font/window state and drawing routines internally.
- */
 class SoftwareTextRenderer : public ITextRenderer {
 public:
-    SoftwareTextRenderer()  = default;
+    SoftwareTextRenderer();
     ~SoftwareTextRenderer() = default;
 
     // Font
@@ -53,6 +50,45 @@ public:
     int32_t StringHeight(int32_t units_per_px, const char* text) override;
 
     const char* GetName() const override { return "SOFTWARE"; }
+
+private:
+    /** Build a TextLayoutContext snapshot from current member state. */
+    TextLayoutContext BuildLayoutContext() const;
+
+    /** Segment callback for paragraph layout — dispatches to PutDownSprites. */
+    static void SwDrawSegment(const char* sbuf, const char* ebuf,
+                              int32_t x, int32_t y, int32_t space_len,
+                              int32_t units_per_px, void* userdata);
+
+    /** Top-level sprite dispatcher: routes to simple or DBC, scaled or unscaled. */
+    void PutDownSprites(const char* sbuf, const char* ebuf,
+                        int32_t x, int32_t y, int32_t len, int32_t units_per_px);
+
+    void PutDownSimpleSprites(const char* sbuf, const char* ebuf,
+                              int32_t x, int32_t y, int32_t len);
+    void PutDownSimpleSpritesResized(const char* sbuf, const char* ebuf,
+                                     int32_t x, int32_t y, int32_t space_len,
+                                     int32_t units_per_px);
+    void PutDownDbcSprites(const char* sbuf, const char* ebuf,
+                           int32_t x, int32_t y, int32_t len);
+    void PutDownDbcSpritesResized(const char* sbuf, const char* ebuf,
+                                  int32_t x, int32_t y, int32_t space_len,
+                                  int32_t units_per_px);
+
+    /**************************************************************************/
+    /* Font / DBC state                                                       */
+    /**************************************************************************/
+    const struct TbSpriteSheet* m_font;
+    const struct AsianFont*     m_dbc_font;
+    int32_t                     m_dbc_colour0;
+    int32_t                     m_dbc_colour1;
+    TbBool                      m_dbc_enabled;
+
+    /**************************************************************************/
+    /* Text windows                                                           */
+    /**************************************************************************/
+    TextWindow                  m_justify_window;
+    TextWindow                  m_clip_window;
 };
 
 /******************************************************************************/
