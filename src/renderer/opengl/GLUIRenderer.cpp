@@ -24,6 +24,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include "kfx/profiling/KfxProfiling.h"
 #include "post_inc.h"
 
 /******************************************************************************/
@@ -345,6 +346,9 @@ void GLUIRenderer::SetLayer(int layer)
 
 void GLUIRenderer::FlushBack()
 {
+    KFX_ZONE("UIRenderer::FlushBack");
+    KFX_GPU_ZONE("UIPass::Back");
+    KFX_GL_SCOPE(back_grp, "UIPass/Back");
     // Render only layer-0 (back) quads — the sidebar background panels that must land
     // beneath the CPU staging-buffer blit.  No hand sprites, minimap, or lines here.
     if (m_ui_quads.empty() && m_remap_quads.empty()) return;
@@ -379,6 +383,9 @@ void GLUIRenderer::FlushBack()
 
 void GLUIRenderer::FlushFront()
 {
+    KFX_ZONE("UIRenderer::FlushFront");
+    KFX_GPU_ZONE("UIPass::Front");
+    KFX_GL_SCOPE(front_grp, "UIPass/Front");
     if (m_ui_quads.empty() && m_ui_lines.empty() && !m_minimap_pending
         && m_pending_hand_sprites.empty())
         return;
@@ -472,6 +479,11 @@ void GLUIRenderer::FlushFront()
 
 void GLUIRenderer::Flush()
 {
+    KFX_ZONE("UIRenderer::Flush");
+    // Emit per-frame stats before flushing (capture sizes before clear).
+    KFX_PLOT("UI/Quads",      (int)m_ui_quads.size());
+    KFX_PLOT("UI/RemapQuads", (int)m_remap_quads.size());
+    KFX_PLOT("UI/Lines",      (int)m_ui_lines.size());
     // Full flush: back layer then front layer.
     FlushBack();
     FlushFront();
@@ -607,6 +619,12 @@ bool GLUIRenderer::CreateShaders()
     }
 
     glDeleteShader(vert);
+    // Label all successfully-created shader programs for RenderDoc.
+    if (m_prog_sprite)         KFX_GL_LABEL(GL_PROGRAM, m_prog_sprite,         "UIR/SpriteProg");
+    if (m_prog_sprite_colored) KFX_GL_LABEL(GL_PROGRAM, m_prog_sprite_colored, "UIR/SpriteColoredProg");
+    if (m_prog_font)           KFX_GL_LABEL(GL_PROGRAM, m_prog_font,           "UIR/FontProg");
+    if (m_prog_solid)          KFX_GL_LABEL(GL_PROGRAM, m_prog_solid,          "UIR/SolidProg");
+    if (m_prog_remap)          KFX_GL_LABEL(GL_PROGRAM, m_prog_remap,          "UIR/RemapProg");
     return ok;
 }
 
@@ -614,6 +632,8 @@ void GLUIRenderer::CreateVertexArrays()
 {
     glGenVertexArrays(1, &m_vao);
     glGenBuffers(1, &m_vbo);
+    KFX_GL_LABEL(GL_VERTEX_ARRAY, m_vao, "UIR/VAO");
+    KFX_GL_LABEL(GL_BUFFER,       m_vbo, "UIR/VBO");
     
     glBindVertexArray(m_vao);
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
@@ -652,10 +672,46 @@ void GLUIRenderer::FlushQuads(int layer)
         [layer](const UIQuad& q) { return (int)q.layer == layer; });
     if (mid == m_ui_quads.begin()) return;  // nothing for this layer
 
+    // Reset texture unit state from whatever GPUFlushNow (or a previous pass) left
+    // behind.  The world renderer leaves the tile atlas bound at unit 0 (GL_TEXTURE_2D)
+    // and the palette at unit 1 (GL_TEXTURE_1D) with GL_TEXTURE1 as the active unit.
+    // Without this reset the wrong atlas would be sampled by the UI sprite shader.
+    glActiveTexture(GL_TEXTURE0);
+
     glBindVertexArray(m_vao);
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
 
-    // ---- Pass 1: palette-indexed sprite quads (mode 0) ----
+    // ---- Pass 1: tiled slab-background quads (mode 10, range 9.5 – 19.5) ----
+    // Must render FIRST (background) so sprite/font passes paint on top of it.
+    // Depth test is disabled for all UI passes (painter's algorithm).
+    m_vertices.clear();
+    for (auto it = m_ui_quads.begin(); it != mid; ++it)
+        if (it->mode >= 9.5f && it->mode < 19.5f) ExpandQuadToVertices(*it);
+    if (!m_vertices.empty() && m_slab_texture) {
+        glUseProgram(m_prog_sprite);
+        glUniform2f(m_loc_screen_sprite, (float)m_screen_width, (float)m_screen_height);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, m_slab_texture);
+        if (m_palette_texture) {
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(m_palette_texture_target, m_palette_texture);
+        }
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(GLUIVertex) * m_vertices.size(), m_vertices.data());
+        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_vertices.size());
+    }
+
+    // ---- Pass 2: solid-colour quads (modes 1.5 – 9.5, excludes slab mode 10) ----
+    m_vertices.clear();
+    for (auto it = m_ui_quads.begin(); it != mid; ++it)
+        if (it->mode >= 1.5f && it->mode < 9.5f) ExpandQuadToVertices(*it);
+    if (!m_vertices.empty()) {
+        glUseProgram(m_prog_solid);
+        glUniform2f(m_loc_screen_solid, (float)m_screen_width, (float)m_screen_height);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(GLUIVertex) * m_vertices.size(), m_vertices.data());
+        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_vertices.size());
+    }
+
+    // ---- Pass 3: palette-indexed sprite quads (mode 0) ----
     m_vertices.clear();
     for (auto it = m_ui_quads.begin(); it != mid; ++it)
         if (it->mode < 0.5f) ExpandQuadToVertices(*it);
@@ -674,50 +730,7 @@ void GLUIRenderer::FlushQuads(int layer)
         glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_vertices.size());
     }
 
-    // ---- Pass 2: font glyph quads (mode 1) ----
-    m_vertices.clear();
-    for (auto it = m_ui_quads.begin(); it != mid; ++it)
-        if (it->mode >= 0.5f && it->mode < 1.5f) ExpandQuadToVertices(*it);
-    if (!m_vertices.empty()) {
-        glUseProgram(m_prog_font);
-        glUniform2f(m_loc_screen_font, (float)m_screen_width, (float)m_screen_height);
-        if (m_font_atlas) {
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, m_font_atlas->GetTextureID());
-        }
-        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(GLUIVertex) * m_vertices.size(), m_vertices.data());
-        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_vertices.size());
-    }
-
-    // ---- Pass 3: solid-colour quads (modes 1.5 – 9.5, excludes slab mode 10) ----
-    m_vertices.clear();
-    for (auto it = m_ui_quads.begin(); it != mid; ++it)
-        if (it->mode >= 1.5f && it->mode < 9.5f) ExpandQuadToVertices(*it);
-    if (!m_vertices.empty()) {
-        glUseProgram(m_prog_solid);
-        glUniform2f(m_loc_screen_solid, (float)m_screen_width, (float)m_screen_height);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(GLUIVertex) * m_vertices.size(), m_vertices.data());
-        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_vertices.size());
-    }
-
-    // ---- Pass 4: tiled slab-background quads (mode 10, range 9.5 – 19.5) ----
-    m_vertices.clear();
-    for (auto it = m_ui_quads.begin(); it != mid; ++it)
-        if (it->mode >= 9.5f && it->mode < 19.5f) ExpandQuadToVertices(*it);
-    if (!m_vertices.empty() && m_slab_texture) {
-        glUseProgram(m_prog_sprite);
-        glUniform2f(m_loc_screen_sprite, (float)m_screen_width, (float)m_screen_height);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, m_slab_texture);
-        if (m_palette_texture) {
-            glActiveTexture(GL_TEXTURE1);
-            glBindTexture(m_palette_texture_target, m_palette_texture);
-        }
-        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(GLUIVertex) * m_vertices.size(), m_vertices.data());
-        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_vertices.size());
-    }
-
-    // ---- Pass 5: atlas-as-mask flat-colour quads (mode 20, range >= 19.5) ----
+    // ---- Pass 4: atlas-as-mask flat-colour quads (mode 20, range >= 19.5) ----
     m_vertices.clear();
     for (auto it = m_ui_quads.begin(); it != mid; ++it)
         if (it->mode >= 19.5f) ExpandQuadToVertices(*it);
@@ -732,9 +745,26 @@ void GLUIRenderer::FlushQuads(int layer)
         glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_vertices.size());
     }
 
+    // ---- Pass 5: font glyph quads (mode 1) ----
+    // Rendered last so text is always on top of sprites and backgrounds.
+    m_vertices.clear();
+    for (auto it = m_ui_quads.begin(); it != mid; ++it)
+        if (it->mode >= 0.5f && it->mode < 1.5f) ExpandQuadToVertices(*it);
+    if (!m_vertices.empty()) {
+        glUseProgram(m_prog_font);
+        glUniform2f(m_loc_screen_font, (float)m_screen_width, (float)m_screen_height);
+        if (m_font_atlas) {
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, m_font_atlas->GetTextureID());
+        }
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(GLUIVertex) * m_vertices.size(), m_vertices.data());
+        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_vertices.size());
+    }
+
     glBindVertexArray(0);
-    m_ui_quads.erase(m_ui_quads.begin(), mid);  // Remove flushed layer-N quads
+    m_ui_quads.erase(m_ui_quads.begin(), mid);  // Remove flushed layer-N quads                                                                                                                                                                                                            
 }
+
 
 void GLUIRenderer::FlushLines(int layer)
 {

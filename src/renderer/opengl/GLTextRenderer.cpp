@@ -21,7 +21,7 @@
 #include <glad/glad.h>
 #include <cstring>
 #include <climits>
-#include "renderer/opengl/KfxProfiling.h"
+#include "kfx/profiling/KfxProfiling.h"
 #include "post_inc.h"
 
 /******************************************************************************/

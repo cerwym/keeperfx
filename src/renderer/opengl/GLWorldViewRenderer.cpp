@@ -34,6 +34,7 @@
 #include <glad/glad.h>
 #include <cstdlib>
 #include <cstring>
+#include "kfx/profiling/KfxProfiling.h"
 #include "post_inc.h"
 
 /******************************************************************************/
@@ -124,6 +125,8 @@ bool GLWorldViewRenderer::init_gl_resources()
     // VAO + dynamic VBO for world geometry
     glGenVertexArrays(1, &m_vao);
     glGenBuffers(1, &m_vbo);
+    KFX_GL_LABEL(GL_VERTEX_ARRAY, m_vao, "WVR/WorldVAO");
+    KFX_GL_LABEL(GL_BUFFER,       m_vbo, "WVR/WorldVBO");
 
     glBindVertexArray(m_vao);
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
@@ -184,6 +187,7 @@ bool GLWorldViewRenderer::init_gl_resources()
     // Phase 2: lightmap texture — mirrors game.lish.subtile_lightness[] each frame.
     // GL_R16UI stores the raw 0..16128 lightness values; the shader normalises them.
     glGenTextures(1, &m_tex_lightmap);
+    KFX_GL_LABEL(GL_TEXTURE, m_tex_lightmap, "WVR/LightmapTex");
     glBindTexture(GL_TEXTURE_2D, m_tex_lightmap);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_R16UI, MAX_SUBTILES_X, MAX_SUBTILES_Y,
                  0, GL_RED_INTEGER, GL_UNSIGNED_SHORT, nullptr);
@@ -292,6 +296,7 @@ bool GLWorldViewRenderer::compile_world_shaders()
         m_shader = 0;
         return false;
     }
+    KFX_GL_LABEL(GL_PROGRAM, m_shader, "WVR/WorldProg");
     return true;
 }
 
@@ -336,9 +341,13 @@ bool GLWorldViewRenderer::init_shadow_shader()
     glUniform1i(m_shadow_loc_silhouette, 0); // GL_TEXTURE0
     glUseProgram(0);
 
+    KFX_GL_LABEL(GL_PROGRAM, m_shadow_shader, "WVR/ShadowProg");
+
     // Shadow quad VAO + VBO: 6 vertices × (vec2 pos + vec2 uv) = 4 floats each
     glGenVertexArrays(1, &m_shadow_vao);
     glGenBuffers(1, &m_shadow_vbo);
+    KFX_GL_LABEL(GL_VERTEX_ARRAY, m_shadow_vao, "WVR/ShadowVAO");
+    KFX_GL_LABEL(GL_BUFFER,       m_shadow_vbo, "WVR/ShadowVBO");
     glBindVertexArray(m_shadow_vao);
     glBindBuffer(GL_ARRAY_BUFFER, m_shadow_vbo);
     glBufferData(GL_ARRAY_BUFFER, 6 * 4 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
@@ -352,6 +361,7 @@ bool GLWorldViewRenderer::init_shadow_shader()
 
     // Reusable 256x256 R8 silhouette texture — overwritten each frame per shadow
     glGenTextures(1, &m_shadow_silhouette_tex);
+    KFX_GL_LABEL(GL_TEXTURE, m_shadow_silhouette_tex, "WVR/ShadowSilhouetteTex");
     glBindTexture(GL_TEXTURE_2D, m_shadow_silhouette_tex);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, 256, 256, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -482,6 +492,12 @@ bool GLWorldViewRenderer::init_keeper_sprite_shader()
     glEnableVertexAttribArray(1);
     glBindVertexArray(0);
 
+    KFX_GL_LABEL(GL_PROGRAM,      m_kspr_shader,      "WVR/KSprProg");
+    KFX_GL_LABEL(GL_PROGRAM,      m_kspr_glow_shader, "WVR/KSprGlowProg");
+    KFX_GL_LABEL(GL_TEXTURE,      m_kspr_sprite_tex,  "WVR/KSprSpriteTex");
+    KFX_GL_LABEL(GL_TEXTURE,      m_kspr_palette_tex, "WVR/KSprPaletteTex");
+    KFX_GL_LABEL(GL_VERTEX_ARRAY, m_kspr_vao,         "WVR/KSprVAO");
+    KFX_GL_LABEL(GL_BUFFER,       m_kspr_vbo,         "WVR/KSprVBO");
     SYNCLOG("GLWorldViewRenderer: keeper-sprite shader initialised");
     return true;
 }
@@ -524,9 +540,13 @@ bool GLWorldViewRenderer::init_flatpoly_shader()
     m_flatpoly_loc_viewport = glGetUniformLocation(m_flatpoly_shader, "u_viewport");
     glUseProgram(0);
 
+    KFX_GL_LABEL(GL_PROGRAM, m_flatpoly_shader, "WVR/FlatPolyProg");
+
     // VAO + dynamic VBO: 6 floats per vertex (x, y, z, r, g, b)
     glGenVertexArrays(1, &m_flatpoly_vao);
     glGenBuffers(1, &m_flatpoly_vbo);
+    KFX_GL_LABEL(GL_VERTEX_ARRAY, m_flatpoly_vao, "WVR/FlatPolyVAO");
+    KFX_GL_LABEL(GL_BUFFER,       m_flatpoly_vbo, "WVR/FlatPolyVBO");
     glBindVertexArray(m_flatpoly_vao);
     glBindBuffer(GL_ARRAY_BUFFER, m_flatpoly_vbo);
     // layout(location=0) vec3 a_pos  (x, y = screen px; z = NDC)
@@ -767,20 +787,26 @@ void GLWorldViewRenderer::setup_world_sprite_processing(long bucket_num)
 void GLWorldViewRenderer::BeginWorldPass(unsigned char* framebuf, int pitch,
                                           int w, int h, int vp_x, int vp_y)
 {
+    KFX_ZONE("WVR::BeginWorldPass");
     m_screen_w        = w;
     m_screen_h        = h;
     m_vp_x            = vp_x;
     m_vp_y            = vp_y;
     m_framebuf        = framebuf;
     m_pitch           = pitch;
-    m_vert_count      = 0;
-    m_cmd_vert_start  = 0;
     m_current_variation = 0;
     m_current_bucket    = 0;
-    m_draw_cmds.clear();
-    m_shadow_cmds.clear();
-    m_worldtext_cmds.clear();
     m_kspr_palette_dirty = true;
+    m_world_pass_active  = true;
+
+    // Flush any tile batch from the *previous* sub-pass before starting the
+    // new one — but do NOT clear the draw list.  Multiple sub-passes per frame
+    // (isometric view + front view, or creature possession + normal view) must
+    // accumulate into a single draw list so GPUFlushNow sees all geometry.
+    // We DO need to reset the vertex write cursor so the new pass starts fresh
+    // with its own section of the staging vertex buffer.
+    gpu_flush();                  // close any open tile batch from prior pass
+    m_cmd_vert_start = m_vert_count;  // new pass appends after prior pass verts
 
     // Lazy initialise GL resources on first use (GL context must be current)
     if (!m_initialized)
@@ -837,7 +863,11 @@ bool GLWorldViewRenderer::append_triangle(int tile_id,
     }
 
     if (m_vert_count + 3 > k_max_verts)
+    {
         gpu_flush();
+        if (m_vert_count + 3 > k_max_verts)
+            return false; // buffer full; drop gracefully rather than write OOB
+    }
 
     // Look up the normalised UV rectangle for this tile in the atlas.
     float u0f, v0f, u1f, v1f;
@@ -874,14 +904,55 @@ bool GLWorldViewRenderer::append_triangle_compact(
     int sx1, int sy1, int u1, int v1, int shade1,
     int sx2, int sy2, int u2, int v2, int shade2)
 {
-    if (m_vert_count + 3 > k_max_verts)
+    // Compact UV (0..255) addresses the original 8-tiles-wide source layout:
+    //   column in 8-wide layout = u8 / 32,  within-tile x = u8 % 32
+    //   row in source layout    = v8 / 32,  within-tile y = v8 % 32
+    //   tile_id = tile_row * block_count_per_row + tile_col
+    // The atlas is repacked 64 tiles wide (2048 px), so we must remap via
+    // GetTileUV just as append_triangle does for full PolyPoint polygons.
+    // Compact triangles always reference tiles with variation 0 (tile_id < TEXTURE_BLOCKS_COUNT);
+    // flush the current batch if a different variation is active.
+    if (m_current_variation != 0)
+    {
         gpu_flush();
+        m_current_variation = 0;
+    }
+
+    if (m_vert_count + 3 > k_max_verts)
+    {
+        gpu_flush();
+        if (m_vert_count + 3 > k_max_verts)
+            return false; // buffer full; drop gracefully rather than write OOB
+    }
+
+    // Helper: derive atlas UV from a compact (u8, v8) coordinate pair.
+    // The compact coords index the 8-column source layout; map to atlas via GetTileUV.
+    auto compact_to_atlas = [](int u8, int v8, float& out_u, float& out_v)
+    {
+        const int tile_col = (u8 >> 5) & 7;   // u8 / 32 — column in 8-wide source (0-7)
+        const int within_x =  u8 & 31;         // u8 % 32 — pixel within tile horizontally
+        const int tile_row =  v8 >> 5;          // v8 / 32 — tile row in source
+        const int within_y =  v8 & 31;          // v8 % 32 — pixel within tile vertically
+        const int tile_id  = tile_row * (int)block_count_per_row + tile_col;
+        float u0f, v0f, u1f, v1f;
+        TileAtlasPacker::GetTileUV(tile_id, &u0f, &v0f, &u1f, &v1f);
+        // Remap within-tile pixel (0..31) to the atlas UV range for this tile,
+        // matching the same / 32.0f convention used in append_triangle.
+        out_u = u0f + ((float)within_x / 32.0f) * (u1f - u0f);
+        out_v = v0f + ((float)within_y / 32.0f) * (v1f - v0f);
+    };
 
     const float z_ndc = 2.0f * (float)m_current_bucket / (float)(BUCKETS_COUNT - 1) - 1.0f;
     WorldVertex* v = &m_verts[m_vert_count];
+
+    // Build screen-space XY and shade via the existing macro, then overwrite
+    // the UV fields with the correctly remapped atlas coordinates.
     COMPACT_UV_TO_WORLDVERTEX(&v[0], sx0, sy0, u0, v0, shade0, m_screen_w, m_screen_h);
     COMPACT_UV_TO_WORLDVERTEX(&v[1], sx1, sy1, u1, v1, shade1, m_screen_w, m_screen_h);
     COMPACT_UV_TO_WORLDVERTEX(&v[2], sx2, sy2, u2, v2, shade2, m_screen_w, m_screen_h);
+    compact_to_atlas(u0, v0, v[0].u, v[0].v);
+    compact_to_atlas(u1, v1, v[1].u, v[1].v);
+    compact_to_atlas(u2, v2, v[2].u, v[2].v);
     v[0].z = z_ndc; v[1].z = z_ndc; v[2].z = z_ndc;
     m_vert_count += 3;
     return true;
@@ -906,6 +977,17 @@ void GLWorldViewRenderer::gpu_flush()
 
 void GLWorldViewRenderer::GPUFlushNow()
 {
+    KFX_ZONE("WVR::GPUFlushNow");
+    KFX_GPU_ZONE("Frame::WorldPass");
+    KFX_GL_SCOPE(world_pass_dbg, "WorldPass");
+
+    // Reset the per-frame active flag immediately — before any early returns.
+    // EndFrame caches WorldViewRenderer_IsGpuActive() BEFORE calling this
+    // function, so the CURRENT frame's staging-blit decision is already made.
+    // Clearing here ensures that on the NEXT frame, IsGpuAccelerated() returns
+    // false when no BeginWorldPass has been issued yet (e.g. main menu).
+    m_world_pass_active = false;
+
     if (!m_initialized)
     {
         m_draw_cmds.clear();
@@ -976,6 +1058,7 @@ void GLWorldViewRenderer::GPUFlushNow()
     {
         if (cmd.type == DrawCmd::CMD_TILES)
         {
+            KFX_GL_PUSH("WorldPass/Tiles");
             if (cmd.variation != bound_variation)
             {
                 GLuint atlas_tex = (m_atlas && m_atlas->IsInitialized())
@@ -1000,9 +1083,11 @@ void GLWorldViewRenderer::GPUFlushNow()
             glActiveTexture(GL_TEXTURE1);
             glBindTexture(GL_TEXTURE_1D, m_palette_tex);
             glDrawArrays(GL_TRIANGLES, cmd.vert_start, cmd.vert_count);
+            KFX_GL_POP();
         }
         else if (cmd.type == DrawCmd::CMD_SHADOWS)
         {
+            KFX_GL_PUSH("WorldPass/Shadows");
             // Render a creature shadow: decode the keeper-sprite silhouette,
             // upload as an R8 texture, then draw the floor-projected quad
             // with a multiply-darken blend (GL_ZERO / GL_ONE_MINUS_SRC_ALPHA).
@@ -1066,9 +1151,11 @@ void GLWorldViewRenderer::GPUFlushNow()
             glBindVertexArray(m_vao);
             // Rebind the atlas texture that was displaced by the silhouette
             bound_variation = -1;
+            KFX_GL_POP();
         }
         else if (cmd.type == DrawCmd::CMD_SPRITES)
         {
+            KFX_GL_PUSH("WorldPass/Sprites");
             // 3D sprites: all rendering goes through render_keepersprite_gpu()
             // via the SubmitKeeperSprite intercept in draw_keepersprite().
             // No CPU staging buffer is needed — the GPU path always claims
@@ -1092,9 +1179,11 @@ void GLWorldViewRenderer::GPUFlushNow()
             glUseProgram(m_shader);
             glBindVertexArray(m_vao);
             bound_variation = -1;
+            KFX_GL_POP();
         }
         else if (cmd.type == DrawCmd::CMD_WORLDTEXT)
         {
+            KFX_GL_PUSH("WorldPass/WorldText");
             // Render world-space text with depth testing enabled
             const WorldTextCmd& wt = m_worldtext_cmds[cmd.worldtext_idx];
 
@@ -1125,9 +1214,11 @@ void GLWorldViewRenderer::GPUFlushNow()
                 glBindVertexArray(m_vao);
                 bound_variation = -1;
             }
+            KFX_GL_POP();
         }
         else if (cmd.type == DrawCmd::CMD_FLAT_POLYS)
         {
+            KFX_GL_PUSH("WorldPass/FlatPoly");
             // Flat-colour polygons: all vertices already converted to screen-px + linear RGB.
             // Upload the entire flat-poly buffer once on first encounter, draw sub-range.
             if (!m_flatpoly_verts.empty())
@@ -1149,6 +1240,7 @@ void GLWorldViewRenderer::GPUFlushNow()
                 glBindVertexArray(m_vao);
                 bound_variation = -1;
             }
+            KFX_GL_POP();
         }
     }
 
@@ -1157,6 +1249,12 @@ void GLWorldViewRenderer::GPUFlushNow()
     glDepthMask(GL_FALSE);
     glDisable(GL_DEPTH_TEST);
     glViewport(0, 0, (int)MyScreenWidth, (int)MyScreenHeight);
+
+    // Emit per-frame statistics as Tracy plots.
+    KFX_PLOT("WVR/VertCount",    m_vert_count);
+    KFX_PLOT("WVR/DrawCmds",     (int)m_draw_cmds.size());
+    KFX_PLOT("WVR/ShadowCmds",   (int)m_shadow_cmds.size());
+    KFX_PLOT("WVR/WorldTextCmds",(int)m_worldtext_cmds.size());
 
     // Reset for next frame.
     m_draw_cmds.clear();
@@ -1171,6 +1269,7 @@ void GLWorldViewRenderer::GPUFlushNow()
 
 void GLWorldViewRenderer::FlushIsometricView()
 {
+    KFX_ZONE("WVR::FlushIsometricView");
     if (!m_initialized) {
         // Fall back to software if GL resources not ready
         if (m_sw_fallback) m_sw_fallback->FlushIsometricView();
@@ -1186,7 +1285,11 @@ void GLWorldViewRenderer::FlushIsometricView()
     //   sprite backend), then the sprite quads are immediately flushed.
     // Non-spatial elements (shadows, selector, status, text, room flags) are
     // drawn afterwards into the CPU staging buffer via draw_nonspatial_sprites().
-    for (int bi = BUCKETS_COUNT - 1; bi > 0; bi--)
+    // bi >= 0: the GPU renderer must include bucket 0 (tiles with z < 32 in
+    // fill_in_points_isometric are clamped to z=0 → bucket_index=0).  The
+    // software renderer skips bucket 0 because its scan-converter can't handle
+    // near-plane vertices, but OpenGL clips natively so they're always safe.
+    for (int bi = BUCKETS_COUNT - 1; bi >= 0; bi--)
     {
         m_current_bucket = bi;
         const float z_ndc = 2.0f * (float)bi / (float)(BUCKETS_COUNT - 1) - 1.0f;
@@ -1221,6 +1324,13 @@ void GLWorldViewRenderer::FlushIsometricView()
                 case QK_PolygonNearFP:
                 {
                     auto* p = (struct BucketKindPolygonNearFP*)q;
+                    // m_current_bucket is already correct here: it was set by
+                    // do_a_trig_gourad_tr using max(ec1->z, ec2->z, ec3->z)/16.
+                    // The coordinate_first/second/third.z fields are only filled
+                    // in the actual near-plane split branches; "just close but not
+                    // behind" cases leave them at 0 (poly_pool is memset'd each
+                    // frame), so reading them would send triangles to bucket 0
+                    // which is skipped by the bi > 0 bucket walk loop.
                     append_triangle(p->block,
                                     &p->vertex_first,
                                     &p->vertex_second,

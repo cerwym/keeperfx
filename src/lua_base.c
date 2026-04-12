@@ -19,6 +19,7 @@
 #include "config_effects.h"
 #include "config_objects.h"
 #include "config_trapdoor.h"
+#include "kfx/profiling/KfxProfilingC.h"
 
 #include "post_inc.h"
 
@@ -163,6 +164,7 @@ void lua_set_random_seed(unsigned int seed)
 
 TbBool open_lua_script(LevelNumber lvnum)
 {
+	KFX_C_ZONE_BEGIN(_kfx_ctx, "Lua::LoadScripts");
 	Lvl_script = luaL_newstate();
 
 	luaL_openlibs(Lvl_script);
@@ -177,12 +179,14 @@ TbBool open_lua_script(LevelNumber lvnum)
     if ( !fname || !LbFileExists(fname) )
     {
         ERRORLOG("file %s missing", fname != NULL ? fname : "lua/init.lua");
+        KFX_C_ZONE_END(_kfx_ctx);
         return false;
     }
 	if(!CheckLua(Lvl_script, luaL_dofile(Lvl_script, fname),"global_lua_file"))
 	{
         ERRORLOG("failed to load global lua script");
         close_lua_script();
+		KFX_C_ZONE_END(_kfx_ctx);
         return false;
 	}
 
@@ -198,15 +202,19 @@ TbBool open_lua_script(LevelNumber lvnum)
     short fgroup = get_level_fgroup(lvnum);
     fname = get_game_file_path_fmt(fgroup, "map%05lu.lua", (unsigned long)lvnum);
 	// Load and parse the Lua File
-    if ( !fname || !LbFileExists(fname) )
+    if ( !fname || !LbFileExists(fname) ) {
+		KFX_C_ZONE_END(_kfx_ctx);
       return false;
+	}
 
     if(!CheckLua(Lvl_script, luaL_dofile(Lvl_script, fname),"level_script_loading"))
 	{
         ERRORLOG("failed to load lua script");
+		KFX_C_ZONE_END(_kfx_ctx);
         return false;
 	}
 
+	KFX_C_ZONE_END(_kfx_ctx);
     return true;
 }
 

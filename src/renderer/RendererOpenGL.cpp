@@ -17,6 +17,8 @@
 #include "renderer/opengl/GLSpriteAtlas.h"
 #include "renderer/opengl/GLWorldViewRenderer.h"
 #include "renderer/opengl/GLShaderLoader.h"
+#include "renderer/util/RenderDocAPI.h"
+#include "kfx/profiling/KfxProfiling.h"
 
 #include "bflib_video.h"    // lbDisplay, lbPaletteColors, MyScreenWidth/Height
 #include "bflib_render.h"   // render_fade_tables
@@ -91,6 +93,12 @@ bool RendererOpenGL::Init()
         return false;
     }
 
+    // Detect RenderDoc (must be before any GL object creation).
+    RenderDocAPI::Init();
+
+    // Initialise Tracy GPU profiling context (requires GL function pointers).
+    KFX_GPU_CTX_CREATE();
+
     if (!compile_shaders())
     {
         platform_destroy_gl_context();
@@ -100,6 +108,8 @@ bool RendererOpenGL::Init()
     // ── Fullscreen palette-blit quad ─────────────────────────────────────────
     glGenVertexArrays(1, &m_vao);
     glGenBuffers(1, &m_vbo);
+    KFX_GL_LABEL(GL_VERTEX_ARRAY, m_vao, "Blit/QuadVAO");
+    KFX_GL_LABEL(GL_BUFFER, m_vbo, "Blit/QuadVBO");
     glBindVertexArray(m_vao);
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
     glBufferData(GL_ARRAY_BUFFER, sizeof(k_quadVerts), k_quadVerts, GL_STATIC_DRAW);
@@ -115,6 +125,7 @@ bool RendererOpenGL::Init()
     m_stagingBuf = new uint8_t[m_stagingW * m_stagingH]();
 
     glGenTextures(1, &m_texIndex);
+    KFX_GL_LABEL(GL_TEXTURE, m_texIndex, "Blit/StagingIndexTex");
     glBindTexture(GL_TEXTURE_2D, m_texIndex);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
@@ -122,6 +133,7 @@ bool RendererOpenGL::Init()
 
     // Palette texture (256 RGBA entries)
     glGenTextures(1, &m_texPalette);
+    KFX_GL_LABEL(GL_TEXTURE, m_texPalette, "Blit/PaletteTex");
     glBindTexture(GL_TEXTURE_1D, m_texPalette);
     glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
@@ -154,6 +166,10 @@ bool RendererOpenGL::Init()
         WARNLOG("RendererOpenGL: UI sprite atlas init failed — panel sprites will use staging buffer");
         delete m_sprite_atlas;
         m_sprite_atlas = nullptr;
+    }
+    else
+    {
+        SYNCLOG("RendererOpenGL: UI sprite atlas initialized successfully");
     }
 
     return true;
@@ -208,11 +224,82 @@ bool RendererOpenGL::BeginFrame()
         }
     }
 
+    // Tag the next RenderDoc capture with a monotonic frame number so captures
+    // are easy to compare (RenderDoc shows this in the capture list).
+    if (RenderDocAPI::IsActive())
+    {
+        static int s_frame = 0;
+        static char s_title[64];
+        snprintf(s_title, sizeof(s_title), "KFX Frame %d", s_frame++);
+        RenderDocAPI::SetCaptureTitle(s_title);
+    }
+
     RenderPass_BeginFrame();
     UIRenderer_Clear();
     return true;
 }
 
+/** ============================================================
+ *  Frame composition pipeline (bottom-to-top draw order)
+ *  ============================================================
+ *
+ *  Step 1 — glClear()
+ *       Wipes the colour + depth buffer to the GL clear colour (black).
+ *       Everything below composites on top of this.
+ *
+ *  Step 2 — GPUFlushNow()                      [GLWorldViewRenderer]
+ *       Replays the bucket-walk command list:
+ *         CMD_TILES    — indexed-colour tile meshes (world geometry)
+ *         CMD_SHADOWS  — per-creature floor-shadow quads
+ *         CMD_SPRITES  — depth-sorted 3D billboard sprites (creatures, objects)
+ *         CMD_WORLDTEXT — floating 3D text (gold numbers above piles)
+ *       Hardware depth test keeps geometry correctly occluded.
+ *       Shade is per-vertex Gouraud from the DK fade table (mode 0) or
+ *       per-fragment lightmap (mode 1, Phase 3+).
+ *
+ *  Step 3 — UIRenderer_FlushBack()               [GLUIRenderer, layer=0]
+ *       Flushes UIQuads tagged layer=0 (back):
+ *         mode 10 — tiled slab-background quads (sidebar panel fill)
+ *         mode  3 — solid-colour quads (progress bar trough fills)
+ *         mode  0 — palette-indexed atlas sprites (back-layer panel sprites)
+ *       Must land BEFORE the staging blit (Step 4) so that CPU-drawn text
+ *       from the staging buffer composites on top of panel backgrounds.
+ *       (GPU-active path skips Step 4, but the ordering still matters for
+ *       slab backgrounds vs. front-layer sprites.)
+ *
+ *  Step 4 — CPU staging blit                     [skipped when GPU active]
+ *       Uploads m_stagingBuf (raw 8-bit palette indices, 1 byte per pixel)
+ *       to m_texIndex (GL_R8 GL_TEXTURE_2D).  Index 0 = transparent (alpha 0).
+ *       Draws a fullscreen quad through the palette-lookup shader.
+ *       Non-zero pixels from CPU-drawn UI (minimap digits, text, gold totals)
+ *       composite over Step 3.  Skipped entirely when GPU world-view is active
+ *       because the staging buffer is all-zeros (nothing writes to it).
+ *
+ *  Step 5 — UIRenderer_FlushFront()              [GLUIRenderer, layer=1]
+ *       Flushes UIQuads tagged layer=1 (front):
+ *         mode  0 — panel/button atlas sprites (escape menu, battler icons)
+ *         mode  3 — solid-colour quads
+ *         mode 20  — atlas-as-mask flat-colour sprites (player-flash portraits)
+ *       FlushRemapQuads (layer=1) — player-colour remap sprites (game panel gems).
+ *       Minimap palette-lookup quad (if minimap was submitted this frame).
+ *       SubmitKeeperSprite hand sprites (power-hand cursor).
+ *       Line quads (slab selectors).
+ *
+ *  Step 6 — TextRenderer_Flush()                 [GLTextRenderer]
+ *       Renders all deferred text draws AFTER front-layer sprites.
+ *       Critical: batching sprites by layer means text must come last or
+ *       sprite quad backgrounds (e.g. tooltip panels, column-number buttons)
+ *       would overdraw already-rasterised glyph pixels.
+ *       Each draw is scissor-clipped to its original text clip window.
+ *
+ *  Step 7 — platform_swap_gl_buffers()
+ *       Flips the back buffer to the display.
+ *
+ *  RenderDoc tip: each Step above corresponds to one or more draw calls.
+ *  The GPUFlushNow tile meshes are one draw per tile variation (all-opaque);
+ *  shadows are one draw call each; sprites are batched by bucket depth.
+ *  UI quads are one draw call per render-mode pass per layer.
+ *  ============================================================ */
 void RendererOpenGL::EndFrame()
 {
     // Upload palette unconditionally — it may have changed this frame via LbPaletteSet.
@@ -226,6 +313,11 @@ void RendererOpenGL::EndFrame()
     glDepthMask(GL_TRUE);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+    // Cache the world-active state BEFORE GPUFlushNow clears the per-frame flag.
+    // IsGpuAccelerated() returns true only when BeginWorldPass was called this frame;
+    // GPUFlushNow resets the flag at the end of its execution so we must read it first.
+    const TbBool world_gpu_active = WorldViewRenderer_IsGpuActive();
+
     // Flush GPU world geometry + depth-correct sprites.
     // Runs BEFORE the staging buffer upload so both layers composite correctly.
     if (m_world_renderer)
@@ -238,7 +330,9 @@ void RendererOpenGL::EndFrame()
     // GUI, text, sprites, shadows) is routed through GPU shaders / UIRenderer /
     // GLTextRenderer.  The staging buffer is all-zeros, so uploading + blitting it
     // is pure overhead (~1 MB upload + one draw call doing nothing).  Skip it.
-    if (!WorldViewRenderer_IsGpuActive())
+    // Use the cached value from before GPUFlushNow so main-menu frames (where
+    // BeginWorldPass was never called and the flag is false) always run the blit.
+    if (!world_gpu_active)
     {
         // Upload CPU framebuffer to index texture.
         glActiveTexture(GL_TEXTURE0);
@@ -277,6 +371,12 @@ void RendererOpenGL::EndFrame()
 
     RenderPass_EndFrame();
     platform_swap_gl_buffers(lbWindow);
+
+    // Collect pending GPU timer query results for Tracy GPU zones.
+    KFX_GPU_COLLECT();
+    // Mark the end of this rendered frame in Tracy's timeline.
+    KFX_FRAMEMARK();
+
     m_staging_cleared = false; // next frame's first LockFramebuffer will clear the staging buffer
     m_frame_begun     = false; // allow BeginFrame to run fully on the next frame
 }

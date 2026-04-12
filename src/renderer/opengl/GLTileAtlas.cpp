@@ -12,6 +12,7 @@
 
 #include "engine_textures.h"   // TEXTURE_VARIATIONS_COUNT
 #include "bflib_basics.h"      // SYNCLOG / ERRORLOG
+#include "kfx/profiling/KfxProfiling.h"
 
 #include <glad/glad.h>
 #include <cstring>
@@ -47,6 +48,7 @@ bool GLTileAtlas::Init()
     for (int v = 0; v < TEXTURE_VARIATIONS_COUNT; v++)
     {
         glBindTexture(GL_TEXTURE_2D, m_textures[v]);
+        KFX_GL_LABEL_FMT(GL_TEXTURE, m_textures[v], "TileAtlas/Var%02d", v);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,     GL_CLAMP_TO_EDGE);
@@ -83,6 +85,7 @@ void GLTileAtlas::Free()
 
 void GLTileAtlas::UpdateAnimatedTiles()
 {
+    KFX_ZONE("TileAtlas::UpdateAnimated");
     if (!m_initialized) return;
     for (int v = 0; v < TEXTURE_VARIATIONS_COUNT; v++)
         BuildAnimatedStrip(v);
@@ -100,6 +103,7 @@ unsigned int GLTileAtlas::GetAtlasTexture(int variation) const
 
 void GLTileAtlas::BuildVariation(int variation)
 {
+    KFX_ZONE("TileAtlas::BuildVariation");
     memset(m_r8_scratch, 0, (size_t)k_atlas_w * k_atlas_h);
 
     const int total_tiles = TEXTURE_BLOCKS_COUNT;
@@ -124,6 +128,7 @@ void GLTileAtlas::BuildVariation(int variation)
 
 void GLTileAtlas::BuildAnimatedStrip(int variation)
 {
+    KFX_ZONE("TileAtlas::BuildAnimatedStrip");
     const int first_tile  = TEXTURE_BLOCKS_STAT_COUNT_A;  // 544
     const int last_tile   = TEX_B_START_POINT;             // 999 (exclusive end)
     const int total_tiles = TEXTURE_BLOCKS_COUNT;

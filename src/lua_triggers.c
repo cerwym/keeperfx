@@ -17,14 +17,15 @@
 #include "config_magic.h"
 #include "globals.h"
 #include "thing_data.h"
+#include "kfx/profiling/KfxProfilingC.h"
 
 
 #include "post_inc.h"
 
 void lua_on_dungeon_destroyed(PlayerNumber plyr_idx)
 {
+	KFX_C_ZONE_BEGIN(_kfx_ctx, "Lua::OnDungeonDestroyed");
 	SYNCDBG(6,"Starting");
-	lua_getglobal(Lvl_script, "OnDungeonDestroyed");
 	if (lua_isfunction(Lvl_script, -1))
 	{
 		lua_pushPlayer(Lvl_script, plyr_idx);
@@ -35,10 +36,12 @@ void lua_on_dungeon_destroyed(PlayerNumber plyr_idx)
 	{
 		lua_pop(Lvl_script, 1);
 	}
+	KFX_C_ZONE_END(_kfx_ctx);
 }
 
 void lua_on_chatmsg(PlayerNumber plyr_idx, char *msg)
 {
+	KFX_C_ZONE_BEGIN(_kfx_ctx, "Lua::OnChatMsg");
 	SYNCDBG(6,"Starting");
     lua_getglobal(Lvl_script, "OnChatMsg");
 	if (lua_isfunction(Lvl_script, -1))
@@ -52,11 +55,13 @@ void lua_on_chatmsg(PlayerNumber plyr_idx, char *msg)
 	{
 		lua_pop(Lvl_script, 1);
 	}
+	KFX_C_ZONE_END(_kfx_ctx);
 }
 
 
 void lua_on_game_start()
 {
+	KFX_C_ZONE_BEGIN(_kfx_ctx, "Lua::OnGameStart");
 	SYNCDBG(6,"Starting");
 
 	lua_getglobal(Lvl_script, "OnCampaignGameStart");
@@ -78,10 +83,12 @@ void lua_on_game_start()
 	{
 		lua_pop(Lvl_script, 1);
 	}
+	KFX_C_ZONE_END(_kfx_ctx);
 }
 
 void lua_on_game_tick()
 {
+	KFX_C_ZONE_BEGIN(_kfx_ctx, "Lua::OnGameTick");
 	SYNCDBG(6,"Starting");
     lua_getglobal(Lvl_script, "OnGameTick");
 	if (lua_isfunction(Lvl_script, -1))
@@ -92,11 +99,13 @@ void lua_on_game_tick()
 	{
 		lua_pop(Lvl_script, 1);
 	}
+	KFX_C_ZONE_END(_kfx_ctx);
 }
 
 void lua_on_power_cast(PlayerNumber plyr_idx, PowerKind pwkind,
     unsigned short splevel, MapSubtlCoord stl_x, MapSubtlCoord stl_y, struct Thing *thing)
 	{
+	KFX_C_ZONE_BEGIN(_kfx_ctx, "Lua::OnPowerCast");
 	SYNCDBG(6,"Starting");
     lua_getglobal(Lvl_script, "OnPowerCast");
 	if (lua_isfunction(Lvl_script, -1))
@@ -114,10 +123,12 @@ void lua_on_power_cast(PlayerNumber plyr_idx, PowerKind pwkind,
 	{
 		lua_pop(Lvl_script, 1);
 	}
+	KFX_C_ZONE_END(_kfx_ctx);
 }
 
 void lua_on_special_box_activate(PlayerNumber plyr_idx, struct Thing *cratetng)
 {
+	KFX_C_ZONE_BEGIN(_kfx_ctx, "Lua::OnSpecialActivated");
 	SYNCDBG(6,"Starting");
     lua_getglobal(Lvl_script, "OnSpecialActivated");
 	if (lua_isfunction(Lvl_script, -1))
@@ -132,10 +143,12 @@ void lua_on_special_box_activate(PlayerNumber plyr_idx, struct Thing *cratetng)
 	{
 		lua_pop(Lvl_script, 1);
 	}
+	KFX_C_ZONE_END(_kfx_ctx);
 }
 
 void lua_on_trap_placed(struct Thing *traptng)
 {
+	KFX_C_ZONE_BEGIN(_kfx_ctx, "Lua::OnTrapPlaced");
 	SYNCDBG(6,"Starting");
     lua_getglobal(Lvl_script, "OnTrapPlaced");
 	if (lua_isfunction(Lvl_script, -1))
@@ -148,10 +161,12 @@ void lua_on_trap_placed(struct Thing *traptng)
 	{
 		lua_pop(Lvl_script, 1);
 	}
+	KFX_C_ZONE_END(_kfx_ctx);
 }
 
 void lua_on_creature_death(struct Thing *crtng)
 {
+	KFX_C_ZONE_BEGIN(_kfx_ctx, "Lua::OnCreatureDeath");
 	SYNCDBG(6,"Starting");
     lua_getglobal(Lvl_script, "OnCreatureDeath");
 	if (lua_isfunction(Lvl_script, -1))
@@ -164,10 +179,12 @@ void lua_on_creature_death(struct Thing *crtng)
 	{
 		lua_pop(Lvl_script, 1);
 	}
+	KFX_C_ZONE_END(_kfx_ctx);
 }
 
 void lua_on_creature_rebirth(struct Thing* crtng)
 {
+    KFX_C_ZONE_BEGIN(_kfx_ctx, "Lua::OnCreatureRebirth");
     SYNCDBG(6, "Starting");
     lua_getglobal(Lvl_script, "OnCreatureRebirth");
     if (lua_isfunction(Lvl_script, -1))
@@ -179,11 +196,13 @@ void lua_on_creature_rebirth(struct Thing* crtng)
     {
         lua_pop(Lvl_script, 1);
     }
+    KFX_C_ZONE_END(_kfx_ctx);
 }
 
 
 void lua_on_apply_damage_to_thing(struct Thing *thing, HitPoints dmg, PlayerNumber dealing_plyr_idx)
 {
+	KFX_C_ZONE_BEGIN(_kfx_ctx, "Lua::OnApplyDamage");
 	SYNCDBG(6,"Starting");
     lua_getglobal(Lvl_script, "OnApplyDamage");
 	if (lua_isfunction(Lvl_script, -1))
@@ -198,10 +217,12 @@ void lua_on_apply_damage_to_thing(struct Thing *thing, HitPoints dmg, PlayerNumb
 	{
 		lua_pop(Lvl_script, 1);
 	}
+	KFX_C_ZONE_END(_kfx_ctx);
 }
 
 void lua_on_level_up(struct Thing *thing)
 {
+	KFX_C_ZONE_BEGIN(_kfx_ctx, "Lua::OnLevelUp");
 	SYNCDBG(6,"Starting");
     lua_getglobal(Lvl_script, "OnLevelUp");
 	if (lua_isfunction(Lvl_script, -1))
@@ -213,4 +234,5 @@ void lua_on_level_up(struct Thing *thing)
 	{
 		lua_pop(Lvl_script, 1);
 	}
+	KFX_C_ZONE_END(_kfx_ctx);
 }

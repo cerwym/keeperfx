@@ -13,6 +13,7 @@
 #include <cstring>
 #include "bflib_basics.h"
 #include "bflib_sprite.h"
+#include "kfx/profiling/KfxProfiling.h"
 #include "post_inc.h"
 
 /******************************************************************************/
@@ -22,6 +23,7 @@ bool GLSpriteAtlas::Init()
     m_pixels.assign((size_t)k_atlas_w * k_atlas_h, 0u);
 
     glGenTextures(1, &m_texture);
+    KFX_GL_LABEL(GL_TEXTURE, m_texture, "SpriteAtlas/Tex");
     glBindTexture(GL_TEXTURE_2D, m_texture);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
@@ -57,11 +59,14 @@ void GLSpriteAtlas::Free()
 
 void GLSpriteAtlas::decode_rle(uint8_t* dst, int dst_stride, const struct TbSprite* spr)
 {
+    KFX_ZONE("SpriteAtlas::DecodeRLE");
     // Zero out the sprite area (index 0 == transparent)
     for (int y = 0; y < spr->SHeight; ++y)
         memset(dst + y * dst_stride, 0, spr->SWidth);
 
     const signed char* sp = reinterpret_cast<const signed char*>(spr->Data);
+    int total_pixels_written = 0;
+
     for (int y = 0; y < spr->SHeight; ++y) {
         uint8_t* row = dst + y * dst_stride;
         int x = 0;
@@ -73,12 +78,35 @@ void GLSpriteAtlas::decode_rle(uint8_t* dst, int dst_stride, const struct TbSpri
             } else {
                 int count = (int)cmd;
                 for (int i = 0; i < count; ++i) {
-                    if (x < spr->SWidth)
+                    if (x < spr->SWidth) {
                         row[x] = (uint8_t)(*sp);
+                        if (*sp != 0) total_pixels_written++;
+                    }
                     ++sp;
                     ++x;
                 }
             }
+        }
+    }
+
+    // Log sprites that decode to all zeros (potential black squares)
+    if (total_pixels_written == 0) {
+        static int empty_sprite_count = 0;
+        if (empty_sprite_count < 10) {
+            WARNLOG("GLSpriteAtlas: Sprite %dx%d decoded to all zeros (palette index 0) - will appear as transparent", 
+                   spr->SWidth, spr->SHeight);
+            // Show first few bytes of sprite data for debugging
+            const unsigned char* raw = spr->Data;
+            SYNCLOG("GLSpriteAtlas: Empty sprite raw data: %02X %02X %02X %02X %02X %02X...", 
+                   raw[0], raw[1], raw[2], raw[3], raw[4], raw[5]);
+            empty_sprite_count++;
+        }
+    } else {
+        static int decoded_sprite_count = 0;
+        if (decoded_sprite_count < 5) {
+            SYNCLOG("GLSpriteAtlas: Sprite %dx%d decoded successfully: %d non-zero pixels", 
+                   spr->SWidth, spr->SHeight, total_pixels_written);
+            decoded_sprite_count++;
         }
     }
 }
@@ -128,6 +156,7 @@ bool GLSpriteAtlas::pack_sprite(const struct TbSprite* spr, SpriteUV& out)
 
 void GLSpriteAtlas::flush_dirty()
 {
+    KFX_ZONE("SpriteAtlas::FlushDirty");
     if (m_dirty_y_min > m_dirty_y_max) return;
     int h = m_dirty_y_max - m_dirty_y_min;
     if (h <= 0) return;
@@ -151,6 +180,8 @@ void GLSpriteAtlas::AddSheet(const struct TbSpriteSheet* sheet)
     if (!sheet) return;
     long n = num_sprites(sheet);
     int packed = 0;
+    SYNCLOG("GLSpriteAtlas::AddSheet: Adding sheet %p with %ld sprites", sheet, n);
+
     for (long i = 0; i < n; ++i) {
         const struct TbSprite* spr = get_sprite(sheet, i);
         if (!spr || !spr->Data || spr->SWidth == 0 || spr->SHeight == 0) continue;
@@ -164,17 +195,22 @@ void GLSpriteAtlas::AddSheet(const struct TbSpriteSheet* sheet)
         }
     }
     flush_dirty();
-    SYNCDBG(8, "GLSpriteAtlas: packed %d/%ld sprites from sheet", packed, n);
+    SYNCLOG("GLSpriteAtlas::AddSheet: packed %d/%ld sprites from sheet %p (total handles: %d)", 
+           packed, n, sheet, (int)m_handle_uvs.size());
 }
 
 void GLSpriteAtlas::RemoveSheet(const struct TbSpriteSheet* sheet)
 {
     if (!sheet) return;
     long n = num_sprites(sheet);
+    SYNCLOG("GLSpriteAtlas::RemoveSheet: Removing sheet %p with %ld sprites", sheet, n);
+
     for (long i = 0; i < n; ++i) {
         const struct TbSprite* spr = get_sprite(sheet, i);
         if (spr) m_sprite_to_handle.erase(spr);
     }
+    SYNCLOG("GLSpriteAtlas::RemoveSheet: Removed sheet %p (remaining handles: %d)", 
+           sheet, (int)m_handle_uvs.size());
     // Note: atlas pixels and handle slots not reclaimed; space is lost until full reinit.
 }
 
