@@ -142,6 +142,9 @@ struct TbSpriteSheet;
 /** Set the active font for subsequent text operations. */
 void TextRenderer_SetFont(const struct TbSpriteSheet* font);
 
+/** Return the active Western font, or NULL if none has been set. */
+const struct TbSpriteSheet* TextRenderer_GetFont(void);
+
 /** Set both justify and clip windows to the same rectangle. */
 void TextRenderer_SetWindow(int32_t x, int32_t y, int32_t w, int32_t h);
 

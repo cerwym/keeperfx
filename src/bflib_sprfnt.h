@@ -86,10 +86,7 @@ struct AsianFontWindow {
 extern short dbc_language;
 extern TbBool dbc_enabled;
 extern TbBool dbc_initialized;
-extern const struct TbSpriteSheet *lbFontPtr;
 extern struct AsianFont *active_dbcfont;
-extern long dbc_colour0;
-extern long dbc_colour1;
 
 /******************************************************************************/
 
@@ -110,8 +107,8 @@ int  LbTextGetSpacesPerTab(void);
 TbResult LbTextSetJustifyWindow(int pos_x, int pos_y, int width);
 TbResult LbTextSetClipWindow(int x1, int y1, int x2, int y2);
 TbBool LbTextSetFont(const struct TbSpriteSheet *font);
-unsigned char LbTextGetFontFaceColor(void);
-unsigned char LbTextGetFontBackColor(void);
+unsigned char LbTextGetFontFaceColor(const struct TbSpriteSheet *font);
+unsigned char LbTextGetFontBackColor(const struct TbSpriteSheet *font);
 int LbTextStringWidth(const char *str);
 int LbTextStringPartWidth(const char *text, int part);
 int LbTextStringHeight(const char *str);

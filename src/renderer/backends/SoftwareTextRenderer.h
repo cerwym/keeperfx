@@ -26,6 +26,7 @@ public:
 
     // Font
     void SetFont(const struct TbSpriteSheet* font) override;
+    const struct TbSpriteSheet* GetFont() const override { return m_font; }
 
     // Windowing
     void SetWindow(int32_t x, int32_t y, int32_t w, int32_t h) override;

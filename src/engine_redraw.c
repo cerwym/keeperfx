@@ -128,8 +128,8 @@ static void draw_creature_view_icons(struct Thing* creatng)
             }
             LbTextSetWindow(x + scale_ui_value_lofi(spr->SWidth / 2), y - scale_ui_value_lofi(spr->SHeight), w, h);
             lbDisplay.DrawFlags = Lb_TEXT_HALIGN_CENTER;
-            lbDisplay.DrawColour = LbTextGetFontFaceColor();
-            lbDisplayEx.ShadowColour = LbTextGetFontBackColor();
+            lbDisplay.DrawColour = LbTextGetFontFaceColor(winfont);
+            lbDisplayEx.ShadowColour = LbTextGetFontBackColor(winfont);
             char text[16];
             snprintf(text, sizeof(text), "%u", (cctrl->timebomb_countdown / game_num_fps));
             LbTextDrawResized(0, 0, tx_units_per_px, text);
@@ -607,8 +607,8 @@ void draw_overlay_compass(long base_x, long base_y)
     LbTextSetWindow(0, 0, MyScreenWidth, MyScreenHeight);
     int units_per_px = (16 * status_panel_width + 140 / 2) / 140;
     int tx_units_per_px = (22 * units_per_px) / LbTextLineHeight();
-    int w = (LbSprFontCharWidth(lbFontPtr, '/') * tx_units_per_px / 16) / 2;
-    int h = (LbSprFontCharHeight(lbFontPtr, '/') * tx_units_per_px / 16) / 2 + 2 * units_per_px / 16;
+    int w = (LbSprFontCharWidth(winfont, '/') * tx_units_per_px / 16) / 2;
+    int h = (LbSprFontCharHeight(winfont, '/') * tx_units_per_px / 16) / 2 + 2 * units_per_px / 16;
     int center_x = base_x * units_per_px / 16 + MapDiagonalLength / 2;
     int center_y = base_y * units_per_px / 16 + MapDiagonalLength / 2;
     int shift_x = (-(MapDiagonalLength * 7 / 16) * LbSinL(cam->rotation_angle_x)) >> LbFPMath_TrigmBits;

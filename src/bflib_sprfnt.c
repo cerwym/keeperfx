@@ -64,12 +64,9 @@ struct AsianFont dbcKorFonts[] = {
 };
 
 struct AsianFont *active_dbcfont = &dbcJapFonts[0];
-long dbc_colour0 = 0;
-long dbc_colour1 = 0;
 short dbc_language = 0;
 TbBool dbc_initialized = false;
 TbBool dbc_enabled = true;
-const struct TbSpriteSheet *lbFontPtr;
 
 static unsigned char lbSpacesPerTab;
 /******************************************************************************/
@@ -592,32 +589,32 @@ TbBool LbTextSetFont(const struct TbSpriteSheet *font)
     return true;
 }
 
-unsigned char LbTextGetFontFaceColor(void)
+unsigned char LbTextGetFontFaceColor(const struct TbSpriteSheet *font)
 {
-    if (lbFontPtr == frontend_font[0]) {
+    if (font == frontend_font[0]) {
       return 238;
-    } else if (lbFontPtr == frontend_font[1]) {
+    } else if (font == frontend_font[1]) {
       return 243;
-    } else if (lbFontPtr == frontend_font[2]) {
+    } else if (font == frontend_font[2]) {
       return 248;
-    } else if (lbFontPtr == frontend_font[3]) {
+    } else if (font == frontend_font[3]) {
       return 119;
-    } else if (lbFontPtr == winfont) {
+    } else if (font == winfont) {
       return 73;
-    } else if (lbFontPtr == font_sprites) {
+    } else if (font == font_sprites) {
       return 1;
-    } else if (lbFontPtr == frontstory_font) {
+    } else if (font == frontstory_font) {
       return 237;
     } else {
       return 70;
     }
 }
 
-unsigned char LbTextGetFontBackColor(void)
+unsigned char LbTextGetFontBackColor(const struct TbSpriteSheet *font)
 {
-    if (lbFontPtr == font_sprites) {
+    if (font == font_sprites) {
       return 0;
-    } else if (lbFontPtr == frontstory_font) {
+    } else if (font == frontstory_font) {
         return 232;
     } else {
         return 1;
@@ -632,7 +629,7 @@ unsigned char LbTextGetFontBackColor(void)
  */
 int LbTextStringPartWidth(const char *text, int part)
 {
-    if (lbFontPtr == NULL)
+    if (TextRenderer_GetFont() == NULL)
         return 0;
     int max_len = 0;
     int len = 0;
@@ -677,7 +674,7 @@ int LbTextStringPartWidth(const char *text, int part)
 
 int LbTextStringPartWidthM(const char *text, int part, long units_per_px)
 {
-    if (lbFontPtr == NULL)
+    if (TextRenderer_GetFont() == NULL)
         return 0;
     int max_len = 0;
     int len = 0;
@@ -753,7 +750,7 @@ int LbTextWordWidthM(const char *str, long units_per_px)
 int LbTextStringHeight(const char *str)
 {
     int lines = 1;
-    if ((lbFontPtr == NULL) || (str == NULL))
+    if ((TextRenderer_GetFont() == NULL) || (str == NULL))
         return 0;
     for (int i = 0; i < MAX_TEXT_LENGTH; i++)
     {
@@ -771,7 +768,7 @@ long text_string_height(int units_per_px, const char *text)
 
 int LbTextNumberDraw(int pos_x, int pos_y, int units_per_px, long number, unsigned short fdflags)
 {
-    if (lbFontPtr == NULL)
+    if (TextRenderer_GetFont() == NULL)
       return 0;
     char text[16] = "";
     snprintf(text, sizeof(text), "%ld", number);
@@ -795,7 +792,7 @@ int LbTextNumberDraw(int pos_x, int pos_y, int units_per_px, long number, unsign
 
 int LbTextStringDraw(int pos_x, int pos_y, int units_per_px, const char *text, unsigned short fdflags)
 {
-    if (lbFontPtr == NULL)
+    if (TextRenderer_GetFont() == NULL)
       return 0;
     if (text == NULL)
       return 0;

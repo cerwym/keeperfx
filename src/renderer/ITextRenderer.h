@@ -45,6 +45,9 @@ public:
      *  font internally.  Does not destroy previously used font data. */
     virtual void SetFont(const struct TbSpriteSheet* font) = 0;
 
+    /** Return the active Western font, or NULL if none has been set. */
+    virtual const struct TbSpriteSheet* GetFont() const = 0;
+
     /**************************************************************************/
     /* Windowing                                                              */
     /**************************************************************************/

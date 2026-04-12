@@ -31,6 +31,7 @@ public:
 
     // ITextRenderer interface — Font
     void SetFont(const struct TbSpriteSheet* font) override;
+    const struct TbSpriteSheet* GetFont() const override { return m_font; }
 
     // ITextRenderer interface — Windowing
     void SetWindow(int32_t x, int32_t y, int32_t w, int32_t h) override;
@@ -77,7 +78,7 @@ private:
         unsigned char  draw_colour;         // lbDisplay.DrawColour at queue time
         unsigned short draw_flags;          // lbDisplay.DrawFlags  at queue time
         std::string text;
-        const struct TbSpriteSheet* font;   // lbFontPtr captured at call time
+        const struct TbSpriteSheet* font;   // Active font captured at call time
         const struct AsianFont* dbc_font;   // DBC font (nullptr when DBC off)
         long  dbc_colour0;                  // DBC face colour
         long  dbc_colour1;                  // DBC shadow colour

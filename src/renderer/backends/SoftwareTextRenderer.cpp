@@ -38,13 +38,10 @@ void SoftwareTextRenderer::SetFont(const struct TbSpriteSheet* font)
 {
     m_font = font;
 
-    // Keep globals in sync during transition
-    lbFontPtr = font;
-
     if (dbc_initialized)
     {
-        m_dbc_colour0 = LbTextGetFontFaceColor();
-        m_dbc_colour1 = LbTextGetFontBackColor();
+        m_dbc_colour0 = LbTextGetFontFaceColor(font);
+        m_dbc_colour1 = LbTextGetFontBackColor(font);
 
         // Resolve DBC font index from the Western font identity
         int dbc_idx;
@@ -71,10 +68,8 @@ void SoftwareTextRenderer::SetFont(const struct TbSpriteSheet* font)
             m_dbc_enabled = false;
         }
 
-        // Keep globals in sync
+        // Keep globals in sync during transition
         active_dbcfont = const_cast<struct AsianFont*>(m_dbc_font);
-        dbc_colour0 = m_dbc_colour0;
-        dbc_colour1 = m_dbc_colour1;
     }
     else
     {

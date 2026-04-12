@@ -607,6 +607,13 @@ void TextRenderer_SetFont(const struct TbSpriteSheet* font)
         s_textRenderer->SetFont(font);
 }
 
+const struct TbSpriteSheet* TextRenderer_GetFont(void)
+{
+    if (s_textRenderer)
+        return s_textRenderer->GetFont();
+    return NULL;
+}
+
 void TextRenderer_SetWindow(int32_t x, int32_t y, int32_t w, int32_t h)
 {
     if (s_textRenderer)

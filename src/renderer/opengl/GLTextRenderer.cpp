@@ -196,13 +196,11 @@ bool GLTextRenderer::CompileShaders()
 void GLTextRenderer::SetFont(const struct TbSpriteSheet* font)
 {
     m_font = font;
-    // Keep global in sync during transition
-    lbFontPtr = font;
 
     if (dbc_initialized)
     {
-        m_dbc_colour0 = LbTextGetFontFaceColor();
-        m_dbc_colour1 = LbTextGetFontBackColor();
+        m_dbc_colour0 = LbTextGetFontFaceColor(font);
+        m_dbc_colour1 = LbTextGetFontBackColor(font);
 
         // Resolve DBC font index from the Western font identity
         int dbc_idx;
@@ -231,8 +229,6 @@ void GLTextRenderer::SetFont(const struct TbSpriteSheet* font)
 
         // Keep globals in sync during transition
         active_dbcfont = const_cast<struct AsianFont*>(m_dbc_font);
-        dbc_colour0 = m_dbc_colour0;
-        dbc_colour1 = m_dbc_colour1;
     }
     else
     {
@@ -491,8 +487,7 @@ void GLTextRenderer::Flush()
     m_active_atlas = nullptr;
     m_active_dbc_atlas = nullptr;
 
-    // Save globals that the layout engine and FlushSegment will overwrite
-    const struct TbSpriteSheet* saved_font      = lbFontPtr;
+    // Save globals that FlushSegment control codes will overwrite
     unsigned char               saved_colour     = lbDisplay.DrawColour;
     unsigned short              saved_draw_flags = lbDisplay.DrawFlags;
 
@@ -626,7 +621,6 @@ void GLTextRenderer::Flush()
 
         // Expose draw state as globals so FlushSegment reads/writes
         // lbDisplay.DrawColour / DrawFlags consistently for control codes.
-        lbFontPtr            = const_cast<struct TbSpriteSheet*>(d.font);
         lbDisplay.DrawColour = d.draw_colour;
         lbDisplay.DrawFlags  = d.draw_flags;
 
@@ -657,7 +651,6 @@ void GLTextRenderer::Flush()
     m_pending.clear();
 
     // Restore globals overwritten during layout
-    lbFontPtr            = saved_font;
     lbDisplay.DrawColour = saved_colour;
     lbDisplay.DrawFlags  = saved_draw_flags;
 
@@ -772,8 +765,8 @@ int GLTextRenderer::GenerateCharQuad(unsigned long chr, float x, float y, float 
         // Log the first few missing glyphs for diagnosis
         static int missing_glyph_count = 0;
         if (missing_glyph_count < 10) {
-            WARNLOG("GLTextRenderer: No glyph for character %lu (0x%02lX) in font %p", 
-                    chr, chr, lbFontPtr);
+            WARNLOG("GLTextRenderer: No glyph for character %lu (0x%02lX), atlas=%p dbc_atlas=%p", 
+                    chr, chr, (void*)m_active_atlas, (void*)m_active_dbc_atlas);
             missing_glyph_count++;
         }
         return 0;

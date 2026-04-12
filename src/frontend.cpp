@@ -27,6 +27,7 @@
 #include "bflib_guibtns.h"
 #include "bflib_sprite.h"
 #include "bflib_sprfnt.h"
+#include "renderer/RendererManager.h"
 #include "bflib_dernc.h"
 #include "bflib_datetm.h"
 #include "bflib_keybrd.h"
@@ -1250,8 +1251,8 @@ TbBool fronttestfont_draw(void)
     SYNCDBG(9,"Drawing char %lu",i);
     x = (k%32)*w + 2;
     y = (k/32)*h + 2;
-    if (lbFontPtr != NULL)
-      spr = LbFontCharSprite(lbFontPtr,i);
+    if (TextRenderer_GetFont() != NULL)
+      spr = LbFontCharSprite(TextRenderer_GetFont(),i);
     else
       spr = NULL;
     if (spr != NULL)
