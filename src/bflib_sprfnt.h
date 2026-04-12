@@ -142,6 +142,7 @@ void set_bit_to_array(unsigned char *arrD, int iX, int iY, int iMax, int iValue)
 void dbc_set_language(short ilng);
 short dbc_initialize(const char *fpath);
 TbBool is_wide_charcode(unsigned long chr);
+unsigned short dbc_char_to_font_char(unsigned long chr);
 long dbc_char_width(unsigned long chr);
 long dbc_char_widthM(unsigned long chr, long units_per_px);
 long dbc_char_height(unsigned long chr);

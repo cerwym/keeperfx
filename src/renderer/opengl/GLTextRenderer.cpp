@@ -11,9 +11,12 @@
 #ifdef RENDERER_OPENGL_ENABLED
 
 #include "renderer/opengl/GLFontAtlas.h"
+#include "renderer/opengl/GLDbcFontAtlas.h"
 #include "renderer/opengl/GLShaders.h"
 #include "bflib_sprfnt.h"
 #include "bflib_video.h"
+#include "frontend.h"       // frontend_font[], winfont, font_sprites, frontstory_font
+#include "front_credits.h"  // frontstory_font
 
 #include <glad/glad.h>
 #include <cstring>
@@ -25,6 +28,8 @@
 
 GLTextRenderer::GLTextRenderer()
     : m_active_atlas(nullptr)
+    , m_active_dbc_atlas(nullptr)
+    , m_current_dbc_colour0(0)
     , m_shader_program(0)
     , m_vao(0)
     , m_vbo(0)
@@ -38,6 +43,10 @@ GLTextRenderer::GLTextRenderer()
     , m_font(nullptr)
     , m_justify_window{}
     , m_clip_window{}
+    , m_dbc_font(nullptr)
+    , m_dbc_colour0(0)
+    , m_dbc_colour1(0)
+    , m_dbc_enabled(false)
 {
 }
 
@@ -116,6 +125,11 @@ void GLTextRenderer::Shutdown()
     m_atlas_cache.clear();
     m_active_atlas = nullptr;
 
+    for (auto& kv : m_dbc_atlas_cache)
+        delete kv.second;
+    m_dbc_atlas_cache.clear();
+    m_active_dbc_atlas = nullptr;
+
     if (m_shader_program) { glDeleteProgram(m_shader_program); m_shader_program = 0; }
     if (m_vao)            { glDeleteVertexArrays(1, &m_vao); m_vao = 0; }
     if (m_vbo)            { glDeleteBuffers(1, &m_vbo); m_vbo = 0; }
@@ -184,6 +198,47 @@ void GLTextRenderer::SetFont(const struct TbSpriteSheet* font)
     m_font = font;
     // Keep global in sync during transition
     lbFontPtr = font;
+
+    if (dbc_initialized)
+    {
+        m_dbc_colour0 = LbTextGetFontFaceColor();
+        m_dbc_colour1 = LbTextGetFontBackColor();
+
+        // Resolve DBC font index from the Western font identity
+        int dbc_idx;
+        if (font == frontend_font[0]) {
+            dbc_idx = 2;
+        } else if (font == frontend_font[1] || font == frontend_font[2] ||
+                   font == frontend_font[3] || font == winfont ||
+                   font == font_sprites || font == frontstory_font) {
+            dbc_idx = (lbDisplay.PhysicalScreenWidth < 512) ? 0 : 1;
+        } else {
+            dbc_idx = (lbDisplay.PhysicalScreenWidth < 512) ? 0 : 1;
+        }
+
+        const int32_t fonts_count = dbc_fonts_count();
+        struct AsianFont* dbcfonts = dbc_fonts_list();
+        if ((dbc_idx >= 0) && (dbc_idx < fonts_count) && (dbcfonts != nullptr))
+        {
+            m_dbc_font    = &dbcfonts[dbc_idx];
+            m_dbc_enabled = true;
+        }
+        else
+        {
+            m_dbc_font    = nullptr;
+            m_dbc_enabled = false;
+        }
+
+        // Keep globals in sync during transition
+        active_dbcfont = const_cast<struct AsianFont*>(m_dbc_font);
+        dbc_colour0 = m_dbc_colour0;
+        dbc_colour1 = m_dbc_colour1;
+    }
+    else
+    {
+        m_dbc_font    = nullptr;
+        m_dbc_enabled = false;
+    }
 }
 
 void GLTextRenderer::SetWindow(int32_t x, int32_t y, int32_t w, int32_t h)
@@ -246,7 +301,8 @@ TbBool GLTextRenderer::DrawTextResized(int32_t posx, int32_t posy, int32_t units
                           m_justify_window.x, m_justify_window.y, m_justify_window.width,
                           m_clip_window.x, m_clip_window.y, m_clip_window.width, m_clip_window.height,
                           lbDisplay.DrawColour, lbDisplay.DrawFlags,
-                          text, m_font });
+                          text, m_font,
+                          m_dbc_font, m_dbc_colour0, m_dbc_colour1, m_dbc_enabled });
     return true;
 }
 
@@ -433,6 +489,7 @@ void GLTextRenderer::Flush()
     // bind their textures to GL_TEXTURE0 between our Flush() calls, corrupting state.
     // We must rebind the font atlas texture for the first draw of each frame.
     m_active_atlas = nullptr;
+    m_active_dbc_atlas = nullptr;
 
     // Save globals that the layout engine and FlushSegment will overwrite
     const struct TbSpriteSheet* saved_font      = lbFontPtr;
@@ -442,8 +499,13 @@ void GLTextRenderer::Flush()
     // CRITICAL FIX: Sort pending draws by font pointer to minimize atlas rebinding.
     // Main menu uses 3 different fonts (36BC0DC8, 36BC0E18, 36BC1368) and without
     // sorting, the code thrashes between atlases hundreds of times per frame.
+    // Group DBC draws together so the DBC atlas is bound once per font.
     std::sort(m_pending.begin(), m_pending.end(),
               [](const DeferredDraw& a, const DeferredDraw& b) {
+                  if (a.dbc_enabled != b.dbc_enabled)
+                      return (int)a.dbc_enabled < (int)b.dbc_enabled;
+                  if (a.dbc_enabled)
+                      return a.dbc_font < b.dbc_font;
                   return a.font < b.font;
               });
 
@@ -451,59 +513,111 @@ void GLTextRenderer::Flush()
     {
         if (!d.font) continue;
 
-        // Look up the cached atlas for this font; build it on first use.
-        // IMPORTANT: activate GL_TEXTURE0 before Init() so PackAndUploadAtlas's
-        // glBindTexture calls don't disturb the palette binding on GL_TEXTURE1.
-        GLFontAtlas* atlas = nullptr;
+        if (d.dbc_enabled && d.dbc_font)
         {
-            auto it = m_atlas_cache.find(d.font);
-            if (it != m_atlas_cache.end())
+            // ---- DBC path: use DBC atlas for all characters ----
+            GLDbcFontAtlas* dbc_atlas = nullptr;
             {
-                atlas = it->second;
-                // Rebuild if the sprite sheet changed since the atlas was built
-                // (font loaded/reloaded after the atlas was first created from empty data).
-                if (atlas->NeedsRebuild(d.font))
+                auto it = m_dbc_atlas_cache.find(d.dbc_font);
+                if (it != m_dbc_atlas_cache.end())
                 {
-                    SYNCLOG("GLTextRenderer: Rebuilding stale atlas for font %p (sprite count changed)", d.font);
-                    atlas->Shutdown();
+                    dbc_atlas = it->second;
+                    if (dbc_atlas->NeedsRebuild(d.dbc_font))
+                    {
+                        SYNCLOG("GLTextRenderer: Rebuilding stale DBC atlas for font %p", d.dbc_font);
+                        dbc_atlas->Shutdown();
+                        glActiveTexture(GL_TEXTURE0);
+                        if (!dbc_atlas->Init(d.dbc_font))
+                        {
+                            ERRORLOG("GLTextRenderer::Flush: failed to rebuild DBC atlas for font %p", d.dbc_font);
+                            m_dbc_atlas_cache.erase(it);
+                            delete dbc_atlas;
+                            continue;
+                        }
+                        if (dbc_atlas == m_active_dbc_atlas)
+                            m_active_dbc_atlas = nullptr;
+                    }
+                }
+                else
+                {
+                    SYNCLOG("GLTextRenderer: Creating new DBC atlas for font %p (cache size: %d)",
+                           d.dbc_font, (int)m_dbc_atlas_cache.size());
+                    dbc_atlas = new GLDbcFontAtlas();
+                    glActiveTexture(GL_TEXTURE0);
+                    if (!dbc_atlas->Init(d.dbc_font))
+                    {
+                        ERRORLOG("GLTextRenderer::Flush: failed to init DBC atlas for font %p", d.dbc_font);
+                        delete dbc_atlas;
+                        continue;
+                    }
+                    m_dbc_atlas_cache[d.dbc_font] = dbc_atlas;
+                }
+            }
+
+            if (!dbc_atlas->IsInitialized()) continue;
+
+            if (dbc_atlas != m_active_dbc_atlas)
+            {
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, dbc_atlas->GetTextureID());
+                m_active_dbc_atlas = dbc_atlas;
+                m_active_atlas = nullptr;  // DBC atlas is bound, not Western
+            }
+
+            m_current_dbc_colour0 = d.dbc_colour0;
+        }
+        else
+        {
+            // ---- Western path: use sprite-based atlas ----
+            GLFontAtlas* atlas = nullptr;
+            {
+                auto it = m_atlas_cache.find(d.font);
+                if (it != m_atlas_cache.end())
+                {
+                    atlas = it->second;
+                    if (atlas->NeedsRebuild(d.font))
+                    {
+                        SYNCLOG("GLTextRenderer: Rebuilding stale atlas for font %p (sprite count changed)", d.font);
+                        atlas->Shutdown();
+                        glActiveTexture(GL_TEXTURE0);
+                        if (!atlas->Init(d.font))
+                        {
+                            ERRORLOG("GLTextRenderer::Flush: failed to rebuild atlas for font %p", d.font);
+                            m_atlas_cache.erase(it);
+                            delete atlas;
+                            continue;
+                        }
+                        if (atlas == m_active_atlas)
+                            m_active_atlas = nullptr;
+                    }
+                }
+                else
+                {
+                    SYNCLOG("GLTextRenderer: Creating new atlas for font %p (cache size: %d)",
+                           d.font, (int)m_atlas_cache.size());
+                    atlas = new GLFontAtlas();
                     glActiveTexture(GL_TEXTURE0);
                     if (!atlas->Init(d.font))
                     {
-                        ERRORLOG("GLTextRenderer::Flush: failed to rebuild atlas for font %p", d.font);
-                        m_atlas_cache.erase(it);
+                        ERRORLOG("GLTextRenderer::Flush: failed to init atlas for font %p", d.font);
                         delete atlas;
                         continue;
                     }
-                    if (atlas == m_active_atlas)
-                        m_active_atlas = nullptr; // force rebind since texture was recreated
+                    m_atlas_cache[d.font] = atlas;
                 }
             }
-            else
+
+            if (!atlas->IsInitialized()) continue;
+
+            if (atlas != m_active_atlas)
             {
-                SYNCLOG("GLTextRenderer: Creating new atlas for font %p (cache size: %d)", 
-                       d.font, (int)m_atlas_cache.size());
-                atlas = new GLFontAtlas();
+                SYNCLOG("GLTextRenderer: Rebinding atlas from %p to %p for font %p",
+                       m_active_atlas, atlas, d.font);
                 glActiveTexture(GL_TEXTURE0);
-                if (!atlas->Init(d.font))
-                {
-                    ERRORLOG("GLTextRenderer::Flush: failed to init atlas for font %p", d.font);
-                    delete atlas;
-                    continue;
-                }
-                m_atlas_cache[d.font] = atlas;
+                glBindTexture(GL_TEXTURE_2D, atlas->GetTextureID());
+                m_active_atlas = atlas;
+                m_active_dbc_atlas = nullptr;  // Western atlas is bound, not DBC
             }
-        }
-
-        if (!atlas->IsInitialized()) continue;
-
-        // Only rebind the texture when the atlas actually changes.
-        if (atlas != m_active_atlas)
-        {
-            SYNCLOG("GLTextRenderer: Rebinding atlas from %p to %p for font %p", 
-                   m_active_atlas, atlas, d.font);
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, atlas->GetTextureID());
-            m_active_atlas = atlas;
         }
 
         // Set the clip window on the renderer so gl_draw_segment can read it
@@ -527,8 +641,8 @@ void GLTextRenderer::Flush()
         // Build layout context from the deferred draw's captured state
         TextLayoutContext ctx{};
         ctx.font           = d.font;
-        ctx.dbc_font       = nullptr;   // DBC: Phase 4
-        ctx.dbc_enabled    = false;
+        ctx.dbc_font       = d.dbc_font;
+        ctx.dbc_enabled    = d.dbc_enabled;
         ctx.draw_flags     = d.draw_flags;
         ctx.justify_window = { d.wnd_x, d.wnd_y, d.wnd_width, 0 };
         ctx.clip_window    = { d.clip_x, d.clip_y, d.clip_w, d.clip_h };
@@ -559,7 +673,7 @@ void GLTextRenderer::FlushSegment(const char* sbuf, const char* ebuf,
                                    float space_len, float scale_factor)
 {
     KFX_ZONE("TextRenderer::FlushSegment");
-    if (!sbuf || sbuf >= ebuf || !m_active_atlas || !m_active_atlas->IsInitialized())
+    if (!sbuf || sbuf >= ebuf || (!m_active_atlas && !m_active_dbc_atlas))
         return;
 
     // Stack buffer: 100 characters × 6 vertices each
@@ -614,8 +728,18 @@ void GLTextRenderer::FlushSegment(const char* sbuf, const char* ebuf,
         }
 
         // Normal character — emit a textured quad
-        float forced_idx = (lbDisplay.DrawFlags & Lb_TEXT_ONE_COLOR)
-                         ? (float)lbDisplay.DrawColour : -1.0f;
+        float forced_idx;
+        if (m_active_dbc_atlas)
+        {
+            // DBC glyphs are monochrome masks — always force a palette index.
+            forced_idx = (lbDisplay.DrawFlags & Lb_TEXT_ONE_COLOR)
+                       ? (float)lbDisplay.DrawColour : (float)m_current_dbc_colour0;
+        }
+        else
+        {
+            forced_idx = (lbDisplay.DrawFlags & Lb_TEXT_ONE_COLOR)
+                       ? (float)lbDisplay.DrawColour : -1.0f;
+        }
                          
         int glyph_width = GenerateCharQuad(chr, current_x, screen_y, scale_factor,
                                            forced_idx, &vertices[vertex_count]);
@@ -637,7 +761,12 @@ void GLTextRenderer::FlushSegment(const char* sbuf, const char* ebuf,
 int GLTextRenderer::GenerateCharQuad(unsigned long chr, float x, float y, float scale_factor,
                                       float forced_palette_idx, TextVertex* verts)
 {
-    const FontGlyph* glyph = m_active_atlas->GetGlyph(chr);
+    const FontGlyph* glyph = nullptr;
+    if (m_active_dbc_atlas)
+        glyph = m_active_dbc_atlas->GetGlyph(chr);
+    else if (m_active_atlas)
+        glyph = m_active_atlas->GetGlyph(chr);
+
     if (!glyph)
     {
         // Log the first few missing glyphs for diagnosis

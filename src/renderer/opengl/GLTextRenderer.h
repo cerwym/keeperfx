@@ -16,6 +16,7 @@
 #ifdef RENDERER_OPENGL_ENABLED
 
 class GLFontAtlas;
+class GLDbcFontAtlas;
 
 /******************************************************************************/
 
@@ -77,13 +78,22 @@ private:
         unsigned short draw_flags;          // lbDisplay.DrawFlags  at queue time
         std::string text;
         const struct TbSpriteSheet* font;   // lbFontPtr captured at call time
+        const struct AsianFont* dbc_font;   // DBC font (nullptr when DBC off)
+        long  dbc_colour0;                  // DBC face colour
+        long  dbc_colour1;                  // DBC shadow colour
+        TbBool dbc_enabled;                 // Whether DBC is active
     };
 
     std::vector<DeferredDraw>  m_pending;         // Queued draws, flushed in Flush()
 
     // Per-font atlas cache: built once per unique TbSpriteSheet*, reused every frame.
     std::unordered_map<const struct TbSpriteSheet*, GLFontAtlas*> m_atlas_cache;
-    GLFontAtlas*     m_active_atlas;     // Atlas currently bound for the in-progress draw
+    GLFontAtlas*     m_active_atlas;     // Western atlas currently bound
+
+    // Per-DBC-font atlas cache
+    std::unordered_map<const struct AsianFont*, GLDbcFontAtlas*> m_dbc_atlas_cache;
+    GLDbcFontAtlas*  m_active_dbc_atlas; // DBC atlas currently bound (nullptr when DBC off)
+    long             m_current_dbc_colour0; // DBC face colour for current draw
     unsigned int     m_shader_program;   // Text rendering shader
     unsigned int     m_vao;              // Vertex array object
     unsigned int     m_vbo;              // Vertex buffer object
@@ -152,6 +162,12 @@ private:
     const struct TbSpriteSheet* m_font;
     TextWindow                  m_justify_window;
     TextWindow                  m_clip_window;
+
+    // DBC state (resolved in SetFont)
+    const struct AsianFont*     m_dbc_font;
+    long                        m_dbc_colour0;
+    long                        m_dbc_colour1;
+    TbBool                      m_dbc_enabled;
 };
 
 /******************************************************************************/
