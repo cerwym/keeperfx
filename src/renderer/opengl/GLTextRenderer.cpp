@@ -619,6 +619,12 @@ void GLTextRenderer::Flush()
         // for absolute screen coordinate conversion.
         m_clip_window = { d.clip_x, d.clip_y, d.clip_w, d.clip_h };
 
+        // Restore font state so virtual CharWidthScaled/WordWidthScaled
+        // calls from TextLayout read the correct font for this draw.
+        m_font        = d.font;
+        m_dbc_font    = d.dbc_font;
+        m_dbc_enabled = d.dbc_enabled;
+
         // Expose draw state as globals so FlushSegment reads/writes
         // lbDisplay.DrawColour / DrawFlags consistently for control codes.
         lbDisplay.DrawColour = d.draw_colour;
