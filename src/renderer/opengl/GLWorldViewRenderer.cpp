@@ -175,13 +175,14 @@ bool GLWorldViewRenderer::init_gl_resources()
     m_loc_shade_gamma   = glGetUniformLocation(m_shader, "u_shade_gamma");
     m_loc_lighting_mode = glGetUniformLocation(m_shader, "u_lighting_mode");
     m_loc_lightmap      = glGetUniformLocation(m_shader, "u_lightmap");
+    m_loc_tile_filter   = glGetUniformLocation(m_shader, "u_tile_filter");
     glUniform1f(m_loc_fullbright,    0.0f);
     glUniform1f(m_loc_ambient,       0.0f);
     glUniform1f(m_loc_shade_scale,   1.0f);
     glUniform1f(m_loc_shade_gamma,   1.0f);
     glUniform1i(m_loc_lighting_mode, RENDERER_LIGHTING_SOFTWARE);
     glUniform1i(m_loc_lightmap,      2);  // GL_TEXTURE2
-    m_tile_filter_applied = -1;  // force apply on first flush
+    glUniform1i(m_loc_tile_filter,   RENDERER_FILTER_NEAREST);
     glUseProgram(0);
 
     // Phase 2: lightmap texture — mirrors game.lish.subtile_lightness[] each frame.
@@ -1038,6 +1039,7 @@ void GLWorldViewRenderer::GPUFlushNow()
     glUniform1f(m_loc_shade_scale,   g_renderer_settings.shade_scale);
     glUniform1f(m_loc_shade_gamma,   g_renderer_settings.shade_gamma);
     glUniform1i(m_loc_lighting_mode, g_renderer_settings.lighting_mode);
+    glUniform1i(m_loc_tile_filter,   g_renderer_settings.tile_filter);
     glUseProgram(0);
 
     // Upload lightmap (game.lish.subtile_lightness[]) to GL_TEXTURE2.
@@ -1067,15 +1069,6 @@ void GLWorldViewRenderer::GPUFlushNow()
                 glActiveTexture(GL_TEXTURE0);
                 glBindTexture(GL_TEXTURE_2D, atlas_tex);
                 bound_variation = cmd.variation;
-                // Apply tile filter when the setting has changed.
-                int wanted_filter = g_renderer_settings.tile_filter;
-                if (wanted_filter != m_tile_filter_applied)
-                {
-                    GLenum gl_filter = (wanted_filter == 1) ? GL_LINEAR : GL_NEAREST;
-                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, gl_filter);
-                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, gl_filter);
-                    m_tile_filter_applied = wanted_filter;
-                }
             }
             // Always rebind the 1D palette at unit 1 — keeper-sprite and other
             // passes bind their own textures to unit 1 (GL_TEXTURE_2D), which

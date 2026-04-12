@@ -2222,6 +2222,28 @@ TbBool cmd_renderer_palette_mode(PlayerNumber plyr_idx, char* args)
     return true;
 }
 
+TbBool cmd_renderer_tile_filter(PlayerNumber plyr_idx, char* args)
+{
+    char* tok = strsep(&args, " ");
+    if (tok == NULL) {
+        targeted_message_add(MsgType_Player, plyr_idx, plyr_idx, GUI_MESSAGES_DELAY,
+            "renderer.tile_filter = %s",
+            g_renderer_settings.tile_filter == RENDERER_FILTER_LINEAR ? "linear" : "nearest");
+        return true;
+    }
+    int newfilter;
+    if (strcasecmp(tok, "linear") == 0 || strcmp(tok, "1") == 0)
+        newfilter = RENDERER_FILTER_LINEAR;
+    else
+        newfilter = RENDERER_FILTER_NEAREST;
+    g_renderer_settings.tile_filter = newfilter;
+    RendererApplySettings(RendererGetSettings());
+    targeted_message_add(MsgType_Player, plyr_idx, plyr_idx, GUI_MESSAGES_DELAY,
+        "renderer.tile_filter = %s",
+        newfilter == RENDERER_FILTER_LINEAR ? "linear" : "nearest");
+    return true;
+}
+
 TbBool cmd_cheat_menu(PlayerNumber plyr_idx, char * args)
 {
     if (game.easter_eggs_enabled == false) {
@@ -2383,6 +2405,7 @@ static const struct ConsoleCommand console_commands[] = {
     { "renderer.shade_scale",   cmd_renderer_shade_scale },
     { "renderer.shade_gamma",   cmd_renderer_shade_gamma },
     { "renderer.palette_mode",  cmd_renderer_palette_mode },
+    { "renderer.tile_filter",    cmd_renderer_tile_filter },
 };
 static const int console_command_count = sizeof(console_commands) / sizeof(*console_commands);
 

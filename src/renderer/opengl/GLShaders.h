@@ -235,11 +235,29 @@ uniform float      u_ambient;           // darkness floor added to shade [0,1]
 uniform float      u_shade_scale;       // brightness multiplier (1.0=original)
 uniform float      u_shade_gamma;       // shade curve exponent  (1.0=linear)
 uniform int        u_lighting_mode;     // 0=software-accurate, 1=modern (Phase 3+)
+uniform int        u_tile_filter;        // 0=nearest, 1=palette-correct bilinear
 out vec4 fragColor;
 void main()
 {
-    float idx = texture(u_tile_atlas, v_uv).r;
-    vec4  col = texture(u_palette, idx);
+    // Sampling the R8 atlas with GL_LINEAR would interpolate palette *indices*,
+    // producing wrong colours.  For bilinear mode we instead manually sample the
+    // 4 neighbouring texels (GL_NEAREST), look each up in the palette, then lerp
+    // the resulting RGBA colours — palette-correct bilinear filtering.
+    vec4 col;
+    if (u_tile_filter == 1) {
+        vec2 tex_size = vec2(textureSize(u_tile_atlas, 0));
+        vec2 px   = v_uv * tex_size - 0.5;
+        vec2 f    = fract(px);
+        vec2 base = (floor(px) + 0.5) / tex_size;
+        vec2 st   = 1.0 / tex_size;
+        vec4 c00 = texture(u_palette, texture(u_tile_atlas, base).r);
+        vec4 c10 = texture(u_palette, texture(u_tile_atlas, base + vec2(st.x, 0.0)).r);
+        vec4 c01 = texture(u_palette, texture(u_tile_atlas, base + vec2(0.0, st.y)).r);
+        vec4 c11 = texture(u_palette, texture(u_tile_atlas, base + st).r);
+        col = mix(mix(c00, c10, f.x), mix(c01, c11, f.x), f.y);
+    } else {
+        col = texture(u_palette, texture(u_tile_atlas, v_uv).r);
+    }
     float shade;
     if (u_lighting_mode == 0) {
         // Software-accurate: per-vertex Gouraud shade from the DK fade table.

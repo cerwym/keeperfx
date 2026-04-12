@@ -54,7 +54,11 @@ public:
     void FlushIsometricView() override;
     void FlushFrontView(struct Camera* cam) override;
     const char* GetName() const override { return "GLWorldViewRenderer"; }
-    bool IsGpuAccelerated() const override { return m_initialized; }
+    // Returns true only when the world renderer is initialised AND a world pass
+    // (BeginWorldPass) was issued this frame — resets to false in GPUFlushNow.
+    // The main menu never calls BeginWorldPass, so this returns false there,
+    // allowing RendererOpenGL::EndFrame to run the CPU staging blit.
+    bool IsGpuAccelerated() const override { return m_initialized && m_world_pass_active; }
 
     // Called by RendererOpenGL::EndFrame() to issue the accumulated draw call
     // after glClear() and before the CPU framebuffer blit overlay.
@@ -203,10 +207,9 @@ private:
     GLint  m_loc_shade_gamma   = -1;  // u_shade_gamma
     GLint  m_loc_lighting_mode = -1;  // u_lighting_mode (0=software-accurate, 1=modern)
     GLint  m_loc_lightmap      = -1;  // usampler2D u_lightmap (unit 2)
+    GLint  m_loc_tile_filter   = -1;  // u_tile_filter (0=nearest, 1=palette-correct bilinear)
     // Lightmap texture (unit 2): mirrors game.lish.subtile_lightness[] as GL_R16UI
     GLuint m_tex_lightmap      = 0;
-    // Tile filter: last value applied to atlas textures (-1 = not yet applied)
-    int    m_tile_filter_applied = -1;
 
     // Shadow uniform locations
     GLint  m_shadow_loc_viewport   = -1;
@@ -258,6 +261,9 @@ private:
     GLTextRenderer* m_text_renderer = nullptr;
 
     bool m_initialized = false;
+    // Set to true in BeginWorldPass(); reset to false at the end of GPUFlushNow().
+    // Tracks whether the world renderer is actually being used this frame.
+    bool m_world_pass_active = false;
 };
 
 /******************************************************************************/
