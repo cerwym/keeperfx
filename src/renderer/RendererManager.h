@@ -254,6 +254,12 @@ void UIRenderer_SubmitButtonSprite(int32_t x, int32_t y, int units_per_px, short
  *  In software mode: temporarily sets Lb_SPRITE_FLIP_HORIZ before blitting. */
 void UIRenderer_SubmitButtonSpriteFlipped(int32_t x, int32_t y, int units_per_px, short spridx);
 
+/** Draw a decimal number using GBS_fontchars_number_dig0..9 button sprites.
+ *  Digits are drawn right-to-left, horizontally centered on center_x.
+ *  Each digit is scaled to w * h pixels.  Values <= 0 draw nothing.
+ *  Used for floating gold text, HUD numbers, etc. */
+void UIRenderer_SubmitDigitSprites(int32_t center_x, int32_t y, int32_t w, int32_t h, long long value);
+
 /** Submit a sprite with explicit pixel dimensions to the GPU batch.
  *  Called by game-logic hooks (draw_status_sprites, draw_engine_number, etc.)
  *  instead of LbSpriteDrawScaled when the GPU renderer is active. */

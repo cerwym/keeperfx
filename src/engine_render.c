@@ -4848,11 +4848,8 @@ static void draw_engine_number(struct BucketKindFloatingGoldText *num)
     struct PlayerInfo *player;
     unsigned short flg_mem;
     const struct TbSprite *spr;
-    long remaining_digits;
-    long ndigits;
     long w;
     long h;
-    long pos_x;
 
     // 1st argument: the scale when fully zoomed out. 2nd argument: the scale at base level zoom
     float scale_by_zoom = LbLerp(0.15, 1.00, hud_scale);
@@ -4868,22 +4865,7 @@ static void draw_engine_number(struct BucketKindFloatingGoldText *num)
         player->acamera->view_mode == PVM_FrontView ||
         player->acamera->view_mode == PVM_IsoStraightView
     ) {
-        // Count digits to be displayed
-        ndigits=0;
-        for (remaining_digits = num->lvl; remaining_digits > 0; remaining_digits /= 10)
-            ndigits++;
-        if (ndigits > 0)
-        {
-            // Show the digits
-            pos_x = w*(ndigits-1)/2 + num->x;
-            for (remaining_digits = num->lvl; remaining_digits > 0; remaining_digits /= 10)
-            {
-                spr = get_button_sprite((remaining_digits%10) + GBS_fontchars_number_dig0);
-                UIRenderer_SubmitScaledSprite(pos_x, num->y - h, w, h, spr);
-
-                pos_x -= w;
-            }
-        }
+        UIRenderer_SubmitDigitSprites(num->x, num->y - h, w, h, num->lvl);
     }
     lbDisplay.DrawFlags = flg_mem;
 }
@@ -8005,6 +7987,15 @@ static void prepare_jonty_remap_and_scale(int32_t *scale, const struct BucketKin
         fade = jspr->depth_fade;
         shade = 0;
     }
+
+    // Guard against division by zero
+    if (fade <= 0)
+    {
+        WARNLOG("Invalid fade value %d for thing %d at (%d,%d,%d), using minimum fade", 
+                fade, thing->index, thing->mappos.x.val, thing->mappos.y.val, thing->mappos.z.val);
+        fade = 1;  // Set minimum safe value
+    }
+
     shade_factor = shade >> 8;
     *scale = (thelens * (long)thing->sprite_size) / fade;
     if ((thing->rendering_flags & (TRF_Tint_1|TRF_Tint_2)) != 0)
@@ -9238,29 +9229,10 @@ static void render_sprite_debug_id(struct Thing* thing, long scr_x, long scr_y)
         if (thing->class_id != TCls_Creature)
             return;
     }
-    ushort flg_mem = lbDisplay.DrawFlags;
-    lbDisplay.DrawFlags = Lb_TEXT_ONE_COLOR;
     const struct TbSprite *spr = get_button_sprite(GBS_fontchars_number_dig0);
     long w = scale_ui_value(spr->SWidth);
     long h = scale_ui_value(spr->SHeight);
-
-    long digit_counter, value = thing->index;
-
-    // Count digits to be displayed
-    int ndigits=0;
-    for (digit_counter = value; digit_counter > 0; digit_counter /= 10)
-        ndigits++;
-    // Show the digits
-    scr_y -= h;
-    long pos_x = w * (ndigits - 1) / 2 + scr_x;
-    for (digit_counter = value; digit_counter > 0; digit_counter /= 10)
-    {
-        spr = get_button_sprite((digit_counter%10) + GBS_fontchars_number_dig0);
-        LbSpriteDrawScaled(pos_x, scr_y - h, spr, w, h);
-
-        pos_x -= w;
-    }
-    lbDisplay.DrawFlags = flg_mem;
+    UIRenderer_SubmitDigitSprites(scr_x, scr_y - 2 * h, w, h, thing->index);
 }
 
 void render_set_sprite_debug(int level)

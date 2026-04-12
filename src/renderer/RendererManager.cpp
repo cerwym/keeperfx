@@ -38,6 +38,7 @@
 #include "gui_draw.h"          // get_panel_sprite
 #include "config_spritecolors.h" // get_player_colored_icon_idx
 #include "custom_sprites.h"    // get_button_sprite_for_player
+#include "sprites.h"           // GBS_fontchars_number_dig0
 #include "player_data.h"       // my_player_number
 // Forward declaration to avoid pulling in frontend.h (conflicts with C++ stdlib)
 extern "C" { struct TbSpriteSheet; extern struct TbSpriteSheet *button_sprites; extern struct TbSpriteSheet *custom_sprites; extern struct TbSpriteSheet *pointer_sprites; }
@@ -819,6 +820,26 @@ void UIRenderer_SubmitButtonSpriteFlipped(int32_t x, int32_t y, int units_per_px
     const struct TbSprite* spr = get_button_sprite_for_player(spridx, my_player_number);
     SpriteHandle h = resolve_sprite_handle(spr);
     s_uiRenderer->SubmitPanelSprite(x, y, units_per_px, h, true);
+}
+
+void UIRenderer_SubmitDigitSprites(int32_t center_x, int32_t y, int32_t w, int32_t h, long long value)
+{
+    if (!s_uiRenderer || value <= 0) return;
+
+    // Count digits
+    int ndigits = 0;
+    for (long long v = value; v > 0; v /= 10)
+        ndigits++;
+
+    // Draw right-to-left, centered on center_x
+    int32_t pos_x = center_x + w * (ndigits - 1) / 2;
+    for (long long v = value; v > 0; v /= 10)
+    {
+        const struct TbSprite* spr = get_button_sprite((short)((v % 10) + GBS_fontchars_number_dig0));
+        SpriteHandle hspr = resolve_sprite_handle(spr);
+        s_uiRenderer->SubmitScaledSprite(pos_x, y, w, h, hspr);
+        pos_x -= w;
+    }
 }
 
 void UIRenderer_SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h, const struct TbSprite *spr)
