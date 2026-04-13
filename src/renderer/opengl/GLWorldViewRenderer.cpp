@@ -1038,7 +1038,7 @@ void GLWorldViewRenderer::GPUFlushNow()
     glUniform1f(m_loc_shade_scale,   g_renderer_settings.shade_scale);
     glUniform1f(m_loc_shade_gamma,   g_renderer_settings.shade_gamma);
     glUniform1i(m_loc_lighting_mode, g_renderer_settings.lighting_mode);
-    glUseProgram(0);
+    // Keep m_shader bound — pass 1 (tiles) draws with it immediately below.
 
     // Upload lightmap (game.lish.subtile_lightness[]) to GL_TEXTURE2.
     // Uploaded every frame so dynamic lighting changes (torches, spells) are
@@ -1054,6 +1054,11 @@ void GLWorldViewRenderer::GPUFlushNow()
     glPixelStorei(GL_UNPACK_ALIGNMENT, 4);  // restore default
     glActiveTexture(GL_TEXTURE0);  // restore default active texture unit
 
+    // ── Pass 1: Opaque geometry (tiles, flat-colour polys) ──────────────────
+    // All opaque commands run first so the depth buffer is fully populated
+    // before any blended pass reads it.  Shadows are explicitly excluded here —
+    // mixing them with tile batches was causing flickering because tile batches
+    // drawn after a shadow command would overdraw the darkened pixels.
     for (const auto& cmd : m_draw_cmds)
     {
         if (cmd.type == DrawCmd::CMD_TILES)
@@ -1085,137 +1090,6 @@ void GLWorldViewRenderer::GPUFlushNow()
             glDrawArrays(GL_TRIANGLES, cmd.vert_start, cmd.vert_count);
             KFX_GL_POP();
         }
-        else if (cmd.type == DrawCmd::CMD_SHADOWS)
-        {
-            KFX_GL_PUSH("WorldPass/Shadows");
-            // Render a creature shadow: decode the keeper-sprite silhouette,
-            // upload as an R8 texture, then draw the floor-projected quad
-            // with a multiply-darken blend (GL_ZERO / GL_ONE_MINUS_SRC_ALPHA).
-            const ShadowCmd& sc = m_shadow_cmds[cmd.shadow_idx];
-            if (!sc.sprite_data) continue;
-
-            // Decode RLE sprite into the local scratch buffer (stride=256).
-            // This replaces the old call to draw_keepsprite_unscaled_in_buffer
-            // so the GPU renderer never touches the global big_scratch buffer.
-            decode_keeper_rle(s_kspr_decode_buf, sc.sprite_data,
-                              sc.sprite_w, sc.sprite_h);
-
-            // Upload silhouette to the reusable R8 texture
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, m_shadow_silhouette_tex);
-            glPixelStorei(GL_UNPACK_ROW_LENGTH, 256);
-            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, sc.sprite_w, sc.sprite_h,
-                            GL_RED, GL_UNSIGNED_BYTE, s_kspr_decode_buf);
-            glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-
-            // UV extent covers only the used sprite region of the 256x256 texture.
-            const float u_extent = (float)sc.sprite_w / 256.0f;
-            const float v_extent = (float)sc.sprite_h / 256.0f;
-
-            // Build 6 float vertices: two triangles covering the quad (0,1,2) + (0,2,3)
-            // PolyPoint.X/Y = integer screen pixels; U/V = 16.16 → normalise to [0,1]
-            float sv[6][4];
-            const struct PolyPoint* vp = sc.verts;
-            for (int t = 0; t < 6; t++)
-            {
-                const int idx[6] = { 0, 1, 2, 0, 2, 3 };
-                sv[t][0] = (float)vp[idx[t]].X;
-                sv[t][1] = (float)vp[idx[t]].Y;
-                float raw_u = (float)(vp[idx[t]].U >> 16) / 256.0f;
-                float raw_v = (float)(vp[idx[t]].V >> 16) / 256.0f;
-                // Remap UVs to the actual sprite region and apply x-flip if needed
-                sv[t][2] = sc.x_flip ? (u_extent - raw_u * u_extent) : (raw_u * u_extent);
-                sv[t][3] = raw_v * v_extent;
-            }
-            glBindBuffer(GL_ARRAY_BUFFER, m_shadow_vbo);
-            glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(sv), sv);
-
-            // Shadow shader + blend state
-            glBindVertexArray(m_shadow_vao);
-            glUseProgram(m_shadow_shader);
-            glUniform2f(m_shadow_loc_viewport, (float)m_screen_w, (float)m_screen_h);
-            glUniform1f(m_shadow_loc_darkness, sc.darkness);
-
-            glDepthMask(GL_FALSE);
-            glDisable(GL_DEPTH_TEST);
-            glEnable(GL_BLEND);
-            glBlendFunc(GL_ZERO, GL_ONE_MINUS_SRC_ALPHA);
-
-            glDrawArrays(GL_TRIANGLES, 0, 6);
-
-            // Restore tile rendering state
-            glDisable(GL_BLEND);
-            glEnable(GL_DEPTH_TEST);
-            glDepthMask(GL_TRUE);
-            glUseProgram(m_shader);
-            glBindVertexArray(m_vao);
-            // Rebind the atlas texture that was displaced by the silhouette
-            bound_variation = -1;
-            KFX_GL_POP();
-        }
-        else if (cmd.type == DrawCmd::CMD_SPRITES)
-        {
-            KFX_GL_PUSH("WorldPass/Sprites");
-            // 3D sprites: all rendering goes through render_keepersprite_gpu()
-            // via the SubmitKeeperSprite intercept in draw_keepersprite().
-            // No CPU staging buffer is needed — the GPU path always claims
-            // the sprite, so the CPU fallback in draw_keepersprite never fires.
-            glBindVertexArray(0);
-            glUseProgram(0);
-
-            RenderPassSystem::GetInstance().SetScreenSize(m_screen_w, m_screen_h);
-
-            const float sprite_z = 2.0f * (float)cmd.bucket_num / (float)(BUCKETS_COUNT - 1) - 1.0f;
-            OpenGLSpriteBackend::SetCurrentBucketZ(sprite_z);
-            m_current_sprite_z = sprite_z;
-
-            setup_world_sprite_processing(cmd.bucket_num);
-            draw_3d_sprites_for_bucket(cmd.bucket_num);
-            RenderPass_FlushNow();
-
-            RenderPassSystem::GetInstance().SetScreenSize(0, 0);
-
-            // Restore the world shader and VAO for subsequent tile batches.
-            glUseProgram(m_shader);
-            glBindVertexArray(m_vao);
-            bound_variation = -1;
-            KFX_GL_POP();
-        }
-        else if (cmd.type == DrawCmd::CMD_WORLDTEXT)
-        {
-            KFX_GL_PUSH("WorldPass/WorldText");
-            // Render world-space text with depth testing enabled
-            const WorldTextCmd& wt = m_worldtext_cmds[cmd.worldtext_idx];
-
-            if (m_text_renderer && wt.text)
-            {
-                // TODO: Project world position to screen coordinates
-                // For now, render at a fixed test position
-                float screen_x = 100.0f;  // Placeholder
-                float screen_y = 100.0f;  // Placeholder
-
-                // Set up depth testing for world text
-                glEnable(GL_DEPTH_TEST);
-                glDepthFunc(GL_LEQUAL);
-                glDepthMask(GL_FALSE);  // Don't write depth (allows overdraw)
-
-                // Scale factor from world text scale  
-                int units_per_px = (int)(wt.scale * 16.0f);
-
-                // Render the text at the calculated position
-                m_text_renderer->DrawTextResized((int)screen_x, (int)screen_y, 
-                                                units_per_px, wt.text);
-
-                // Restore state
-                glDepthMask(GL_TRUE);
-
-                // Rebind world renderer state for subsequent commands
-                glUseProgram(m_shader);
-                glBindVertexArray(m_vao);
-                bound_variation = -1;
-            }
-            KFX_GL_POP();
-        }
         else if (cmd.type == DrawCmd::CMD_FLAT_POLYS)
         {
             KFX_GL_PUSH("WorldPass/FlatPoly");
@@ -1236,6 +1110,134 @@ void GLWorldViewRenderer::GPUFlushNow()
                 glUniform2f(m_flatpoly_loc_viewport, (float)m_screen_w, (float)m_screen_h);
                 glDrawArrays(GL_TRIANGLES, cmd.vert_start, cmd.vert_count);
                 // Restore tile shader state for subsequent CMD_TILES.
+                glUseProgram(m_shader);
+                glBindVertexArray(m_vao);
+                bound_variation = -1;
+            }
+            KFX_GL_POP();
+        }
+    }
+
+    // ── Pass 2: Creature shadows ─────────────────────────────────────────────
+    // Shadows are floor-projected quads that multiply-darken the tiles beneath
+    // creatures.  Running them after ALL opaque tiles (pass 1) ensures no
+    // subsequent tile draw can overwrite the darkened pixels.  Depth testing is
+    // disabled — shadows are always on the floor plane and don't occlude anything.
+    for (const auto& cmd : m_draw_cmds)
+    {
+        if (cmd.type != DrawCmd::CMD_SHADOWS) continue;
+
+        KFX_GL_PUSH("WorldPass/Shadows");
+        const ShadowCmd& sc = m_shadow_cmds[cmd.shadow_idx];
+        if (!sc.sprite_data) { KFX_GL_POP(); continue; }
+
+        // Decode RLE sprite into the local scratch buffer (stride=256).
+        decode_keeper_rle(s_kspr_decode_buf, sc.sprite_data,
+                          sc.sprite_w, sc.sprite_h);
+
+        // Upload silhouette to the reusable R8 texture.
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, m_shadow_silhouette_tex);
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, 256);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, sc.sprite_w, sc.sprite_h,
+                        GL_RED, GL_UNSIGNED_BYTE, s_kspr_decode_buf);
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+
+        // u_extent: fraction of the 256-wide texture occupied by this sprite.
+        // Used only for the x-flip boundary calculation.
+        const float u_extent = (float)sc.sprite_w / 256.0f;
+
+        // Build 6 float vertices: two triangles covering the quad (0,1,2)+(0,2,3).
+        // U/V are 16.16 fixed-point sprite-pixel coords; normalise to [0,1] by /256.
+        float sv[6][4];
+        const struct PolyPoint* vp = sc.verts;
+        for (int t = 0; t < 6; t++)
+        {
+            const int idx[6] = { 0, 1, 2, 0, 2, 3 };
+            sv[t][0] = (float)vp[idx[t]].X;
+            sv[t][1] = (float)vp[idx[t]].Y;
+            float raw_u = (float)(vp[idx[t]].U >> 16) / 256.0f;
+            float raw_v = (float)(vp[idx[t]].V >> 16) / 256.0f;
+            sv[t][2] = sc.x_flip ? (u_extent - raw_u) : raw_u;
+            sv[t][3] = raw_v;
+        }
+        glBindBuffer(GL_ARRAY_BUFFER, m_shadow_vbo);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(sv), sv);
+
+        glBindVertexArray(m_shadow_vao);
+        glUseProgram(m_shadow_shader);
+        glUniform2f(m_shadow_loc_viewport, (float)m_screen_w, (float)m_screen_h);
+        glUniform1f(m_shadow_loc_darkness, sc.darkness);
+
+        glDepthMask(GL_FALSE);
+        glDisable(GL_DEPTH_TEST);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_ZERO, GL_ONE_MINUS_SRC_ALPHA);
+
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+
+        glDisable(GL_BLEND);
+        glEnable(GL_DEPTH_TEST);
+        glDepthMask(GL_TRUE);
+        KFX_GL_POP();
+    }
+
+    // Restore tile shader/VAO state for the sprite pass.
+    glUseProgram(m_shader);
+    glBindVertexArray(m_vao);
+    bound_variation = -1;
+
+    // ── Pass 3: Sprites and world text ───────────────────────────────────────
+    // Sprites depth-test against the tile z-buffer written in pass 1 (wall
+    // occlusion).  Back-to-front bucket order is preserved because
+    // FlushIsometricView recorded CMD_SPRITES entries highest-bucket-first.
+    for (const auto& cmd : m_draw_cmds)
+    {
+        if (cmd.type == DrawCmd::CMD_SPRITES)
+        {
+            KFX_GL_PUSH("WorldPass/Sprites");
+            glBindVertexArray(0);
+            glUseProgram(0);
+
+            RenderPassSystem::GetInstance().SetScreenSize(m_screen_w, m_screen_h);
+
+            const float sprite_z = 2.0f * (float)cmd.bucket_num / (float)(BUCKETS_COUNT - 1) - 1.0f;
+            OpenGLSpriteBackend::SetCurrentBucketZ(sprite_z);
+            m_current_sprite_z = sprite_z;
+
+            setup_world_sprite_processing(cmd.bucket_num);
+            draw_3d_sprites_for_bucket(cmd.bucket_num);
+            RenderPass_FlushNow();
+
+            RenderPassSystem::GetInstance().SetScreenSize(0, 0);
+
+            glUseProgram(m_shader);
+            glBindVertexArray(m_vao);
+            bound_variation = -1;
+            KFX_GL_POP();
+        }
+        else if (cmd.type == DrawCmd::CMD_WORLDTEXT)
+        {
+            KFX_GL_PUSH("WorldPass/WorldText");
+            const WorldTextCmd& wt = m_worldtext_cmds[cmd.worldtext_idx];
+
+            if (m_text_renderer && wt.text)
+            {
+                // TODO: Project world position to screen coordinates
+                // For now, render at a fixed test position
+                float screen_x = 100.0f;  // Placeholder
+                float screen_y = 100.0f;  // Placeholder
+
+                glEnable(GL_DEPTH_TEST);
+                glDepthFunc(GL_LEQUAL);
+                glDepthMask(GL_FALSE);
+
+                int units_per_px = (int)(wt.scale * 16.0f);
+                m_text_renderer->DrawTextResized((int)screen_x, (int)screen_y,
+                                                units_per_px, wt.text);
+
+                glDepthMask(GL_TRUE);
+
                 glUseProgram(m_shader);
                 glBindVertexArray(m_vao);
                 bound_variation = -1;
@@ -1432,7 +1434,6 @@ void GLWorldViewRenderer::FlushIsometricView()
                     }
                     if (!sprite_data || spr_w <= 0 || spr_h <= 0) break;
 
-                    gpu_flush();
                     ShadowCmd sc;
                     sc.verts[0]     = s->vertex_first;
                     sc.verts[1]     = s->vertex_second;
@@ -1442,7 +1443,9 @@ void GLWorldViewRenderer::FlushIsometricView()
                     sc.sprite_w     = spr_w;
                     sc.sprite_h     = spr_h;
                     sc.x_flip       = flip;
-                    sc.darkness     = 1.0f - (float)s->color_value / 32.0f;
+                    // vertex_first.S holds dist_sq (range 16..31) set by create_shadows().
+                    // color_value is a separate field that create_shadows() never populates.
+                    sc.darkness     = 1.0f - (float)s->vertex_first.S / 32.0f;
                     DrawCmd cmd;
                     cmd.type       = DrawCmd::CMD_SHADOWS;
                     cmd.shadow_idx = (int)m_shadow_cmds.size();
