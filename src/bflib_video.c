@@ -254,10 +254,7 @@ TbResult LbPaletteFadeStep(unsigned char *from_palette,unsigned char *to_palette
         palette[i+2] = fade_count * (target_color_component - source_color_component) / fade_steps + source_color_component;
     }
     LbScreenWaitVbi();
-    TbResult ret = LbPaletteSet(palette);
-    if (lbHasSecondSurface)
-        LbScreenSwap();
-    return ret;
+    return LbPaletteSet(palette);
 }
 
 TbResult LbPaletteStopOpenFade(void)

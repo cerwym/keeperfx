@@ -208,6 +208,7 @@ private:
     GLint  m_loc_lighting_mode = -1;  // u_lighting_mode (0=software-accurate, 1=modern)
     GLint  m_loc_lightmap      = -1;  // usampler2D u_lightmap (unit 2)
     GLint  m_loc_tile_filter   = -1;  // u_tile_filter (0=nearest, 1=palette-correct bilinear)
+    int    m_tile_filter_applied = -1; // last GL filter mode applied; -1 = force re-apply on next flush
     // Lightmap texture (unit 2): mirrors game.lish.subtile_lightness[] as GL_R16UI
     GLuint m_tex_lightmap      = 0;
 

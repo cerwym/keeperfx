@@ -189,6 +189,7 @@ void RendererOpenGL::Shutdown()
     if (m_vao)     { glDeleteVertexArrays(1, &m_vao);  m_vao = 0; }
     if (m_vbo)     { glDeleteBuffers(1, &m_vbo);        m_vbo = 0; }
     if (m_shader)  { glDeleteProgram(m_shader);          m_shader = 0; }
+    if (m_tintProg){ glDeleteProgram(m_tintProg);        m_tintProg = 0; }
     if (m_texIndex)   { glDeleteTextures(1, &m_texIndex);   m_texIndex = 0; }
     if (m_texPalette) { glDeleteTextures(1, &m_texPalette); m_texPalette = 0; }
     if (m_texFade)    { glDeleteTextures(1, &m_texFade);    m_texFade = 0; }
@@ -369,6 +370,22 @@ void RendererOpenGL::EndFrame()
     // bleed outside its designated area.
     TextRenderer_Flush();
 
+    // Screen-tint overlay — composites over all rendered layers (tiles, sprites,
+    // UI, text). Driven by g_screen_tint set from palette-effect callbacks:
+    // possession/pain (red), dungeon-heart death flash (white), zoom-to-heart.
+    // No-op when alpha == 0 or no tint shader compiled.
+    if (g_screen_tint[3] > 0.0f && m_tintProg)
+    {
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glUseProgram(m_tintProg);
+        glUniform4fv(m_uTintColor, 1, g_screen_tint);
+        glBindVertexArray(m_vao);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+        glBindVertexArray(0);
+        glDisable(GL_BLEND);
+    }
+
     RenderPass_EndFrame();
     platform_swap_gl_buffers(lbWindow);
 
@@ -467,6 +484,36 @@ bool RendererOpenGL::compile_shaders()
         m_shader = 0;
         return false;
     }
+
+    // Compile the screen-tint overlay program (flat-colour fullscreen quad).
+    // Non-fatal: if this fails, palette effects (possession, white flash, etc.)
+    // won't show on the 3D world pass but gameplay is unaffected.
+    {
+        std::string tv_src = get_embedded_shader_source("screen_tint_vert.glsl");
+        std::string tf_src = get_embedded_shader_source("screen_tint_frag.glsl");
+        if (!tv_src.empty() && !tf_src.empty())
+        {
+            unsigned int tv = compile_shader(GL_VERTEX_SHADER,   tv_src.c_str());
+            unsigned int tf = compile_shader(GL_FRAGMENT_SHADER, tf_src.c_str());
+            if (tv && tf)
+            {
+                m_tintProg = glCreateProgram();
+                glAttachShader(m_tintProg, tv);
+                glAttachShader(m_tintProg, tf);
+                glLinkProgram(m_tintProg);
+                glDeleteShader(tv);
+                glDeleteShader(tf);
+                m_uTintColor = glGetUniformLocation(m_tintProg, "u_tint_color");
+            }
+            else
+            {
+                if (tv) glDeleteShader(tv);
+                if (tf) glDeleteShader(tf);
+                WARNLOG("RendererOpenGL: screen-tint shader compile failed");
+            }
+        }
+    }
+
     return true;
 }
 

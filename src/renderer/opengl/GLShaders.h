@@ -170,6 +170,22 @@ void main()
 }
 )glsl";
 
+// Screen-tint overlay shaders — simple flat-colour fullscreen quad.
+// Used to composite palette effects (possession/pain tint, white flash) over
+// all rendered layers (tiles, sprites, UI, text) in GPU world mode.
+constexpr const char* SCREEN_TINT_VERTEX_SHADER = R"glsl(
+#version 330 core
+layout(location = 0) in vec2 a_pos;
+void main() { gl_Position = vec4(a_pos, 0.0, 1.0); }
+)glsl";
+
+constexpr const char* SCREEN_TINT_FRAGMENT_SHADER = R"glsl(
+#version 330 core
+out vec4 fragColor;
+uniform vec4 u_tint_color;
+void main() { fragColor = u_tint_color; }
+)glsl";
+
 // Shadow shaders
 constexpr const char* SHADOW_VERTEX_SHADER = R"glsl(
 #version 330 core

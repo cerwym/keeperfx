@@ -976,3 +976,17 @@ const RendererSettings* RendererGetSettings(void)
 {
     return &g_renderer_settings;
 }
+
+/******************************************************************************/
+/* Screen-tint overlay                                                        */
+/******************************************************************************/
+
+float g_screen_tint[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+void RendererSetScreenTint(float r, float g, float b, float a)
+{
+    g_screen_tint[0] = r;
+    g_screen_tint[1] = g;
+    g_screen_tint[2] = b;
+    g_screen_tint[3] = a;
+}

@@ -328,6 +328,19 @@ void RendererApplySettings(const RendererSettings* s);
 const RendererSettings* RendererGetSettings(void);
 
 /******************************************************************************/
+/* C-callable screen-tint overlay                                             */
+/******************************************************************************/
+
+/** Current screen-tint RGBA (each channel 0.0–1.0).  Alpha 0 disables the tint. *
+ *  Set by palette-effect callbacks (possession, pain, dungeon-heart flash, etc.). */
+extern float g_screen_tint[4];
+
+/** Set the full-screen tint applied over all rendered content this frame.
+ *  r/g/b/a are in [0,1].  Alpha 0 disables the tint entirely.
+ *  No-op when no renderer is active. */
+void RendererSetScreenTint(float r, float g, float b, float a);
+
+/******************************************************************************/
 #ifdef __cplusplus
 }
 /* C++ only: direct access to the active IRenderer* */

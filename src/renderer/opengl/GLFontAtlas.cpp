@@ -29,6 +29,7 @@ GLFontAtlas::GLFontAtlas()
     , m_atlas_height(0)
     , m_line_height(0)
     , m_max_char_width(0)
+    , m_built_sprite_count(0)
 {
 }
 
@@ -82,9 +83,16 @@ bool GLFontAtlas::Init(const struct TbSpriteSheet* font_sheet)
         return false;
     }
 
+    m_built_sprite_count = num_sprites(font_sheet);
     SYNCLOG("GLFontAtlas: initialized %dx%d atlas with %ld characters", 
-            m_atlas_width, m_atlas_height, num_sprites(font_sheet));
+            m_atlas_width, m_atlas_height, m_built_sprite_count);
     return true;
+}
+
+bool GLFontAtlas::NeedsRebuild(const struct TbSpriteSheet* font_sheet) const
+{
+    if (!font_sheet) return false;
+    return num_sprites(font_sheet) != m_built_sprite_count;
 }
 
 void GLFontAtlas::CalculateAtlasDimensions(const struct TbSpriteSheet* font_sheet,

@@ -34,6 +34,7 @@
 #include "player_instances.h"
 #include "keeperfx.hpp"
 #include "config_keeperfx.h"
+#include "renderer/RendererManager.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -231,6 +232,7 @@ void ProperFadePalette(unsigned char *pal, long fade_steps, enum TbPaletteFadeFl
         TbClockMSec latest_loop_time = LbTimerClock();
         while (LbPaletteFade(pal, fade_steps, Lb_PALETTE_FADE_OPEN) < fade_steps)
         {
+          LbScreenSwap();
           if (!is_key_pressed(KC_SPACE,KMod_DONTCARE) &&
               !is_key_pressed(KC_ESCAPE,KMod_DONTCARE) &&
               !is_key_pressed(KC_RETURN,KMod_DONTCARE) &&
@@ -263,6 +265,7 @@ void ProperForcedFadePalette(unsigned char *pal, long fade_steps, enum TbPalette
         TbClockMSec latest_loop_time = LbTimerClock();
         while (LbPaletteFade(pal, fade_steps, Lb_PALETTE_FADE_OPEN) < fade_steps)
         {
+          LbScreenSwap();
           latest_loop_time += lbFadeDelay;
 
           if (flag_is_set(start_params.startup_flags, (SFlg_Legal|SFlg_FX))) {
@@ -299,11 +302,13 @@ long PaletteFadePlayer(struct PlayerInfo *player)
   } else
   { // both are == 0 - no fade
     g_palette_possession_tint = 0.0f;
+    RendererSetScreenTint(0.0f, 0.0f, 0.0f, 0.0f);
     return 0;
   }
   if (i >= 120)
     i = 120;
   g_palette_possession_tint = (float)i / 120.0f;
+  RendererSetScreenTint(1.0f, 0.0f, 0.0f, g_palette_possession_tint);
   long step = 120 - i;
   // Create the new palette
   for (i=0; i < PALETTE_COLORS; i++)

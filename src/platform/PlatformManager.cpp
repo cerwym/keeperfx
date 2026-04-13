@@ -3,6 +3,7 @@
 #include "platform/IWindowSystem.h"
 #include "platform.h"
 #include "bflib_fileio.h"
+#include <tracy/Tracy.hpp>
 #include "post_inc.h"
 
 // ----- Singleton storage -----
@@ -18,6 +19,8 @@ void PlatformManager::Set(IPlatform* platform)
 {
     delete s_instance;
     s_instance = platform;
+    // Probably could do this in a nicer way, but fuck it for now.
+    tracy::SetThreadName("KeeperFX Main Thread");
 }
 
 // ----- Default IWindowSystem (base class impl) -----

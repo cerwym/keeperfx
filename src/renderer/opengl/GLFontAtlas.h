@@ -64,6 +64,11 @@ public:
     /** Check if atlas is initialized and ready to use. */
     bool IsInitialized() const { return m_texture_id != 0; }
 
+    /** Check if the source font sheet has changed since the atlas was built.
+     *  Returns true when the sprite count differs — happens when a font is
+     *  loaded/reloaded after the atlas was first built from empty/partial data. */
+    bool NeedsRebuild(const struct TbSpriteSheet* font_sheet) const;
+
     /** Get atlas texture dimensions. */
     void GetAtlasSize(int* width, int* height) const { 
         *width = m_atlas_width; 
@@ -77,6 +82,7 @@ private:
     int          m_atlas_height;    // Atlas texture height
     int          m_line_height;     // Line height for this font
     int          m_max_char_width;  // Maximum character width
+    long         m_built_sprite_count; // num_sprites() at atlas-build time
 
     /** Pack sprite data into atlas and upload to GPU.
      *  @param font_sheet Source sprite font data

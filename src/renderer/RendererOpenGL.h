@@ -84,9 +84,11 @@ private:
     unsigned int m_vao          = 0;
     unsigned int m_vbo          = 0;
     unsigned int m_shader       = 0;
+    unsigned int m_tintProg     = 0;  // fullscreen screen-tint overlay shader
     unsigned int m_texIndex     = 0; // R8: 8-bit index texture (staging upload)
     unsigned int m_texPalette   = 0; // RGBA8 256-entry 1D palette
     int          m_uTintFactor  = -1; // uniform location for u_tint_factor
+    int          m_uTintColor   = -1; // uniform location for u_tint_color
 
     // Shared GPU resources (owned here, injected into world renderer)
     unsigned int m_texFade      = 0; // R8 256×256: render_fade_tables lighting LUT
