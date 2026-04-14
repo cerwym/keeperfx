@@ -57,6 +57,11 @@ public:
                           const uint8_t* bgra_palette_1024,
                           int dst_x, int dst_y, int dst_w, int dst_h) override;
 
+    bool SubmitLandviewZoom(const uint8_t* src_buf, int src_w, int src_h,
+                            float center_map_x, float center_map_y,
+                            float screen_cx,    float screen_cy,
+                            float scale) override;
+
     // Sub-renderer access
     IWorldViewRenderer* GetWorldViewRenderer() override;
     IMapFadePass* GetMapFadePass() override;
@@ -150,6 +155,33 @@ private:
     int               m_fmv_index_tex_w    = 0;
     int               m_fmv_index_tex_h    = 0;
     unsigned int      m_fmv_palette_tex    = 0;  // GL_RGBA8 1D — per-video palette
+
+    // ── Landview zoom GPU blit (Phase D campaign-map zoom transition) ─────
+    // Queued by SubmitLandviewZoom(); executed at EndFrame() using a
+    // fullscreen quad whose fragment shader computes zoomed UVs from
+    // gl_FragCoord rather than vertex UVs, so no geometry rebuild is needed.
+    struct LandviewZoomCmd {
+        const uint8_t* src_buf       = nullptr; // map_screen (8-bit indexed)
+        int            src_w         = 0;       // LANDVIEW_MAP_WIDTH  (1280)
+        int            src_h         = 0;       // LANDVIEW_MAP_HEIGHT (960)
+        float          center_map_x  = 0.f;     // zoom centre, map texels
+        float          center_map_y  = 0.f;
+        float          screen_cx     = 0.f;     // zoom centre, screen pixels (y-down)
+        float          screen_cy     = 0.f;
+        float          scale         = 1.f;     // src_delta / 256.0
+    };
+    bool              m_zoom_pending       = false;
+    LandviewZoomCmd   m_zoom_cmd           = {};
+    unsigned int      m_zoom_shader        = 0;  // palette_blit_vert + landview_zoom_frag
+    unsigned int      m_zoom_tex           = 0;  // GL_R8 — map_screen indices (1280×960)
+    int               m_zoom_tex_w         = 0;
+    int               m_zoom_tex_h         = 0;
+    // Cached uniform locations for the zoom shader.
+    int               m_zoom_u_center_map  = -1;
+    int               m_zoom_u_screen_ctr  = -1;
+    int               m_zoom_u_scale       = -1;
+    int               m_zoom_u_inv_map_sz  = -1;
+    int               m_zoom_u_screen_h    = -1;
 };
 
 /******************************************************************************/

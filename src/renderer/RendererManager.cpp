@@ -786,6 +786,18 @@ TbBool RendererSubmitVideoFrame(const unsigned char* px, int src_w, int src_h, i
                                   dst_x, dst_y, dst_w, dst_h) ? true : false;
 }
 
+TbBool RendererSubmitLandviewZoom(const unsigned char* src_buf, int src_w, int src_h,
+                                  float center_map_x, float center_map_y,
+                                  float screen_cx,    float screen_cy,
+                                  float scale)
+{
+    IRenderer* rend = RendererGetActive();
+    if (!rend) return false;
+    return rend->SubmitLandviewZoom(src_buf, src_w, src_h,
+                                    center_map_x, center_map_y,
+                                    screen_cx, screen_cy, scale) ? true : false;
+}
+
 /******************************************************************************/
 /* C-callable UI renderer wrappers                                            */
 /******************************************************************************/

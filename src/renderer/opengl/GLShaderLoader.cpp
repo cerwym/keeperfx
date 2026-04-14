@@ -32,6 +32,7 @@ std::string get_embedded_shader_source(const char* shader_name)
         {"palette_blit_vert.glsl", PALETTE_BLIT_VERTEX_SHADER},
         {"palette_blit_frag.glsl", PALETTE_BLIT_FRAGMENT_SHADER},
         {"rawimage_blit_frag.glsl", RAWIMAGE_BLIT_FRAGMENT_SHADER},
+        {"landview_zoom_frag.glsl", LANDVIEW_ZOOM_FRAGMENT_SHADER},
         {"screen_tint_vert.glsl", SCREEN_TINT_VERTEX_SHADER},
         {"screen_tint_frag.glsl", SCREEN_TINT_FRAGMENT_SHADER},
         {"shadow_vert.glsl", SHADOW_VERTEX_SHADER},

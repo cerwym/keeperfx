@@ -230,6 +230,19 @@ TbBool RendererSubmitVideoFrame(const unsigned char* pal8_pixels,
                                 const unsigned char* bgra_palette_1024,
                                 int dst_x, int dst_y, int dst_w, int dst_h);
 
+/** Submit the landview zoom frame through the GPU path.
+ *  @param src_buf           map_screen — 8-bit indexed pixels (src_w × src_h).
+ *  @param src_w/src_h       Source image dimensions (LANDVIEW_MAP_WIDTH/HEIGHT).
+ *  @param center_map_x/y   Zoom centre in map texel coordinates.
+ *  @param screen_cx/cy     Zoom centre in screen pixel coordinates (y-down).
+ *  @param scale             src_delta / 256.0 — source texels per screen pixel.
+ *  @return true  when GPU path accepted the frame (caller skips CPU zoom loop).
+ *          false when GPU unavailable (software renderer) — caller runs CPU path. */
+TbBool RendererSubmitLandviewZoom(const unsigned char* src_buf, int src_w, int src_h,
+                                  float center_map_x, float center_map_y,
+                                  float screen_cx,    float screen_cy,
+                                  float scale);
+
 /******************************************************************************/
 /* C-callable UI renderer wrappers                                            */
 /******************************************************************************/

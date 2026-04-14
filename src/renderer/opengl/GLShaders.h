@@ -358,6 +358,42 @@ void main()
 }
 )glsl";
 
+// Landview zoom fragment shader.
+// Used by RendererOpenGL::SubmitLandviewZoom() for the campaign-map zoom
+// transition (frontzoom_to_point).  Draws map_screen (GL_R8, 1280×960) as
+// a fullscreen opaque quad, computing source UVs from gl_FragCoord so that
+// the zoom centre in map space aligns with the zoom centre in screen space.
+// Vertex shader: PALETTE_BLIT_VERTEX_SHADER (shared; v_uv unused here).
+constexpr const char* LANDVIEW_ZOOM_FRAGMENT_SHADER = R"glsl(
+#version 330 core
+out vec4 fragColor;
+
+uniform sampler2D u_index;       // R8  — map_screen palette indices
+uniform sampler1D u_palette;     // RGBA8 — 256-entry game palette
+uniform vec2  u_center_map;      // zoom centre in map texels (map_x, map_y)
+uniform vec2  u_screen_center;   // zoom centre in screen pixels (game y-down)
+uniform float u_scale;           // src_delta / 256.0  (source texels per screen pixel)
+uniform vec2  u_inv_map_size;    // (1 / MAP_W, 1 / MAP_H)
+uniform float u_screen_h;        // screen height in pixels
+
+void main()
+{
+    // gl_FragCoord.xy is at pixel centre (x=0.5 at left column, y=0.5 at bottom row).
+    // Convert from OpenGL convention (y increases upward) to game convention (y=0 top).
+    vec2 fragXY = vec2(gl_FragCoord.x - 0.5, u_screen_h - gl_FragCoord.y - 0.5);
+
+    // Map screen position to source texel (mirrors frontzoom_to_point arithmetic).
+    vec2 srcXY = u_center_map + (fragXY - u_screen_center) * u_scale;
+
+    // Normalise to [0,1] UV.  GL_CLAMP_TO_EDGE naturally replicates the edge
+    // pixel for any fragment that maps outside the 1280×960 source image.
+    vec2 uv = srcXY * u_inv_map_size;
+
+    float idx = texture(u_index, uv).r;
+    fragColor  = vec4(texture(u_palette, idx).rgb, 1.0);
+}
+)glsl";
+
 // UI rendering shaders
 // Shared vertex shader — same VAO layout for all three UI programs.
 constexpr const char* UI_VERTEX_SHADER = R"glsl(

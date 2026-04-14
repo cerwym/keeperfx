@@ -142,6 +142,38 @@ public:
         return false;
     }
 
+    /** GPU path for the campaign-map zoom transition (frontzoom_to_point).
+     *
+     *  The source image (map_screen, 8-bit indexed, src_w×src_h) is uploaded
+     *  as a GL_R8 texture and decoded via the current game palette.  A
+     *  fullscreen opaque quad is drawn; each fragment's source texel is
+     *  computed as:
+     *    u = (center_map_x + (screen_x - screen_cx) * scale) / src_w
+     *    v = (center_map_y + (screen_y - screen_cy) * scale) / src_h
+     *  which exactly mirrors the arithmetic in frontzoom_to_point().
+     *
+     *  Software backends return false (the caller runs the CPU zoom loop).
+     *
+     *  @param src_buf       map_screen — 8-bit indexed pixels, row-major.
+     *  @param src_w/src_h   Source image dimensions (LANDVIEW_MAP_WIDTH/HEIGHT).
+     *  @param center_map_x/y  Zoom centre in map texel coordinates.
+     *  @param screen_cx/cy    Zoom centre in screen pixel coordinates (y-down).
+     *  @param scale           src_delta / 256.0 — source texels per screen pixel.
+     *  @return true  if the GPU path accepted the frame.
+     *          false if unhandled (software renderer). */
+    virtual bool SubmitLandviewZoom(
+        const uint8_t* src_buf, int src_w, int src_h,
+        float center_map_x, float center_map_y,
+        float screen_cx,    float screen_cy,
+        float scale)
+    {
+        (void)src_buf; (void)src_w; (void)src_h;
+        (void)center_map_x; (void)center_map_y;
+        (void)screen_cx;    (void)screen_cy;
+        (void)scale;
+        return false;
+    }
+
     // -------------------------------------------------------------------------
     // Metadata
 

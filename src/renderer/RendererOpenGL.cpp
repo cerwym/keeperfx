@@ -262,6 +262,68 @@ bool RendererOpenGL::Init()
     glTexImage1D(GL_TEXTURE_1D, 0, GL_RGBA8, 256, 0, GL_BGRA, GL_UNSIGNED_BYTE, nullptr);
     glBindTexture(GL_TEXTURE_1D, 0);
 
+    // ── Landview zoom GPU blit (Phase D campaign-map zoom transition) ──────────
+    // Compile shader: reuse palette_blit_vert.glsl + landview_zoom_frag.glsl.
+    // The zoom fragment shader uses gl_FragCoord to compute source UVs from
+    // per-frame uniforms (zoom centre in map & screen coords, scale).
+    {
+        std::string zv_src = get_embedded_shader_source("palette_blit_vert.glsl");
+        std::string zf_src = get_embedded_shader_source("landview_zoom_frag.glsl");
+        if (zv_src.empty() || zf_src.empty())
+        {
+            ERRORLOG("RendererOpenGL::Init: landview zoom shader source missing");
+            platform_destroy_gl_context();
+            return false;
+        }
+        unsigned int zv = compile_shader(GL_VERTEX_SHADER,   zv_src.c_str());
+        unsigned int zf = compile_shader(GL_FRAGMENT_SHADER, zf_src.c_str());
+        if (!zv || !zf)
+        {
+            if (zv) glDeleteShader(zv);
+            if (zf) glDeleteShader(zf);
+            ERRORLOG("RendererOpenGL::Init: landview zoom shader compile failed");
+            platform_destroy_gl_context();
+            return false;
+        }
+        m_zoom_shader = glCreateProgram();
+        glAttachShader(m_zoom_shader, zv);
+        glAttachShader(m_zoom_shader, zf);
+        glLinkProgram(m_zoom_shader);
+        glDeleteShader(zv);
+        glDeleteShader(zf);
+        int ok = 0;
+        glGetProgramiv(m_zoom_shader, GL_LINK_STATUS, &ok);
+        if (!ok)
+        {
+            char log[512];
+            glGetProgramInfoLog(m_zoom_shader, sizeof(log), nullptr, log);
+            ERRORLOG("RendererOpenGL::Init: landview zoom shader link error: %s", log);
+            glDeleteProgram(m_zoom_shader);
+            m_zoom_shader = 0;
+            platform_destroy_gl_context();
+            return false;
+        }
+        glUseProgram(m_zoom_shader);
+        glUniform1i(glGetUniformLocation(m_zoom_shader, "u_index"),   0);
+        glUniform1i(glGetUniformLocation(m_zoom_shader, "u_palette"), 1);
+        m_zoom_u_center_map = glGetUniformLocation(m_zoom_shader, "u_center_map");
+        m_zoom_u_screen_ctr = glGetUniformLocation(m_zoom_shader, "u_screen_center");
+        m_zoom_u_scale      = glGetUniformLocation(m_zoom_shader, "u_scale");
+        m_zoom_u_inv_map_sz = glGetUniformLocation(m_zoom_shader, "u_inv_map_size");
+        m_zoom_u_screen_h   = glGetUniformLocation(m_zoom_shader, "u_screen_h");
+        KFX_GL_LABEL(GL_PROGRAM, m_zoom_shader, "LandviewZoom/Program");
+    }
+
+    // Landview zoom index texture — R8, 1280×960, GL_NEAREST, CLAMP_TO_EDGE.
+    glGenTextures(1, &m_zoom_tex);
+    KFX_GL_LABEL(GL_TEXTURE, m_zoom_tex, "LandviewZoom/IndexTex");
+    glBindTexture(GL_TEXTURE_2D, m_zoom_tex);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
     // Sprite atlas for UI panel sprites (gui_panel_sprites, button_sprites).
     // Sheets are added in create_ui_renderer() after this returns.
     m_sprite_atlas = new GLSpriteAtlas();
@@ -305,6 +367,8 @@ void RendererOpenGL::Shutdown()
     if (m_fmv_vbo)          { glDeleteBuffers(1, &m_fmv_vbo);             m_fmv_vbo = 0; }
     if (m_fmv_index_tex)    { glDeleteTextures(1, &m_fmv_index_tex);      m_fmv_index_tex = 0; }
     if (m_fmv_palette_tex)  { glDeleteTextures(1, &m_fmv_palette_tex);    m_fmv_palette_tex = 0; }
+    if (m_zoom_shader)      { glDeleteProgram(m_zoom_shader);              m_zoom_shader = 0; }
+    if (m_zoom_tex)         { glDeleteTextures(1, &m_zoom_tex);            m_zoom_tex = 0; }
 
     platform_destroy_gl_context();
 }
@@ -573,6 +637,74 @@ void RendererOpenGL::EndFrame()
         m_fmv_pending = false;
     }
 
+    // Landview zoom GPU blit — campaign-map zoom transition.
+    // Draws map_screen as a fullscreen opaque quad; the fragment shader computes
+    // each pixel's source texel from gl_FragCoord + per-frame zoom uniforms,
+    // exactly matching frontzoom_to_point() arithmetic.
+    // After this pass the staging blit still runs (world_gpu_active is false for
+    // frontend frames) and composites the compressed_window_draw() frame overlay
+    // from WScreen on top with index-0-transparent blending.
+    if (m_zoom_pending)
+    {
+        const LandviewZoomCmd& cmd = m_zoom_cmd;
+
+        glViewport(0, 0, m_stagingW, m_stagingH);
+        glDisable(GL_DEPTH_TEST);
+        glDepthMask(GL_FALSE);
+
+        // Upload map_screen.  Use TexSubImage when dimensions are unchanged.
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, m_zoom_tex);
+        if (cmd.src_w != m_zoom_tex_w || cmd.src_h != m_zoom_tex_h)
+        {
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, cmd.src_w, cmd.src_h,
+                         0, GL_RED, GL_UNSIGNED_BYTE, cmd.src_buf);
+            m_zoom_tex_w = cmd.src_w;
+            m_zoom_tex_h = cmd.src_h;
+        }
+        else
+        {
+            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, cmd.src_w, cmd.src_h,
+                            GL_RED, GL_UNSIGNED_BYTE, cmd.src_buf);
+        }
+
+        // Game palette on unit 1.
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_1D, m_texPalette);
+
+        // Draw a fullscreen NDC quad; position/UV matches k_quadVerts convention.
+        // The zoom fragment shader ignores v_uv and uses gl_FragCoord instead.
+        static const float fs_quad[6][4] = {
+            {-1.f, -1.f,  0.f, 1.f},
+            { 1.f, -1.f,  1.f, 1.f},
+            { 1.f,  1.f,  1.f, 0.f},
+            {-1.f, -1.f,  0.f, 1.f},
+            { 1.f,  1.f,  1.f, 0.f},
+            {-1.f,  1.f,  0.f, 0.f},
+        };
+        // Reuse m_rawblit_vao — same VAO layout; zoom and rawblit are mutually
+        // exclusive within a frame (only one land-view draw path fires per frame).
+        glBindVertexArray(m_rawblit_vao);
+        glBindBuffer(GL_ARRAY_BUFFER, m_rawblit_vbo);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(fs_quad), fs_quad);
+
+        glUseProgram(m_zoom_shader);
+        glUniform2f(m_zoom_u_center_map, cmd.center_map_x, cmd.center_map_y);
+        glUniform2f(m_zoom_u_screen_ctr, cmd.screen_cx,    cmd.screen_cy);
+        glUniform1f(m_zoom_u_scale,      cmd.scale);
+        glUniform2f(m_zoom_u_inv_map_sz, 1.0f / (float)cmd.src_w,
+                                         1.0f / (float)cmd.src_h);
+        glUniform1f(m_zoom_u_screen_h,   (float)m_stagingH);
+
+        glDisable(GL_BLEND);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+        glBindVertexArray(0);
+
+        glDepthMask(GL_TRUE);
+        glActiveTexture(GL_TEXTURE0);
+        m_zoom_pending = false;
+    }
+
     // When the GPU world-view renderer is active every drawing path (status panel,
     // GUI, text, sprites, shadows) is routed through GPU shaders / UIRenderer /
     // GLTextRenderer.  The staging buffer is all-zeros, so uploading + blitting it
@@ -720,6 +852,30 @@ bool RendererOpenGL::SubmitVideoFrame(
     }
     m_fmv_cmd = { px, src_w, src_h, src_pitch, bgra_pal, dst_x, dst_y, dst_w, dst_h };
     m_fmv_pending = true;
+    return true;
+}
+
+bool RendererOpenGL::SubmitLandviewZoom(
+    const uint8_t* src_buf, int src_w, int src_h,
+    float center_map_x, float center_map_y,
+    float screen_cx,    float screen_cy,
+    float scale)
+{
+    if (!m_zoom_shader)
+    {
+        ERRORLOG("RendererOpenGL::SubmitLandviewZoom: shader not compiled; GPU path dropped");
+        return false;
+    }
+    if (!src_buf || src_w <= 0 || src_h <= 0)
+    {
+        ERRORLOG("RendererOpenGL::SubmitLandviewZoom: invalid params (src=%p %dx%d)",
+                 (const void*)src_buf, src_w, src_h);
+        return false;
+    }
+    m_zoom_cmd = { src_buf, src_w, src_h,
+                   center_map_x, center_map_y,
+                   screen_cx, screen_cy, scale };
+    m_zoom_pending = true;
     return true;
 }
 

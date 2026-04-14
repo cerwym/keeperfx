@@ -796,6 +796,17 @@ void frontzoom_to_point(long map_x, long map_y, long zoom)
     long scr_y = smap_y - scale_value_landview(map_info.screen_shift_y);
     if (scr_y > lbDisplay.PhysicalScreenHeight-1) scr_y = lbDisplay.PhysicalScreenHeight-1;
     if (scr_y < 1) scr_y = 1;
+
+    // GPU path: upload map_screen as a GL_R8 texture and draw a fullscreen
+    // opaque quad; the fragment shader reproduces the same zoom arithmetic.
+    if (RendererSubmitLandviewZoom(
+            map_screen, LANDVIEW_MAP_WIDTH, LANDVIEW_MAP_HEIGHT,
+            (float)map_x, (float)map_y,
+            (float)scr_x, (float)scr_y,
+            (float)src_delta / 256.0f))
+        return;
+
+    // CPU fallback (software renderer).
     unsigned char* src_buf = &map_screen[LANDVIEW_MAP_WIDTH * map_y + map_x];
     long dst_scanln = lbDisplay.GraphicsScreenWidth;
     unsigned char* dst_buf = &lbDisplay.WScreen[dst_scanln * scr_y + scr_x];
