@@ -489,11 +489,6 @@ void RendererOpenGL::EndFrame()
     glDepthMask(GL_TRUE);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    // Cache the world-active state BEFORE GPUFlushNow clears the per-frame flag.
-    // IsGpuAccelerated() returns true only when BeginWorldPass was called this frame;
-    // GPUFlushNow resets the flag at the end of its execution so we must read it first.
-    const TbBool world_gpu_active = WorldViewRenderer_IsGpuActive();
-
     // Flush GPU world geometry + depth-correct sprites.
     // Runs BEFORE the staging buffer upload so both layers composite correctly.
     if (m_world_renderer)
@@ -576,7 +571,6 @@ void RendererOpenGL::EndFrame()
     // Uses the same palette-indexed quad shader as rawblit, but with a per-video-frame
     // palette texture on unit 1 instead of the game palette.
     // The glClear() at the top of EndFrame already fills letterbox areas with black.
-    const TbBool fmv_gpu_active = m_fmv_pending;
     if (m_fmv_pending)
     {
         const FmvBlitCmd& cmd = m_fmv_cmd;
@@ -641,9 +635,8 @@ void RendererOpenGL::EndFrame()
     // Draws map_screen as a fullscreen opaque quad; the fragment shader computes
     // each pixel's source texel from gl_FragCoord + per-frame zoom uniforms,
     // exactly matching frontzoom_to_point() arithmetic.
-    // After this pass the staging blit still runs (world_gpu_active is false for
-    // frontend frames) and composites the compressed_window_draw() frame overlay
-    // from WScreen on top with index-0-transparent blending.
+    // The staging overlay (m_overlay_pending) composites compressed_window_draw()
+    // output on top with index-0-transparent blending after this pass.
     if (m_zoom_pending)
     {
         const LandviewZoomCmd& cmd = m_zoom_cmd;
@@ -705,14 +698,15 @@ void RendererOpenGL::EndFrame()
         m_zoom_pending = false;
     }
 
-    // When the GPU world-view renderer is active every drawing path (status panel,
-    // GUI, text, sprites, shadows) is routed through GPU shaders / UIRenderer /
-    // GLTextRenderer.  The staging buffer is all-zeros, so uploading + blitting it
-    // is pure overhead (~1 MB upload + one draw call doing nothing).  Skip it.
-    // Also skip when the FMV GPU path handled the frame — WScreen was not written.
-    // Use the cached value from before GPUFlushNow so main-menu frames (where
-    // BeginWorldPass was never called and the flag is false) always run the blit.
-    if (!world_gpu_active && !fmv_gpu_active)
+    // Explicit staging overlay — composites CPU-rendered WScreen pixels over the
+    // GPU frame with index-0 transparency.  Queued by SubmitStagingOverlay(), which
+    // is called from game code after any CPU WScreen write that must be visible
+    // (e.g. compressed_window_draw() campaign-map window frame).
+    //
+    // Replaces the old implicit staging blit that fired unconditionally for every
+    // non-world, non-FMV frame.  Game code is now responsible for calling
+    // RendererSubmitStagingOverlay() when it writes to WScreen.
+    if (m_overlay_pending)
     {
         // Full-screen viewport + no depth interaction for this 2D overlay pass.
         glViewport(0, 0, m_stagingW, m_stagingH);
@@ -742,6 +736,7 @@ void RendererOpenGL::EndFrame()
         glDisable(GL_BLEND);
         glDepthMask(GL_TRUE);
         glActiveTexture(GL_TEXTURE0);
+        m_overlay_pending = false;
     }
 
     // Map-fade GPU compose pass — active during PVM_ParchFadeIn / ParchFadeOut.
@@ -876,6 +871,12 @@ bool RendererOpenGL::SubmitLandviewZoom(
                    center_map_x, center_map_y,
                    screen_cx, screen_cy, scale };
     m_zoom_pending = true;
+    return true;
+}
+
+bool RendererOpenGL::SubmitStagingOverlay()
+{
+    m_overlay_pending = true;
     return true;
 }
 

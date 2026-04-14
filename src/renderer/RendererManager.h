@@ -97,6 +97,12 @@ void RendererNotifyPointerSpritesLoaded(void);
  *  handles for frontend menu / button sprites. */
 void RendererNotifyFrontendSpritesLoaded(void);
 
+/** Append map_flag into the live atlas after load_spritesheet() in front_landview.c.
+ *  map_flag is loaded fresh on each landview entry (singleplayer + network); call
+ *  this after every successful load so UIRenderer_SubmitPanelSpriteRaw can draw
+ *  campaign-map ensign / pin sprites without the staging-buffer fallback. */
+void RendererNotifyLandviewFlagLoaded(void);
+
 /******************************************************************************/
 /* C-callable world-view renderer wrappers (safe to call from C files)        */
 /******************************************************************************/
@@ -242,6 +248,13 @@ TbBool RendererSubmitLandviewZoom(const unsigned char* src_buf, int src_w, int s
                                   float center_map_x, float center_map_y,
                                   float screen_cx,    float screen_cy,
                                   float scale);
+
+/** Composite the current CPU staging buffer (lbDisplay.WScreen) over the GPU
+ *  frame with index-0 transparency.  Call after any CPU WScreen write that must
+ *  appear over GPU-rendered content (e.g. compressed_window_draw() window frame).
+ *  @return true  (GL: queued; overlay blit runs at EndFrame).
+ *          false (software renderer: WScreen write already in final framebuffer). */
+TbBool RendererSubmitStagingOverlay(void);
 
 /******************************************************************************/
 /* C-callable UI renderer wrappers                                            */

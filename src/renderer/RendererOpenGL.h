@@ -62,6 +62,8 @@ public:
                             float screen_cx,    float screen_cy,
                             float scale) override;
 
+    bool SubmitStagingOverlay() override;
+
     // Sub-renderer access
     IWorldViewRenderer* GetWorldViewRenderer() override;
     IMapFadePass* GetMapFadePass() override;
@@ -182,6 +184,11 @@ private:
     int               m_zoom_u_scale       = -1;
     int               m_zoom_u_inv_map_sz  = -1;
     int               m_zoom_u_screen_h    = -1;
+
+    // ── Explicit staging overlay (Phase E) ────────────────────────────────
+    // Set by SubmitStagingOverlay(); EndFrame composites m_stagingBuf over the
+    // current frame with index-0 transparency (same as the old implicit blit).
+    bool              m_overlay_pending    = false;
 };
 
 /******************************************************************************/

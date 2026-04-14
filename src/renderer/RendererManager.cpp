@@ -42,7 +42,7 @@
 #include "sprites.h"           // GBS_fontchars_number_dig0
 #include "player_data.h"       // my_player_number
 // Forward declaration to avoid pulling in frontend.h (conflicts with C++ stdlib)
-extern "C" { struct TbSpriteSheet; extern struct TbSpriteSheet *button_sprites; extern struct TbSpriteSheet *custom_sprites; extern struct TbSpriteSheet *pointer_sprites; }
+extern "C" { struct TbSpriteSheet; extern struct TbSpriteSheet *button_sprites; extern struct TbSpriteSheet *custom_sprites; extern struct TbSpriteSheet *pointer_sprites; extern struct TbSpriteSheet *map_flag; }
 #include "renderer/RenderPass_C.h"
 #include <unordered_map>
 #include "post_inc.h"
@@ -141,6 +141,32 @@ void RendererNotifyFrontendSpritesLoaded()
                 (void*)frontend_sprite, after - before, after);
     }
 #endif
+}
+
+/** Append map_flag into the live atlas after load_spritesheet() in front_landview.c.
+ *  Handles both GL (GLSpriteAtlas) and software (IUIRenderer handle table) modes. */
+void RendererNotifyLandviewFlagLoaded()
+{
+#ifdef RENDERER_OPENGL_ENABLED
+    if (s_spriteAtlas && map_flag && num_sprites(map_flag) > 0) {
+        long before = (long)s_spriteAtlas->GetRegisteredCount();
+        s_spriteAtlas->AddSheet(map_flag);
+        long after  = (long)s_spriteAtlas->GetRegisteredCount();
+        SYNCLOG("RendererNotifyLandviewFlagLoaded: map_flag=%p added %ld new sprites (total %ld)",
+                (void*)map_flag, after - before, after);
+    }
+#endif
+    // SW mode: register into the IUIRenderer handle table so SubmitPanelSprite
+    // falls back to LbSpriteDrawResized correctly.
+    register_sheet_software(map_flag);
+}
+
+/** Explicitly composite m_stagingBuf (lbDisplay.WScreen) on the GL frame. */
+TbBool RendererSubmitStagingOverlay()
+{
+    IRenderer* rend = RendererGetActive();
+    if (!rend) return false;
+    return rend->SubmitStagingOverlay() ? true : false;
 }
 
 /** Append any newly-built custom_sprites into the live atlas.

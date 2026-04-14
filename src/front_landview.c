@@ -469,7 +469,7 @@ void draw_map_level_ensigns(void)
       {
           long x = lvinfo->ensign_x - (long)map_info.screen_shift_x - (int)(spr->SWidth >> 1);
           long y = lvinfo->ensign_y - (long)map_info.screen_shift_y - (int)(spr->SHeight);
-          LbSpriteDrawResized(scale_value_landview(x), scale_value_landview(y), units_per_pixel_landview, spr);
+          UIRenderer_SubmitPanelSpriteRaw(scale_value_landview(x), scale_value_landview(y), units_per_pixel_landview, spr);
       }
       lvinfo = get_prev_level_info(lvinfo);
     }
@@ -890,6 +890,10 @@ void compressed_window_draw(void)
     LbHugeSpriteDraw(&map_window, map_window_len,
         lbDisplay.WScreen, lbDisplay.GraphicsScreenWidth, lbDisplay.PhysicalScreenHeight,
         xshift, yshift, units_per_pixel_landview_frame);
+    // Composite the window frame (just written to WScreen) over the GPU frame.
+    // In GL mode this queues an explicit staging-overlay blit at EndFrame.
+    // In software mode this is a no-op — the WScreen write is already in the framebuffer.
+    RendererSubmitStagingOverlay();
 }
 
 void unload_map_and_window(void)
@@ -1069,6 +1073,7 @@ TbBool frontnetmap_load(void)
       ERRORLOG("Unable to load MAP SCREEN sprites");
       return false;
     }
+    RendererNotifyLandviewFlagLoaded();
     frontend_load_data_reset();
     frontnet_init_level_descriptions();
     frontmap_zoom_skip_init(SINGLEPLAYER_NOTSTARTED);
@@ -1184,6 +1189,7 @@ TbBool frontmap_load(void)
         frontend_load_data_reset();
         return false;
     }
+    RendererNotifyLandviewFlagLoaded();
     frontend_load_data_reset();
     struct PlayerInfo* player = get_my_player();
     lvnum = get_continue_level_number();
