@@ -33,6 +33,8 @@
 
 #ifdef RENDERER_OPENGL_ENABLED
 
+#include <vector>
+#include <cstdint>
 #include <glad/glad.h>
 #include "renderer/IMapFadePass.h"
 

@@ -60,6 +60,7 @@
 #include "sprites.h"
 #include "player_instances.h"
 
+#include "renderer/RendererManager.h"
 #include "keeperfx.hpp"
 #include "post_inc.h"
 
@@ -196,9 +197,12 @@ TbBool parchment_copy_background_at(const struct TbRect *bkgnd_area, int units_p
         srcbuf, img_width, img_height);
     // Burning candle flames
     const struct TbSprite* spr = get_button_sprite(GBS_parchment_map_screen_flame_1 + (game.play_gameturn & 3));
-    LbSpriteDrawScaled(bkgnd_area->left+(36*units_per_px/(pixel_size << shift)),(bkgnd_area->top+0*units_per_px/(16*pixel_size)), spr, spr->SWidth*units_per_px/16, spr->SHeight*units_per_px/16);
+    int flame_x1 = bkgnd_area->left+(36*units_per_px/(pixel_size << shift));
+    int flame_y  = bkgnd_area->top+0*units_per_px/(16*pixel_size);
+    UIRenderer_SubmitScaledSprite(flame_x1, flame_y, spr->SWidth*units_per_px/16, spr->SHeight*units_per_px/16, spr);
     spr = get_button_sprite(GBS_parchment_map_screen_flame_5+(game.play_gameturn & 3));
-    LbSpriteDrawScaled(bkgnd_area->left+(574*units_per_px/(pixel_size << shift)),(bkgnd_area->top+0*units_per_px/(16*pixel_size)), spr, spr->SWidth*units_per_px/16, spr->SHeight*units_per_px/16);
+    int flame_x2 = bkgnd_area->left+(574*units_per_px/(pixel_size << shift));
+    UIRenderer_SubmitScaledSprite(flame_x2, flame_y, spr->SWidth*units_per_px/16, spr->SHeight*units_per_px/16, spr);
     return true;
 }
 
@@ -326,6 +330,22 @@ TbPixel get_overhead_mapblock_color(MapSubtlCoord stl_x, MapSubtlCoord stl_y, Pl
 
 void draw_overhead_map(const struct TbRect *map_area, long block_size, PlayerNumber plyr_idx)
 {
+    if (RendererIsGpuComposited())
+    {
+        for (int row = 0; row < game.map_tiles_y; row++)
+        {
+            long stl_y = 1 + row * STL_PER_SLB;
+            for (int col = 0; col < game.map_tiles_x; col++)
+            {
+                long stl_x = 1 + col * STL_PER_SLB;
+                TbPixel color = get_overhead_mapblock_color(stl_x, stl_y, plyr_idx, 0);
+                long px = map_area->left + col * block_size;
+                long py = map_area->top  + row * block_size;
+                UIRenderer_SubmitSolidBox(px, py, block_size, block_size, color);
+            }
+        }
+        return;
+    }
     long line = 0;
     long stl_y = 1;
     unsigned char* dstline = &lbDisplay.WScreen[map_area->left + lbDisplay.GraphicsScreenWidth * map_area->top];
@@ -380,7 +400,7 @@ void draw_overhead_room_icons(const struct TbRect *map_area, long block_size, Pl
                     const struct TbSprite* spr = get_panel_sprite(sprite_idx);
                     long pos_x = map_area->left + (block_size * room->central_stl_x / STL_PER_SLB) - (spr->SWidth * ps_units_per_px / 16 / 2);
                     long pos_y = map_area->top + (block_size * room->central_stl_y / STL_PER_SLB) - (spr->SHeight * ps_units_per_px / 16 / 2);
-                    LbSpriteDrawResized(pos_x, pos_y, ps_units_per_px, spr);
+                    UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, ps_units_per_px, spr);
                 }
             }
           }
@@ -457,9 +477,13 @@ int draw_overhead_creatures(const struct TbRect *map_area, long block_size, Play
                     col = col1;
                 }
                 pixel_end = get_pixels_scaled_and_zoomed(TWO_PIXELS);
-                for (p = 0; p < pixel_end; p++)
-                {
-                    LbDrawPixel(pos_x + draw_square[p].delta_x, pos_y+draw_square[p].delta_y, col);
+                if (RendererIsGpuComposited()) {
+                    UIRenderer_SubmitSolidBox(pos_x, pos_y, pixel_end, pixel_end, col);
+                } else {
+                    for (p = 0; p < pixel_end; p++)
+                    {
+                        LbDrawPixel(pos_x + draw_square[p].delta_x, pos_y+draw_square[p].delta_y, col);
+                    }
                 }
                 n++;
             } else
@@ -488,9 +512,13 @@ int draw_overhead_creatures(const struct TbRect *map_area, long block_size, Play
                     long pos_x = map_area->left + block_size * stl_num_decode_x(memberpos) / STL_PER_SLB;
                     long pos_y = map_area->top + block_size * stl_num_decode_y(memberpos) / STL_PER_SLB;
                     pixel_end = get_pixels_scaled_and_zoomed(TWO_PIXELS);
-                    for (p = 0; p < pixel_end; p++)
-                    {
-                        LbDrawPixel(pos_x + draw_square[p].delta_x, pos_y + draw_square[p].delta_y, col);
+                    if (RendererIsGpuComposited()) {
+                        UIRenderer_SubmitSolidBox(pos_x, pos_y, pixel_end, pixel_end, col);
+                    } else {
+                        for (p = 0; p < pixel_end; p++)
+                        {
+                            LbDrawPixel(pos_x + draw_square[p].delta_x, pos_y + draw_square[p].delta_y, col);
+                        }
                     }
                     n++;
                 }
@@ -534,14 +562,19 @@ int draw_overhead_traps(const struct TbRect *map_area, long block_size, PlayerNu
                     short pixels_amount = scale_pixel(ONE_PIXEL);
                     short pixel_end = get_pixels_scaled_and_zoomed(ONE_PIXEL);
                     short colour = 60;
-                    for (int p = 0; p < pixel_end; p++)
-                    {
-                        // Draw a cross
-                        LbDrawPixel(pos_x + draw_square[p].delta_x, pos_y + draw_square[p].delta_y, colour);
-                        LbDrawPixel(pos_x + pixels_amount + draw_square[p].delta_x, pos_y + draw_square[p].delta_y, colour);
-                        LbDrawPixel(pos_x - pixels_amount + draw_square[p].delta_x, pos_y + draw_square[p].delta_y, colour);
-                        LbDrawPixel(pos_x + draw_square[p].delta_x, pos_y + pixels_amount + draw_square[p].delta_y, colour);
-                        LbDrawPixel(pos_x + draw_square[p].delta_x, pos_y - pixels_amount + draw_square[p].delta_y, colour);
+                    if (RendererIsGpuComposited()) {
+                        UIRenderer_SubmitSolidBox(pos_x - pixels_amount, pos_y, pixels_amount*2 + pixel_end, pixel_end, colour);
+                        UIRenderer_SubmitSolidBox(pos_x, pos_y - pixels_amount, pixel_end, pixels_amount*2 + pixel_end, colour);
+                    } else {
+                        for (int p = 0; p < pixel_end; p++)
+                        {
+                            // Draw a cross
+                            LbDrawPixel(pos_x + draw_square[p].delta_x, pos_y + draw_square[p].delta_y, colour);
+                            LbDrawPixel(pos_x + pixels_amount + draw_square[p].delta_x, pos_y + draw_square[p].delta_y, colour);
+                            LbDrawPixel(pos_x - pixels_amount + draw_square[p].delta_x, pos_y + draw_square[p].delta_y, colour);
+                            LbDrawPixel(pos_x + draw_square[p].delta_x, pos_y + pixels_amount + draw_square[p].delta_y, colour);
+                            LbDrawPixel(pos_x + draw_square[p].delta_x, pos_y - pixels_amount + draw_square[p].delta_y, colour);
+                        }
                     }
                     n++;
                 }
@@ -583,9 +616,13 @@ int draw_overhead_spells(const struct TbRect *map_area, long block_size, PlayerN
                   long pos_x = map_area->left + block_size * (int)thing->mappos.x.stl.num / STL_PER_SLB  + ((block_size + 1)/5);
                   long pos_y = map_area->top + block_size * (int)thing->mappos.y.stl.num / STL_PER_SLB + ((block_size + 1)/5);
                   short pixel_end = get_pixels_scaled_and_zoomed(TWO_PIXELS);
-                  for (int p = 0; p < pixel_end; p++)
-                  {
-                      LbDrawPixel(pos_x + draw_square[p].delta_x, pos_y + draw_square[p].delta_y, colours[15][0][15]);
+                  if (RendererIsGpuComposited()) {
+                      UIRenderer_SubmitSolidBox(pos_x, pos_y, pixel_end, pixel_end, colours[15][0][15]);
+                  } else {
+                      for (int p = 0; p < pixel_end; p++)
+                      {
+                          LbDrawPixel(pos_x + draw_square[p].delta_x, pos_y + draw_square[p].delta_y, colours[15][0][15]);
+                      }
                   }
               }
               else if ( thing_is_workshop_crate(thing) )
@@ -593,9 +630,13 @@ int draw_overhead_spells(const struct TbRect *map_area, long block_size, PlayerN
                   long pos_x = map_area->left + block_size * (int)thing->mappos.x.stl.num / STL_PER_SLB  + ((block_size + 1)/5);
                   long pos_y = map_area->top + block_size * (int)thing->mappos.y.stl.num / STL_PER_SLB + ((block_size + 1)/5);
                   short pixel_end = get_pixels_scaled_and_zoomed(TWO_PIXELS);
-                  for (int p = 0; p < pixel_end; p++)
-                  {
-                      LbDrawPixel(pos_x + draw_square[p].delta_x, pos_y + draw_square[p].delta_y, colours[7][6][7]);
+                  if (RendererIsGpuComposited()) {
+                      UIRenderer_SubmitSolidBox(pos_x, pos_y, pixel_end, pixel_end, colours[7][6][7]);
+                  } else {
+                      for (int p = 0; p < pixel_end; p++)
+                      {
+                          LbDrawPixel(pos_x + draw_square[p].delta_x, pos_y + draw_square[p].delta_y, colours[7][6][7]);
+                      }
                   }
               }
             }
@@ -895,10 +936,10 @@ void draw_zoom_box(void)
     int beg_y = scrtop_y - scale_value_for_resolution(24);
     int end_x = scrtop_x - scale_value_for_resolution(46) + draw_tiles_x * subtile_size;
     int end_y = scrtop_y - scale_value_for_resolution(58) + draw_tiles_y * subtile_size;
-    LbSpriteDrawResized(beg_x, beg_y, bs_units_per_px, get_button_sprite(GBS_parchment_map_frame_deco_b_tl));
-    LbSpriteDrawResized(end_x, beg_y, bs_units_per_px, get_button_sprite(GBS_parchment_map_frame_deco_b_tr));
-    LbSpriteDrawResized(beg_x, end_y, bs_units_per_px, get_button_sprite(GBS_parchment_map_frame_deco_b_bl));
-    LbSpriteDrawResized(end_x, end_y, bs_units_per_px, get_button_sprite(GBS_parchment_map_frame_deco_b_br));
+    UIRenderer_SubmitPanelSpriteRaw(beg_x, beg_y, bs_units_per_px, get_button_sprite(GBS_parchment_map_frame_deco_b_tl));
+    UIRenderer_SubmitPanelSpriteRaw(end_x, beg_y, bs_units_per_px, get_button_sprite(GBS_parchment_map_frame_deco_b_tr));
+    UIRenderer_SubmitPanelSpriteRaw(beg_x, end_y, bs_units_per_px, get_button_sprite(GBS_parchment_map_frame_deco_b_bl));
+    UIRenderer_SubmitPanelSpriteRaw(end_x, end_y, bs_units_per_px, get_button_sprite(GBS_parchment_map_frame_deco_b_br));
     // Finish
     LbScreenSetGraphicsWindow(0/pixel_size, 0/pixel_size, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
 }
@@ -918,6 +959,9 @@ void redraw_parchment_view(void)
   draw_zoom_box();
   draw_map_level_name();
   draw_tooltip();
+  // Composite all WScreen writes (parchment bg candles, overhead map tiles,
+  // room icons, GUI boxes, zoom box) onto the GL frame.
+  RendererSubmitStagingOverlay();
 }
 
 void redraw_minimal_overhead_view(void)
@@ -926,6 +970,7 @@ void redraw_minimal_overhead_view(void)
     draw_2d_map();
     draw_gui();
     draw_tooltip();
+    RendererSubmitStagingOverlay();
 }
 
 void zoom_to_parchment_map(void)
