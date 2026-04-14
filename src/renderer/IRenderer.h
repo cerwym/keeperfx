@@ -160,6 +160,8 @@ public:
     {
         return false;
     }
+
+    /** GPU path for the campaign-map zoom transition (frontzoom_to_point).
      *
      *  The source image (map_screen, 8-bit indexed, src_w×src_h) is uploaded
      *  as a GL_R8 texture and decoded via the current game palette.  A
