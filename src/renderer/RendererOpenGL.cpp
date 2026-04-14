@@ -226,6 +226,41 @@ bool RendererOpenGL::Init()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    // ── FMV video-frame GPU blit — reuses rawblit shader; own VAO/VBO/textures. ──
+    glGenVertexArrays(1, &m_fmv_vao);
+    glGenBuffers(1, &m_fmv_vbo);
+    KFX_GL_LABEL(GL_VERTEX_ARRAY, m_fmv_vao, "FmvBlit/QuadVAO");
+    KFX_GL_LABEL(GL_BUFFER, m_fmv_vbo, "FmvBlit/QuadVBO");
+    glBindVertexArray(m_fmv_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, m_fmv_vbo);
+    glBufferData(GL_ARRAY_BUFFER, 6 * 4 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+    glBindVertexArray(0);
+
+    // Per-frame pixel index texture (R8, GL_NEAREST — palette indices must not interpolate).
+    glGenTextures(1, &m_fmv_index_tex);
+    KFX_GL_LABEL(GL_TEXTURE, m_fmv_index_tex, "FmvBlit/IndexTex");
+    glBindTexture(GL_TEXTURE_2D, m_fmv_index_tex);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    // Per-video palette texture (1D RGBA8, 256 entries; GL_BGRA upload swaps B/R automatically).
+    glGenTextures(1, &m_fmv_palette_tex);
+    KFX_GL_LABEL(GL_TEXTURE, m_fmv_palette_tex, "FmvBlit/PaletteTex");
+    glBindTexture(GL_TEXTURE_1D, m_fmv_palette_tex);
+    glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexImage1D(GL_TEXTURE_1D, 0, GL_RGBA8, 256, 0, GL_BGRA, GL_UNSIGNED_BYTE, nullptr);
+    glBindTexture(GL_TEXTURE_1D, 0);
 
     // Sprite atlas for UI panel sprites (gui_panel_sprites, button_sprites).
     // Sheets are added in create_ui_renderer() after this returns.
@@ -266,6 +301,10 @@ void RendererOpenGL::Shutdown()
     if (m_rawblit_vao)    { glDeleteVertexArrays(1, &m_rawblit_vao);      m_rawblit_vao = 0; }
     if (m_rawblit_vbo)    { glDeleteBuffers(1, &m_rawblit_vbo);           m_rawblit_vbo = 0; }
     if (m_rawblit_tex)    { glDeleteTextures(1, &m_rawblit_tex);          m_rawblit_tex = 0; }
+    if (m_fmv_vao)          { glDeleteVertexArrays(1, &m_fmv_vao);        m_fmv_vao = 0; }
+    if (m_fmv_vbo)          { glDeleteBuffers(1, &m_fmv_vbo);             m_fmv_vbo = 0; }
+    if (m_fmv_index_tex)    { glDeleteTextures(1, &m_fmv_index_tex);      m_fmv_index_tex = 0; }
+    if (m_fmv_palette_tex)  { glDeleteTextures(1, &m_fmv_palette_tex);    m_fmv_palette_tex = 0; }
 
     platform_destroy_gl_context();
 }
@@ -469,13 +508,79 @@ void RendererOpenGL::EndFrame()
         m_rawblit_pending = false;
     }
 
+    // FMV video frame GPU blit — queued by SubmitVideoFrame() in output_video_frame().
+    // Uses the same palette-indexed quad shader as rawblit, but with a per-video-frame
+    // palette texture on unit 1 instead of the game palette.
+    // The glClear() at the top of EndFrame already fills letterbox areas with black.
+    const TbBool fmv_gpu_active = m_fmv_pending;
+    if (m_fmv_pending)
+    {
+        const FmvBlitCmd& cmd = m_fmv_cmd;
+
+        glViewport(0, 0, m_stagingW, m_stagingH);
+        glDisable(GL_DEPTH_TEST);
+        glDepthMask(GL_FALSE);
+
+        // Upload palette-index data. Use GL_UNPACK_ROW_LENGTH so FFmpeg frames
+        // with linesize padding are handled correctly.
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, m_fmv_index_tex);
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, cmd.src_pitch);
+        if (cmd.src_w != m_fmv_index_tex_w || cmd.src_h != m_fmv_index_tex_h)
+        {
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, cmd.src_w, cmd.src_h,
+                         0, GL_RED, GL_UNSIGNED_BYTE, cmd.px);
+            m_fmv_index_tex_w = cmd.src_w;
+            m_fmv_index_tex_h = cmd.src_h;
+        }
+        else
+        {
+            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, cmd.src_w, cmd.src_h,
+                            GL_RED, GL_UNSIGNED_BYTE, cmd.px);
+        }
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+
+        // Upload per-video palette (BGRA data; GL swaps B/R into RGBA storage).
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_1D, m_fmv_palette_tex);
+        glTexSubImage1D(GL_TEXTURE_1D, 0, 0, 256, GL_BGRA, GL_UNSIGNED_BYTE, cmd.bgra_pal);
+
+        // Build NDC rect for the pre-computed letterboxed/scaled destination.
+        const float sw = (float)m_stagingW;
+        const float sh = (float)m_stagingH;
+        const float x0 = (float)cmd.dst_x               / sw * 2.0f - 1.0f;
+        const float x1 = (float)(cmd.dst_x + cmd.dst_w) / sw * 2.0f - 1.0f;
+        const float y0 = 1.0f - (float)cmd.dst_y               / sh * 2.0f;
+        const float y1 = 1.0f - (float)(cmd.dst_y + cmd.dst_h) / sh * 2.0f;
+        const float verts[6][4] = {
+            { x0, y1,  0.f, 1.f },
+            { x1, y1,  1.f, 1.f },
+            { x1, y0,  1.f, 0.f },
+            { x0, y1,  0.f, 1.f },
+            { x1, y0,  1.f, 0.f },
+            { x0, y0,  0.f, 0.f },
+        };
+        glBindVertexArray(m_fmv_vao);
+        glBindBuffer(GL_ARRAY_BUFFER, m_fmv_vbo);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(verts), verts);
+        glDisable(GL_BLEND);
+        glUseProgram(m_rawblit_shader);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+        glBindVertexArray(0);
+
+        glDepthMask(GL_TRUE);
+        glActiveTexture(GL_TEXTURE0);
+        m_fmv_pending = false;
+    }
+
     // When the GPU world-view renderer is active every drawing path (status panel,
     // GUI, text, sprites, shadows) is routed through GPU shaders / UIRenderer /
     // GLTextRenderer.  The staging buffer is all-zeros, so uploading + blitting it
     // is pure overhead (~1 MB upload + one draw call doing nothing).  Skip it.
+    // Also skip when the FMV GPU path handled the frame — WScreen was not written.
     // Use the cached value from before GPUFlushNow so main-menu frames (where
     // BeginWorldPass was never called and the flag is false) always run the blit.
-    if (!world_gpu_active)
+    if (!world_gpu_active && !fmv_gpu_active)
     {
         // Full-screen viewport + no depth interaction for this 2D overlay pass.
         glViewport(0, 0, m_stagingW, m_stagingH);
@@ -595,6 +700,26 @@ bool RendererOpenGL::BlitRaw8GPU(int dst_width, int dst_height, int dst_x, int d
     m_rawblit_cmd     = { src_buf, src_width, src_height,
                           dst_x, dst_y, dst_width, dst_height };
     m_rawblit_pending = true;
+    return true;
+}
+
+bool RendererOpenGL::SubmitVideoFrame(
+    const uint8_t* px, int src_w, int src_h, int src_pitch,
+    const uint8_t* bgra_pal, int dst_x, int dst_y, int dst_w, int dst_h)
+{
+    if (!m_rawblit_shader)
+    {
+        ERRORLOG("RendererOpenGL::SubmitVideoFrame: shader not compiled; GPU path dropped");
+        return false;
+    }
+    if (!px || !bgra_pal || src_w <= 0 || src_h <= 0 || dst_w <= 0 || dst_h <= 0)
+    {
+        ERRORLOG("RendererOpenGL::SubmitVideoFrame: invalid params (px=%p src=%dx%d dst=%dx%d)",
+                 (const void*)px, src_w, src_h, dst_w, dst_h);
+        return false;
+    }
+    m_fmv_cmd = { px, src_w, src_h, src_pitch, bgra_pal, dst_x, dst_y, dst_w, dst_h };
+    m_fmv_pending = true;
     return true;
 }
 

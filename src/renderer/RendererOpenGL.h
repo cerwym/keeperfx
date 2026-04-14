@@ -53,6 +53,10 @@ public:
     bool BlitRaw8GPU(int dst_width, int dst_height, int dst_x, int dst_y,
                      const unsigned char* src_buf, int src_width, int src_height) override;
 
+    bool SubmitVideoFrame(const uint8_t* pal8_pixels, int src_w, int src_h, int src_pitch,
+                          const uint8_t* bgra_palette_1024,
+                          int dst_x, int dst_y, int dst_w, int dst_h) override;
+
     // Sub-renderer access
     IWorldViewRenderer* GetWorldViewRenderer() override;
     IMapFadePass* GetMapFadePass() override;
@@ -127,6 +131,25 @@ private:
     unsigned int      m_rawblit_tex      = 0;  // GL_R8 — source image indices
     int               m_rawblit_tex_w    = 0;  // current texture dimensions
     int               m_rawblit_tex_h    = 0;
+
+    // ── FMV video frame GPU blit (Phase C) ────────────────────────────────
+    // Queued by SubmitVideoFrame(); drawn at EndFrame() using the same shader
+    // as rawblit (palette_blit_vert + rawimage_blit_frag) but with a separate
+    // per-video-frame palette texture instead of the game palette.
+    struct FmvBlitCmd {
+        const uint8_t* px       = nullptr;  // palette indices (AVFrame::data[0])
+        int src_w = 0, src_h = 0, src_pitch = 0;
+        const uint8_t* bgra_pal = nullptr;  // 256×BGRA (AVFrame::data[1])
+        int dst_x = 0, dst_y = 0, dst_w = 0, dst_h = 0;
+    };
+    bool              m_fmv_pending        = false;
+    FmvBlitCmd        m_fmv_cmd            = {};
+    unsigned int      m_fmv_vao            = 0;
+    unsigned int      m_fmv_vbo            = 0;
+    unsigned int      m_fmv_index_tex      = 0;  // GL_R8 — per-frame pixel indices
+    int               m_fmv_index_tex_w    = 0;
+    int               m_fmv_index_tex_h    = 0;
+    unsigned int      m_fmv_palette_tex    = 0;  // GL_RGBA8 1D — per-video palette
 };
 
 /******************************************************************************/

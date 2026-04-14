@@ -8,6 +8,7 @@
 #include "bflib_fileio.h"
 #include "kjm_input.h"
 #include "platform/PlatformManager.h"
+#include "renderer/RendererManager.h"
 
 // See: https://trac.ffmpeg.org/ticket/3626
 extern "C" {
@@ -54,6 +55,47 @@ static int64_t vita_avio_seek(void *opaque, int64_t offset, int whence)
     return LbFileSeek(f, (long)offset, whence) == 0 ? (int64_t)LbFilePosition(f) : -1;
 }
 #endif
+
+/** Compute the letterboxed/cropped destination rect for an FMV frame.
+ *  Mirrors the scaling logic in copy_to_screen_scaled; used by both the
+ *  software and GPU paths so the rect is always consistent. */
+static void smk_compute_dst_rect(int src_w, int src_h, int scr_w, int scr_h, int flags,
+                                  int *out_x, int *out_y, int *out_w, int *out_h)
+{
+    if ((flags & SMK_FullscreenStretch) && !(flags & SMK_FullscreenFit)) {
+        *out_x = 0; *out_y = 0; *out_w = scr_w; *out_h = scr_h;
+        return;
+    }
+    int in_width  = src_w;
+    int in_height = src_h;
+    const float relative_ar_difference = (in_width * 1.0f / in_height) /
+                                          (scr_w   * 1.0f / scr_h);
+    float comparison_ratio = 1.0f;
+    if ((flags & SMK_FullscreenStretch) && (flags & SMK_FullscreenFit)) {
+        if (src_w == 320 && src_h == 200)
+            in_height = (int)(in_height * 1.2f);
+    }
+    if ((flags & SMK_FullscreenCrop) && !(flags & SMK_FullscreenFit))
+        comparison_ratio = relative_ar_difference;
+    else
+        comparison_ratio = 1.0f / relative_ar_difference;
+    float units_per_px;
+    if (comparison_ratio <= 1.0f)
+        units_per_px = (scr_w > scr_h ? scr_w : scr_h) /
+                       ((in_width > in_height ? in_width : in_height) / 16.0f);
+    else
+        units_per_px = (scr_w > scr_h ? scr_h : scr_w) /
+                       ((in_width > in_height ? in_height : in_width) / 16.0f);
+    if ((flags & SMK_FullscreenCrop) && (flags & SMK_FullscreenFit)) {
+        if ((flags & SMK_FullscreenStretch) && src_w == 320 && src_h == 200)
+            units_per_px = (float)(max(5, (int)(units_per_px / 16.0f / 5.0f) * 5) * 16);
+        units_per_px = (float)((int)(units_per_px / 16.0f) * 16);
+    }
+    *out_x = (int)((scr_w - in_width  * units_per_px / 16.0f) / 2.0f);
+    *out_y = (int)((scr_h - in_height * units_per_px / 16.0f) / 2.0f);
+    *out_w = (int)(in_width  * units_per_px / 16.0f);
+    *out_h = (int)(in_height * units_per_px / 16.0f);
+}
 
 void copy_to_screen_pxquad(unsigned char *srcbuf, unsigned char *dstbuf, long width, long dst_shift)
 {
@@ -179,69 +221,11 @@ void copy_to_screen_scaled(const AVFrame & frame, const int flags)
 	const auto src_pitch = frame.linesize[0];
 	const auto src_buf = frame.data[0];
 	const auto dst_buf = &lbDisplay.WScreen[0];
-	// Compute scaling ratio -> Output co-ordinates and output size
 	const int scanline = lbDisplay.GraphicsScreenWidth;
 	const int nlines = lbDisplay.GraphicsScreenHeight;
-	int spw = 0;
-	int sph = 0;
-	int dst_width = 0;
-	int dst_height = 0;
-
-	if ((flags & SMK_FullscreenStretch) && !(flags & SMK_FullscreenFit)) {
-		// Use full screen resolution and fill the whole canvas by "stretching"
-		dst_width = scanline;
-		dst_height = nlines;
-	} else {
-		// Calculate the correct output size
-		int in_width = frame.width;
-		int in_height = frame.height;
-		float units_per_px = 0;
-		// relative aspect ratio difference between the source frame and destination frame
-		const float relative_ar_difference = (in_width * 1.0 / in_height * 1.0) / (scanline * 1.0 / nlines * 1.0);
-		// when keeping aspect ratio, instead of stretching, this is inverted depending on if we want to crop or fit
-		float comparison_ratio = 1;
-		if ((flags & SMK_FullscreenStretch) && (flags & SMK_FullscreenFit)) {
-			// stretch source from 320x200(16:10) to 320x240 (4:3) (i.e. vertical x 1.2) - "preserve *original* aspect ratio mode"
-			if (frame.width == 320 && frame.height == 200) {
-				in_height = (int)(in_height * 1.2);
-			}
-		}
-		if ((flags & SMK_FullscreenCrop) && !(flags & SMK_FullscreenFit)) {
-			// fill screen (will crop)
-			comparison_ratio = relative_ar_difference;
-		} else {
-			// fit to full screen, preserve aspect ratio (pillar/letter boxed)
-			comparison_ratio = 1.0 / relative_ar_difference;
-		}
-		// take either the destination width or height, depending on whether
-		// the destination is wider or narrower than the source
-		// (same aspect ratio is treated the same as wider),
-		// and also if we want to crop or fit
-		if (comparison_ratio <= 1.0) {
-			units_per_px = (scanline>nlines?scanline:nlines)/((in_width>in_height?in_width:in_height)/16.0);
-		} else {
-			units_per_px = (scanline>nlines?nlines:scanline)/((in_width>in_height?in_height:in_width)/16.0);
-		}
-		if ((flags & SMK_FullscreenCrop) && (flags & SMK_FullscreenFit)) {
-			// Find the highest integer scale possible
-			if (flags & SMK_FullscreenStretch) {
-				//4:3 stretch mode (crop off to the nearest 5x/6x scale
-				if (frame.width == 320 && frame.height == 200) {
-					// make sure the multiple is integer divisible by 5. Use 5x as a minimum,
-					// otherwise there will be no video (resolutions smaller than 1600x1200
-					// will have a cropped image from a buffer of that size).
-					units_per_px = (max(5, (int)(units_per_px / 16.0 / 5.0) * 5) * 16);
-				}
-			}
-			// scale to the nearest integer multiple of the source resolution.
-			units_per_px = ((int)(units_per_px / 16.0) * 16);
-		}
-		// Starting point coords and width for the destination buffer (based on desired aspect ratio)
-		spw = (int)((scanline - in_width * units_per_px / 16.0) / 2.0);
-		sph = (int)((nlines - in_height * units_per_px / 16.0) / 2.0);
-		dst_width = (int)(in_width * units_per_px / 16.0);
-		dst_height = (int)(in_height * units_per_px / 16.0);
-	}
+	int spw = 0, sph = 0, dst_width = 0, dst_height = 0;
+	smk_compute_dst_rect(frame.width, frame.height, scanline, nlines, flags,
+	                     &spw, &sph, &dst_width, &dst_height);
 
 	// Clearing top of the canvas
 	for (int sh = 0; sh < sph; sh++) {
@@ -627,7 +611,35 @@ struct movie_t {
 		SDL_SetPaletteColors(lbDrawSurface->format->palette, palette, 0, PALETTE_COLORS);
 		if (LbScreenLock() != Lb_SUCCESS) {
 			return;
-		} else if (m_flags & (SMK_FullscreenFit | SMK_FullscreenStretch | SMK_FullscreenCrop)) { // new scaling mode
+		}
+		// Try GPU video frame path first.
+		// Compute the letterboxed destination rect (same logic as copy_to_screen_scaled).
+		{
+			const int scr_w = lbDisplay.GraphicsScreenWidth;
+			const int scr_h = lbDisplay.GraphicsScreenHeight;
+			int dst_x, dst_y, dst_w, dst_h;
+			if (m_flags & (SMK_FullscreenFit | SMK_FullscreenStretch | SMK_FullscreenCrop)) {
+				smk_compute_dst_rect(m_frame->width, m_frame->height,
+				                     scr_w, scr_h, m_flags,
+				                     &dst_x, &dst_y, &dst_w, &dst_h);
+			} else {
+				// Centred, with optional pixel-doubling.
+				dst_w = m_frame->width  * ((m_flags & SMK_PixelDoubleWidth) ? 2 : 1);
+				dst_h = m_frame->height * ((m_flags & SMK_PixelDoubleLine)  ? 2 : 1);
+				dst_x = (scr_w - dst_w) / 2;
+				dst_y = (scr_h - dst_h) / 2;
+			}
+			if (RendererSubmitVideoFrame(
+					m_frame->data[0], m_frame->width, m_frame->height, m_frame->linesize[0],
+					m_frame->data[1], dst_x, dst_y, dst_w, dst_h))
+			{
+				LbScreenUnlock();
+				LbScreenSwap();
+				return;
+			}
+		}
+		// Software path — renderer returned false (software renderer).
+		if (m_flags & (SMK_FullscreenFit | SMK_FullscreenStretch | SMK_FullscreenCrop)) {
 			copy_to_screen_scaled(*m_frame, m_flags);
 		} else {
 			copy_to_screen(*m_frame, m_flags);

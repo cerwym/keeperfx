@@ -217,6 +217,19 @@ int32_t TextRenderer_StringHeight(int32_t units_per_px, const char* text);
 TbBool RendererBlitRaw8(int dst_width, int dst_height, int dst_x, int dst_y,
                         const unsigned char* src_buf, int src_width, int src_height);
 
+/** Submit one FMV video frame through the GPU path.
+ *  @param pal8_pixels       8-bit palette-indexed pixel data (AVFrame::data[0]).
+ *  @param src_w/src_h       Frame dimensions.
+ *  @param src_pitch         Row stride in bytes (may differ from src_w).
+ *  @param bgra_palette_1024 256 BGRA entries (AVFrame::data[1], 1024 bytes).
+ *  @param dst_x/dst_y/dst_w/dst_h  Pre-computed letterboxed destination rect.
+ *  @return true  when GPU path accepted the frame (caller skips copy_to_screen*).
+ *          false when GPU unavailable (software renderer) — caller runs CPU path. */
+TbBool RendererSubmitVideoFrame(const unsigned char* pal8_pixels,
+                                int src_w, int src_h, int src_pitch,
+                                const unsigned char* bgra_palette_1024,
+                                int dst_x, int dst_y, int dst_w, int dst_h);
+
 /******************************************************************************/
 /* C-callable UI renderer wrappers                                            */
 /******************************************************************************/

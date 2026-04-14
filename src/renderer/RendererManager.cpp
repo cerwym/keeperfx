@@ -776,6 +776,16 @@ TbBool RendererBlitRaw8(int dst_width, int dst_height, int dst_x, int dst_y,
         src_buf, src_width, src_height);
 }
 
+TbBool RendererSubmitVideoFrame(const unsigned char* px, int src_w, int src_h, int src_pitch,
+                                const unsigned char* bgra_pal,
+                                int dst_x, int dst_y, int dst_w, int dst_h)
+{
+    IRenderer* rend = RendererGetActive();
+    if (!rend) return false;
+    return rend->SubmitVideoFrame(px, src_w, src_h, src_pitch, bgra_pal,
+                                  dst_x, dst_y, dst_w, dst_h) ? true : false;
+}
+
 /******************************************************************************/
 /* C-callable UI renderer wrappers                                            */
 /******************************************************************************/

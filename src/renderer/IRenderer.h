@@ -120,6 +120,28 @@ public:
         return false;
     }
 
+    /** GPU path for a single FMV (Smacker) video frame.
+     *  @param pal8_pixels        8-bit palette-indexed pixel data (row-major).
+     *  @param src_w/src_h        Frame dimensions in pixels.
+     *  @param src_pitch          Row stride in bytes (may differ from src_w).
+     *  @param bgra_palette_1024  256 BGRA entries (4 bytes each, 1024 bytes total),
+     *                            as provided by FFmpeg in AVFrame::data[1].
+     *  @param dst_x/dst_y        Top-left corner of the draw rect in screen pixels,
+     *                            accounting for letterboxing/pillarboxing.
+     *  @param dst_w/dst_h        Draw rect dimensions in screen pixels.
+     *  @return true  if the GPU path handled the frame (caller skips CPU copy).
+     *          false if unhandled (software renderer — caller runs copy_to_screen). */
+    virtual bool SubmitVideoFrame(
+        const uint8_t* pal8_pixels, int src_w, int src_h, int src_pitch,
+        const uint8_t* bgra_palette_1024,
+        int dst_x, int dst_y, int dst_w, int dst_h)
+    {
+        (void)pal8_pixels; (void)src_w; (void)src_h; (void)src_pitch;
+        (void)bgra_palette_1024;
+        (void)dst_x; (void)dst_y; (void)dst_w; (void)dst_h;
+        return false;
+    }
+
     // -------------------------------------------------------------------------
     // Metadata
 
