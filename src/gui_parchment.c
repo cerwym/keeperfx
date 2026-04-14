@@ -338,6 +338,9 @@ void draw_overhead_map(const struct TbRect *map_area, long block_size, PlayerNum
             for (int col = 0; col < game.map_tiles_x; col++)
             {
                 long stl_x = 1 + col * STL_PER_SLB;
+                struct Map* mapblk = get_map_block_at(stl_x, stl_y);
+                if (!map_block_revealed(mapblk, plyr_idx))
+                    continue; // parchment background quad shows through
                 TbPixel color = get_overhead_mapblock_color(stl_x, stl_y, plyr_idx, 0);
                 long px = map_area->left + col * block_size;
                 long py = map_area->top  + row * block_size;
