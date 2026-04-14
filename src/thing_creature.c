@@ -4273,6 +4273,10 @@ void draw_creature_view(struct Thing *thing)
   if (WorldViewRenderer_IsGpuActive())
   {
       engine(player, render_cam);
+      // Swipe graphic writes to the CPU staging buffer; composite it on top
+      // of the GPU-rendered world via the staging overlay mechanism.
+      draw_swipe_graphic();
+      RendererSubmitStagingOverlay();
       return;
   }
 

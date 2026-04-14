@@ -776,6 +776,9 @@ void RendererOpenGL::EndFrame()
     }
 
     RenderPass_EndFrame();
+    // Snapshot the fully-composited backbuffer for use by GLMapFadePass when
+    // a parchment ↔ 3D-view transition starts on the next frame.
+    MapFadePass_SnapshotFrame();
     platform_swap_gl_buffers(lbWindow);
 
     // Collect pending GPU timer query results for Tracy GPU zones.

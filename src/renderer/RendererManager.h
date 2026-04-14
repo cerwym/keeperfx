@@ -53,6 +53,12 @@ void RendererShutdown(void);
 /** Returns the RendererType enum value currently in use. */
 RendererType RendererGetActiveType(void);
 
+/** Returns true when the active renderer composites frames on the GPU
+ *  (i.e. EndFrame builds the final image via OpenGL rather than directly
+ *  presenting lbDisplay.WScreen).  Use this instead of testing
+ *  RendererGetActiveType() == RENDERER_OPENGL in non-renderer code. */
+TbBool RendererIsGpuComposited(void);
+
 /******************************************************************************/
 /* C-callable framebuffer / frame wrappers (safe to call from bflib_video.c) */
 /******************************************************************************/
@@ -144,6 +150,11 @@ long MapFadePass_StepFadeIn(long step);
 
 /** Render one fade-out step (3D view → parchment) and return next step value. */
 long MapFadePass_StepFadeOut(long step);
+
+/** Capture the current GL framebuffer into GLMapFadePass's snapshot buffer.
+ *  Called by RendererOpenGL::EndFrame just before platform_swap_gl_buffers().
+ *  No-op for non-GL implementations. */
+void MapFadePass_SnapshotFrame(void);
 
 /******************************************************************************/
 /* C-callable text renderer wrappers                                          */

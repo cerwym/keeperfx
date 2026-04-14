@@ -307,7 +307,7 @@ bool LbI_PointerHandler::OnMove(void)
     std::lock_guard<std::mutex> guard(lock);
     if (lbPointerAdvancedDraw && lbInteruptMouse)
     {
-        if (!WorldViewRenderer_IsGpuActive()) {
+        if (!RendererIsGpuComposited()) {
           Undraw(true);
           NewMousePos();
           Backup(true);
@@ -327,7 +327,7 @@ void LbI_PointerHandler::OnBeginSwap(void)
     std::lock_guard<std::mutex> guard(lock);
     if ( lbPointerAdvancedDraw )
     {
-        if (WorldViewRenderer_IsGpuActive())
+        if (RendererIsGpuComposited())
         {
           // GPU mode + advanced draw: submit cursor through UI renderer instead
           // of writing to WScreen (which would be lost since staging blit is skipped).
@@ -342,7 +342,7 @@ void LbI_PointerHandler::OnBeginSwap(void)
           Draw(false);
         }
     } else
-    if (WorldViewRenderer_IsGpuActive() && sprite != NULL)
+    if (RendererIsGpuComposited() && sprite != NULL)
     {
       // GPU path: submit cursor sprite through the UI renderer so it composites
       // during EndFrame's FlushFront(), matching the software renderer's cursor.
@@ -364,7 +364,7 @@ void LbI_PointerHandler::OnEndSwap(void)
     std::lock_guard<std::mutex> guard(lock);
     if ( lbPointerAdvancedDraw )
     {
-        if (!WorldViewRenderer_IsGpuActive()) {
+        if (!RendererIsGpuComposited()) {
           Undraw(false);
         }
         this->needs_redraw = true;

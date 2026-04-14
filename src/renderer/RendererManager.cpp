@@ -143,6 +143,8 @@ void RendererNotifyFrontendSpritesLoaded()
 #endif
 }
 
+static void register_sheet_software(const struct TbSpriteSheet* sheet); // fwd
+
 /** Append map_flag into the live atlas after load_spritesheet() in front_landview.c.
  *  Handles both GL (GLSpriteAtlas) and software (IUIRenderer handle table) modes. */
 void RendererNotifyLandviewFlagLoaded()
@@ -556,6 +558,11 @@ RendererType RendererGetActiveType()
     return s_activeType;
 }
 
+TbBool RendererIsGpuComposited(void)
+{
+    return (s_activeType == RENDERER_OPENGL) ? 1 : 0;
+}
+
 /******************************************************************************/
 /* C-callable wrappers */
 /******************************************************************************/
@@ -640,6 +647,12 @@ long MapFadePass_StepFadeOut(long step)
     if (s_mapFadePass)
         return s_mapFadePass->StepFadeOut(step);
     return step;
+}
+
+void MapFadePass_SnapshotFrame(void)
+{
+    if (s_mapFadePass)
+        s_mapFadePass->SnapshotFrame();
 }
 
 /******************************************************************************/

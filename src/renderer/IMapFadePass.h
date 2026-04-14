@@ -59,6 +59,12 @@ public:
      *  Renders the wipe quad using the pending step value set during the most
      *  recent StepFadeIn / StepFadeOut call.  No-op by default. */
     virtual void RenderGPUComposePass() {}
+
+    /** Called by RendererOpenGL::EndFrame() just before platform_swap_gl_buffers().
+     *  Captures the fully-composited GL backbuffer into an internal RGBA snapshot
+     *  so CaptureAndUploadFrames() can use it as the 3D-world fade texture.
+     *  No-op for non-GPU implementations. */
+    virtual void SnapshotFrame() {}
 };
 
 /******************************************************************************/

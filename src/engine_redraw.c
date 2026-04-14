@@ -414,6 +414,23 @@ void prepare_map_fade_buffers(unsigned char *fade_src, unsigned char *fade_dest,
     }
     // create the parchment screen
     load_parchment_file();
+    // In GL mode RendererBlitRaw8 queues a GPU blit and does not write to
+    // WScreen.  Write the parchment background directly via the CPU path so
+    // that fade_dest captures the complete parchment image including the bg.
+    {
+        struct TbRect bkgnd_area;
+        int units_per_px = get_parchment_background_area_rect(&bkgnd_area);
+        int img_width  = (LbScreenWidth() >= 640) ? 640 : 320;
+        int img_height = (LbScreenWidth() >= 640) ? 480 : 200;
+        unsigned char* pbuf = (LbScreenWidth() >= 640) ? hires_parchment : poly_pool;
+        if (pbuf != NULL)
+            copy_raw8_image_buffer(
+                lbDisplay.WScreen,
+                lbDisplay.GraphicsScreenWidth, lbDisplay.GraphicsScreenHeight,
+                img_width * units_per_px / 16, img_height * units_per_px / 16,
+                bkgnd_area.left, bkgnd_area.top,
+                pbuf, img_width, img_height);
+    }
     redraw_minimal_overhead_view();
     // Copy the screen to fade destination temp buffer
     fadebuf_pos = 0;
