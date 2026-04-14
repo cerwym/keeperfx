@@ -35,6 +35,7 @@
 #include "sprites.h"
 #include "game_legacy.h"
 #include "custom_sprites.h"
+#include "renderer/RendererManager.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -771,30 +772,30 @@ void frontend_draw_button(struct GuiButton *gbtn, unsigned short btntype, const 
     {
      case 1:
          spr = get_frontend_sprite(spridx);
-         LbSpriteDrawResized(x, y, units_per_px, spr);
+         UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_px, spr);
          x += spr->SWidth * units_per_px / 16;
          spr = get_frontend_sprite(spridx+1);
-         LbSpriteDrawResized(x, y, units_per_px, spr);
+         UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_px, spr);
          x += spr->SWidth * units_per_px / 16;
          break;
     case 2:
         spr = get_frontend_sprite(spridx);
-        LbSpriteDrawResized(x, y, units_per_px, spr);
+        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_px, spr);
         x += spr->SWidth * units_per_px / 16;
         spr = get_frontend_sprite(spridx+1);
-        LbSpriteDrawResized(x, y, units_per_px, spr);
+        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_px, spr);
         x += spr->SWidth * units_per_px / 16;
-        LbSpriteDrawResized(x, y, units_per_px, spr);
+        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_px, spr);
         x += spr->SWidth * units_per_px / 16;
         break;
     default:
         spr = get_frontend_sprite(spridx);
-        LbSpriteDrawResized(x, y, units_per_px, spr);
+        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_px, spr);
         x += spr->SWidth * units_per_px / 16;
         break;
     }
     spr = get_frontend_sprite(spridx+2);
-    LbSpriteDrawResized(x, y, units_per_px, spr);
+    UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_px, spr);
     if (text != NULL)
     {
         lbDisplay.DrawFlags = drw_flags;
@@ -834,16 +835,16 @@ void frontend_draw_scroll_box_tab(struct GuiButton *gbtn)
     // Since this tab is attachable from top, it is important to keep bottom position without variation
     pos_y = gbtn->scr_pos_y + gbtn->height - spr->SHeight * fs_units_per_px / 16;
     spr = get_frontend_sprite(GFS_hugearea_thc_cor_tl);
-    LbSpriteDrawResized(pos_x, pos_y, fs_units_per_px, spr);
+    UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, fs_units_per_px, spr);
     pos_x += spr->SWidth * fs_units_per_px / 16;
     spr = get_frontend_sprite(GFS_hugearea_thc_tx1_tc);
-    LbSpriteDrawResized(pos_x, pos_y, fs_units_per_px, spr);
+    UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, fs_units_per_px, spr);
     pos_x += spr->SWidth * fs_units_per_px / 16;
     spr = get_frontend_sprite(GFS_hugearea_thc_tx1_tc);
-    LbSpriteDrawResized(pos_x, pos_y, fs_units_per_px, spr);
+    UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, fs_units_per_px, spr);
     pos_x += spr->SWidth * fs_units_per_px / 16;
     spr = get_frontend_sprite(GFS_hugearea_thc_cor_tr);
-    LbSpriteDrawResized(pos_x, pos_y, fs_units_per_px, spr);
+    UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, fs_units_per_px, spr);
 }
 
 void frontend_draw_scroll_box(struct GuiButton *gbtn)
@@ -1086,7 +1087,7 @@ void gui_draw_scroll_box(struct GuiButton *gbtn, int height_lines, TbBool draw_s
     pos_x = gbtn->scr_pos_x;
     for (i=0; i < 6; i++)
     {
-        LbSpriteDrawResized(pos_x, pos_y, units_per_px, spr);
+        UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, units_per_px, spr);
         pos_x += spr->SWidth * units_per_px / 16;
         spr++;
     }
@@ -1108,7 +1109,7 @@ void gui_draw_scroll_box(struct GuiButton *gbtn, int height_lines, TbBool draw_s
       pos_x = gbtn->scr_pos_x;
       for (i=0; i < 6; i++)
       {
-          LbSpriteDrawResized(pos_x, pos_y, units_per_px, spr);
+          UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, units_per_px, spr);
           pos_x += spr->SWidth * units_per_px / 16;
           spr++;
       }
@@ -1133,7 +1134,7 @@ void gui_draw_scroll_box(struct GuiButton *gbtn, int height_lines, TbBool draw_s
     pos_x = gbtn->scr_pos_x;
     for (i=0; i < 6; i++)
     {
-        LbSpriteDrawResized(pos_x, pos_y, units_per_px, spr);
+        UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, units_per_px, spr);
         pos_x += spr->SWidth * units_per_px / 16;
         spr++;
     }

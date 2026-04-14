@@ -129,6 +129,20 @@ void RendererNotifyPointerSpritesLoaded()
 #endif
 }
 
+/** Append frontend_sprite into the live atlas after frontend_load_data(). */
+void RendererNotifyFrontendSpritesLoaded()
+{
+#ifdef RENDERER_OPENGL_ENABLED
+    if (s_spriteAtlas && frontend_sprite && num_sprites(frontend_sprite) > 0) {
+        long before = (long)s_spriteAtlas->GetRegisteredCount();
+        s_spriteAtlas->AddSheet(frontend_sprite);
+        long after  = (long)s_spriteAtlas->GetRegisteredCount();
+        SYNCLOG("RendererNotifyFrontendSpritesLoaded: frontend_sprite=%p added %ld new sprites (total %ld)",
+                (void*)frontend_sprite, after - before, after);
+    }
+#endif
+}
+
 /** Append any newly-built custom_sprites into the live atlas.
  *  Call this after every init_custom_sprites() so per-level icons are available. */
 void RendererNotifyCustomSpritesReloaded()

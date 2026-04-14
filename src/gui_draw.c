@@ -505,13 +505,13 @@ void draw_message_box_at(long startx, long starty, long box_width, long box_heig
     long y = starty;
     {
         spr = get_frontend_sprite(GFS_hugearea_thn_cor_tl);
-        LbSpriteDrawResized(x, y, units_per_pixel, spr);
+        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr);
         x += spr->SWidth * units_per_pixel / 16;
     }
     for (n=0; n < spritesx; n++)
     {
         spr = get_frontend_sprite((n % 4) + GFS_hugearea_thn_tx1_tc);
-        LbSpriteDrawResized(x, y, units_per_pixel, spr);
+        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr);
         x += spr->SWidth * units_per_pixel / 16;
     }
     x = startx;
@@ -522,12 +522,12 @@ void draw_message_box_at(long startx, long starty, long box_width, long box_heig
     for (n=0; n < spritesx; n++)
     {
         spr = get_frontend_sprite((n % 4) + GFS_hugearea_thn_tx1_tc);
-        LbSpriteDrawResized(x, y, units_per_pixel, spr);
+        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr);
         x += spr->SWidth * units_per_pixel / 16;
     }
     {
         spr = get_frontend_sprite(GFS_hugearea_thn_cor_tr);
-        LbSpriteDrawResized(x, y, units_per_pixel, spr);
+        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr);
     }
     // Draw centered line of sprites
     spr = get_frontend_sprite(GFS_hugearea_thn_cor_tl);
@@ -535,18 +535,18 @@ void draw_message_box_at(long startx, long starty, long box_width, long box_heig
     y += spr->SHeight * units_per_pixel / 16;
     {
         spr = get_frontend_sprite(GFS_hugearea_thc_cor_ml);
-        LbSpriteDrawResized(x, y, units_per_pixel, spr);
+        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr);
         x += spr->SWidth * units_per_pixel / 16;
     }
     for (n=0; n < spritesx; n++)
     {
         spr = get_frontend_sprite((n % 4) + GFS_hugearea_thc_tx1_mc);
-        LbSpriteDrawResized(x, y, units_per_pixel, spr);
+        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr);
         x += spr->SWidth * units_per_pixel / 16;
     }
     {
         spr = get_frontend_sprite(GFS_hugearea_thc_cor_mr);
-        LbSpriteDrawResized(x, y, units_per_pixel, spr);
+        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr);
     }
     // Draw bottom line of sprites
     spr = get_frontend_sprite(GFS_hugearea_thc_cor_ml);
@@ -554,18 +554,18 @@ void draw_message_box_at(long startx, long starty, long box_width, long box_heig
     y += spr->SHeight * units_per_pixel / 16;
     {
         spr = get_frontend_sprite(GFS_hugearea_thn_cor_bl);
-        LbSpriteDrawResized(x, y, units_per_pixel, spr);
+        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr);
         x += spr->SWidth * units_per_pixel / 16;
     }
     for (n=0; n < spritesx; n++)
     {
         spr = get_frontend_sprite((n % 4) + GFS_hugearea_thn_tx1_bc);
-        LbSpriteDrawResized(x, y, units_per_pixel, spr);
+        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr);
         x += spr->SWidth * units_per_pixel / 16;
     }
     {
         spr = get_frontend_sprite(GFS_hugearea_thn_cor_br);
-        LbSpriteDrawResized(x, y, units_per_pixel, spr);
+        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr);
     }
 }
 
@@ -629,7 +629,7 @@ void draw_scroll_box(struct GuiButton *gbtn, int units_per_px, int num_rows)
         spr = get_frontend_sprite(GFS_hugearea_thn_cor_tl);
         for (i = 6; i > 0; i--)
         {
-            LbSpriteDrawResized(pos_x, pos_y, units_per_px, spr);
+            UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, units_per_px, spr);
             pos_x += spr->SWidth * units_per_px / 16;
             spr++;
         }
@@ -646,7 +646,7 @@ void draw_scroll_box(struct GuiButton *gbtn, int units_per_px, int num_rows)
         pos_x = gbtn->scr_pos_x;
         for (i = 6; i > 0; i--)
         {
-            LbSpriteDrawResized(pos_x, pos_y, units_per_px, spr);
+            UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, units_per_px, spr);
             pos_x += spr->SWidth * units_per_px / 16;
             spr++;
         }
@@ -662,7 +662,7 @@ void draw_scroll_box(struct GuiButton *gbtn, int units_per_px, int num_rows)
     pos_x = gbtn->scr_pos_x;
     for (i = 6; i > 0; i--)
     {
-        LbSpriteDrawResized(pos_x, pos_y, units_per_px, spr);
+        UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, units_per_px, spr);
         pos_x += spr->SWidth * units_per_px / 16;
         spr++;
     }
@@ -715,7 +715,7 @@ void draw_button_sprite_rmleft(long x, long y, int units_per_px, long spridx, un
 void draw_frontend_sprite_left(long x, long y, int units_per_px, long spridx)
 {
     const struct TbSprite* spr = get_frontend_sprite(spridx);
-    LbSpriteDrawResized(x, y, units_per_px, spr);
+    UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_px, spr);
 }
 
 void draw_string64k(long x, long y, int units_per_px, const char * text)

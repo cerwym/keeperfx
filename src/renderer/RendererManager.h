@@ -91,6 +91,12 @@ void RendererNotifyCustomSpritesReloaded(void);
  *  so they must be registered after loading completes. */
 void RendererNotifyPointerSpritesLoaded(void);
 
+/** Append frontend_sprite into the live atlas after frontend_load_data().
+ *  frontend_sprite is loaded independently from the main GUI sprite sheets
+ *  and must be registered so UIRenderer_SubmitPanelSpriteRaw can resolve
+ *  handles for frontend menu / button sprites. */
+void RendererNotifyFrontendSpritesLoaded(void);
+
 /******************************************************************************/
 /* C-callable world-view renderer wrappers (safe to call from C files)        */
 /******************************************************************************/

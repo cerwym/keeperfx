@@ -986,6 +986,7 @@ TbResult frontend_load_data(void)
         ERRORLOG("Cannot load frontend sprites.");
         return Lb_FAIL;
     }
+    RendererNotifyFrontendSpritesLoaded();
     return ret;
 }
 
