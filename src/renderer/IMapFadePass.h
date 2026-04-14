@@ -19,8 +19,11 @@
  *       StepFadeIn(step)  → engine_redraw_map_fade_in(step)   → map_fade_in(step)
  *       StepFadeOut(step) → engine_redraw_map_fade_out(step)  → map_fade_out(step)
  *
- * @par Future GPU implementation:
- *       StepFadeIn/Out → render-to-texture capture + UV-warp fragment shader
+ * @par GPU implementation (GLMapFadePass):
+ *       StepFadeIn/Out: on first call captures both views via prepare_map_fade_buffers(),
+ *       decodes palette to RGBA, uploads two GL_RGBA8 textures.  Sets a pending-step
+ *       flag so EndFrame() can call RenderGPUComposePass() to composite the wipe at
+ *       native resolution using MAP_FADE_FRAG_SHADER (UV-warp + additive RGB blend).
  */
 /******************************************************************************/
 #ifndef IMAP_FADE_PASS_H
@@ -45,6 +48,17 @@ public:
     virtual long StepFadeOut(long step) = 0;
 
     virtual const char* GetName() const = 0;
+
+    /** Returns true when this pass wants to render a fullscreen wipe quad at
+     *  EndFrame() time (after the staging palette blit).  The software
+     *  implementation always returns false — it writes directly to WScreen.
+     *  GLMapFadePass returns true after CaptureAndUploadFrames() succeeds. */
+    virtual bool HasGPUComposePass() const { return false; }
+
+    /** Called by RendererOpenGL::EndFrame() when HasGPUComposePass() is true.
+     *  Renders the wipe quad using the pending step value set during the most
+     *  recent StepFadeIn / StepFadeOut call.  No-op by default. */
+    virtual void RenderGPUComposePass() {}
 };
 
 /******************************************************************************/

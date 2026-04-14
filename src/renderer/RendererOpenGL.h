@@ -46,6 +46,13 @@ public:
     const char* GetName() const override;
     bool     SupportsRuntimeSwitch() const override;
 
+    /** GPU raw-image blit — queues a frontend background image for opaque
+     *  palette-decoded rendering at EndFrame() time.  No WScreen write occurs.
+     *  Returns true unconditionally when the shader is compiled; false only
+     *  when called before Init() completes (programming error). */
+    bool BlitRaw8GPU(int dst_width, int dst_height, int dst_x, int dst_y,
+                     const unsigned char* src_buf, int src_width, int src_height) override;
+
     // Sub-renderer access
     IWorldViewRenderer* GetWorldViewRenderer() override;
     IMapFadePass* GetMapFadePass() override;
@@ -103,6 +110,23 @@ private:
     // block_ptrs[TEXTURE_BLOCKS_STAT_COUNT_A] changes exactly when
     // update_animating_texture_maps() advances the animation counter.
     const uint8_t* m_last_anim_sentinel = nullptr;
+
+    // ── Raw-image GPU blit (Phase A frontend GPU path) ────────────────────
+    // Queued by BlitRaw8GPU(); executed once at EndFrame() before the staging
+    // blit so the opaque background composites beneath sprite overlays.
+    struct RawBlitCmd {
+        const uint8_t* src_buf = nullptr;
+        int src_w = 0, src_h = 0;
+        int dst_x = 0, dst_y = 0, dst_w = 0, dst_h = 0;
+    };
+    bool              m_rawblit_pending  = false;
+    RawBlitCmd        m_rawblit_cmd      = {};
+    unsigned int      m_rawblit_shader   = 0;  // palette_blit_vert + rawimage_blit_frag
+    unsigned int      m_rawblit_vao      = 0;
+    unsigned int      m_rawblit_vbo      = 0;  // GL_DYNAMIC_DRAW — updated per blit
+    unsigned int      m_rawblit_tex      = 0;  // GL_R8 — source image indices
+    int               m_rawblit_tex_w    = 0;  // current texture dimensions
+    int               m_rawblit_tex_h    = 0;
 };
 
 /******************************************************************************/

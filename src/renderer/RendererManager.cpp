@@ -19,6 +19,7 @@
 #  include "renderer/opengl/GLTileAtlas.h"
 #  include "renderer/opengl/GLSpriteAtlas.h"
 #  include "renderer/opengl/GLWorldViewRenderer.h"
+#  include "renderer/opengl/GLMapFadePass.h"
 #  include "renderer/opengl/GLTextRenderer.h"
 #  include "renderer/opengl/GLUIRenderer.h"
 #endif
@@ -243,7 +244,11 @@ static IWorldViewRenderer* create_world_view_renderer(RendererType type)
 /** Allocates the appropriate IMapFadePass for the given renderer type. */
 static IMapFadePass* create_map_fade_pass(RendererType type)
 {
-    (void)type; // reserved for future GPU dispatch
+#ifdef RENDERER_OPENGL_ENABLED
+    if (type == RENDERER_OPENGL)
+        return new GLMapFadePass();
+#endif
+    (void)type;
     return new SoftwareMapFadePass();
 }
 
@@ -740,6 +745,16 @@ extern "C" TbBool copy_raw8_image_buffer(
 TbBool RendererBlitRaw8(int dst_width, int dst_height, int dst_x, int dst_y,
                         const unsigned char* src_buf, int src_width, int src_height)
 {
+    // Prefer the GPU path: in OpenGL mode BlitRaw8GPU queues an opaque palette-decoded
+    // quad so the source image bypasses the staging buffer entirely.
+    // No CPU fallback is permitted when the GPU path is active — returning false
+    // from BlitRaw8GPU in GL mode is a fatal misconfiguration (ERRORLOG inside).
+    IRenderer* rend = RendererGetActive();
+    if (rend && rend->BlitRaw8GPU(dst_width, dst_height, dst_x, dst_y,
+                                   src_buf, src_width, src_height))
+        return true;
+
+    // Software renderer (or GPU path unavailable): write to the CPU framebuffer.
     return copy_raw8_image_buffer(
         lbDisplay.WScreen,
         LbGraphicsScreenWidth(), LbGraphicsScreenHeight(),
@@ -755,6 +770,36 @@ void UIRenderer_SubmitSlabSelector(int x1, int y1, int x2, int y2, unsigned char
 {
     if (s_uiRenderer)
         s_uiRenderer->SubmitSlabSelector(x1, y1, x2, y2, color, z_depth);
+}
+
+void UIRenderer_BeginWorldDepth(float ndc_z)
+{
+    if (s_uiRenderer)
+        s_uiRenderer->SetWorldDepth(ndc_z);
+}
+
+void UIRenderer_EndWorldDepth(void)
+{
+    if (s_uiRenderer)
+        s_uiRenderer->ClearWorldDepth();
+}
+
+void UIRenderer_BeginTopOverlay(void)
+{
+    if (s_uiRenderer)
+        s_uiRenderer->SetTopOverlay();
+}
+
+void UIRenderer_EndTopOverlay(void)
+{
+    if (s_uiRenderer)
+        s_uiRenderer->ClearTopOverlay();
+}
+
+void UIRenderer_FlushHandSprites(void)
+{
+    if (s_uiRenderer)
+        s_uiRenderer->FlushHandSprites();
 }
 
 void UIRenderer_SubmitKeeperSprite(short x, short y, unsigned short kspr_base,

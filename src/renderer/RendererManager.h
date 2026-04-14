@@ -218,6 +218,31 @@ TbBool RendererBlitRaw8(int dst_width, int dst_height, int dst_x, int dst_y,
 struct Thing;
 
 void UIRenderer_SubmitSlabSelector(int x1, int y1, int x2, int y2, unsigned char color, float z_depth);
+
+/** Begin a world-depth-tested submission batch.  All UIRenderer_Submit* calls
+ *  issued between this and UIRenderer_EndWorldDepth() are tagged with ndc_z
+ *  ([-1,1]) and rendered with GL depth-test ON against the tile depth buffer,
+ *  so non-spatial world elements (status flowers, room flags, etc.) are
+ *  correctly occluded by walls in front of them.
+ *  No-op when no renderer is active. */
+void UIRenderer_BeginWorldDepth(float ndc_z);
+
+/** End the world-depth-tested batch started by UIRenderer_BeginWorldDepth(). */
+void UIRenderer_EndWorldDepth(void);
+
+/** Begin a top-overlay batch: subsequent submissions are drawn dead-last,
+ *  on top of all other UI and world-depth elements (depth test OFF).
+ *  Use for cursor-driven affordances (slab selector) that must never be
+ *  obscured by room flags, status flowers or any other world element. */
+void UIRenderer_BeginTopOverlay(void);
+
+/** End the top-overlay batch. */
+void UIRenderer_EndTopOverlay(void);
+
+/** Flush deferred keeper-hand / cursor sprites.  Call this AFTER
+ *  TextRenderer_Flush() so the cursor always composites above all text. */
+void UIRenderer_FlushHandSprites(void);
+
 /** Submit a power-hand keeper sprite; deferred in OpenGL mode until after glClear(). */
 void UIRenderer_SubmitKeeperSprite(short x, short y, unsigned short kspr_base,
                                    short kspr_angle, unsigned char sprgroup, long scale);

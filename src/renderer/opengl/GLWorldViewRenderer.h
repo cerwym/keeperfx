@@ -145,6 +145,7 @@ private:
         int              sprite_h;      // decoded sprite height
         bool             x_flip;        // true when silhouette needs horizontal flip
         float            darkness;      // 1.0 - (color_value / 32.0); used as src_alpha for multiply-blend
+        float            ndc_z;          // NDC depth of shadow's floor bucket, used for depth testing
     };
 
     // Per-world-text data recorded during FlushIsometricView, consumed by GPUFlushNow
@@ -208,6 +209,7 @@ private:
     GLint  m_loc_lighting_mode = -1;  // u_lighting_mode (0=software-accurate, 1=modern)
     GLint  m_loc_lightmap      = -1;  // usampler2D u_lightmap (unit 2)
     GLint  m_loc_tile_filter   = -1;  // u_tile_filter (0=nearest, 1=palette-correct bilinear)
+    GLint  m_loc_missing_tile  = -1;  // u_missing_tile — diagnostic checkerboard when atlas absent
     int    m_tile_filter_applied = -1; // last GL filter mode applied; -1 = force re-apply on next flush
     // Lightmap texture (unit 2): mirrors game.lish.subtile_lightness[] as GL_R16UI
     GLuint m_tex_lightmap      = 0;
@@ -216,6 +218,7 @@ private:
     GLint  m_shadow_loc_viewport   = -1;
     GLint  m_shadow_loc_darkness   = -1;
     GLint  m_shadow_loc_silhouette = -1;
+    GLint  m_shadow_loc_ndc_z      = -1;
 
     // Keeper-sprite uniform locations
     GLint  m_kspr_loc_viewport = -1;

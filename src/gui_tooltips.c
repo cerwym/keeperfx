@@ -44,6 +44,7 @@
 #include "game_legacy.h"
 #include "local_camera.h"
 #include "keeperfx.hpp"
+#include "renderer/RendererManager.h"
 #include "post_inc.h"
 #include <math.h>
 
@@ -634,7 +635,9 @@ void draw_tooltip(void)
           long y_offset = scale_ui_value(86);
           tool_tip_box.pos_y = GetMouseY() + y_offset;
         }
+        UIRenderer_BeginTopOverlay();
         draw_tooltip_at(tool_tip_box.pos_x,tool_tip_box.pos_y,tool_tip_box.text);
+        UIRenderer_EndTopOverlay();
     }
     LbTextSetWindow(0/pixel_size, 0/pixel_size, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
 }

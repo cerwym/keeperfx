@@ -192,13 +192,14 @@ constexpr const char* SHADOW_VERTEX_SHADER = R"glsl(
 layout(location = 0) in vec2 a_pos;
 layout(location = 1) in vec2 a_uv;
 uniform vec2 u_viewport;
+uniform float u_ndc_z;     // NDC depth from the shadow's floor bucket
 out vec2 v_uv;
 void main()
 {
     vec2 ndc;
     ndc.x = a_pos.x / u_viewport.x * 2.0 - 1.0;
     ndc.y = 1.0 - a_pos.y / u_viewport.y * 2.0;
-    gl_Position = vec4(ndc, 0.0, 1.0);
+    gl_Position = vec4(ndc, u_ndc_z, 1.0);
     v_uv = a_uv;
 }
 )glsl";
@@ -251,10 +252,22 @@ uniform float      u_ambient;           // darkness floor added to shade [0,1]
 uniform float      u_shade_scale;       // brightness multiplier (1.0=original)
 uniform float      u_shade_gamma;       // shade curve exponent  (1.0=linear)
 uniform int        u_lighting_mode;     // 0=software-accurate, 1=modern (Phase 3+)
-uniform int        u_tile_filter;        // 0=nearest, 1=palette-correct bilinear
+uniform int        u_tile_filter;       // 0=nearest, 1=palette-correct bilinear
+uniform float      u_missing_tile;      // 1.0 = no valid atlas bound — show diagnostic
 out vec4 fragColor;
 void main()
 {
+    // When the tile atlas slot is missing (atlas not yet loaded or variation out of
+    // range), show a magenta/black checkerboard so the problem is immediately visible
+    // rather than a silent black tile.
+    if (u_missing_tile > 0.5)
+    {
+        ivec2 cell = ivec2(gl_FragCoord.xy / 8.0);
+        fragColor  = ((cell.x + cell.y) & 1) == 0
+                     ? vec4(1.0, 0.0, 1.0, 1.0)  // magenta
+                     : vec4(0.0, 0.0, 0.0, 1.0);  // black
+        return;
+    }
     // Sampling the R8 atlas with GL_LINEAR would interpolate palette *indices*,
     // producing wrong colours.  For bilinear mode we instead manually sample the
     // 4 neighbouring texels (GL_NEAREST), look each up in the palette, then lerp
@@ -321,6 +334,27 @@ out vec4 fragColor;
 void main()
 {
     fragColor = vec4(v_color, 1.0);
+}
+)glsl";
+
+// Raw-image blit fragment shader.
+// Used by RendererOpenGL::BlitRaw8GPU() for frontend background images
+// (legal screen, loading screen, menu background, map background, etc.).
+// Unlike the staging-buffer palette blit, all pixels are fully opaque —
+// palette index 0 is treated as a normal colour, not transparency.
+// The vertex shader is shared with the staging blit (PALETTE_BLIT_VERTEX_SHADER).
+constexpr const char* RAWIMAGE_BLIT_FRAGMENT_SHADER = R"glsl(
+#version 330 core
+in  vec2 v_uv;
+out vec4 fragColor;
+uniform sampler2D u_index;    // R8  — 8-bit palette indices (raw image)
+uniform sampler1D u_palette;  // RGBA8 — 256-entry palette (same as staging blit)
+void main()
+{
+    float idx = texture(u_index, v_uv).r;
+    vec4  pal = texture(u_palette, idx);
+    // Always opaque: raw background images fill the entire rect.
+    fragColor  = vec4(pal.rgb, 1.0);
 }
 )glsl";
 
@@ -435,5 +469,83 @@ void main()
     float remapped_f = texture(u_fade_table, vec2(idx_f, remap_y)).r;
     vec4 pal = texture(u_palette, remapped_f);
     fragColor = vec4(pal.rgb * v_color.rgb, v_color.a);
+}
+)glsl";
+
+// ── Map Fade Transition shaders ───────────────────────────────────────────────
+// Full-screen wipe between the parchment overhead map and the 3D game view.
+// u_parchment = tex unit 0  — decoded RGBA snapshot of the parchment view.
+// u_world     = tex unit 1  — decoded RGBA snapshot of the 3D world view.
+// u_step      = 0.0 (full parchment) → 32.0 (full 3D world) for fade-in;
+//               reversed for fade-out.
+//
+// The warp math is a faithful GLSL port of map_fade() in engine_redraw.c:
+//   • Both source images are UV-warped by functions of step and screen position
+//     that create the original elastic "pinch from centre" distortion.
+//   • Each image is multiplied by a fade factor (parchment dims, world brightens)
+//     matching the original fade_tbl rows used in the CPU path.
+//   • The two contributions are added and clamped, reproducing the ghost-table
+//     additive-mix in palette space at full RGBA precision.
+//
+// UV convention:
+//   v_uv from the vertex shader:  (0,0)=bottom-left, (1,1)=top-right (GL default).
+//   CPU image rows:                row 0 = top of image → texture y = 1 after upload.
+//   Warp computations use fy_cpu = 1-v_uv.y so (0)=top and (1)=bottom matches the
+//   CPU loop direction; sample UVs flip back to GL convention before texture().
+constexpr const char* MAP_FADE_VERT_SHADER = R"glsl(
+#version 330 core
+layout(location = 0) in vec2 a_pos;
+out vec2 v_uv;
+void main()
+{
+    gl_Position = vec4(a_pos, 0.0, 1.0);
+    v_uv = a_pos * 0.5 + 0.5;
+}
+)glsl";
+
+constexpr const char* MAP_FADE_FRAG_SHADER = R"glsl(
+#version 330 core
+in vec2 v_uv;
+uniform sampler2D u_parchment; // unit 0 — parchment RGBA snapshot
+uniform sampler2D u_world;     // unit 1 — 3D world RGBA snapshot
+uniform float u_step;          // 0.0..32.0
+out vec4 fragColor;
+
+void main()
+{
+    float a6 = u_step;
+    // Screen-space UV where y=0 is bottom, y=1 is top.
+    float fx = v_uv.x;
+    // Convert to CPU-image row fraction: 0=top row, 1=bottom row.
+    float fy = 1.0 - v_uv.y;
+
+    // Original xmax=320 is the scale base for the warp constants.
+    const float xmax = 320.0;
+
+    // ── Parchment (srcbuf1) warp — dims as step increases ──────────────────
+    // Matches: xt[0] = clamp(4*(32-a6) + ix*(xmax-8*(32-a6))/xmax, 0, xmax)
+    //          yt[0] as xmax row-offset scaled by ymax/xmax
+    float wp = 32.0 - a6;
+    float uv_px = clamp(fx + wp * (4.0 - 8.0 * fx) / xmax, 0.0, 1.0);
+    float uv_py = clamp(fy + wp * 4.0 * (1.0 - 2.0 * fy) / xmax, 0.0, 1.0);
+
+    // ── World (srcbuf2) warp — brightens as step increases ─────────────────
+    float ww = a6;
+    float uv_wx = clamp(fx + ww * (4.0 - 8.0 * fx) / xmax, 0.0, 1.0);
+    float uv_wy = clamp(fy + ww * 4.0 * (1.0 - 2.0 * fy) / xmax, 0.0, 1.0);
+
+    // Convert warp outputs back to GL texture convention (y flipped).
+    float samp_py = 1.0 - uv_py;
+    float samp_wy = 1.0 - uv_wy;
+
+    // Fade factors matching fade_tbl rows: x0base=(32-a6)<<8, y0base=a6<<8.
+    float f_parch = wp  / 32.0;   // parchment: 1→0
+    float f_world = ww  / 32.0;   // 3D world:  0→1
+
+    vec3 c_parch = texture(u_parchment, vec2(uv_px, samp_py)).rgb * f_parch;
+    vec3 c_world = texture(u_world,     vec2(uv_wx, samp_wy)).rgb * f_world;
+
+    // Ghost-table equivalent: additive blend of two faded contributions.
+    fragColor = vec4(clamp(c_parch + c_world, 0.0, 1.0), 1.0);
 }
 )glsl";

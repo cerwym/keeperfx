@@ -452,14 +452,50 @@ void GLUIRenderer::FlushFront()
     // Flush slab-selector lines and other line geometry (front layer).
     FlushLines(1);
 
+    // Flush world-depth-tagged elements (layer 2) — these are non-spatial sprites
+    // (status flowers, room flags, slab selectors, floating numbers) submitted via
+    // SetWorldDepth()/ClearWorldDepth() during draw_nonspatial_sprites_gpu().  They
+    // carry an NDC z matching their bucket depth, so the existing tile depth buffer
+    // will correctly occlude anything behind a wall.
+    {
+        bool has_layer2_quads = false;
+        for (const auto& q : m_ui_quads) if (q.layer == 2) { has_layer2_quads = true; break; }
+        bool has_layer2_lines = false;
+        for (const auto& l : m_ui_lines) if (l.layer == 2) { has_layer2_lines = true; break; }
+        bool has_layer2_remap = false;
+        for (const auto& r : m_remap_quads) if (r.layer == 2) { has_layer2_remap = true; break; }
+        if (has_layer2_quads || has_layer2_lines || has_layer2_remap)
+        {
+            glEnable(GL_DEPTH_TEST);
+            glDepthFunc(GL_LEQUAL);
+            glDepthMask(GL_FALSE);  // read depth only — don't overwrite world geometry depth
+            FlushQuads(2);
+            FlushRemapQuads(2);
+            FlushLines(2);
+            glDepthMask(GL_TRUE);
+            glDisable(GL_DEPTH_TEST);
+        }
+    }
+
+    // Layer 3: top-overlay — cursor-driven affordances (slab selector) drawn dead-last,
+    // depth test OFF, so they are never obscured by any world or UI element.
+    FlushQuads(3);
+    FlushRemapQuads(3);
+    FlushLines(3);
+
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
     glUseProgram(0);
+}
 
-    // Drain deferred hand sprites LAST — the cursor must appear above all other
-    // UI elements including escape menus, minimap, and status icons.
+void GLUIRenderer::FlushHandSprites()
+{
+    // Drain deferred hand / cursor keeper-sprites.  Called from EndFrame AFTER
+    // TextRenderer_Flush() so the cursor always appears above all text.
     if (!m_pending_hand_sprites.empty() && m_world_view_renderer)
     {
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         m_world_view_renderer->BeginHandSpriteRendering();
         unsigned int  saved_flags = lbDisplay.DrawFlags;
         unsigned char saved_alpha = EngineSpriteDrawUsingAlpha;
@@ -474,6 +510,7 @@ void GLUIRenderer::FlushFront()
         EngineSpriteDrawUsingAlpha = saved_alpha;
         m_world_view_renderer->EndHandSpriteRendering();
         m_pending_hand_sprites.clear();
+        glDisable(GL_BLEND);
     }
 }
 
@@ -913,12 +950,38 @@ void GLUIRenderer::SubmitQuad(float x, float y, float w, float h, float u0, floa
     quad.g = g;
     quad.b = b;
     quad.a = a;
-    quad.z = z;
+    quad.z = m_world_depth_active ? m_world_z : z;
     quad.mode = mode;
     quad.texture_id = texture_id;
-    quad.layer = static_cast<uint8_t>(m_current_layer);
+    if (m_top_overlay_active)
+        quad.layer = 3;
+    else if (m_world_depth_active)
+        quad.layer = 2;
+    else
+        quad.layer = static_cast<uint8_t>(m_current_layer);
     
     m_ui_quads.push_back(quad);
+}
+
+void GLUIRenderer::SetWorldDepth(float ndc_z)
+{
+    m_world_z            = ndc_z;
+    m_world_depth_active = true;
+}
+
+void GLUIRenderer::ClearWorldDepth()
+{
+    m_world_depth_active = false;
+}
+
+void GLUIRenderer::SetTopOverlay()
+{
+    m_top_overlay_active = true;
+}
+
+void GLUIRenderer::ClearTopOverlay()
+{
+    m_top_overlay_active = false;
 }
 
 void GLUIRenderer::SubmitLine(float x1, float y1, float x2, float y2, float r, float g, float b, float a, 
@@ -933,9 +996,14 @@ void GLUIRenderer::SubmitLine(float x1, float y1, float x2, float y2, float r, f
     line.g = g;
     line.b = b;
     line.a = a;
-    line.z = z;
+    line.z = m_world_depth_active ? m_world_z : z;
     line.thickness = thickness;
-    line.layer = static_cast<uint8_t>(m_current_layer);
+    if (m_top_overlay_active)
+        line.layer = 3;
+    else if (m_world_depth_active)
+        line.layer = 2;
+    else
+        line.layer = static_cast<uint8_t>(m_current_layer);
     
     m_ui_lines.push_back(line);
 }

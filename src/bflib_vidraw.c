@@ -1617,6 +1617,12 @@ int LbSpriteDrawScaledRemap(long xpos, long ypos, const struct TbSprite *sprite,
     SYNCDBG(19,"At (%ld,%ld) size (%ld,%ld)",xpos,ypos,dest_width,dest_height);
     if ((dest_width <= 0) || (dest_height <= 0))
       return 1;
+    if (g_render_pass_active && !lb_in_sprite_submit) {
+        lb_in_sprite_submit = 1;
+        TbResult ret = RenderPass_SubmitSpriteRemap(xpos, ypos, sprite, cmap, lbDisplay.DrawFlags);
+        lb_in_sprite_submit = 0;
+        return ret;
+    }
     if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLNSHADOW) != 0)
         lbSpriteReMapPtr = lbDisplay.FadeTable + ((lbDisplay.FadeStep & 0x3F) << 8);
     LbSpriteSetScalingData(xpos, ypos, sprite->SWidth, sprite->SHeight, dest_width, dest_height);

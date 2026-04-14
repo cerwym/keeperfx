@@ -175,12 +175,14 @@ bool GLWorldViewRenderer::init_gl_resources()
     m_loc_shade_gamma   = glGetUniformLocation(m_shader, "u_shade_gamma");
     m_loc_lighting_mode = glGetUniformLocation(m_shader, "u_lighting_mode");
     m_loc_lightmap      = glGetUniformLocation(m_shader, "u_lightmap");
+    m_loc_missing_tile  = glGetUniformLocation(m_shader, "u_missing_tile");
     glUniform1f(m_loc_fullbright,    0.0f);
     glUniform1f(m_loc_ambient,       0.0f);
     glUniform1f(m_loc_shade_scale,   1.0f);
     glUniform1f(m_loc_shade_gamma,   1.0f);
     glUniform1i(m_loc_lighting_mode, RENDERER_LIGHTING_SOFTWARE);
     glUniform1i(m_loc_lightmap,      2);  // GL_TEXTURE2
+    glUniform1f(m_loc_missing_tile,  0.0f);
     m_tile_filter_applied = -1;  // force apply on first flush
     glUseProgram(0);
 
@@ -338,6 +340,7 @@ bool GLWorldViewRenderer::init_shadow_shader()
     m_shadow_loc_viewport   = glGetUniformLocation(m_shadow_shader, "u_viewport");
     m_shadow_loc_darkness   = glGetUniformLocation(m_shadow_shader, "u_darkness");
     m_shadow_loc_silhouette = glGetUniformLocation(m_shadow_shader, "u_silhouette");
+    m_shadow_loc_ndc_z      = glGetUniformLocation(m_shadow_shader, "u_ndc_z");
     glUniform1i(m_shadow_loc_silhouette, 0); // GL_TEXTURE0
     glUseProgram(0);
 
@@ -820,15 +823,6 @@ void GLWorldViewRenderer::BeginWorldPass(unsigned char* framebuf, int pitch,
             WARNLOG("GLWorldViewRenderer: tile atlas not yet ready on BeginWorldPass");
     }
 
-    // Zero the viewport area in the CPU staging buffer so palette index 0
-    // acts as transparent in the compositing blit, letting GPU-rendered tiles
-    // show through.
-    //
-    // Always zero when the GPU renderer is initialized — even if the tile atlas
-    // hasn't loaded yet.  This prevents stale CPU pixels from previous frames
-    // (creature-view lens effect, front-view rasterisation, swipe graphic) from
-    // leaking into the composited output.  If the atlas isn't ready, the GPU
-    // simply draws nothing and the viewport appears as the glClear colour.
     if (framebuf && m_initialized)
     {
         for (int row = 0; row < h; row++)
@@ -1039,6 +1033,7 @@ void GLWorldViewRenderer::GPUFlushNow()
     glUniform1f(m_loc_shade_gamma,   g_renderer_settings.shade_gamma);
     glUniform1i(m_loc_lighting_mode, g_renderer_settings.lighting_mode);
     // Keep m_shader bound — pass 1 (tiles) draws with it immediately below.
+    // glUseProgram(0) will fuck up flat-poly draws in pass 1, and the flat-poly shader is only used in pass 2 after all tiles are drawn, so we can defer binding it until then.    
 
     // Upload lightmap (game.lish.subtile_lightness[]) to GL_TEXTURE2.
     // Uploaded every frame so dynamic lighting changes (torches, spells) are
@@ -1071,6 +1066,11 @@ void GLWorldViewRenderer::GPUFlushNow()
                                    : 0;
                 glActiveTexture(GL_TEXTURE0);
                 glBindTexture(GL_TEXTURE_2D, atlas_tex);
+                // When no valid atlas texture is bound the shader would silently
+                // output black tiles (palette[0]).  Set the diagnostic flag so the
+                // fragment shader renders a magenta/black checkerboard instead,
+                // making the missing variation immediately visible.
+                glUniform1f(m_loc_missing_tile, (atlas_tex == 0) ? 1.0f : 0.0f);
                 bound_variation = cmd.variation;
                 // Apply tile filter when the setting has changed.
                 int wanted_filter = g_renderer_settings.tile_filter;
@@ -1121,8 +1121,10 @@ void GLWorldViewRenderer::GPUFlushNow()
     // ── Pass 2: Creature shadows ─────────────────────────────────────────────
     // Shadows are floor-projected quads that multiply-darken the tiles beneath
     // creatures.  Running them after ALL opaque tiles (pass 1) ensures no
-    // subsequent tile draw can overwrite the darkened pixels.  Depth testing is
-    // disabled — shadows are always on the floor plane and don't occlude anything.
+    // subsequent tile draw can overwrite the darkened pixels.
+    // Depth testing is ENABLED (GL_LEQUAL, no depth write) so that columns and
+    // walls correctly occlude shadows — the floor z-values written in pass 1
+    // pass the test, while column face z-values are closer and fail it.
     for (const auto& cmd : m_draw_cmds)
     {
         if (cmd.type != DrawCmd::CMD_SHADOWS) continue;
@@ -1168,16 +1170,18 @@ void GLWorldViewRenderer::GPUFlushNow()
         glUseProgram(m_shadow_shader);
         glUniform2f(m_shadow_loc_viewport, (float)m_screen_w, (float)m_screen_h);
         glUniform1f(m_shadow_loc_darkness, sc.darkness);
+        glUniform1f(m_shadow_loc_ndc_z,    sc.ndc_z);
 
         glDepthMask(GL_FALSE);
-        glDisable(GL_DEPTH_TEST);
+        glEnable(GL_DEPTH_TEST);
+        glDepthFunc(GL_LEQUAL);
         glEnable(GL_BLEND);
         glBlendFunc(GL_ZERO, GL_ONE_MINUS_SRC_ALPHA);
 
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
         glDisable(GL_BLEND);
-        glEnable(GL_DEPTH_TEST);
+        glDepthFunc(GL_LEQUAL);  // restore (matches tile-pass default)
         glDepthMask(GL_TRUE);
         KFX_GL_POP();
     }
@@ -1446,6 +1450,7 @@ void GLWorldViewRenderer::FlushIsometricView()
                     // vertex_first.S holds dist_sq (range 16..31) set by create_shadows().
                     // color_value is a separate field that create_shadows() never populates.
                     sc.darkness     = 1.0f - (float)s->vertex_first.S / 32.0f;
+                    sc.ndc_z        = 2.0f * (float)bi / (float)(BUCKETS_COUNT - 1) - 1.0f;
                     DrawCmd cmd;
                     cmd.type       = DrawCmd::CMD_SHADOWS;
                     cmd.shadow_idx = (int)m_shadow_cmds.size();

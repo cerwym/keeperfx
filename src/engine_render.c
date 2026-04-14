@@ -6778,7 +6778,12 @@ void draw_nonspatial_sprites_gpu(void)
 
     for (bucket_num = BUCKETS_COUNT-1; bucket_num > 0; bucket_num--)
     {
-        // Convert bucket Z to normalized depth for GPU rendering
+        // NDC z for this bucket — matches the formula used by the world tile/sprite pass
+        // so depth-test comparisons against the tile z-buffer are valid.
+        float ndc_z = 2.0f * (float)bucket_num / (float)(BUCKETS_COUNT - 1) - 1.0f;
+
+        // z_depth (0..1 range) is kept for the slab-selector UIRenderer API which
+        // requires it; the actual depth testing uses ndc_z above.
         float z_depth = (float)(bucket_num * BUCKETS_STEP) / (float)Z_DRAW_DISTANCE_MAX;
 
         for (item.b = buckets[bucket_num]; item.b != NULL; item.b = item.b->next)
@@ -6786,6 +6791,9 @@ void draw_nonspatial_sprites_gpu(void)
             switch (item.b->kind)
             {
             case QK_SlabSelector:
+                // Top-overlay: the selector is a cursor-driven affordance that must
+                // always be on top of everything — room flags, status flowers, all UI.
+                UIRenderer_BeginTopOverlay();
                 UIRenderer_SubmitSlabSelector(
                     item.slabSelector->p.X + vp_x,
                     item.slabSelector->p.Y + vp_y,
@@ -6793,21 +6801,31 @@ void draw_nonspatial_sprites_gpu(void)
                     item.slabSelector->p.V + vp_y,
                     item.slabSelector->p.S,
                     z_depth);
+                UIRenderer_EndTopOverlay();
                 break;
             case QK_CreatureStatus:
+                UIRenderer_BeginWorldDepth(ndc_z);
                 draw_status_sprites(
                     item.creatureStatus->x + vp_x,
                     item.creatureStatus->y + vp_y,
                     item.creatureStatus->thing);
+                UIRenderer_EndWorldDepth();
                 break;
             case QK_FloatingGoldText:
                 item.floatingGoldText->x += vp_x;
                 item.floatingGoldText->y += vp_y;
+                UIRenderer_BeginWorldDepth(ndc_z);
                 draw_engine_number(item.floatingGoldText);
+                UIRenderer_EndWorldDepth();
                 break;
             case QK_RoomFlagBottomPole:
                 item.roomFlag->x += vp_x;
                 item.roomFlag->y += vp_y;
+                // Room flags are world-positioned but must not be occluded by
+                // flat-poly placement previews drawn in GPUFlushNow.  Render
+                // without depth test (layer 1) so they always appear above
+                // world geometry.  Creature status (health flowers) keeps depth
+                // testing because occlusion-by-wall is intentional there.
                 draw_engine_room_flagpole(item.roomFlag);
                 break;
             case QK_RoomFlagStatusBox:

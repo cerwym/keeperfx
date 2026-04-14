@@ -50,9 +50,14 @@ void smooth_screen_area(unsigned char *a1, long a2, long a3, long a4, long a5, l
 
 int get_place_terrain_pointer_graphics(SlabKind skind);
 
-/** Map-fade transition steps — called by SoftwareMapFadePass. */
+/** Map-fade transition steps — called by SoftwareMapFadePass / GLMapFadePass. */
 long map_fade_in(long step);
 long map_fade_out(long step);
+
+/** Renders both the 3D-world view and the parchment view into CPU buffers.
+ *  Used by SoftwareMapFadePass on step 0/32, and by GLMapFadePass to decode
+ *  both frames to RGBA for GPU texture upload. */
+void prepare_map_fade_buffers(unsigned char *fade_src, unsigned char *fade_dest, int scanline, int height);
 /******************************************************************************/
 #ifdef __cplusplus
 }

@@ -297,7 +297,8 @@ TbBool GLTextRenderer::DrawTextResized(int32_t posx, int32_t posy, int32_t units
                           m_justify_window.x, m_justify_window.y, m_justify_window.width,
                           m_clip_window.x, m_clip_window.y, m_clip_window.width, m_clip_window.height,
                           lbDisplay.DrawColour, lbDisplay.DrawFlags,
-                          text, m_font,
+                          text,
+                          m_font,
                           m_dbc_font, m_dbc_colour0, m_dbc_colour1, m_dbc_enabled });
     return true;
 }

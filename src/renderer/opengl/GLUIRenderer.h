@@ -104,6 +104,11 @@ public:
     virtual uint8_t* AcquireMinimapBuffer(int size) override;
     virtual void SubmitMinimap(int screen_x, int screen_y, int size) override;
     virtual void SetLayer(int layer) override;
+    virtual void SetWorldDepth(float ndc_z) override;
+    virtual void ClearWorldDepth() override;
+    virtual void SetTopOverlay() override;
+    virtual void ClearTopOverlay() override;
+    virtual void FlushHandSprites() override;
     virtual void FlushBack() override;
     virtual void FlushFront() override;
     virtual void Flush() override;
@@ -206,9 +211,13 @@ private:
     int      m_minimap_size;
     bool     m_minimap_pending;
     
-    // Current render layer: 0=back (before staging blit), 1=front (after staging blit).
-    // Set by SetLayer(); reset to 1 each Clear().
-    int m_current_layer = 1;
+    // Current render layer: 0=back (before staging blit), 1=front (after staging blit),
+    // 2=world-depth (after GPUFlushNow, depth test ON against tile depth buffer).
+    // Set by SetLayer()/SetWorldDepth(); reset to 1 each Clear().
+    int   m_current_layer       = 1;
+    float m_world_z             = 0.0f;  // NDC z for active world-depth batch
+    bool  m_world_depth_active  = false; // when true, SubmitQuad/SubmitLine use layer=2, z=m_world_z
+    bool  m_top_overlay_active  = false; // when true, SubmitQuad/SubmitLine use layer=3 (drawn last, depth-test OFF)
 
     // Internal methods
     bool CreateShaders();

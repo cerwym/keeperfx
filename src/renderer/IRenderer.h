@@ -91,6 +91,35 @@ public:
     /** Releases the framebuffer lock obtained via LockFramebuffer(). */
     virtual void UnlockFramebuffer() = 0;
 
+    /** Blit a scaled RAW 8-bit paletted image to the GPU framebuffer.
+     *
+     *  GPU backends (OpenGL) queue the blit: the source pixels are uploaded
+     *  as a GL_R8 texture and decoded via the current palette at EndFrame()
+     *  time. The image is drawn as an opaque quad covering exactly the
+     *  destination rectangle — index 0 is NOT transparent here.
+     *
+     *  Software backends return false (the caller then writes to WScreen
+     *  via copy_raw8_image_buffer).
+     *
+     *  In OpenGL mode returning false is a fatal misconfiguration — there
+     *  must be no CPU-staging fallback for GPU frontend rendering paths.
+     *
+     *  @param dst_width   Width of the destination rect in screen pixels.
+     *  @param dst_height  Height of the destination rect in screen pixels.
+     *  @param dst_x       Left edge of the destination rect in screen pixels.
+     *  @param dst_y       Top edge of the destination rect in screen pixels.
+     *  @param src_buf     Source 8-bit indexed image data (row-major).
+     *  @param src_width   Width of the source image in pixels.
+     *  @param src_height  Height of the source image in pixels.
+     *  @return true if the GPU path handled the blit, false otherwise. */
+    virtual bool BlitRaw8GPU(int dst_width, int dst_height, int dst_x, int dst_y,
+                             const unsigned char* src_buf, int src_width, int src_height)
+    {
+        (void)dst_width; (void)dst_height; (void)dst_x; (void)dst_y;
+        (void)src_buf; (void)src_width; (void)src_height;
+        return false;
+    }
+
     // -------------------------------------------------------------------------
     // Metadata
 

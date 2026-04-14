@@ -163,6 +163,28 @@ public:
     /** Set the active render layer (0=back, 1=front).  CPU default: no-op. */
     virtual void SetLayer(int /*layer*/) { }
 
+    /** Begin a world-depth-tested batch: subsequent submissions are tagged with
+     *  ndc_z (in [-1,1]) and rendered with GL depth-test ON so they are occluded
+     *  by world geometry drawn earlier this frame.  CPU default: no-op. */
+    virtual void SetWorldDepth(float /*ndc_z*/) { }
+
+    /** End a world-depth-tested batch, returning to normal (depth-test OFF) rendering. */
+    virtual void ClearWorldDepth() { }
+
+    /** Begin a top-overlay batch: subsequent submissions are drawn dead-last in the
+     *  frame, on top of all other UI and world-depth elements (depth test OFF).
+     *  Use for cursor-driven affordances (slab selector) that must never be
+     *  obscured by room flags, status flowers, or any other world element.  CPU default: no-op. */
+    virtual void SetTopOverlay() { }
+
+    /** End the top-overlay batch. */
+    virtual void ClearTopOverlay() { }
+
+    /** Flush deferred keeper-hand / cursor sprites.  Must be called AFTER
+     *  TextRenderer_Flush() so the cursor always composites above all text.
+     *  CPU default: no-op (software renderer draws hand sprites inline). */
+    virtual void FlushHandSprites() { }
+
     /** Flush layer-0 (back) elements before the CPU staging-buffer blit.
      *  CPU default: no-op. */
     virtual void FlushBack() { }
