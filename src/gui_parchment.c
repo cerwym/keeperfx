@@ -950,6 +950,10 @@ void draw_zoom_box(void)
 void redraw_parchment_view(void)
 {
   SYNCDBG(5,"Starting");
+  // Clear the staging buffer so stale pixels from the previous 3D-world frame
+  // don't composite over the GPU-rendered parchment background.
+  if (RendererIsGpuComposited())
+      memset(lbDisplay.WScreen, 0, (size_t)lbDisplay.GraphicsScreenWidth * lbDisplay.GraphicsScreenHeight);
   // Load and draw background
   load_parchment_file();
   draw_map_parchment();
@@ -969,6 +973,8 @@ void redraw_parchment_view(void)
 
 void redraw_minimal_overhead_view(void)
 {
+    if (RendererIsGpuComposited())
+        memset(lbDisplay.WScreen, 0, (size_t)lbDisplay.GraphicsScreenWidth * lbDisplay.GraphicsScreenHeight);
     draw_map_parchment();
     draw_2d_map();
     draw_gui();
