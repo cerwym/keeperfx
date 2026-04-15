@@ -332,17 +332,10 @@ void draw_overhead_map(const struct TbRect *map_area, long block_size, PlayerNum
 {
     if (RendererIsGpuComposited())
     {
-        // Cull to visible screen region: convert screen bounds back to slab indices.
-        long scr_w = MyScreenWidth  / pixel_size;
-        long scr_h = MyScreenHeight / pixel_size;
-        int col_min = (int)max(0L,                (              - map_area->left) / block_size);
-        int col_max = (int)min((long)game.map_tiles_x, (scr_w - map_area->left + block_size - 1) / block_size);
-        int row_min = (int)max(0L,                (              - map_area->top)  / block_size);
-        int row_max = (int)min((long)game.map_tiles_y, (scr_h - map_area->top  + block_size - 1) / block_size);
-        for (int row = row_min; row < row_max; row++)
+        for (int row = 0; row < game.map_tiles_y; row++)
         {
             long stl_y = 1 + row * STL_PER_SLB;
-            for (int col = col_min; col < col_max; col++)
+            for (int col = 0; col < game.map_tiles_x; col++)
             {
                 long stl_x = 1 + col * STL_PER_SLB;
                 struct Map* mapblk = get_map_block_at(stl_x, stl_y);
