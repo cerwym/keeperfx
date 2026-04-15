@@ -169,6 +169,9 @@ static void init_level(void)
     game_flags2 &= (GF2_PERSISTENT_FLAGS | GF2_Timer);
     clear_game();
     reset_heap_manager();
+    // Invalidate the keeper-sprite decode atlas: sprite data pointers are
+    // tied to the heap which is reset above, so cached entries are stale.
+    WorldViewRenderer_ClearKeeperSpriteAtlas();
     lens_mode = 0;
     setup_heap_manager();
 

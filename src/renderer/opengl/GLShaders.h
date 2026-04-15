@@ -101,6 +101,25 @@ void main()
 }
 )glsl";
 
+// Atlas variant: u_sprite is a GL_TEXTURE_2D_ARRAY;
+// u_layer selects the pre-decoded layer for this sprite.
+constexpr const char* KSPR_ARRAY_FRAGMENT_SHADER = R"glsl(
+#version 330 core
+in vec2 v_uv;
+uniform sampler2DArray u_sprite;   // GL_R8 texture array, one layer per unique sprite
+uniform sampler2D      u_palette;  // GL_RGBA8 colour table (256x1)
+uniform float          u_alpha;    // 1.0=solid, 0.5=transpar4, 0.25=transpar8
+uniform float          u_layer;    // layer index in the sprite array
+out vec4 fragColor;
+void main()
+{
+    float idx = texture(u_sprite, vec3(v_uv, u_layer)).r;
+    if (idx < (0.5 / 255.0)) discard;
+    vec4 color = texture(u_palette, vec2(idx, 0.5));
+    fragColor = vec4(color.rgb, u_alpha);
+}
+)glsl";
+
 constexpr const char* KSPR_GLOW_FRAGMENT_SHADER = R"glsl(
 #version 330 core
 in vec2 v_uv;

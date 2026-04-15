@@ -28,6 +28,7 @@ std::string get_embedded_shader_source(const char* shader_name)
         {"text_frag.glsl", TEXT_FRAGMENT_SHADER},
         {"kspr_vert.glsl", KSPR_VERTEX_SHADER},
         {"kspr_frag.glsl", KSPR_FRAGMENT_SHADER},
+        {"kspr_array_frag.glsl", KSPR_ARRAY_FRAGMENT_SHADER},
         {"kspr_glow_frag.glsl", KSPR_GLOW_FRAGMENT_SHADER},
         {"palette_blit_vert.glsl", PALETTE_BLIT_VERTEX_SHADER},
         {"palette_blit_frag.glsl", PALETTE_BLIT_FRAGMENT_SHADER},

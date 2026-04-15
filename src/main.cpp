@@ -898,6 +898,10 @@ short setup_game(void)
   }
   VITA_TICK("load_configuration");
 
+  // Kick off sound bank I/O on a background thread so it overlaps with
+  // the splash screens.  InitAudio() will join it before first use.
+  SoundBanks_StartAsyncLoad();
+
   #ifdef FUNCTESTING
     start_params.startup_flags &= ~SFlg_Legal;
     start_params.startup_flags &= ~SFlg_FX;

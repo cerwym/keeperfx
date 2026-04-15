@@ -25,6 +25,7 @@
 
 #include <glad/glad.h>
 #include <vector>
+#include <unordered_map>
 #include "renderer/IWorldViewRenderer.h"
 #include "renderer/WorldVertex.h"
 #include "bflib_render.h"   // PolyPoint (needed by ShadowCmd)
@@ -90,6 +91,11 @@ public:
     // and z=-1 (near plane, always on top), restores in EndHandSpriteRendering().
     void BeginHandSpriteRendering();
     void EndHandSpriteRendering();
+
+    /** Clear the per-sprite decode atlas.  Must be called before new sprite
+     *  data is loaded (e.g. between levels) so stale data-pointer → layer
+     *  mappings are not reused. */
+    void ClearKeeperSpriteAtlas();
 
 private:
     bool init_gl_resources();
@@ -187,10 +193,20 @@ private:
     // Keeper-sprite GL objects (palette-indexed per-sprite texture + shader)
     GLuint m_kspr_shader        = 0;
     GLuint m_kspr_glow_shader   = 0;  // Additive glow variant — no palette, computes RGB delta directly
-    GLuint m_kspr_sprite_tex    = 0;  // 256x256 GL_R8  — overwritten per sprite
+    GLuint m_kspr_sprite_tex    = 0;  // 256x256 GL_R8  — overwritten per sprite (fallback path)
     GLuint m_kspr_palette_tex   = 0;  // 256x1  GL_RGBA8 — palette LUT
     GLuint m_kspr_vao           = 0;
     GLuint m_kspr_vbo           = 0;
+
+    // Keeper-sprite decode atlas: GL_TEXTURE_2D_ARRAY where each layer holds
+    // one pre-decoded sprite (populated on first use, persists across frames).
+    // Fallback to m_kspr_sprite_tex when atlas is full or unsupported.
+    static const int k_kspr_atlas_layers = 512;
+    GLuint m_kspr_sprite_array  = 0;  // GL_TEXTURE_2D_ARRAY 256×256×k_kspr_atlas_layers GL_R8
+    GLuint m_kspr_atlas_shader  = 0;  // separate program using sampler2DArray
+    int    m_kspr_atlas_used    = 0;  // next free layer index
+    struct AtlasEntry { int layer; int src_w; };
+    std::unordered_map<const uint8_t*, AtlasEntry> m_kspr_atlas_map;
 
     // Flat-colour polygon GL objects (QK_PolyMode0/4/BasicPolygon — full GPU path)
     GLuint m_flatpoly_shader        = 0;
@@ -226,6 +242,14 @@ private:
     GLint  m_kspr_loc_palette  = -1;
     GLint  m_kspr_loc_alpha    = -1;
     GLint  m_kspr_loc_z_ndc    = -1;
+
+    // Atlas-shader uniform locations (sampler2DArray variant)
+    GLint  m_kspr_atlas_loc_viewport = -1;
+    GLint  m_kspr_atlas_loc_sprite   = -1;
+    GLint  m_kspr_atlas_loc_palette  = -1;
+    GLint  m_kspr_atlas_loc_alpha    = -1;
+    GLint  m_kspr_atlas_loc_z_ndc    = -1;
+    GLint  m_kspr_atlas_loc_layer    = -1;
 
     // Glow-shader uniform locations (shared vert; u_sprite + u_viewport + u_z_ndc only)
     GLint  m_kspr_glow_loc_viewport = -1;

@@ -558,11 +558,6 @@ RendererType RendererGetActiveType()
     return s_activeType;
 }
 
-TbBool RendererIsGpuComposited(void)
-{
-    return (s_activeType == RENDERER_OPENGL) ? 1 : 0;
-}
-
 /******************************************************************************/
 /* C-callable wrappers */
 /******************************************************************************/
@@ -631,6 +626,16 @@ int WorldViewRenderer_SubmitKeeperSprite(long dst_x, long dst_y, long dst_w, lon
     return 0;
 }
 
+void WorldViewRenderer_ClearKeeperSpriteAtlas(void)
+{
+#ifdef RENDERER_OPENGL_ENABLED
+    if (s_worldViewRenderer) {
+        auto* gl = dynamic_cast<GLWorldViewRenderer*>(s_worldViewRenderer);
+        if (gl) gl->ClearKeeperSpriteAtlas();
+    }
+#endif
+}
+
 /******************************************************************************/
 /* C-callable map fade pass wrappers */
 /******************************************************************************/
@@ -647,12 +652,6 @@ long MapFadePass_StepFadeOut(long step)
     if (s_mapFadePass)
         return s_mapFadePass->StepFadeOut(step);
     return step;
-}
-
-void MapFadePass_SnapshotFrame(void)
-{
-    if (s_mapFadePass)
-        s_mapFadePass->SnapshotFrame();
 }
 
 /******************************************************************************/

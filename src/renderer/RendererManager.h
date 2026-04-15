@@ -53,12 +53,6 @@ void RendererShutdown(void);
 /** Returns the RendererType enum value currently in use. */
 RendererType RendererGetActiveType(void);
 
-/** Returns true when the active renderer composites frames on the GPU
- *  (i.e. EndFrame builds the final image via OpenGL rather than directly
- *  presenting lbDisplay.WScreen).  Use this instead of testing
- *  RendererGetActiveType() == RENDERER_OPENGL in non-renderer code. */
-TbBool RendererIsGpuComposited(void);
-
 /******************************************************************************/
 /* C-callable framebuffer / frame wrappers (safe to call from bflib_video.c) */
 /******************************************************************************/
@@ -141,6 +135,11 @@ int WorldViewRenderer_SubmitKeeperSprite(long dst_x, long dst_y, long dst_w, lon
                                          const unsigned char* data, int src_w, int src_h,
                                          unsigned int draw_flags, const unsigned char* remap);
 
+/** Clear the keeper-sprite decode atlas and reset the layer index.
+ *  Must be called before each level load so stale data-pointer mappings
+ *  from the previous level are not reused. */
+void WorldViewRenderer_ClearKeeperSpriteAtlas(void);
+
 /******************************************************************************/
 /* C-callable map fade pass wrappers                                          */
 /******************************************************************************/
@@ -150,11 +149,6 @@ long MapFadePass_StepFadeIn(long step);
 
 /** Render one fade-out step (3D view → parchment) and return next step value. */
 long MapFadePass_StepFadeOut(long step);
-
-/** Capture the current GL framebuffer into GLMapFadePass's snapshot buffer.
- *  Called by RendererOpenGL::EndFrame just before platform_swap_gl_buffers().
- *  No-op for non-GL implementations. */
-void MapFadePass_SnapshotFrame(void);
 
 /******************************************************************************/
 /* C-callable text renderer wrappers                                          */

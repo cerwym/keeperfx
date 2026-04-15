@@ -23,6 +23,8 @@
 #include <mutex>
 #include <atomic>
 #include <set>
+#include <thread>
+#include <exception>
 #include "post_inc.h"
 
 namespace {
@@ -441,6 +443,49 @@ if (sample_count <= 0 || sample_count > 65535) {
 std::vector<openal_source> g_sources;
 std::array<std::vector<sound_sample>, 2> g_banks;
 
+// Background thread for async sound bank preloading.
+static std::thread        g_sound_preload_thread;
+static std::exception_ptr g_sound_preload_exception;
+
+extern "C" void SoundBanks_StartAsyncLoad(void)
+{
+    if (SoundDisabled) return;
+    if (g_sound_preload_thread.joinable()) return; // already started
+
+    // Compute file paths on the main thread — static-buffer helpers are not thread-safe.
+    char snd_fname[2048] = {};
+    char spc_fname[2048] = {};
+    prepare_file_path_buf(snd_fname, sizeof(snd_fname), FGrp_LrgSound, "sound.dat");
+    {
+        char* spc = get_game_file_path_fmt(FGrp_LrgSound, "speech_%s.dat", get_language_lwrstr(install_info.lang_id));
+        if (!spc || !LbFileExists(spc))
+            spc = prepare_file_path(FGrp_LrgSound, "speech.dat");
+        if (!spc || !LbFileExists(spc))
+            spc = get_game_file_path_fmt(FGrp_LrgSound, "speech_%s.dat", get_language_lwrstr(1));
+        if (spc)
+            snprintf(spc_fname, sizeof(spc_fname), "%s", spc);
+    }
+
+    g_sound_preload_thread = std::thread(
+        [s = std::string(snd_fname), p = std::string(spc_fname)]()
+        {
+            try {
+                g_banks[0] = load_sound_bank(s.c_str());
+                try {
+                    if (!p.empty())
+                        g_banks[1] = load_sound_bank(p.c_str());
+                } catch (const std::exception& e) {
+                    WARNLOG("Speech bank async preload failed: %s", e.what());
+                    g_banks[1].clear();
+                }
+            } catch (const std::exception&) {
+                g_sound_preload_exception = std::current_exception();
+            }
+        }
+    );
+    SYNCLOG("SoundBanks_StartAsyncLoad: preloading sound banks on background thread");
+}
+
 void load_sound_banks() {
 	char snd_fname[2048];
 	prepare_file_path_buf(snd_fname, sizeof(snd_fname), FGrp_LrgSound, "sound.dat");
@@ -667,7 +712,23 @@ extern "C" TbBool InitAudio(const SoundSettings * settings) {
 		for (size_t i = 0; i < g_sources.size(); ++i) {
 			g_sources[i].mss_id = i + 1;
 		}
-		load_sound_banks();
+		if (g_sound_preload_thread.joinable()) {
+			SYNCLOG("InitAudio: joining async sound preload thread");
+			g_sound_preload_thread.join();
+			if (g_sound_preload_exception) {
+				// Async load failed — retry synchronously.
+				ERRORLOG("InitAudio: async sound preload failed, retrying synchronously");
+				g_sound_preload_exception = nullptr;
+				g_banks[0].clear();
+				g_banks[1].clear();
+				load_sound_banks();
+			} else {
+				SYNCLOG("InitAudio: async sound preload complete (banks: %zu + %zu samples)",
+					g_banks[0].size(), g_banks[1].size());
+			}
+		} else {
+			load_sound_banks();
+		}
 		g_openal_device = std::move(device);
 		g_openal_context = std::move(context);
 		return true;

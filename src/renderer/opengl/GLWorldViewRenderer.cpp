@@ -234,6 +234,13 @@ bool GLWorldViewRenderer::init_gl_resources()
     return true;
 }
 
+void GLWorldViewRenderer::ClearKeeperSpriteAtlas()
+{
+    m_kspr_atlas_map.clear();
+    m_kspr_atlas_used = 0;
+    SYNCDBG(6, "GLWorldViewRenderer: keeper-sprite atlas cleared");
+}
+
 void GLWorldViewRenderer::free_gl_resources()
 {
     free(m_verts);
@@ -254,6 +261,10 @@ void GLWorldViewRenderer::free_gl_resources()
     if (m_kspr_glow_shader) { glDeleteProgram(m_kspr_glow_shader);          m_kspr_glow_shader = 0; }
     if (m_kspr_sprite_tex)  { glDeleteTextures(1, &m_kspr_sprite_tex);      m_kspr_sprite_tex = 0; }
     if (m_kspr_palette_tex) { glDeleteTextures(1, &m_kspr_palette_tex);     m_kspr_palette_tex = 0; }
+    if (m_kspr_sprite_array){ glDeleteTextures(1, &m_kspr_sprite_array);    m_kspr_sprite_array = 0; }
+    if (m_kspr_atlas_shader){ glDeleteProgram(m_kspr_atlas_shader);         m_kspr_atlas_shader = 0; }
+    m_kspr_atlas_used = 0;
+    m_kspr_atlas_map.clear();
 
     if (m_flatpoly_vao)    { glDeleteVertexArrays(1, &m_flatpoly_vao); m_flatpoly_vao = 0; }
     if (m_flatpoly_vbo)    { glDeleteBuffers(1, &m_flatpoly_vbo);       m_flatpoly_vbo = 0; }
@@ -501,6 +512,77 @@ bool GLWorldViewRenderer::init_keeper_sprite_shader()
     KFX_GL_LABEL(GL_TEXTURE,      m_kspr_palette_tex, "WVR/KSprPaletteTex");
     KFX_GL_LABEL(GL_VERTEX_ARRAY, m_kspr_vao,         "WVR/KSprVAO");
     KFX_GL_LABEL(GL_BUFFER,       m_kspr_vbo,         "WVR/KSprVBO");
+
+    // Attempt to build the sprite decode atlas (GL_TEXTURE_2D_ARRAY).
+    // This is an optional optimisation: on first use each unique data pointer
+    // is decoded once and cached in a layer of the array, so per-frame decode
+    // and per-draw upload are both eliminated for non-remapped sprites.
+    // If the driver does not support GL_TEXTURE_2D_ARRAY the atlas is skipped
+    // and the existing single-texture fallback path is used unchanged.
+    do {
+        std::string af_src = get_embedded_shader_source("kspr_array_frag.glsl");
+        if (af_src.empty()) break;
+
+        GLuint av = compile_shader_src(GL_VERTEX_SHADER,   sv_src.c_str(), "kspr_vert.glsl");
+        GLuint af = compile_shader_src(GL_FRAGMENT_SHADER, af_src.c_str(), "kspr_array_frag.glsl");
+        if (!av || !af) { if (av) glDeleteShader(av); if (af) glDeleteShader(af); break; }
+
+        m_kspr_atlas_shader = glCreateProgram();
+        glAttachShader(m_kspr_atlas_shader, av);
+        glAttachShader(m_kspr_atlas_shader, af);
+        glLinkProgram(m_kspr_atlas_shader);
+        glDeleteShader(av);
+        glDeleteShader(af);
+        GLint linked = 0;
+        glGetProgramiv(m_kspr_atlas_shader, GL_LINK_STATUS, &linked);
+        if (!linked) {
+            char log[512];
+            glGetProgramInfoLog(m_kspr_atlas_shader, sizeof(log), nullptr, log);
+            WARNLOG("kspr_array shader link failed: %s", log);
+            glDeleteProgram(m_kspr_atlas_shader);
+            m_kspr_atlas_shader = 0;
+            break;
+        }
+        glUseProgram(m_kspr_atlas_shader);
+        m_kspr_atlas_loc_viewport = glGetUniformLocation(m_kspr_atlas_shader, "u_viewport");
+        m_kspr_atlas_loc_sprite   = glGetUniformLocation(m_kspr_atlas_shader, "u_sprite");
+        m_kspr_atlas_loc_palette  = glGetUniformLocation(m_kspr_atlas_shader, "u_palette");
+        m_kspr_atlas_loc_alpha    = glGetUniformLocation(m_kspr_atlas_shader, "u_alpha");
+        m_kspr_atlas_loc_z_ndc    = glGetUniformLocation(m_kspr_atlas_shader, "u_z_ndc");
+        m_kspr_atlas_loc_layer    = glGetUniformLocation(m_kspr_atlas_shader, "u_layer");
+        glUniform1i(m_kspr_atlas_loc_sprite,  0);  // GL_TEXTURE0
+        glUniform1i(m_kspr_atlas_loc_palette, 1);  // GL_TEXTURE1
+        glUseProgram(0);
+
+        // Allocate the texture array.  Clear any pre-existing GL error so the
+        // subsequent error check is reliable.
+        while (glGetError() != GL_NO_ERROR) {}
+        glGenTextures(1, &m_kspr_sprite_array);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, m_kspr_sprite_array);
+        glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_R8,
+                     256, 256, k_kspr_atlas_layers,
+                     0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
+        GLenum err = glGetError();
+        if (err != GL_NO_ERROR) {
+            WARNLOG("GL_TEXTURE_2D_ARRAY alloc failed (err=%u), sprite atlas disabled", err);
+            glDeleteTextures(1, &m_kspr_sprite_array);
+            m_kspr_sprite_array = 0;
+            glDeleteProgram(m_kspr_atlas_shader);
+            m_kspr_atlas_shader = 0;
+            glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+            break;
+        }
+        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+        KFX_GL_LABEL(GL_PROGRAM, m_kspr_atlas_shader, "WVR/KSprAtlasProg");
+        KFX_GL_LABEL(GL_TEXTURE, m_kspr_sprite_array, "WVR/KSprAtlasTex");
+        SYNCLOG("GLWorldViewRenderer: keeper-sprite decode atlas ready (%d layers, 256x256 GL_R8)",
+                k_kspr_atlas_layers);
+    } while (false);
+
     SYNCLOG("GLWorldViewRenderer: keeper-sprite shader initialised");
     return true;
 }
@@ -645,13 +727,101 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
         m_kspr_palette_dirty = false;
     }
 
+    // --- Sprite decode atlas (non-remapped, non-additive sprites only) ---
+    // The atlas caches pre-decoded sprites for the lifetime of a level so
+    // decode_keeper_rle + glTexSubImage2D run at most once per unique data
+    // pointer.  Subsequent draws of the same sprite just bind the cached
+    // layer with no CPU decode and no GPU upload.
+    const bool additive = (draw_flags & Lb_SPRITE_ALPHA_ADDITIVE) != 0;
+    const bool use_remap = remap && (draw_flags & Lb_TEXT_UNDERLNSHADOW) && !additive;
+    const bool atlas_eligible = m_kspr_sprite_array && m_kspr_atlas_shader
+                                 && !use_remap && !additive;
+    int atlas_layer = -1;
+    if (atlas_eligible)
+    {
+        auto it = m_kspr_atlas_map.find(data);
+        if (it != m_kspr_atlas_map.end())
+        {
+            atlas_layer = it->second.layer;
+            // src_w for this cached entry may differ from current clip height;
+            // UV will use the passed-in src_h so only the visible rows are sampled.
+        }
+        else if (m_kspr_atlas_used < k_kspr_atlas_layers)
+        {
+            // Decode into scratch buf with full width; all 256 rows are cleared
+            // so partial uploads (clipped sprites) are safe.
+            decode_keeper_rle(s_kspr_decode_buf, data, src_w, 256);
+            atlas_layer = m_kspr_atlas_used++;
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D_ARRAY, m_kspr_sprite_array);
+            glPixelStorei(GL_UNPACK_ROW_LENGTH, 256);
+            glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0,
+                            0, 0, atlas_layer,
+                            src_w, 256, 1,
+                            GL_RED, GL_UNSIGNED_BYTE, s_kspr_decode_buf);
+            glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+            m_kspr_atlas_map[data] = {atlas_layer, src_w};
+        }
+    }
+
+    float u1 = (float)src_w / 256.0f;
+    float v1 = (float)src_h / 256.0f;
+    float ul = 0.0f, ur = u1;
+    if (draw_flags & Lb_SPRITE_FLIP_HORIZ) { ul = u1; ur = 0.0f; }
+
+    float vx0 = (float)dst_x,          vy0 = (float)dst_y;
+    float vx1 = (float)(dst_x + dst_w), vy1 = (float)(dst_y + dst_h);
+
+    float sv[6][4] = {
+        { vx0, vy0, ul,  0.0f },   // TL
+        { vx1, vy0, ur,  0.0f },   // TR
+        { vx1, vy1, ur,  v1   },   // BR
+        { vx0, vy0, ul,  0.0f },   // TL
+        { vx1, vy1, ur,  v1   },   // BR
+        { vx0, vy1, ul,  v1   },   // BL
+    };
+    glBindBuffer(GL_ARRAY_BUFFER, m_kspr_vbo);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(sv), sv);
+
+    float alpha = 1.0f;
+    if      (draw_flags & Lb_SPRITE_TRANSPAR4) alpha = 0.5f;
+    else if (draw_flags & Lb_SPRITE_TRANSPAR8) alpha = 0.25f;
+
+    glBindVertexArray(m_kspr_vao);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LEQUAL);
+    glDepthMask(GL_FALSE);
+    glEnable(GL_BLEND);
+
+    if (atlas_layer >= 0)
+    {
+        // Atlas path: no decode, no per-draw upload.
+        glUseProgram(m_kspr_atlas_shader);
+        glUniform2f(m_kspr_atlas_loc_viewport, (float)m_screen_w, (float)m_screen_h);
+        glUniform1f(m_kspr_atlas_loc_alpha,    alpha);
+        glUniform1f(m_kspr_atlas_loc_z_ndc,    m_current_sprite_z);
+        glUniform1f(m_kspr_atlas_loc_layer,    (float)atlas_layer);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, m_kspr_palette_tex);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, m_kspr_sprite_array);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+        glDisable(GL_BLEND);
+        glDepthMask(GL_TRUE);
+        glBindVertexArray(0);
+        glUseProgram(0);
+        return 1;
+    }
+
+    // --- Fallback path: decode + upload to scratch texture each draw ---
+    // Used for remapped sprites, additive glow sprites, and when atlas is full.
+
     // Decode RLE into the stride-256 scratch buffer
     decode_keeper_rle(s_kspr_decode_buf, data, src_w, src_h);
 
-    // Apply colour remap when Lb_TEXT_UNDERLNSHADOW flag is set (white/red highlight,
-    // shade fade, tint).  Additive glow sprites are excluded: their raw pixels are
-    // glow-encoding indices (1–64) fed directly to the glow shader, not palette indices.
-    if (remap && (draw_flags & Lb_TEXT_UNDERLNSHADOW) && !(draw_flags & Lb_SPRITE_ALPHA_ADDITIVE))
+    // Apply colour remap (white/red highlight, shade fade, tint).
+    if (use_remap)
     {
         for (int y = 0; y < src_h; ++y) {
             uint8_t* row = s_kspr_decode_buf + y * 256;
@@ -667,43 +837,6 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, src_w, src_h,
                     GL_RED, GL_UNSIGNED_BYTE, s_kspr_decode_buf);
     glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-
-    // UV covers only the used src_w×src_h region of the 256×256 texture
-    float u1 = (float)src_w / 256.0f;
-    float v1 = (float)src_h / 256.0f;
-    float ul = 0.0f, ur = u1;
-    if (draw_flags & Lb_SPRITE_FLIP_HORIZ) { ul = u1; ur = 0.0f; }
-
-    float vx0 = (float)dst_x,         vy0 = (float)dst_y;
-    float vx1 = (float)(dst_x + dst_w), vy1 = (float)(dst_y + dst_h);
-
-    float sv[6][4] = {
-        { vx0, vy0, ul,  0.0f },   // TL
-        { vx1, vy0, ur,  0.0f },   // TR
-        { vx1, vy1, ur,  v1   },   // BR
-        { vx0, vy0, ul,  0.0f },   // TL
-        { vx1, vy1, ur,  v1   },   // BR
-        { vx0, vy1, ul,  v1   },   // BL
-    };
-
-    glBindBuffer(GL_ARRAY_BUFFER, m_kspr_vbo);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(sv), sv);
-
-    // Lb_SPRITE_ALPHA_ADDITIVE — fire/glow effects.
-    // Sprite pixels 1–64 are DK glow-encoding indices; the glow shader decodes
-    // each pixel's colour family and intensity row into a direct additive RGB delta
-    // (matching compute_alpha_tables()), drawn with GL_ONE/GL_ONE so the delta is
-    // added to whatever player-coloured geometry was rendered beneath.
-    const bool additive = (draw_flags & Lb_SPRITE_ALPHA_ADDITIVE) != 0;
-    float alpha = 1.0f;
-    if      (draw_flags & Lb_SPRITE_TRANSPAR4) alpha = 0.5f;
-    else if (draw_flags & Lb_SPRITE_TRANSPAR8) alpha = 0.25f;
-
-    glBindVertexArray(m_kspr_vao);
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LEQUAL);
-    glDepthMask(GL_FALSE);
-    glEnable(GL_BLEND);
 
     if (additive && m_kspr_glow_shader)
     {
