@@ -745,9 +745,11 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
             atlas_layer = it->second.layer;
             // src_w for this cached entry may differ from current clip height;
             // UV will use the passed-in src_h so only the visible rows are sampled.
+            m_kspr_atlas_hits++;
         }
         else if (m_kspr_atlas_used < k_kspr_atlas_layers)
         {
+            KFX_ZONE_COLOR("WVR::KSprAtlas::Decode+Upload", KFX_COLOR_RENDER_CPU);
             // Decode into scratch buf with full width; all 256 rows are cleared
             // so partial uploads (clipped sprites) are safe.
             decode_keeper_rle(s_kspr_decode_buf, data, src_w, 256);
@@ -761,6 +763,7 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
                             GL_RED, GL_UNSIGNED_BYTE, s_kspr_decode_buf);
             glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
             m_kspr_atlas_map[data] = {atlas_layer, src_w};
+            m_kspr_atlas_misses++;
         }
     }
 
@@ -934,6 +937,8 @@ void GLWorldViewRenderer::BeginWorldPass(unsigned char* framebuf, int pitch,
     m_current_bucket    = 0;
     m_kspr_palette_dirty = true;
     m_world_pass_active  = true;
+    m_kspr_atlas_hits    = 0;
+    m_kspr_atlas_misses  = 0;
 
     // Flush any tile batch from the *previous* sub-pass before starting the
     // new one — but do NOT clear the draw list.  Multiple sub-passes per frame
@@ -1390,10 +1395,13 @@ void GLWorldViewRenderer::GPUFlushNow()
     glViewport(0, 0, (int)MyScreenWidth, (int)MyScreenHeight);
 
     // Emit per-frame statistics as Tracy plots.
-    KFX_PLOT("WVR/VertCount",    m_vert_count);
-    KFX_PLOT("WVR/DrawCmds",     (int)m_draw_cmds.size());
-    KFX_PLOT("WVR/ShadowCmds",   (int)m_shadow_cmds.size());
-    KFX_PLOT("WVR/WorldTextCmds",(int)m_worldtext_cmds.size());
+    KFX_PLOT("WVR/VertCount",          m_vert_count);
+    KFX_PLOT("WVR/DrawCmds",           (int)m_draw_cmds.size());
+    KFX_PLOT("WVR/ShadowCmds",         (int)m_shadow_cmds.size());
+    KFX_PLOT("WVR/WorldTextCmds",      (int)m_worldtext_cmds.size());
+    KFX_PLOT("WVR/KSprAtlasCacheSize", m_kspr_atlas_used);
+    KFX_PLOT("WVR/KSprAtlasHits",      m_kspr_atlas_hits);
+    KFX_PLOT("WVR/KSprAtlasMisses",    m_kspr_atlas_misses);
 
     // Reset for next frame.
     m_draw_cmds.clear();

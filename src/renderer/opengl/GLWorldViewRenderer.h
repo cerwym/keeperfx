@@ -205,6 +205,8 @@ private:
     GLuint m_kspr_sprite_array  = 0;  // GL_TEXTURE_2D_ARRAY 256×256×k_kspr_atlas_layers GL_R8
     GLuint m_kspr_atlas_shader  = 0;  // separate program using sampler2DArray
     int    m_kspr_atlas_used    = 0;  // next free layer index
+    int    m_kspr_atlas_hits    = 0;  // cache hits this frame
+    int    m_kspr_atlas_misses  = 0;  // cache misses (decode+upload) this frame
     struct AtlasEntry { int layer; int src_w; };
     std::unordered_map<const uint8_t*, AtlasEntry> m_kspr_atlas_map;
 

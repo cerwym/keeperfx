@@ -4,6 +4,7 @@
 #include "platform.h"
 #include "bflib_fileio.h"
 #include <tracy/Tracy.hpp>
+#include "kfx/profiling/KfxProfiling.h"
 #include "post_inc.h"
 
 // ----- Singleton storage -----
@@ -21,6 +22,21 @@ void PlatformManager::Set(IPlatform* platform)
     s_instance = platform;
     // Probably could do this in a nicer way, but fuck it for now.
     tracy::SetThreadName("KeeperFX Main Thread");
+
+    // Configure Tracy plot presentation (step-graphs, subsystem colours).
+    // Must run before any plot value is emitted.
+    KFX_PLOT_CONFIG("WVR/VertCount",    tracy::PlotFormatType::Number, true,  true,  KFX_COLOR_RENDER_GPU);
+    KFX_PLOT_CONFIG("WVR/DrawCmds",     tracy::PlotFormatType::Number, true,  false, KFX_COLOR_RENDER_GPU);
+    KFX_PLOT_CONFIG("WVR/ShadowCmds",   tracy::PlotFormatType::Number, true,  false, KFX_COLOR_RENDER_GPU);
+    KFX_PLOT_CONFIG("WVR/WorldTextCmds",      tracy::PlotFormatType::Number, true,  false, KFX_COLOR_RENDER_GPU);
+    KFX_PLOT_CONFIG("WVR/KSprAtlasCacheSize", tracy::PlotFormatType::Number, true,  true,  KFX_COLOR_RENDER_GPU);
+    KFX_PLOT_CONFIG("WVR/KSprAtlasHits",      tracy::PlotFormatType::Number, true,  false, KFX_COLOR_RENDER_GPU);
+    KFX_PLOT_CONFIG("WVR/KSprAtlasMisses",    tracy::PlotFormatType::Number, true,  false, KFX_COLOR_RENDER_CPU);
+    KFX_PLOT_CONFIG("UI/Quads",         tracy::PlotFormatType::Number, true,  true,  KFX_COLOR_RENDER_CPU);
+    KFX_PLOT_CONFIG("UI/RemapQuads",    tracy::PlotFormatType::Number, true,  false, KFX_COLOR_RENDER_CPU);
+    KFX_PLOT_CONFIG("UI/Lines",         tracy::PlotFormatType::Number, true,  false, KFX_COLOR_RENDER_CPU);
+    KFX_PLOT_CONFIG("Sim/CreatureCount",tracy::PlotFormatType::Number, true,  true,  KFX_COLOR_SIMULATION);
+    KFX_PLOT_CONFIG("AI/ActivePlayers", tracy::PlotFormatType::Number, true,  false, KFX_COLOR_AI);
 }
 
 // ----- Default IWindowSystem (base class impl) -----

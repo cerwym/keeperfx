@@ -25,6 +25,7 @@
 #include <set>
 #include <thread>
 #include <exception>
+#include "kfx/profiling/KfxProfiling.h"
 #include "post_inc.h"
 
 namespace {
@@ -470,10 +471,18 @@ extern "C" void SoundBanks_StartAsyncLoad(void)
         [s = std::string(snd_fname), p = std::string(spc_fname)]()
         {
             try {
-                g_banks[0] = load_sound_bank(s.c_str());
+#ifdef TRACY_ENABLE
+                tracy::SetThreadName("SoundPreload");
+#endif
+                {
+                    KFX_ZONE_COLOR("SoundPreload::load_sound_bank(sound.dat)", KFX_COLOR_RENDER_CPU);
+                    g_banks[0] = load_sound_bank(s.c_str());
+                }
                 try {
-                    if (!p.empty())
+                    if (!p.empty()) {
+                        KFX_ZONE_COLOR("SoundPreload::load_sound_bank(speech)", KFX_COLOR_RENDER_CPU);
                         g_banks[1] = load_sound_bank(p.c_str());
+                    }
                 } catch (const std::exception& e) {
                     WARNLOG("Speech bank async preload failed: %s", e.what());
                     g_banks[1].clear();
@@ -714,6 +723,7 @@ extern "C" TbBool InitAudio(const SoundSettings * settings) {
 		}
 		if (g_sound_preload_thread.joinable()) {
 			SYNCLOG("InitAudio: joining async sound preload thread");
+			KFX_ZONE_COLOR("InitAudio::join_preload", KFX_COLOR_RENDER_CPU);
 			g_sound_preload_thread.join();
 			if (g_sound_preload_exception) {
 				// Async load failed — retry synchronously.
