@@ -45,6 +45,10 @@ void RendererSettings_Reset(void)
     /* Lighting pipeline */
     g_renderer_settings.lighting_mode         = RENDERER_LIGHTING_SOFTWARE;
 
+    /* Creature outline */
+    g_renderer_settings.creature_outline_enable = 1;
+    g_renderer_settings.creature_outline_alpha  = 0.5f;
+
     /* Debug */
     g_renderer_settings.wireframe             = 0;
     g_renderer_settings.show_depth            = 0;

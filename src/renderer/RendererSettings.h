@@ -169,6 +169,18 @@ typedef struct RendererSettings {
      *  sample + point light accumulation (requires modern renderer, Phase 3+). */
     int   lighting_mode;
 
+    /* --- Creature depth-fail outline --- */
+
+    /** Draw an owner-coloured silhouette where a creature sprite is occluded
+     *  by geometry (walls, columns).  Uses a depth-fail pass so the outline
+     *  is visible only through solid objects.
+     *  0 = disabled; 1 = enabled.  Default: 1. */
+    int   creature_outline_enable;
+
+    /** Alpha of the depth-fail creature outline.  Range [0.0, 1.0].
+     *  Default: 0.5. */
+    float creature_outline_alpha;
+
 } RendererSettings;
 
 /** Global active renderer settings.  Modified by config parsing and console

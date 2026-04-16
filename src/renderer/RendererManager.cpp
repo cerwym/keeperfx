@@ -8,6 +8,8 @@
 #include "pre_inc.h"
 #include "renderer/RendererManager.h"
 #include "renderer/SpriteHandle.h"
+#include "renderer/ICursorLayer.h"
+#include "renderer/backends/SWCursorLayer.h"
 
 #include "renderer/RendererSoftware.h"
 #include "renderer/backends/SoftwareWorldViewRenderer.h"
@@ -22,6 +24,7 @@
 #  include "renderer/opengl/GLMapFadePass.h"
 #  include "renderer/opengl/GLTextRenderer.h"
 #  include "renderer/opengl/GLUIRenderer.h"
+#  include "renderer/opengl/GLCursorLayer.h"
 #endif
 #ifdef PLATFORM_VITA
 #  include "renderer/RendererVita.h"
@@ -56,6 +59,7 @@ static IMapFadePass*        s_mapFadePass         = nullptr;
 static ITextRenderer*       s_textRenderer        = nullptr;
 static IUIRenderer*         s_uiRenderer          = nullptr;
 static SoftwareUIRenderer*  s_softwareUIRenderer  = nullptr;  // non-null only in software mode
+static ICursorLayer*        s_cursorLayer         = nullptr;
 #ifdef RENDERER_OPENGL_ENABLED
 static GLSpriteAtlas*       s_spriteAtlas         = nullptr;  // non-null only in GL mode
 #endif
@@ -169,6 +173,22 @@ TbBool RendererSubmitStagingOverlay()
     IRenderer* rend = RendererGetActive();
     if (!rend) return false;
     return rend->SubmitStagingOverlay() ? true : false;
+}
+
+TbBool RendererSubmitTransparentBlit(const unsigned char* buf, int w, int h)
+{
+    IRenderer* rend = RendererGetActive();
+    if (!rend) return false;
+    return rend->SubmitTransparentBlit(buf, w, h) ? true : false;
+}
+
+TbBool RendererSubmitOverheadMap(const unsigned char* tile_colors, int tiles_x, int tiles_y,
+                                  int dst_x, int dst_y, int dst_w, int dst_h)
+{
+    IRenderer* rend = RendererGetActive();
+    if (!rend) return false;
+    return rend->SubmitOverheadMap(tile_colors, tiles_x, tiles_y,
+                                   dst_x, dst_y, dst_w, dst_h) ? true : false;
 }
 
 /** Append any newly-built custom_sprites into the live atlas.
@@ -318,6 +338,27 @@ static ITextRenderer* create_text_renderer(RendererType type)
     return new SoftwareTextRenderer();
 }
 
+/** Allocates the appropriate ICursorLayer for the given renderer type. */
+static ICursorLayer* create_cursor_layer(RendererType type)
+{
+#ifdef RENDERER_OPENGL_ENABLED
+    if (type == RENDERER_OPENGL)
+    {
+        RendererOpenGL* ogl = dynamic_cast<RendererOpenGL*>(s_activeRenderer);
+        if (ogl)
+        {
+            auto* glcur = new GLCursorLayer();
+            glcur->SetWorldViewRenderer(dynamic_cast<GLWorldViewRenderer*>(s_worldViewRenderer));
+            glcur->SetSpriteAtlas(s_spriteAtlas);
+            glcur->SetGLUIRenderer(dynamic_cast<GLUIRenderer*>(s_uiRenderer));
+            return glcur;
+        }
+    }
+#endif
+    (void)type;
+    return new SWCursorLayer();
+}
+
 /** Allocates the appropriate IUIRenderer for the given renderer type.
  *  OpenGL uses GLUIRenderer (GPU-accelerated UI elements); all others use software no-ops. */
 static IUIRenderer* create_ui_renderer(RendererType type)
@@ -340,8 +381,6 @@ static IUIRenderer* create_ui_renderer(RendererType type)
             glui->SetPaletteTexture(ogl->GetPaletteTex(), GL_TEXTURE_1D);
             glui->SetFadeTexture(ogl->GetFadeTex());
             glui->SetScreenDimensions(lbDisplay.PhysicalScreenWidth, lbDisplay.PhysicalScreenHeight);
-            glui->SetWorldViewRenderer(dynamic_cast<GLWorldViewRenderer*>(s_worldViewRenderer));
-            // Populate sprite atlas with currently-loaded panel sprite sheets.
             s_spriteAtlas = ogl->GetSpriteAtlas();
             if (s_spriteAtlas) {
                 if (gui_panel_sprites) s_spriteAtlas->AddSheet(gui_panel_sprites);
@@ -423,6 +462,9 @@ int RendererInit(RendererType type)
     s_uiRenderer = create_ui_renderer(type);
     SYNCLOG("UIRenderer initialised: %s", s_uiRenderer->GetName());
 
+    s_cursorLayer = create_cursor_layer(type);
+    SYNCLOG("CursorLayer initialised: %s", s_cursorLayer->GetName());
+
     // Wire sprite intercept backend: Vita uses GPU batch; OpenGL uses software
     // (software backend exercises the full intercept path for testing on desktop).
 #if defined(PLATFORM_VITA)
@@ -493,6 +535,11 @@ int RendererSwitch(RendererType type)
 void RendererShutdown()
 {
     RenderPass_Shutdown();
+    if (s_cursorLayer)
+    {
+        delete s_cursorLayer;
+        s_cursorLayer = nullptr;
+    }
     if (s_uiRenderer)
     {
         delete s_uiRenderer;
@@ -588,6 +635,12 @@ void RendererEndFrame(void)
         s_activeRenderer->EndFrame();
 }
 
+void RendererClearScreen(unsigned char colour_index)
+{
+    if (s_activeRenderer)
+        s_activeRenderer->ClearScreen(colour_index);
+}
+
 /******************************************************************************/
 /* C-callable world-view renderer wrappers */
 /******************************************************************************/
@@ -637,7 +690,49 @@ void WorldViewRenderer_ClearKeeperSpriteAtlas(void)
 }
 
 /******************************************************************************/
-/* C-callable map fade pass wrappers */
+/* Sprite-owner tracking for the depth-fail creature outline                  */
+/******************************************************************************/
+
+static int s_current_sprite_owner = -1;
+
+void WorldViewRenderer_SetCurrentSpriteOwner(int player_idx)
+{
+    s_current_sprite_owner = player_idx;
+}
+
+int WorldViewRenderer_GetCurrentSpriteOwner(void)
+{
+    return s_current_sprite_owner;
+}
+
+/******************************************************************************/
+/* C-callable cursor layer wrappers                                           */
+/******************************************************************************/
+
+void CursorLayer_Flush(void)
+{
+    if (s_cursorLayer)
+        s_cursorLayer->Flush();
+}
+
+void CursorLayer_Clear(void)
+{
+    if (s_cursorLayer)
+        s_cursorLayer->Clear();
+}
+
+void CursorLayer_SubmitPointerSprite(const struct TbSprite* spr, long x, long y, int units_per_px)
+{
+    if (s_cursorLayer)
+        s_cursorLayer->SubmitPointerSprite(spr, x, y, units_per_px);
+}
+
+void CursorLayer_SubmitKeeperHandSprite(short x, short y, unsigned short kspr_base,
+                                        short kspr_angle, unsigned char sprgroup, long scale)
+{
+    if (s_cursorLayer)
+        s_cursorLayer->SubmitKeeperHandSprite(x, y, kspr_base, kspr_angle, sprgroup, scale);
+}
 /******************************************************************************/
 
 long MapFadePass_StepFadeIn(long step)
@@ -872,15 +967,15 @@ void UIRenderer_EndTopOverlay(void)
 
 void UIRenderer_FlushHandSprites(void)
 {
-    if (s_uiRenderer)
-        s_uiRenderer->FlushHandSprites();
+    // Legacy stub — kept so existing callers compile until fully purged.
+    // Real flush now happens via CursorLayer_Flush().
 }
 
 void UIRenderer_SubmitKeeperSprite(short x, short y, unsigned short kspr_base,
                                    short kspr_angle, unsigned char sprgroup, long scale)
 {
-    if (s_uiRenderer)
-        s_uiRenderer->SubmitKeeperSprite(x, y, kspr_base, kspr_angle, sprgroup, scale);
+    // Legacy stub — calls route to CursorLayer_SubmitKeeperHandSprite now.
+    CursorLayer_SubmitKeeperHandSprite(x, y, kspr_base, kspr_angle, sprgroup, scale);
 }
 
 void UIRenderer_SubmitPanelSprite(int32_t x, int32_t y, int units_per_px, int32_t spridx)

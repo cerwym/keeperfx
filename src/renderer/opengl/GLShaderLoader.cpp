@@ -30,6 +30,8 @@ std::string get_embedded_shader_source(const char* shader_name)
         {"kspr_frag.glsl", KSPR_FRAGMENT_SHADER},
         {"kspr_array_frag.glsl", KSPR_ARRAY_FRAGMENT_SHADER},
         {"kspr_glow_frag.glsl", KSPR_GLOW_FRAGMENT_SHADER},
+        {"kspr_outline_frag.glsl",       KSPR_OUTLINE_FRAGMENT_SHADER},
+        {"kspr_array_outline_frag.glsl", KSPR_ARRAY_OUTLINE_FRAGMENT_SHADER},
         {"palette_blit_vert.glsl", PALETTE_BLIT_VERTEX_SHADER},
         {"palette_blit_frag.glsl", PALETTE_BLIT_FRAGMENT_SHADER},
         {"rawimage_blit_frag.glsl", RAWIMAGE_BLIT_FRAGMENT_SHADER},

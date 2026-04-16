@@ -30,6 +30,7 @@
 #include "renderer/backends/OpenGLSpriteBackend.h" // SetCurrentBucketZ()
 #include "creature_graphics.h" // KeeperSprite structure
 #include "bflib_sprite.h"      // TbSprite structure
+#include "player_data.h"       // get_player_color_idx(), player_room_colours[]
 
 #include <glad/glad.h>
 #include <cstdlib>
@@ -68,14 +69,22 @@ static uint8_t s_kspr_decode_buf[256 * 256];
  *  positive cmd = run of palette bytes, 0 = end of row. */
 static void decode_keeper_rle(uint8_t* dst, const uint8_t* data, int w, int h)
 {
+    if (!data || w <= 0 || h <= 0) return;
+
     for (int y = 0; y < h; ++y)
         memset(dst + y * 256, 0, w);
 
-    const signed char* sp = reinterpret_cast<const signed char*>(data);
+    // Upper-bound on bytes we'll consume: generous worst-case for valid RLE.
+    const signed char* sp     = reinterpret_cast<const signed char*>(data);
+    const signed char* sp_end = sp + (ptrdiff_t)w * h * 3 + h;
     for (int y = 0; y < h; ++y) {
         uint8_t* row = dst + y * 256;
         int x = 0;
         while (true) {
+            if (sp >= sp_end) {
+                WARNLOG("decode_keeper_rle: ran past expected data end at row %d", y);
+                return;
+            }
             signed char cmd = *sp++;
             if (cmd == 0) break;
             if (cmd < 0) {
@@ -83,6 +92,10 @@ static void decode_keeper_rle(uint8_t* dst, const uint8_t* data, int w, int h)
             } else {
                 int count = (int)cmd;
                 for (int i = 0; i < count; ++i) {
+                    if (sp >= sp_end) {
+                        WARNLOG("decode_keeper_rle: pixel data past expected end");
+                        return;
+                    }
                     if (x < w) row[x] = (uint8_t)(*sp);
                     ++sp;
                     ++x;
@@ -103,6 +116,7 @@ GLWorldViewRenderer::GLWorldViewRenderer(ITileAtlas* atlas,
 {
     m_sw_fallback = new SoftwareWorldViewRenderer();
     m_text_renderer = new GLTextRenderer();
+    init_gl_resources();
 }
 
 GLWorldViewRenderer::~GLWorldViewRenderer()
@@ -259,6 +273,8 @@ void GLWorldViewRenderer::free_gl_resources()
     if (m_kspr_vbo)         { glDeleteBuffers(1, &m_kspr_vbo);              m_kspr_vbo = 0; }
     if (m_kspr_shader)      { glDeleteProgram(m_kspr_shader);               m_kspr_shader = 0; }
     if (m_kspr_glow_shader) { glDeleteProgram(m_kspr_glow_shader);          m_kspr_glow_shader = 0; }
+    if (m_kspr_outline_shader)       { glDeleteProgram(m_kspr_outline_shader);       m_kspr_outline_shader = 0; }
+    if (m_kspr_atlas_outline_shader) { glDeleteProgram(m_kspr_atlas_outline_shader); m_kspr_atlas_outline_shader = 0; }
     if (m_kspr_sprite_tex)  { glDeleteTextures(1, &m_kspr_sprite_tex);      m_kspr_sprite_tex = 0; }
     if (m_kspr_palette_tex) { glDeleteTextures(1, &m_kspr_palette_tex);     m_kspr_palette_tex = 0; }
     if (m_kspr_sprite_array){ glDeleteTextures(1, &m_kspr_sprite_array);    m_kspr_sprite_array = 0; }
@@ -583,6 +599,87 @@ bool GLWorldViewRenderer::init_keeper_sprite_shader()
                 k_kspr_atlas_layers);
     } while (false);
 
+    // ── Depth-fail outline shaders ────────────────────────────────────────────
+    // Two variants: single-texture (fallback path) and array-atlas (cached path).
+    // Compiled opportunistically — missing shaders just disable the outline.
+    {
+        std::string of_src  = get_embedded_shader_source("kspr_outline_frag.glsl");
+        std::string oaf_src = get_embedded_shader_source("kspr_array_outline_frag.glsl");
+
+        if (!of_src.empty())
+        {
+            GLuint ov = compile_shader_src(GL_VERTEX_SHADER,   sv_src.c_str(), "kspr_vert.glsl");
+            GLuint of = compile_shader_src(GL_FRAGMENT_SHADER, of_src.c_str(), "kspr_outline_frag.glsl");
+            if (ov && of)
+            {
+                m_kspr_outline_shader = glCreateProgram();
+                glAttachShader(m_kspr_outline_shader, ov);
+                glAttachShader(m_kspr_outline_shader, of);
+                glLinkProgram(m_kspr_outline_shader);
+                glDeleteShader(ov); glDeleteShader(of);
+                GLint ol = 0;
+                glGetProgramiv(m_kspr_outline_shader, GL_LINK_STATUS, &ol);
+                if (ol)
+                {
+                    glUseProgram(m_kspr_outline_shader);
+                    m_kspr_outline_loc_viewport = glGetUniformLocation(m_kspr_outline_shader, "u_viewport");
+                    m_kspr_outline_loc_sprite   = glGetUniformLocation(m_kspr_outline_shader, "u_sprite");
+                    m_kspr_outline_loc_z_ndc    = glGetUniformLocation(m_kspr_outline_shader, "u_z_ndc");
+                    m_kspr_outline_loc_color    = glGetUniformLocation(m_kspr_outline_shader, "u_outline_color");
+                    glUniform1i(m_kspr_outline_loc_sprite, 0); // GL_TEXTURE0
+                    glUseProgram(0);
+                    KFX_GL_LABEL(GL_PROGRAM, m_kspr_outline_shader, "WVR/KSprOutlineProg");
+                }
+                else
+                {
+                    char log[512];
+                    glGetProgramInfoLog(m_kspr_outline_shader, sizeof(log), nullptr, log);
+                    WARNLOG("GLWorldViewRenderer: kspr_outline shader link failed: %s", log);
+                    glDeleteProgram(m_kspr_outline_shader);
+                    m_kspr_outline_shader = 0;
+                }
+            }
+            else { if (ov) glDeleteShader(ov); if (of) glDeleteShader(of); }
+        }
+
+        if (!oaf_src.empty() && m_kspr_atlas_shader)
+        {
+            GLuint oav = compile_shader_src(GL_VERTEX_SHADER,   sv_src.c_str(),  "kspr_vert.glsl");
+            GLuint oaf = compile_shader_src(GL_FRAGMENT_SHADER, oaf_src.c_str(), "kspr_array_outline_frag.glsl");
+            if (oav && oaf)
+            {
+                m_kspr_atlas_outline_shader = glCreateProgram();
+                glAttachShader(m_kspr_atlas_outline_shader, oav);
+                glAttachShader(m_kspr_atlas_outline_shader, oaf);
+                glLinkProgram(m_kspr_atlas_outline_shader);
+                glDeleteShader(oav); glDeleteShader(oaf);
+                GLint oal = 0;
+                glGetProgramiv(m_kspr_atlas_outline_shader, GL_LINK_STATUS, &oal);
+                if (oal)
+                {
+                    glUseProgram(m_kspr_atlas_outline_shader);
+                    m_kspr_atlas_outline_loc_viewport = glGetUniformLocation(m_kspr_atlas_outline_shader, "u_viewport");
+                    m_kspr_atlas_outline_loc_sprite   = glGetUniformLocation(m_kspr_atlas_outline_shader, "u_sprite");
+                    m_kspr_atlas_outline_loc_z_ndc    = glGetUniformLocation(m_kspr_atlas_outline_shader, "u_z_ndc");
+                    m_kspr_atlas_outline_loc_color    = glGetUniformLocation(m_kspr_atlas_outline_shader, "u_outline_color");
+                    m_kspr_atlas_outline_loc_layer    = glGetUniformLocation(m_kspr_atlas_outline_shader, "u_layer");
+                    glUniform1i(m_kspr_atlas_outline_loc_sprite, 0); // GL_TEXTURE0
+                    glUseProgram(0);
+                    KFX_GL_LABEL(GL_PROGRAM, m_kspr_atlas_outline_shader, "WVR/KSprAtlasOutlineProg");
+                }
+                else
+                {
+                    char log[512];
+                    glGetProgramInfoLog(m_kspr_atlas_outline_shader, sizeof(log), nullptr, log);
+                    WARNLOG("GLWorldViewRenderer: kspr_array_outline shader link failed: %s", log);
+                    glDeleteProgram(m_kspr_atlas_outline_shader);
+                    m_kspr_atlas_outline_shader = 0;
+                }
+            }
+            else { if (oav) glDeleteShader(oav); if (oaf) glDeleteShader(oaf); }
+        }
+    }
+
     SYNCLOG("GLWorldViewRenderer: keeper-sprite shader initialised");
     return true;
 }
@@ -750,9 +847,10 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
         else if (m_kspr_atlas_used < k_kspr_atlas_layers)
         {
             KFX_ZONE_COLOR("WVR::KSprAtlas::Decode+Upload", KFX_COLOR_RENDER_CPU);
-            // Decode into scratch buf with full width; all 256 rows are cleared
-            // so partial uploads (clipped sprites) are safe.
-            decode_keeper_rle(s_kspr_decode_buf, data, src_w, 256);
+            // Decode into scratch buf; decode only actual sprite rows to avoid
+            // reading past the end of the RLE data. Remainder of 256-row buffer
+            // stays zero-initialized (memset in decode_keeper_rle clears it).
+            decode_keeper_rle(s_kspr_decode_buf, data, src_w, src_h);
             atlas_layer = m_kspr_atlas_used++;
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D_ARRAY, m_kspr_sprite_array);
@@ -796,6 +894,75 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
     glDepthMask(GL_FALSE);
     glEnable(GL_BLEND);
 
+    // ── Depth-fail outline pass ──────────────────────────────────────────────
+    // Draws a flat owner-colour silhouette only where the sprite is BEHIND
+    // geometry (GL_GREATER depth test).  The normal draw below then paints
+    // over the visible portion with GL_LEQUAL, leaving the outline only
+    // peeking out from behind walls/columns.
+    // Additive glow sprites are excluded: they have no meaningful silhouette.
+    if (g_renderer_settings.creature_outline_enable && !additive)
+    {
+        // Resolve owner → player colour index → linear RGB from the palette.
+        float oc_r = 0.9f, oc_g = 0.9f, oc_b = 0.9f;
+        int owner = WorldViewRenderer_GetCurrentSpriteOwner();
+        if (owner >= 0)
+        {
+            unsigned char color_idx = get_player_color_idx((PlayerNumber)owner);
+            if (color_idx < 9)
+            {
+                uint8_t pal_idx = player_room_colours[color_idx];
+                oc_r = (float)((int)lbPalette[pal_idx * 3 + 0] << 2) / 255.0f;
+                oc_g = (float)((int)lbPalette[pal_idx * 3 + 1] << 2) / 255.0f;
+                oc_b = (float)((int)lbPalette[pal_idx * 3 + 2] << 2) / 255.0f;
+            }
+        }
+        const float oc_a = g_renderer_settings.creature_outline_alpha;
+
+        glDepthFunc(GL_GREATER);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+        if (atlas_layer >= 0 && m_kspr_atlas_outline_shader)
+        {
+            // Atlas path: texture already cached in m_kspr_sprite_array.
+            glUseProgram(m_kspr_atlas_outline_shader);
+            glUniform2f(m_kspr_atlas_outline_loc_viewport, (float)m_screen_w, (float)m_screen_h);
+            glUniform1f(m_kspr_atlas_outline_loc_z_ndc,    m_current_sprite_z);
+            glUniform1f(m_kspr_atlas_outline_loc_layer,    (float)atlas_layer);
+            glUniform4f(m_kspr_atlas_outline_loc_color,    oc_r, oc_g, oc_b, oc_a);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D_ARRAY, m_kspr_sprite_array);
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+        }
+        else if (atlas_layer < 0 && m_kspr_outline_shader)
+        {
+            // Fallback path: decode + upload now so the outline has pixel data.
+            // The normal draw below will re-use the already-uploaded texture.
+            decode_keeper_rle(s_kspr_decode_buf, data, src_w, src_h);
+            if (use_remap)
+            {
+                for (int oy = 0; oy < src_h; ++oy) {
+                    uint8_t* orow = s_kspr_decode_buf + oy * 256;
+                    for (int ox = 0; ox < src_w; ++ox)
+                        if (orow[ox] != 0) orow[ox] = remap[orow[ox]];
+                }
+            }
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, m_kspr_sprite_tex);
+            glPixelStorei(GL_UNPACK_ROW_LENGTH, 256);
+            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, src_w, src_h,
+                            GL_RED, GL_UNSIGNED_BYTE, s_kspr_decode_buf);
+            glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+
+            glUseProgram(m_kspr_outline_shader);
+            glUniform2f(m_kspr_outline_loc_viewport, (float)m_screen_w, (float)m_screen_h);
+            glUniform1f(m_kspr_outline_loc_z_ndc,    m_current_sprite_z);
+            glUniform4f(m_kspr_outline_loc_color,    oc_r, oc_g, oc_b, oc_a);
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+        }
+
+        glDepthFunc(GL_LEQUAL); // restore for normal draw below
+    }
+
     if (atlas_layer >= 0)
     {
         // Atlas path: no decode, no per-draw upload.
@@ -819,27 +986,35 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
 
     // --- Fallback path: decode + upload to scratch texture each draw ---
     // Used for remapped sprites, additive glow sprites, and when atlas is full.
-
-    // Decode RLE into the stride-256 scratch buffer
-    decode_keeper_rle(s_kspr_decode_buf, data, src_w, src_h);
-
-    // Apply colour remap (white/red highlight, shade fade, tint).
-    if (use_remap)
+    // If the outline block above already decoded + uploaded the sprite, skip
+    // the decode/upload here to avoid redundant work.
+    const bool outline_uploaded = g_renderer_settings.creature_outline_enable
+                                   && !additive
+                                   && atlas_layer < 0
+                                   && m_kspr_outline_shader;
+    if (!outline_uploaded)
     {
-        for (int y = 0; y < src_h; ++y) {
-            uint8_t* row = s_kspr_decode_buf + y * 256;
-            for (int x = 0; x < src_w; ++x)
-                if (row[x] != 0) row[x] = remap[row[x]];
-        }
-    }
+        // Decode RLE into the stride-256 scratch buffer
+        decode_keeper_rle(s_kspr_decode_buf, data, src_w, src_h);
 
-    // Upload decoded sprite (stride=256 in CPU buffer, upload src_w×src_h region)
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_kspr_sprite_tex);
-    glPixelStorei(GL_UNPACK_ROW_LENGTH, 256);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, src_w, src_h,
-                    GL_RED, GL_UNSIGNED_BYTE, s_kspr_decode_buf);
-    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+        // Apply colour remap (white/red highlight, shade fade, tint).
+        if (use_remap)
+        {
+            for (int y = 0; y < src_h; ++y) {
+                uint8_t* row = s_kspr_decode_buf + y * 256;
+                for (int x = 0; x < src_w; ++x)
+                    if (row[x] != 0) row[x] = remap[row[x]];
+            }
+        }
+
+        // Upload decoded sprite (stride=256 in CPU buffer, upload src_w×src_h region)
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, m_kspr_sprite_tex);
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, 256);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, src_w, src_h,
+                        GL_RED, GL_UNSIGNED_BYTE, s_kspr_decode_buf);
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    }
 
     if (additive && m_kspr_glow_shader)
     {

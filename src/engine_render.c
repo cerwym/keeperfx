@@ -70,6 +70,7 @@
 #ifdef __cplusplus
 #include "renderer/RenderPass.h"  // RenderPassSystem (C++ only)
 #endif
+#include "kfx/profiling/KfxProfilingC.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -2118,6 +2119,7 @@ static void fiddle_gamut_set_minmaxes(int32_t *floor_x, int32_t *floor_y, long m
  */
 static void fiddle_gamut(long pos_x, long pos_y)
 {
+    KFX_C_ZONE_BEGIN_COLOR(ctx, "Render/FiddleGamut", KFX_COLOR_RENDER_CPU);
     struct PlayerInfo *player = get_my_player();
     long ewwidth;
     long ewheight;
@@ -2142,6 +2144,7 @@ static void fiddle_gamut(long pos_x, long pos_y)
         fiddle_gamut_set_minmaxes(floor_x, floor_y, MAX_I_CAN_SEE_OVERHEAD);
         break;
     }
+    KFX_C_ZONE_END(ctx);
 }
 
 int floor_height_for_volume_box(PlayerNumber plyr_idx, MapSlabCoord slb_x, MapSlabCoord slb_y)
@@ -8157,6 +8160,9 @@ static void draw_jonty_mapwho(struct BucketKindJontySprite *jspr)
         thing_being_displayed_is_creature = 0;
         thing_being_displayed = NULL;
     }
+    // Tell the GPU renderer which player owns this sprite so the depth-fail
+    // outline can be drawn in the correct owner colour.
+    WorldViewRenderer_SetCurrentSpriteOwner(thing_is_invalid(thing) ? -1 : (int)thing->owner);
     if (render_sprite_debug_fn)
     {
         render_sprite_debug_fn(thing, jspr->scr_x, jspr->scr_y);
@@ -8202,6 +8208,7 @@ static void draw_jonty_mapwho(struct BucketKindJontySprite *jspr)
     }
     lbDisplay.DrawFlags = flg_mem;
     EngineSpriteDrawUsingAlpha = alpha_mem;
+    WorldViewRenderer_SetCurrentSpriteOwner(-1);
 }
 
 /** Fills solid area of the sprite in target buffer with color 255.

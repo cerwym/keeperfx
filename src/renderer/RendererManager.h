@@ -71,6 +71,12 @@ int RendererBeginFrame(void);
 /** Present the completed frame to the display. */
 void RendererEndFrame(void);
 
+/** Clear the display to the given 8-bit palette colour index.
+ *  GL: stores the index for glClearColor at EndFrame time.
+ *  Software: immediately fills the SDL draw surface.
+ *  Call once per frame before any drawing. */
+void RendererClearScreen(unsigned char colour_index);
+
 /** Call immediately after load_texture_map_file() to discard the cached GPU tile
  *  atlas so it is rebuilt on the next frame with fresh block_mem data.  Safe to
  *  call at any time; no-op if no GL renderer is active. */
@@ -139,6 +145,16 @@ int WorldViewRenderer_SubmitKeeperSprite(long dst_x, long dst_y, long dst_w, lon
  *  Must be called before each level load so stale data-pointer mappings
  *  from the previous level are not reused. */
 void WorldViewRenderer_ClearKeeperSpriteAtlas(void);
+
+/** Set the owning player index for the next keeper-sprite draw.
+ *  Called by draw_jonty_mapwho() so that render_keepersprite_gpu() can
+ *  colour the depth-fail outline with the creature's owner colour.
+ *  Pass -1 when no owner context is available. */
+void WorldViewRenderer_SetCurrentSpriteOwner(int player_idx);
+
+/** Get the owner index set by WorldViewRenderer_SetCurrentSpriteOwner().
+ *  Returns -1 when no owner is active. */
+int WorldViewRenderer_GetCurrentSpriteOwner(void);
 
 /******************************************************************************/
 /* C-callable map fade pass wrappers                                          */
@@ -261,6 +277,28 @@ TbBool RendererSubmitLandviewZoom(const unsigned char* src_buf, int src_w, int s
  *          false (software renderer: WScreen write already in final framebuffer). */
 TbBool RendererSubmitStagingOverlay(void);
 
+/** Composite an external palette-indexed buffer over the GPU frame with index-0
+ *  transparency, without writing to lbDisplay.WScreen.
+ *  Use when game code has drawn into a local bounce buffer (e.g. in GL mode where
+ *  WScreen must not be written).  The GL backend copies buf into its staging texture
+ *  immediately so the caller may free buf after this call returns.
+ *  @param buf  Source pixels (w × h, row-major, 8-bit palette indices).
+ *  @param w/h  Buffer dimensions (must match the physical screen size).
+ *  @return true  (GL: queued; transparent blit runs at EndFrame).
+ *          false (software renderer: caller should draw to WScreen + SubmitStagingOverlay). */
+TbBool RendererSubmitTransparentBlit(const unsigned char* buf, int w, int h);
+
+/** Submit the overhead (parchment) map tile colours for GPU rendering.
+ *  The caller provides one palette index per map tile (tiles_x × tiles_y,
+ *  row-major, background=0 for unrevealed tiles that need ghost effects).
+ *  In GL mode: the tile buffer is uploaded as a GL_R8 texture and drawn as an
+ *  opaque scaled quad covering [dst_x, dst_y, dst_x+dst_w, dst_y+dst_h].
+ *  In software mode: returns false so the caller runs the per-pixel WScreen loop.
+ *  @return true  (GL: overhead map queued; caller skips WScreen write).
+ *          false (software renderer: caller must write pixels to WScreen). */
+TbBool RendererSubmitOverheadMap(const unsigned char* tile_colors, int tiles_x, int tiles_y,
+                                  int dst_x, int dst_y, int dst_w, int dst_h);
+
 /******************************************************************************/
 /* C-callable UI renderer wrappers                                            */
 /******************************************************************************/
@@ -289,13 +327,23 @@ void UIRenderer_BeginTopOverlay(void);
 /** End the top-overlay batch. */
 void UIRenderer_EndTopOverlay(void);
 
-/** Flush deferred keeper-hand / cursor sprites.  Call this AFTER
- *  TextRenderer_Flush() so the cursor always composites above all text. */
-void UIRenderer_FlushHandSprites(void);
+/** Flush deferred cursor sprites (OS pointer + power-hand).
+ *  Must be called AFTER TextRenderer_Flush() so the cursor composites above
+ *  all text.  Replaces UIRenderer_FlushHandSprites(). */
+void CursorLayer_Flush(void);
 
-/** Submit a power-hand keeper sprite; deferred in OpenGL mode until after glClear(). */
-void UIRenderer_SubmitKeeperSprite(short x, short y, unsigned short kspr_base,
-                                   short kspr_angle, unsigned char sprgroup, long scale);
+/** Reset the cursor layer pending lists at the start of each frame.
+ *  Call from BeginFrame() before any submit calls. */
+void CursorLayer_Clear(void);
+
+/** Submit the OS pointer sprite for deferred rendering at end-of-frame.
+ *  Replaces the old LbI_PointerHandler::OnEndSwap() path. */
+void CursorLayer_SubmitPointerSprite(const struct TbSprite* spr, long x, long y, int units_per_px);
+
+/** Submit a power-hand keeper sprite; rendered at end-of-frame via CursorLayer_Flush().
+ *  Replaces UIRenderer_SubmitKeeperSprite(). */
+void CursorLayer_SubmitKeeperHandSprite(short x, short y, unsigned short kspr_base,
+                                        short kspr_angle, unsigned char sprgroup, long scale);
 
 /** Submit a panel sprite (gui_panel_sprites) at screen-left alignment.
  *  Resolves player coloring for spridx and submits GPU quad; immediate in software mode. */

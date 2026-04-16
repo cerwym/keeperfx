@@ -157,6 +157,38 @@ void main()
 }
 )glsl";
 
+// Depth-fail outline shaders — draw a flat owner-colour silhouette only where
+// the creature sprite is occluded by geometry (depth test = GL_GREATER).
+constexpr const char* KSPR_OUTLINE_FRAGMENT_SHADER = R"glsl(
+#version 330 core
+in vec2 v_uv;
+uniform sampler2D u_sprite;
+uniform vec4      u_outline_color;
+out vec4 fragColor;
+void main()
+{
+    float idx = texture(u_sprite, v_uv).r;
+    if (idx < (0.5 / 255.0)) discard;
+    fragColor = u_outline_color;
+}
+)glsl";
+
+// Array-atlas variant of the outline shader (sampler2DArray).
+constexpr const char* KSPR_ARRAY_OUTLINE_FRAGMENT_SHADER = R"glsl(
+#version 330 core
+in vec2 v_uv;
+uniform sampler2DArray u_sprite;
+uniform float          u_layer;
+uniform vec4           u_outline_color;
+out vec4 fragColor;
+void main()
+{
+    float idx = texture(u_sprite, vec3(v_uv, u_layer)).r;
+    if (idx < (0.5 / 255.0)) discard;
+    fragColor = u_outline_color;
+}
+)glsl";
+
 // Palette blit shaders
 constexpr const char* PALETTE_BLIT_VERTEX_SHADER = R"glsl(
 #version 330 core

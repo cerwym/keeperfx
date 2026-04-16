@@ -258,6 +258,21 @@ private:
     GLint  m_kspr_glow_loc_sprite   = -1;
     GLint  m_kspr_glow_loc_z_ndc    = -1;
 
+    // Depth-fail outline shaders and their uniform locations.
+    // Single-texture variant (fallback/remapped sprites):
+    GLuint m_kspr_outline_shader            = 0;
+    GLint  m_kspr_outline_loc_viewport      = -1;
+    GLint  m_kspr_outline_loc_sprite        = -1;
+    GLint  m_kspr_outline_loc_z_ndc         = -1;
+    GLint  m_kspr_outline_loc_color         = -1;
+    // Array-atlas variant (normal sprites using GL_TEXTURE_2D_ARRAY):
+    GLuint m_kspr_atlas_outline_shader           = 0;
+    GLint  m_kspr_atlas_outline_loc_viewport     = -1;
+    GLint  m_kspr_atlas_outline_loc_sprite       = -1;
+    GLint  m_kspr_atlas_outline_loc_z_ndc        = -1;
+    GLint  m_kspr_atlas_outline_loc_color        = -1;
+    GLint  m_kspr_atlas_outline_loc_layer        = -1;
+
     bool   m_kspr_palette_dirty = true;
 
     // Per-frame state
