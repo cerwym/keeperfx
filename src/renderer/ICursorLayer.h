@@ -40,6 +40,8 @@
 #ifndef ICURSOR_LAYER_H
 #define ICURSOR_LAYER_H
 
+#include <cstdint>
+
 struct TbSprite;
 
 #ifdef __cplusplus

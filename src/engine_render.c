@@ -67,6 +67,7 @@
 
 #include "platform/PlatformManager.h"
 #include "renderer/RendererManager.h"
+#include "renderer/RendererSettings.h"
 #ifdef __cplusplus
 #include "renderer/RenderPass.h"  // RenderPassSystem (C++ only)
 #endif
@@ -8160,9 +8161,15 @@ static void draw_jonty_mapwho(struct BucketKindJontySprite *jspr)
         thing_being_displayed_is_creature = 0;
         thing_being_displayed = NULL;
     }
-    // Tell the GPU renderer which player owns this sprite so the depth-fail
-    // outline can be drawn in the correct owner colour.
-    WorldViewRenderer_SetCurrentSpriteOwner(thing_is_invalid(thing) ? -1 : (int)thing->owner);
+    // Tell the GPU renderer the owner and whether this sprite should receive
+    // a depth-fail outline (creatures and dead creatures only).
+    if (!thing_is_invalid(thing))
+    {
+        int wants_outline = (g_renderer_settings.creature_outline_class_mask >> thing->class_id) & 1u;
+        WorldViewRenderer_SetCurrentSpriteContext((int)thing->owner, wants_outline);
+    }
+    else
+        WorldViewRenderer_SetCurrentSpriteContext(-1, 0);
     if (render_sprite_debug_fn)
     {
         render_sprite_debug_fn(thing, jspr->scr_x, jspr->scr_y);
@@ -8208,7 +8215,7 @@ static void draw_jonty_mapwho(struct BucketKindJontySprite *jspr)
     }
     lbDisplay.DrawFlags = flg_mem;
     EngineSpriteDrawUsingAlpha = alpha_mem;
-    WorldViewRenderer_SetCurrentSpriteOwner(-1);
+    WorldViewRenderer_SetCurrentSpriteContext(-1, 0);
 }
 
 /** Fills solid area of the sprite in target buffer with color 255.

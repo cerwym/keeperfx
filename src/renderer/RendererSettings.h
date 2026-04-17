@@ -181,6 +181,13 @@ typedef struct RendererSettings {
      *  Default: 0.5. */
     float creature_outline_alpha;
 
+    /** Bitmask of ThingClass (TCls_*) values that receive the depth-fail outline.
+     *  Bit N is set iff things with class_id == N should be outlined.
+     *  Evaluated by the engine (engine_render.c) before passing wants_outline
+     *  to the renderer; the renderer itself never inspects ThingClass.
+     *  Default: (1<<TCls_Creature)|(1<<TCls_DeadCreature). */
+    unsigned int creature_outline_class_mask;
+
 } RendererSettings;
 
 /** Global active renderer settings.  Modified by config parsing and console

@@ -899,8 +899,10 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
     // geometry (GL_GREATER depth test).  The normal draw below then paints
     // over the visible portion with GL_LEQUAL, leaving the outline only
     // peeking out from behind walls/columns.
-    // Additive glow sprites are excluded: they have no meaningful silhouette.
-    if (g_renderer_settings.creature_outline_enable && !additive)
+    // Additive glow sprites are excluded (no meaningful silhouette).
+    // The class-mask in RendererSettings controls which entity types are outlined.
+    const bool wants_outline = WorldViewRenderer_GetCurrentSpriteWantsOutline() != 0;
+    if (g_renderer_settings.creature_outline_enable && !additive && wants_outline)
     {
         // Resolve owner → player colour index → linear RGB from the palette.
         float oc_r = 0.9f, oc_g = 0.9f, oc_b = 0.9f;
@@ -990,6 +992,7 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
     // the decode/upload here to avoid redundant work.
     const bool outline_uploaded = g_renderer_settings.creature_outline_enable
                                    && !additive
+                                   && wants_outline
                                    && atlas_layer < 0
                                    && m_kspr_outline_shader;
     if (!outline_uploaded)

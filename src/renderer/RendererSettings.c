@@ -7,6 +7,7 @@
 /******************************************************************************/
 #include "pre_inc.h"
 #include "renderer/RendererSettings.h"
+#include "thing_list.h"   // TCls_* enum values for outline class mask default
 
 RendererSettings g_renderer_settings;
 
@@ -46,8 +47,9 @@ void RendererSettings_Reset(void)
     g_renderer_settings.lighting_mode         = RENDERER_LIGHTING_SOFTWARE;
 
     /* Creature outline */
-    g_renderer_settings.creature_outline_enable = 1;
-    g_renderer_settings.creature_outline_alpha  = 0.5f;
+    g_renderer_settings.creature_outline_enable     = 1;
+    g_renderer_settings.creature_outline_alpha      = 0.5f;
+    g_renderer_settings.creature_outline_class_mask = (1u << TCls_Creature) | (1u << TCls_DeadCreature);
 
     /* Debug */
     g_renderer_settings.wireframe             = 0;
