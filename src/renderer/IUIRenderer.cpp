@@ -40,13 +40,6 @@ void IUIRenderer::SubmitSlabSelector(int x1, int y1, int x2, int y2,
     (void)x1; (void)y1; (void)x2; (void)y2; (void)color; (void)z_depth;
 }
 
-void IUIRenderer::SubmitKeeperSprite(short x, short y, unsigned short kspr_base,
-                                     short angle, unsigned char sprgroup, long scale)
-{
-    // Software renderer has no frame-setup concept — execute immediately.
-    process_keeper_sprite(x, y, kspr_base, angle, sprgroup, scale);
-}
-
 void IUIRenderer::SubmitPanelSprite(int32_t x, int32_t y, int units_per_px,
                                     SpriteHandle spr, bool flip_horiz)
 {

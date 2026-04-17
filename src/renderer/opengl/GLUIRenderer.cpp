@@ -13,8 +13,6 @@
 #include "renderer/opengl/GLShaders.h"
 #include "renderer/opengl/GLSpriteAtlas.h"
 #include "renderer/opengl/GLFontAtlas.h"
-#include "renderer/opengl/GLWorldViewRenderer.h"
-#include "engine_render.h"   // process_keeper_sprite
 #include "bflib_basics.h"
 #include "bflib_video.h"       // lbDisplay.DrawFlags
 #include "globals.h"
@@ -50,7 +48,6 @@ GLUIRenderer::GLUIRenderer()
     , m_palette_texture(0)
     , m_palette_texture_target(GL_TEXTURE_2D)
     , m_fade_texture(0)
-    , m_world_view_renderer(nullptr)
     , m_minimap_cpu_buf(nullptr)
     , m_minimap_cpu_size(0)
     , m_minimap_texture(0)
@@ -118,11 +115,6 @@ void GLUIRenderer::SetScreenDimensions(int width, int height)
     m_screen_height = height;
 }
 
-void GLUIRenderer::SetWorldViewRenderer(GLWorldViewRenderer* wvr)
-{
-    m_world_view_renderer = wvr;
-}
-
 bool GLUIRenderer::SetSpriteAtlas(GLSpriteAtlas* atlas)
 {
     m_sprite_atlas = atlas;
@@ -158,21 +150,13 @@ void GLUIRenderer::SubmitSlabSelector(int x1, int y1, int x2, int y2, unsigned c
 
 extern "C" unsigned char EngineSpriteDrawUsingAlpha;
 
-void GLUIRenderer::SubmitKeeperSprite(short x, short y, unsigned short kspr_base,
-                                       short angle, unsigned char sprgroup, long scale)
+// Returns the alpha that should be applied to a submitted UI element based
+// on the current lbDisplay.DrawFlags transparency flags.
+static inline float UIAlphaFromDrawFlags()
 {
-    // Capture draw state at submission time and defer to Flush() which runs
-    // after frame setup (glClear), so the sprites aren't wiped.
-    PendingHandSprite spr;
-    spr.x          = x;
-    spr.y          = y;
-    spr.kspr_base  = kspr_base;
-    spr.angle      = angle;
-    spr.sprgroup   = sprgroup;
-    spr.scale      = scale;
-    spr.draw_flags = lbDisplay.DrawFlags;
-    spr.draw_alpha = EngineSpriteDrawUsingAlpha;
-    m_pending_hand_sprites.push_back(spr);
+    if (lbDisplay.DrawFlags & Lb_SPRITE_TRANSPAR4) return 0.5f;
+    if (lbDisplay.DrawFlags & Lb_SPRITE_TRANSPAR8) return 0.25f;
+    return 1.0f;
 }
 
 void GLUIRenderer::SubmitPanelSprite(int32_t x, int32_t y, int units_per_px, SpriteHandle spr, bool flip_horiz)
@@ -185,9 +169,10 @@ void GLUIRenderer::SubmitPanelSprite(int32_t x, int32_t y, int units_per_px, Spr
     float h = (float)((uv.pixel_h * units_per_px + 8) / 16);
     float u0 = flip_horiz ? uv.u1 : uv.u0;
     float u1 = flip_horiz ? uv.u0 : uv.u1;
+    float a = UIAlphaFromDrawFlags();
     SubmitQuad((float)x, (float)y, w, h,
                u0, uv.v0, u1, uv.v1,
-               1.0f, 1.0f, 1.0f, 1.0f, 0.5f, 0.0f);
+               1.0f, 1.0f, 1.0f, a, 0.5f, 0.0f);
 }
 
 void GLUIRenderer::SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px,
@@ -207,10 +192,8 @@ void GLUIRenderer::SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px
     q.x1 = (float)x + w;  q.y1 = (float)y + h;
     q.u0 = uv.u0;  q.v0 = uv.v0;
     q.u1 = uv.u1;  q.v1 = uv.v1;
-    q.r = 1.0f;  q.g = 1.0f;  q.b = 1.0f;  q.a = 1.0f;
+    q.r = 1.0f;  q.g = 1.0f;  q.b = 1.0f;  q.a = UIAlphaFromDrawFlags();
     q.z = 0.5f;
-    q.layer = (uint8_t)m_current_layer;
-    q.remap_row = remap_row;
     m_remap_quads.push_back(q);
 }
 
@@ -228,7 +211,7 @@ void GLUIRenderer::SubmitPanelSpriteColored(int32_t x, int32_t y, int units_per_
     // mode=20.0: atlas-as-mask, flat vertex colour (Pass 5 in FlushQuads)
     SubmitQuad((float)x, (float)y, w, h,
                uv.u0, uv.v0, uv.u1, uv.v1,
-               r, g, b, 1.0f, 0.5f, 20.0f);
+               r, g, b, UIAlphaFromDrawFlags(), 0.5f, 20.0f);
 }
 
 void GLUIRenderer::SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h, SpriteHandle spr)
@@ -238,7 +221,7 @@ void GLUIRenderer::SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h
     if (!m_sprite_atlas->GetUV(spr, uv)) return;
     SubmitQuad((float)x, (float)y, (float)w, (float)h,
                uv.u0, uv.v0, uv.u1, uv.v1,
-               1.0f, 1.0f, 1.0f, 1.0f, 0.5f, 0.0f);
+               1.0f, 1.0f, 1.0f, UIAlphaFromDrawFlags(), 0.5f, 0.0f);
 }
 
 void GLUIRenderer::SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx)
@@ -386,8 +369,7 @@ void GLUIRenderer::FlushFront()
     KFX_ZONE("UIRenderer::FlushFront");
     KFX_GPU_ZONE("UIPass::Front");
     KFX_GL_SCOPE(front_grp, "UIPass/Front");
-    if (m_ui_quads.empty() && m_ui_lines.empty() && !m_minimap_pending
-        && m_pending_hand_sprites.empty())
+    if (m_ui_quads.empty() && m_ui_lines.empty() && !m_minimap_pending)
         return;
 
     { // Diagnostic: count front-layer elements
@@ -397,8 +379,8 @@ void GLUIRenderer::FlushFront()
         for (auto& l : m_ui_lines) if (l.layer == 1) front_lines++;
         static int s_diag_frame = 0;
         if ((s_diag_frame++ % 300) == 0)
-            SYNCLOG("FlushFront: %d front quads, %d front lines, %d hand sprites, minimap=%d",
-                    front_quads, front_lines, (int)m_pending_hand_sprites.size(), (int)m_minimap_pending);
+            SYNCLOG("FlushFront: %d front quads, %d front lines, minimap=%d",
+                    front_quads, front_lines, (int)m_minimap_pending);
     }
 
     if (MyScreenWidth > 0 && MyScreenHeight > 0) {
@@ -488,30 +470,23 @@ void GLUIRenderer::FlushFront()
     glUseProgram(0);
 }
 
-void GLUIRenderer::FlushHandSprites()
+void GLUIRenderer::FlushCursorSprites()
 {
-    // Drain deferred hand / cursor keeper-sprites.  Called from EndFrame AFTER
-    // TextRenderer_Flush() so the cursor always appears above all text.
-    if (!m_pending_hand_sprites.empty() && m_world_view_renderer)
-    {
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        m_world_view_renderer->BeginHandSpriteRendering();
-        unsigned int  saved_flags = lbDisplay.DrawFlags;
-        unsigned char saved_alpha = EngineSpriteDrawUsingAlpha;
-        for (const auto& spr : m_pending_hand_sprites)
-        {
-            lbDisplay.DrawFlags        = spr.draw_flags;
-            EngineSpriteDrawUsingAlpha = spr.draw_alpha;
-            process_keeper_sprite(spr.x, spr.y, spr.kspr_base,
-                                  spr.angle, spr.sprgroup, spr.scale);
-        }
-        lbDisplay.DrawFlags        = saved_flags;
-        EngineSpriteDrawUsingAlpha = saved_alpha;
-        m_world_view_renderer->EndHandSpriteRendering();
-        m_pending_hand_sprites.clear();
-        glDisable(GL_BLEND);
+    // Flush atlas-quad sprites submitted since the last FlushFront().
+    // Called by GLCursorLayer::Flush() for the OS pointer sprite.
+    if (m_ui_quads.empty()) return;
+    if (MyScreenWidth > 0 && MyScreenHeight > 0) {
+        m_screen_width  = MyScreenWidth;
+        m_screen_height = MyScreenHeight;
     }
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    FlushQuads(1);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+    glUseProgram(0);
 }
 
 void GLUIRenderer::Flush()
@@ -532,7 +507,6 @@ void GLUIRenderer::Clear()
     m_ui_lines.clear();
     m_remap_quads.clear();
     m_vertices.clear();
-    m_pending_hand_sprites.clear();
     m_minimap_pending = false;
     m_current_layer = 1;  // Reset to front layer (default) each frame
 }
@@ -656,7 +630,7 @@ bool GLUIRenderer::CreateShaders()
     }
 
     glDeleteShader(vert);
-    // Label all successfully-created shader programs for RenderDoc.
+    // Label all successfully-created shader programs (GL_KHR_debug).
     if (m_prog_sprite)         KFX_GL_LABEL(GL_PROGRAM, m_prog_sprite,         "UIR/SpriteProg");
     if (m_prog_sprite_colored) KFX_GL_LABEL(GL_PROGRAM, m_prog_sprite_colored, "UIR/SpriteColoredProg");
     if (m_prog_font)           KFX_GL_LABEL(GL_PROGRAM, m_prog_font,           "UIR/FontProg");

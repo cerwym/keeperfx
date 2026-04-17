@@ -693,16 +693,23 @@ void WorldViewRenderer_ClearKeeperSpriteAtlas(void)
 /* Sprite-owner tracking for the depth-fail creature outline                  */
 /******************************************************************************/
 
-static int s_current_sprite_owner = -1;
+static int s_current_sprite_owner        = -1;
+static int s_current_sprite_wants_outline =  0;
 
-void WorldViewRenderer_SetCurrentSpriteOwner(int player_idx)
+void WorldViewRenderer_SetCurrentSpriteContext(int player_idx, int wants_outline)
 {
-    s_current_sprite_owner = player_idx;
+    s_current_sprite_owner        = player_idx;
+    s_current_sprite_wants_outline = wants_outline;
 }
 
 int WorldViewRenderer_GetCurrentSpriteOwner(void)
 {
     return s_current_sprite_owner;
+}
+
+int WorldViewRenderer_GetCurrentSpriteWantsOutline(void)
+{
+    return s_current_sprite_wants_outline;
 }
 
 /******************************************************************************/
@@ -721,14 +728,14 @@ void CursorLayer_Clear(void)
         s_cursorLayer->Clear();
 }
 
-void CursorLayer_SubmitPointerSprite(const struct TbSprite* spr, long x, long y, int units_per_px)
+void CursorLayer_SubmitPointerSprite(const struct TbSprite* spr, int32_t x, int32_t y, int units_per_px)
 {
     if (s_cursorLayer)
         s_cursorLayer->SubmitPointerSprite(spr, x, y, units_per_px);
 }
 
 void CursorLayer_SubmitKeeperHandSprite(short x, short y, unsigned short kspr_base,
-                                        short kspr_angle, unsigned char sprgroup, long scale)
+                                        short kspr_angle, unsigned char sprgroup, int32_t scale)
 {
     if (s_cursorLayer)
         s_cursorLayer->SubmitKeeperHandSprite(x, y, kspr_base, kspr_angle, sprgroup, scale);

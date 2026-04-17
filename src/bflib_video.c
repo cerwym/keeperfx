@@ -67,7 +67,6 @@ unsigned char lbPalette[PALETTE_SIZE];
 SDL_Color lbPaletteColors[PALETTE_COLORS];
 
 char lbDrawAreaTitle[128] = "Bullfrog Shell";
-volatile TbBool lbInteruptMouse;
 volatile unsigned long lbIconIndex = 0;
 SDL_Window *lbWindow = NULL;
 
@@ -173,13 +172,10 @@ TbResult LbScreenSwap(void)
 TbResult LbScreenClear(TbPixel colour)
 {
     SYNCDBG(12,"Starting");
-    if ((!lbScreenInitialised) || (lbDrawSurface == NULL))
-      return Lb_FAIL;
-    if (SDL_FillRect(lbDrawSurface, NULL, colour) < 0) {
-        ERRORLOG("Error while clearing screen.");
+    if (!lbScreenInitialised)
         return Lb_FAIL;
-    }
-  return Lb_SUCCESS;
+    RendererClearScreen(colour);
+    return Lb_SUCCESS;
 }
 
 /** Returns the currently active screen mode.

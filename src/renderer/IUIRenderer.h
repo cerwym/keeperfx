@@ -77,14 +77,6 @@ public:
                                     unsigned char color, float z_depth);
 
     /**
-     * Submit a keeper-hand/cursor sprite for rendering.
-     * CPU default: calls process_keeper_sprite() immediately.
-     * GPU backends defer until after glClear().
-     */
-    virtual void SubmitKeeperSprite(short x, short y, unsigned short kspr_base,
-                                    short angle, unsigned char sprgroup, long scale);
-
-    /**
      * Submit a panel/button sprite.
      * CPU default: LbSpriteDrawResized (with optional horizontal flip).
      * @param flip_horiz  Mirror the sprite horizontally.
@@ -179,11 +171,6 @@ public:
 
     /** End the top-overlay batch. */
     virtual void ClearTopOverlay() { }
-
-    /** Flush deferred keeper-hand / cursor sprites.  Must be called AFTER
-     *  TextRenderer_Flush() so the cursor always composites above all text.
-     *  CPU default: no-op (software renderer draws hand sprites inline). */
-    virtual void FlushHandSprites() { }
 
     /** Flush layer-0 (back) elements before the CPU staging-buffer blit.
      *  CPU default: no-op. */

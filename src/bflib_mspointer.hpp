@@ -22,7 +22,6 @@
 
 #include "bflib_basics.h"
 #include "bflib_planar.h"
-#include "bflib_vidsurface.h"
 #include "bflib_video.h"
 #include "mutex.hpp"
 
@@ -51,9 +50,6 @@ class LbI_PointerHandler {
     void Undraw(bool);
     void Backup(bool);
     // Properties
-    struct SSurface surf1;
-    struct SSurface surf2;
-    //unsigned char sprite_data[4096];
     struct TbPoint *position;
     struct TbPoint *spr_offset;
     struct TbRect rect_1038;

@@ -588,7 +588,7 @@ void draw_power_hand(void)
     if (player->hand_busy_until_turn > game.play_gameturn)
     {
         SYNCDBG(7,"Drawing hand %s index %d, busy state", thing_model_name(thing), (int)thing->index);
-        UIRenderer_SubmitKeeperSprite(GetMouseX()+scale_ui_value(60*global_hand_scale), GetMouseY()+scale_ui_value(40*global_hand_scale),
+        CursorLayer_SubmitKeeperHandSprite(GetMouseX()+scale_ui_value(60*global_hand_scale), GetMouseY()+scale_ui_value(40*global_hand_scale),
           thing->anim_sprite, 0, thing->current_frame, scale_ui_value(64*global_hand_scale));
         draw_mini_things_in_hand(GetMouseX()+scale_ui_value(60*global_hand_scale), GetMouseY());
         return;
@@ -608,7 +608,7 @@ void draw_power_hand(void)
         {
           if (player->work_state == PSt_Slap)
           {
-            UIRenderer_SubmitKeeperSprite(GetMouseX() + scale_ui_value(70*global_hand_scale), GetMouseY() + scale_ui_value(46*global_hand_scale),
+            CursorLayer_SubmitKeeperHandSprite(GetMouseX() + scale_ui_value(70*global_hand_scale), GetMouseY() + scale_ui_value(46*global_hand_scale),
                 thing->anim_sprite, 0, thing->current_frame, scale_ui_value(64*global_hand_scale));
           } else
           if (player->work_state == PSt_CtrlDungeon)
@@ -652,7 +652,7 @@ void draw_power_hand(void)
                     EngineSpriteDrawUsingAlpha = 1;
                 }
 
-                UIRenderer_SubmitKeeperSprite(inputpos_x / pixel_size, inputpos_y / pixel_size,
+                CursorLayer_SubmitKeeperHandSprite(inputpos_x / pixel_size, inputpos_y / pixel_size,
                     picktng->anim_sprite, 0, picktng->current_frame, scale_ui_value(64*global_hand_scale));
                 lbDisplay.DrawFlags = 0;
                 EngineSpriteDrawUsingAlpha = 0;
@@ -660,7 +660,7 @@ void draw_power_hand(void)
             {
                 inputpos_x = GetMouseX() + scale_ui_value(11*global_hand_scale);
                 inputpos_y = GetMouseY() + scale_ui_value(56*global_hand_scale);
-                UIRenderer_SubmitKeeperSprite(inputpos_x / pixel_size, inputpos_y / pixel_size,
+                CursorLayer_SubmitKeeperHandSprite(inputpos_x / pixel_size, inputpos_y / pixel_size,
                     picktng->anim_sprite, 0, picktng->current_frame, scale_ui_value(64*global_hand_scale));
             }
             break;
@@ -669,7 +669,7 @@ void draw_power_hand(void)
             {
               inputpos_x = GetMouseX() + scale_ui_value(11*global_hand_scale);
               inputpos_y = GetMouseY() + scale_ui_value(56*global_hand_scale);
-              UIRenderer_SubmitKeeperSprite(inputpos_x / pixel_size, inputpos_y / pixel_size,
+              CursorLayer_SubmitKeeperHandSprite(inputpos_x / pixel_size, inputpos_y / pixel_size,
                   picktng->anim_sprite, 0, picktng->current_frame, scale_ui_value(64*global_hand_scale));
               break;
             } else
@@ -682,14 +682,14 @@ void draw_power_hand(void)
                 pickoffs = get_object_picked_up_offset(picktng);
                 inputpos_x = GetMouseX() + scale_ui_value(pickoffs->delta_x * global_hand_scale);
                 inputpos_y = GetMouseY() + scale_ui_value(pickoffs->delta_y * global_hand_scale);
-                UIRenderer_SubmitKeeperSprite(inputpos_x / pixel_size, inputpos_y / pixel_size,
+                CursorLayer_SubmitKeeperHandSprite(inputpos_x / pixel_size, inputpos_y / pixel_size,
                     picktng->anim_sprite, 0, picktng->current_frame, scale_ui_value(64 * global_hand_scale));
             }
             break;
         default:
             inputpos_x = GetMouseX();
             inputpos_y = GetMouseY();
-            UIRenderer_SubmitKeeperSprite(inputpos_x / pixel_size, inputpos_y / pixel_size,
+            CursorLayer_SubmitKeeperHandSprite(inputpos_x / pixel_size, inputpos_y / pixel_size,
                   picktng->anim_sprite, 0, picktng->current_frame, scale_ui_value(64*global_hand_scale));
             break;
         }
@@ -698,14 +698,14 @@ void draw_power_hand(void)
     {
         inputpos_x = GetMouseX() + scale_ui_value(58*global_hand_scale);
         inputpos_y = GetMouseY() +  scale_ui_value(6*global_hand_scale);
-        UIRenderer_SubmitKeeperSprite(inputpos_x / pixel_size, inputpos_y / pixel_size,
+        CursorLayer_SubmitKeeperHandSprite(inputpos_x / pixel_size, inputpos_y / pixel_size,
             thing->anim_sprite, 0, thing->current_frame, scale_ui_value(64*global_hand_scale));
         draw_mini_things_in_hand(GetMouseX()+scale_ui_value(60*global_hand_scale), GetMouseY());
     } else
     {
         inputpos_x = GetMouseX() + scale_ui_value(60*global_hand_scale);
         inputpos_y = GetMouseY() + scale_ui_value(40*global_hand_scale);
-        UIRenderer_SubmitKeeperSprite(inputpos_x / pixel_size, inputpos_y / pixel_size,
+        CursorLayer_SubmitKeeperHandSprite(inputpos_x / pixel_size, inputpos_y / pixel_size,
             thing->anim_sprite, 0, thing->current_frame, scale_ui_value(64*global_hand_scale));
         draw_mini_things_in_hand(GetMouseX()+scale_ui_value(60*global_hand_scale), GetMouseY());
     }

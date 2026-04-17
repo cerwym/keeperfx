@@ -146,15 +146,18 @@ int WorldViewRenderer_SubmitKeeperSprite(long dst_x, long dst_y, long dst_w, lon
  *  from the previous level are not reused. */
 void WorldViewRenderer_ClearKeeperSpriteAtlas(void);
 
-/** Set the owning player index for the next keeper-sprite draw.
- *  Called by draw_jonty_mapwho() so that render_keepersprite_gpu() can
- *  colour the depth-fail outline with the creature's owner colour.
- *  Pass -1 when no owner context is available. */
-void WorldViewRenderer_SetCurrentSpriteOwner(int player_idx);
+/** Set the game-entity context for the next keeper-sprite draw.
+ *  Called by draw_jonty_mapwho() before dispatching each sprite so that
+ *  render_keepersprite_gpu() can colour the depth-fail outline correctly.
+ *  Pass -1 / 0 when no context is available (reset). */
+void WorldViewRenderer_SetCurrentSpriteContext(int player_idx, int wants_outline);
 
-/** Get the owner index set by WorldViewRenderer_SetCurrentSpriteOwner().
- *  Returns -1 when no owner is active. */
+/** Get the owner index set by the last WorldViewRenderer_SetCurrentSpriteContext(). */
 int WorldViewRenderer_GetCurrentSpriteOwner(void);
+
+/** Returns non-zero if the last WorldViewRenderer_SetCurrentSpriteContext() call
+ *  requested a depth-fail outline for this sprite. */
+int WorldViewRenderer_GetCurrentSpriteWantsOutline(void);
 
 /******************************************************************************/
 /* C-callable map fade pass wrappers                                          */
@@ -338,12 +341,12 @@ void CursorLayer_Clear(void);
 
 /** Submit the OS pointer sprite for deferred rendering at end-of-frame.
  *  Replaces the old LbI_PointerHandler::OnEndSwap() path. */
-void CursorLayer_SubmitPointerSprite(const struct TbSprite* spr, long x, long y, int units_per_px);
+void CursorLayer_SubmitPointerSprite(const struct TbSprite* spr, int32_t x, int32_t y, int units_per_px);
 
 /** Submit a power-hand keeper sprite; rendered at end-of-frame via CursorLayer_Flush().
  *  Replaces UIRenderer_SubmitKeeperSprite(). */
 void CursorLayer_SubmitKeeperHandSprite(short x, short y, unsigned short kspr_base,
-                                        short kspr_angle, unsigned char sprgroup, long scale);
+                                        short kspr_angle, unsigned char sprgroup, int32_t scale);
 
 /** Submit a panel sprite (gui_panel_sprites) at screen-left alignment.
  *  Resolves player coloring for spridx and submits GPU quad; immediate in software mode. */

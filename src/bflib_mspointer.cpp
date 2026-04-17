@@ -29,7 +29,6 @@
 #include "bflib_planar.h"
 #include "bflib_mouse.h"
 #include "bflib_sprite.h"
-#include "bflib_vidsurface.h"
 #include "bflib_vidraw.h"
 #include "renderer/RendererManager.h"
 
@@ -39,7 +38,6 @@
 struct SSurface;
 /******************************************************************************/
 // Global variables
-volatile TbBool lbPointerAdvancedDraw;
 int32_t cursor_xsteps_array[2*CURSOR_SCALING_XSTEPS];
 int32_t cursor_ysteps_array[2*CURSOR_SCALING_YSTEPS];
 /******************************************************************************/
@@ -124,13 +122,11 @@ static long PointerDraw(long x, long y, const struct TbSprite *spr, TbPixel *out
 
 LbI_PointerHandler::LbI_PointerHandler(void)
 {
-    LbScreenSurfaceInit(&surf1);
-    LbScreenSurfaceInit(&surf2);
-    this->is_active = false;
+    this->is_active    = false;
     this->needs_redraw = false;
-    this->sprite = NULL;
-    this->position = NULL;
-    this->spr_offset = NULL;
+    this->sprite       = NULL;
+    this->position     = NULL;
+    this->spr_offset   = NULL;
     draw_pos_x = 0;
     draw_pos_y = 0;
 }
@@ -191,69 +187,31 @@ void LbI_PointerHandler::ClipHotspot(void)
 
 void LbI_PointerHandler::Initialise(const struct TbSprite *spr, struct TbPoint *npos, struct TbPoint *noffset)
 {
-    void *surfbuf;
-    TbPixel *buf;
-    long i;
-    int dstwidth;
-    int dstheight;
     Release();
     std::lock_guard<std::mutex> guard(lock);
-    sprite = spr;
-    dstwidth = scale_ui_value_lofi(sprite->SWidth + 1);
-    dstheight = scale_ui_value_lofi(sprite->SHeight + 1);
-    LbScreenSurfaceCreate(&surf1, dstwidth, dstheight);
-    LbScreenSurfaceCreate(&surf2, dstwidth, dstheight);
-    surfbuf = LbScreenSurfaceLock(&surf1);
-    if (surfbuf == NULL)
-    {
-        LbScreenSurfaceRelease(&surf1);
-        LbScreenSurfaceRelease(&surf2);
-        sprite = NULL;
-        return;
-    }
-    buf = (TbPixel *)surfbuf;
-    for (i=0; i < dstheight; i++)
-    {
-        memset(buf, 255, surf1.pitch);
-        buf += surf1.pitch;
-    }
-    PointerDraw(0, 0, this->sprite, (TbPixel *)surfbuf, surf1.pitch);
-    LbScreenSurfaceUnlock(&surf1);
-    this->position = npos;
-    this->spr_offset = noffset;
+    sprite       = spr;
+    position     = npos;
+    spr_offset   = noffset;
     ClipHotspot();
-    this->is_active = true;
-    NewMousePos();
+    this->is_active    = true;
     this->needs_redraw = false;
-    LbScreenSurfaceBlit(&surf2, this->draw_pos_x, this->draw_pos_y, &rect_1038, 0x10|0x02);
+    NewMousePos();
 }
 
 void LbI_PointerHandler::Draw(bool a1)
 {
-    unsigned long flags;
-    flags = 0x10 | 0x08 | 0x04;
-    if ( a1 )
-      flags |= 0x02;
-    LbScreenSurfaceBlit(&this->surf1, this->draw_pos_x, this->draw_pos_y, &rect_1038, flags);
+    (void)a1;
 }
 
 void LbI_PointerHandler::Backup(bool a1)
 {
-    unsigned long flags;
-    flags = 0x10;
-    if ( a1 )
-      flags |= 0x02;
+    (void)a1;
     this->needs_redraw = false;
-    LbScreenSurfaceBlit(&this->surf2, this->draw_pos_x, this->draw_pos_y, &rect_1038, flags);
 }
 
 void LbI_PointerHandler::Undraw(bool a1)
 {
-    unsigned long flags;
-    flags = 0x10 | 0x08;
-    if ( a1 )
-      flags |= 0x02;
-    LbScreenSurfaceBlit(&this->surf2, this->draw_pos_x, this->draw_pos_y, &rect_1038, flags);
+    (void)a1;
 }
 
 void LbI_PointerHandler::Release(void)
@@ -261,15 +219,11 @@ void LbI_PointerHandler::Release(void)
     std::lock_guard<std::mutex> guard(lock);
     if ( this->is_active )
     {
-        if ( lbInteruptMouse )
-            Undraw(true);
-        this->is_active = false;
+        this->is_active    = false;
         this->needs_redraw = false;
-        position = NULL;
-        sprite = NULL;
+        position   = NULL;
+        sprite     = NULL;
         spr_offset = NULL;
-        LbScreenSurfaceRelease(&surf1);
-        LbScreenSurfaceRelease(&surf2);
     }
 }
 
@@ -305,70 +259,30 @@ void LbI_PointerHandler::NewMousePos(void)
 bool LbI_PointerHandler::OnMove(void)
 {
     std::lock_guard<std::mutex> guard(lock);
-    if (lbPointerAdvancedDraw && lbInteruptMouse)
-    {
-        if (!RendererIsGpuComposited()) {
-          Undraw(true);
-          NewMousePos();
-          Backup(true);
-          Draw(true);
-        } else {
-          NewMousePos();
-        }
-    } else
-    {
-        NewMousePos();
-    }
+    NewMousePos();
     return true;
 }
 
 void LbI_PointerHandler::OnBeginSwap(void)
 {
     std::lock_guard<std::mutex> guard(lock);
-    if ( lbPointerAdvancedDraw )
-    {
-        if (RendererIsGpuComposited())
-        {
-          // GPU mode + advanced draw: submit cursor through UI renderer instead
-          // of writing to WScreen (which would be lost since staging blit is skipped).
-          if (sprite != NULL) {
-            long cx = position->x - scale_ui_value_lofi(spr_offset->x);
-            long cy = position->y - scale_ui_value_lofi(spr_offset->y);
-            int units_per_px = (int)(scale_ui_value_lofi(sprite->SWidth) * 16 / sprite->SWidth);
-            UIRenderer_SubmitPanelSpriteRaw(cx, cy, units_per_px, sprite);
-          }
-        } else {
-          Backup(false);
-          Draw(false);
-        }
-    } else
-    if (RendererIsGpuComposited() && sprite != NULL)
-    {
-      // GPU path: submit cursor sprite through the UI renderer so it composites
-      // during EndFrame's FlushFront(), matching the software renderer's cursor.
-      long cx = position->x - scale_ui_value_lofi(spr_offset->x);
-      long cy = position->y - scale_ui_value_lofi(spr_offset->y);
-      int units_per_px = (int)(scale_ui_value_lofi(sprite->SWidth) * 16 / sprite->SWidth);
-      UIRenderer_SubmitPanelSpriteRaw(cx, cy, units_per_px, sprite);
-    } else
-    if (LbScreenLock() == Lb_SUCCESS)
-    {
-      PointerDraw(position->x - scale_ui_value_lofi(spr_offset->x), position->y - scale_ui_value_lofi(spr_offset->y),
-          sprite, lbDisplay.WScreen, lbDisplay.GraphicsScreenWidth);
-      LbScreenUnlock();
-    }
+    if (sprite == NULL || !is_active) return;
+    // Submit the pointer sprite to ICursorLayer which renders it last in EndFrame,
+    // after the screen-tint overlay.  Both GL and SW backends handle it correctly:
+    //   GL  → GLCursorLayer::Flush() → atlas quad via FlushCursorSprites()
+    //   SW  → SWCursorLayer::Flush() → PointerDraw() into WScreen before SDL blit
+    int32_t cx = position->x - scale_ui_value_lofi(spr_offset->x);
+    int32_t cy = position->y - scale_ui_value_lofi(spr_offset->y);
+    int units_per_px = (sprite->SWidth > 0)
+        ? (int)(scale_ui_value_lofi(sprite->SWidth) * 16 / sprite->SWidth)
+        : 16;
+    CursorLayer_SubmitPointerSprite(sprite, cx, cy, units_per_px);
 }
 
 void LbI_PointerHandler::OnEndSwap(void)
 {
-    std::lock_guard<std::mutex> guard(lock);
-    if ( lbPointerAdvancedDraw )
-    {
-        if (!RendererIsGpuComposited()) {
-          Undraw(false);
-        }
-        this->needs_redraw = true;
-    }
+    // No-op: cursor rendering is now deferred entirely to CursorLayer_Flush()
+    // which runs inside RendererEndFrame().  No WScreen restore needed.
 }
 
 /******************************************************************************/

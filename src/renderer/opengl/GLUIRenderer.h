@@ -22,7 +22,6 @@
 
 class GLSpriteAtlas;
 class GLFontAtlas;
-class GLWorldViewRenderer;
 
 /******************************************************************************/
 
@@ -65,17 +64,6 @@ struct UIRemapQuad {
     int   remap_row;       // Row in fade table (0–255)
 };
 
-/** Deferred keeper-hand sprite, captured at SubmitKeeperSprite() time. */
-struct PendingHandSprite {
-    short x, y;
-    unsigned short kspr_base;
-    short angle;
-    unsigned char sprgroup;
-    long scale;
-    unsigned int draw_flags;
-    unsigned char draw_alpha;  // EngineSpriteDrawUsingAlpha at submit time
-};
-
 /**
  * OpenGL implementation of IUIRenderer.
  * Batches UI elements and renders with GPU shaders to eliminate flickering.
@@ -87,8 +75,6 @@ public:
 
     // IUIRenderer interface
     virtual void SubmitSlabSelector(int x1, int y1, int x2, int y2, unsigned char color, float z_depth) override;
-    virtual void SubmitKeeperSprite(short x, short y, unsigned short kspr_base,
-                                    short angle, unsigned char sprgroup, long scale) override;
     virtual void SubmitPanelSprite(int32_t x, int32_t y, int units_per_px,
                                    SpriteHandle spr, bool flip_horiz = false) override;
     virtual void SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px,
@@ -108,7 +94,6 @@ public:
     virtual void ClearWorldDepth() override;
     virtual void SetTopOverlay() override;
     virtual void ClearTopOverlay() override;
-    virtual void FlushHandSprites() override;
     virtual void FlushBack() override;
     virtual void FlushFront() override;
     virtual void Flush() override;
@@ -116,16 +101,17 @@ public:
     virtual const char* GetName() const override { return "OPENGL_UI"; }
     virtual bool IsGpuAccelerated() const override { return true; }
 
+    /** Flush any atlas-quad sprites submitted since the last FlushFront().
+     *  Called by GLCursorLayer::Flush() to render the OS pointer sprite
+     *  as the final draw before the buffer swap. */
+    void FlushCursorSprites();
+
     /** Initialize OpenGL resources.
      *  @return true if successful */
     bool Init();
 
     /** Clean up GPU resources. */
     void Shutdown();
-
-    /** Set world-view renderer for hand sprite rendering during Flush().
-     *  Must be set before the first Flush() call in OpenGL mode. */
-    void SetWorldViewRenderer(GLWorldViewRenderer* wvr);
 
     /** Set screen dimensions for coordinate conversion.
      *  @param width Screen width in pixels
@@ -191,12 +177,6 @@ private:
     // Slab background tile texture (64×64 R8, GL_REPEAT) — uploaded via UpdateSlabTexture()
     GLuint m_slab_texture = 0;
     int    m_slab_dim     = 0;
-
-    // World-view renderer reference for hand sprite Flush()
-    GLWorldViewRenderer* m_world_view_renderer;
-
-    // Deferred keeper-hand sprites (flushed after frame setup in Flush())
-    std::vector<PendingHandSprite> m_pending_hand_sprites;
 
     // Batched player-colour remap quads (flushed alongside front-layer quads)
     std::vector<UIRemapQuad> m_remap_quads;

@@ -3,8 +3,8 @@
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 # ━━━ Source File Collection ━━━
-file(GLOB_RECURSE KEEPERFX_SOURCES_C "src/*.c")
-file(GLOB_RECURSE KEEPERFX_SOURCES_CXX "src/*.cpp")
+file(GLOB_RECURSE KEEPERFX_SOURCES_C   CONFIGURE_DEPENDS "src/*.c")
+file(GLOB_RECURSE KEEPERFX_SOURCES_CXX CONFIGURE_DEPENDS "src/*.cpp")
 
 # Exclude stub files — added back explicitly when needed
 list(FILTER KEEPERFX_SOURCES_C EXCLUDE REGEX ".*/bflib_cpu_stub\\.c$")

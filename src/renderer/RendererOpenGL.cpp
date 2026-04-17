@@ -422,6 +422,7 @@ bool RendererOpenGL::BeginFrame()
 
     RenderPass_BeginFrame();
     UIRenderer_Clear();
+    CursorLayer_Clear();
     return true;
 }
 
@@ -476,7 +477,9 @@ bool RendererOpenGL::BeginFrame()
  *       Composites possession/pain (red) or death-flash (white) tint over all
  *       scene content.  Runs before the cursor so the cursor is never tinted.
  *
- *  Step 9 — UIRenderer_FlushHandSprites()        [GLUIRenderer, hand/cursor]
+ *  Step 9 — CursorLayer_Flush()               [GLCursorLayer]
+ *       OS pointer sprite (pointer_sprites atlas) + power-hand keeper sprites,
+ *       rendered as absolute last layer before the buffer swap.
  *       Cursor drawn absolutely last — after the tint overlay — so it is always
  *       on top of every other rendered layer.
  *
@@ -850,7 +853,7 @@ void RendererOpenGL::EndFrame()
 
     // Cursor drawn last — after the screen-tint overlay — so it is always on
     // top of every other rendered layer including possession/death-flash tints.
-    UIRenderer_FlushHandSprites();
+    CursorLayer_Flush();
 
     RenderPass_EndFrame();
     platform_swap_gl_buffers(lbWindow);

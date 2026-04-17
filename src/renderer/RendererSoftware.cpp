@@ -21,6 +21,7 @@
 #include "bflib_video.h"
 #include "bflib_vidsurface.h"
 #include "bflib_render.h"
+#include "renderer/RendererManager.h"
 
 #include <SDL2/SDL.h>
 #include <cstring>
@@ -128,11 +129,15 @@ void RendererSoftware::Shutdown()
 
 bool RendererSoftware::BeginFrame()
 {
+    CursorLayer_Clear();
     return true;
 }
 
 void RendererSoftware::EndFrame()
 {
+    // Draw the cursor into WScreen before blitting to the window.
+    CursorLayer_Flush();
+
     // Refresh the window surface pointer each frame (guards against window resize / alt-tab).
     lbScreenSurface = SDL_GetWindowSurface(lbWindow);
     SDL_Rect dst = { 0, 0, lbScreenSurface->w, lbScreenSurface->h };
@@ -173,6 +178,12 @@ void RendererSoftware::EndFrame()
     {
         ERRORDBG(11, "RendererSoftware::EndFrame flip failed: %s", SDL_GetError());
     }
+}
+
+void RendererSoftware::ClearScreen(uint8_t colour_index)
+{
+    if (lbDrawSurface)
+        SDL_FillRect(lbDrawSurface, NULL, colour_index);
 }
 
 uint8_t* RendererSoftware::LockFramebuffer(int* out_pitch)
