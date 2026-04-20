@@ -33,6 +33,7 @@
 #include "game_legacy.h"
 #include "value_util.h"
 
+#include "kfx/profiling/KfxProfilingC.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -2259,6 +2260,7 @@ static void light_render_area(MapSubtlCoord startx, MapSubtlCoord starty, MapSub
 
 void update_light_render_area(void)
 {
+    KFX_C_ZONE_BEGIN_COLOR(ctx, "Light/Update", KFX_COLOR_LIGHTING);
     int subtile_x;
     int subtile_y;
     int startx;
@@ -2307,6 +2309,7 @@ void update_light_render_area(void)
     if (endx > game.map_subtiles_x) endx = game.map_subtiles_x;
     // Set the area
     light_render_area(startx, starty, endx, endy);
+    KFX_C_ZONE_END(ctx);
 }
 
 void light_set_light_minimum_size_to_cache(long lgt_id, long min_radius, long min_intensity)

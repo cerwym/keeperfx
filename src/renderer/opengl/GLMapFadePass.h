@@ -33,8 +33,6 @@
 
 #ifdef RENDERER_OPENGL_ENABLED
 
-#include <vector>
-#include <cstdint>
 #include <glad/glad.h>
 #include "renderer/IMapFadePass.h"
 
@@ -42,7 +40,7 @@
 
 class GLMapFadePass : public IMapFadePass {
 public:
-    GLMapFadePass() = default;
+    GLMapFadePass();
     ~GLMapFadePass() override;
 
     // ── IMapFadePass ─────────────────────────────────────────────────────────
@@ -68,11 +66,6 @@ public:
      *  Called by RendererOpenGL::EndFrame() after the staging palette blit. */
     void RenderGPUComposePass() override;
 
-    /** Captures the current GL backbuffer as RGBA into m_snapshot_rgba.
-     *  Called by RendererOpenGL::EndFrame() just before platform_swap_gl_buffers().
-     *  Used by CaptureAndUploadFrames() to populate m_tex[1] (3D world frame). */
-    void SnapshotFrame() override;
-
 private:
     bool Init();
     void Shutdown();
@@ -94,13 +87,6 @@ private:
     long m_step        = 0;     ///< step recorded for RenderGPUComposePass()
     int  m_tex_w       = 0;
     int  m_tex_h       = 0;
-
-    // Snapshot of the last fully-composited GL frame (RGBA8, row 0 = screen top).
-    // Populated by SnapshotFrame() in EndFrame; used as the 3D-world texture in
-    // CaptureAndUploadFrames() so the fade starts from a correct world image.
-    std::vector<uint8_t> m_snapshot_rgba;
-    int m_snapshot_w = 0;
-    int m_snapshot_h = 0;
 };
 
 /******************************************************************************/

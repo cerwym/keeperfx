@@ -79,6 +79,14 @@ public:
     /** Called after all rendering is complete — presents the frame to the display. */
     virtual void EndFrame() = 0;
 
+    /** Clear the display to a palette colour index before rendering this frame.
+     *  Call once per frame before any drawing takes place.
+     *  GL backends store the index and resolve it against the current palette
+     *  at the point glClear() runs in EndFrame().  Software backends fill the
+     *  SDL draw surface immediately.  Vita/3DS backends may override as needed.
+     *  @param colour_index  8-bit palette index (0 = black). */
+    virtual void ClearScreen(uint8_t colour_index) { (void)colour_index; }
+
     // -------------------------------------------------------------------------
     // Framebuffer access (used by the software rasteriser)
 
@@ -158,6 +166,54 @@ public:
      *          false (software renderer; WScreen write already in final buffer). */
     virtual bool SubmitStagingOverlay()
     {
+        return false;
+    }
+
+    /** Composite a caller-owned buffer over the GPU frame with index-0 transparency.
+     *
+     *  Equivalent to SubmitStagingOverlay() but takes an external buffer rather
+     *  than reading from the CPU staging buffer (lbDisplay.WScreen).  Use this
+     *  when the caller has drawn into a local bounce buffer and must NOT write
+     *  to lbDisplay.WScreen (e.g. compressed_window_draw() in GL mode).
+     *
+     *  The GL backend copies buf into its internal staging texture so the caller
+     *  may free buf immediately after this call.
+     *
+     *  Software backends return false — the caller should draw directly to WScreen
+     *  and call SubmitStagingOverlay().
+     *
+     *  @param buf  Source palette-indexed pixels (w × h, row-major).
+     *  @param w/h  Buffer dimensions (must equal the physical screen dimensions).
+     *  @return true  (GL: queued; transparent blit runs at EndFrame).
+     *          false (software renderer or size mismatch). */
+    virtual bool SubmitTransparentBlit(const uint8_t* buf, int w, int h)
+    {
+        (void)buf; (void)w; (void)h;
+        return false;
+    }
+
+    /** GPU path for the overhead (parchment) map tile colours.
+     *
+     *  The caller builds a tiles_x × tiles_y byte buffer containing one
+     *  palette index per map tile (one call to get_overhead_mapblock_color per
+     *  tile, background=0).  The GPU uploads the buffer as a GL_R8 texture,
+     *  decodes each index via the current game palette, and draws an opaque
+     *  scaled quad covering dst_x/y … dst_x+dst_w/dst_y+dst_h.
+     *
+     *  Software backends return false — the caller must run the original
+     *  block_size² pixel-per-tile WScreen write loop instead.
+     *
+     *  @param tile_colors  One byte per tile (tiles_x × tiles_y, row-major).
+     *  @param tiles_x/y    Map tile dimensions.
+     *  @param dst_x/y/w/h  Destination rectangle in screen pixels.
+     *  @return true  if the GPU path accepted the data (caller skips WScreen loop).
+     *          false if unhandled (software renderer). */
+    virtual bool SubmitOverheadMap(
+        const uint8_t* tile_colors, int tiles_x, int tiles_y,
+        int dst_x, int dst_y, int dst_w, int dst_h)
+    {
+        (void)tile_colors; (void)tiles_x; (void)tiles_y;
+        (void)dst_x; (void)dst_y; (void)dst_w; (void)dst_h;
         return false;
     }
 

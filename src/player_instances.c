@@ -1011,7 +1011,12 @@ void leave_creature_as_controller(struct PlayerInfo *player, struct Thing *thing
           disband_creatures_group(thing);
         }
     }
-    if ((thing->light_id != 0) && (!crconf->illuminated) && (!creature_under_spell_effect(thing, CSAfF_Light)))
+    // Guard against reading thing->light_id after delete_thing_structure() has
+    // already zeroed the Thing.  delete_thing_structure() handles its own light
+    // cleanup internally, so skip the check for the spectator path where the
+    // Thing was just deleted (identified by alloc_flags being 0 post-memset).
+    if ((thing->alloc_flags != 0) &&
+        (thing->light_id != 0) && (!crconf->illuminated) && (!creature_under_spell_effect(thing, CSAfF_Light)))
     {
         light_delete_light(thing->light_id);
         thing->light_id = 0;

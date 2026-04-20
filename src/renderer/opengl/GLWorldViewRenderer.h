@@ -65,6 +65,12 @@ public:
     // after glClear() and before the CPU framebuffer blit overlay.
     void GPUFlushNow();
 
+    /** Render the accumulated draw list into the currently-bound FBO.
+     *  The caller is responsible for binding/unbinding the FBO and clearing it.
+     *  m_screen_w/h must already be set to pip_w/pip_h via a preceding
+     *  BeginWorldPass(nullptr, 0, pip_w, pip_h, 0, 0) call. */
+    void GPUFlushNow_ToFBO(int pip_w, int pip_h);
+
     // IWorldViewRenderer: submit a keeper-sprite through the GPU path.
     int SubmitKeeperSprite(long dst_x, long dst_y, long dst_w, long dst_h,
                            const unsigned char* data, int src_w, int src_h,
@@ -97,6 +103,11 @@ public:
      *  mappings are not reused. */
     void ClearKeeperSpriteAtlas();
 
+    /** Attempt to initialise GL resources outside of a world pass, e.g. from
+     *  RendererOpenGL::BeginFrame().  No-op when already initialised.
+     *  Returns true when initialisation is complete. */
+    bool TryEarlyInit() { return init_gl_resources(); }
+
 private:
     bool init_gl_resources();
     void free_gl_resources();
@@ -122,6 +133,12 @@ private:
     // batch start pointer.  No GL calls are issued — everything is replayed
     // in GPUFlushNow() after glClear().
     void gpu_flush();
+
+    /** Core GL draw pass shared by GPUFlushNow() and GPUFlushNow_ToFBO().
+     *  Uploads the vertex buffer, sets the given viewport (already in GL
+     *  bottom-origin coords), executes all three draw passes, then resets the
+     *  viewport to the full screen and clears the draw-command lists. */
+    void gpu_execute_passes(int vp_x, int vp_y_gl);
 
     // Setup world sprite processing for a bucket (replaces global hook approach)
     void setup_world_sprite_processing(long bucket_num);

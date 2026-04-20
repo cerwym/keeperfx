@@ -117,6 +117,13 @@ private:
         float forced_palette_idx; // >= 0: use this palette index (ONE_COLOR mode); < 0: use atlas
     };
 
+    std::vector<TextVertex> m_vertex_batch;     // accumulated vertices, flushed in FlushBatch()
+    int  m_batch_scissor_x;
+    int  m_batch_scissor_y;
+    int  m_batch_scissor_w;
+    int  m_batch_scissor_h;
+    bool m_batch_scissor_enabled;
+
     /** Segment callback passed to TextLayout().
      *  Casts userdata back to GLTextRenderer* and calls FlushSegment. */
     static void gl_draw_segment(const char* sbuf, const char* ebuf,
@@ -126,6 +133,10 @@ private:
     /** Compile and link text rendering shaders.
      *  @return true if successful */
     bool CompileShaders();
+
+    /** Upload accumulated vertex batch to GPU using the current scissor state,
+     *  then clear the batch.  No-op if the batch is empty. */
+    void FlushBatch();
 
     /** Emit GPU quads for one justified line segment [sbuf, ebuf).
      *  Mirrors put_down_simpletext_sprites_resized.  Reads lbDisplay.DrawColour

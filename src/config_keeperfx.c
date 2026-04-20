@@ -116,6 +116,13 @@ const struct NamedCommand renderer_palette_mode_names[] = {
   {NULL, 0},
   };
 
+const struct NamedCommand renderer_zoom_box_mode_names[] = {
+  {"OVERHEAD",   RENDERER_ZBM_OVERHEAD},
+  {"ISOMETRIC",  RENDERER_ZBM_ISOMETRIC},
+  {"ISO",        RENDERER_ZBM_ISOMETRIC}, // shorthand
+  {NULL, 0},
+  };
+
 int cfg_renderer_type = RENDERER_AUTO;
 
 const struct NamedCommand atmos_volume[] = {
@@ -181,6 +188,7 @@ const struct NamedCommand conf_commands[] = {
   {"RENDERER_SHADE_SCALE"          , 46},
   {"RENDERER_SHADE_GAMMA"          , 47},
   {"RENDERER_TILE_FILTER"          , 48},
+  {"ZOOM_BOX_MODE"                 , 49},
   {NULL,                   0},
   };
 
@@ -1014,6 +1022,18 @@ static void load_file_configuration(const char *fname, const char *sname, const 
           }
           break;
       }
+      case 49: // ZOOM_BOX_MODE
+          i = recognize_conf_parameter(buf,&pos,len,renderer_zoom_box_mode_names);
+          if (i < 0)
+          {
+              CONFWRNLOG("Couldn't recognize \"%s\" command parameter in %s file.",
+                COMMAND_TEXT(cmd_num),config_textname);
+          }
+          else
+          {
+              g_renderer_settings.zoom_box_mode = i;
+          }
+          break;
       case ccr_comment:
           break;
       case ccr_endOfFile:

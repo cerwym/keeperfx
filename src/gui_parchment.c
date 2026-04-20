@@ -37,6 +37,7 @@
 #include "gui_draw.h"
 #include "kjm_input.h"
 #include "engine_render.h"
+#include "engine_camera.h"
 #include "map_data.h"
 #include "map_blocks.h"
 #include "player_data.h"
@@ -197,12 +198,9 @@ TbBool parchment_copy_background_at(const struct TbRect *bkgnd_area, int units_p
         srcbuf, img_width, img_height);
     // Burning candle flames
     const struct TbSprite* spr = get_button_sprite(GBS_parchment_map_screen_flame_1 + (game.play_gameturn & 3));
-    int flame_x1 = bkgnd_area->left+(36*units_per_px/(pixel_size << shift));
-    int flame_y  = bkgnd_area->top+0*units_per_px/(16*pixel_size);
-    UIRenderer_SubmitScaledSprite(flame_x1, flame_y, spr->SWidth*units_per_px/16, spr->SHeight*units_per_px/16, spr);
+    LbSpriteDrawScaled(bkgnd_area->left+(36*units_per_px/(pixel_size << shift)),(bkgnd_area->top+0*units_per_px/(16*pixel_size)), spr, spr->SWidth*units_per_px/16, spr->SHeight*units_per_px/16);
     spr = get_button_sprite(GBS_parchment_map_screen_flame_5+(game.play_gameturn & 3));
-    int flame_x2 = bkgnd_area->left+(574*units_per_px/(pixel_size << shift));
-    UIRenderer_SubmitScaledSprite(flame_x2, flame_y, spr->SWidth*units_per_px/16, spr->SHeight*units_per_px/16, spr);
+    LbSpriteDrawScaled(bkgnd_area->left+(574*units_per_px/(pixel_size << shift)),(bkgnd_area->top+0*units_per_px/(16*pixel_size)), spr, spr->SWidth*units_per_px/16, spr->SHeight*units_per_px/16);
     return true;
 }
 
@@ -330,25 +328,48 @@ TbPixel get_overhead_mapblock_color(MapSubtlCoord stl_x, MapSubtlCoord stl_y, Pl
 
 void draw_overhead_map(const struct TbRect *map_area, long block_size, PlayerNumber plyr_idx)
 {
-    if (RendererIsGpuComposited())
+    // GPU path: build a per-tile colour buffer and let the renderer scale it to
+    // the dest rect as an opaque GL_R8 texture.  background=0 is correct here
+    // because in GL mode lbDisplay.WScreen has no parchment pixels underneath.
+    if (RendererGetActiveType() == RENDERER_OPENGL)
     {
-        for (int row = 0; row < game.map_tiles_y; row++)
+        int tiles_x = game.map_tiles_x;
+        int tiles_y = game.map_tiles_y;
+        unsigned char* tile_buf = (unsigned char*)KfxAlloc((size_t)tiles_x * (size_t)tiles_y);
+        if (tile_buf)
         {
-            long stl_y = 1 + row * STL_PER_SLB;
-            for (int col = 0; col < game.map_tiles_x; col++)
+            long stl_y = 1;
+            for (int ty = 0; ty < tiles_y; ty++, stl_y += STL_PER_SLB)
             {
-                long stl_x = 1 + col * STL_PER_SLB;
-                struct Map* mapblk = get_map_block_at(stl_x, stl_y);
-                if (!map_block_revealed(mapblk, plyr_idx))
-                    continue; // parchment background quad shows through
-                TbPixel color = get_overhead_mapblock_color(stl_x, stl_y, plyr_idx, 0);
-                long px = map_area->left + col * block_size;
-                long py = map_area->top  + row * block_size;
-                UIRenderer_SubmitSolidBox(px, py, block_size, block_size, color);
+                long stl_x = 1;
+                for (int tx = 0; tx < tiles_x; tx++, stl_x += STL_PER_SLB)
+                {
+                    TbPixel col = get_overhead_mapblock_color(stl_x, stl_y, plyr_idx, 0);
+                    if (col == 0)
+                    {
+                        // Index 0 is the transparency sentinel in the GPU overhead shader.
+                        // Unrevealed tiles correctly stay 0 (transparent).
+                        // Revealed tiles that return 0 (e.g. SlbT_ROCK = black) need a
+                        // non-zero index; palette entry 1 is near-black in the DK palette.
+                        struct Map* mapblk = get_map_block_at(stl_x, stl_y);
+                        if (map_block_revealed(mapblk, plyr_idx))
+                            col = 1;
+                    }
+                    tile_buf[ty * tiles_x + tx] = col;
+                }
             }
+            RendererSubmitOverheadMap(tile_buf, tiles_x, tiles_y,
+                map_area->left, map_area->top,
+                map_area->right - map_area->left, map_area->bottom - map_area->top);
+            KfxFree(tile_buf);
+            lbDisplay.DrawFlags = 0;
+            return;
         }
-        return;
     }
+
+    // CPU fallback: original per-pixel block write to WScreen.
+    // Passes *dstbuf (the parchment pixel already in WScreen) as background so
+    // the ghost table shading correctly darkens the parchment colour underneath.
     long line = 0;
     long stl_y = 1;
     unsigned char* dstline = &lbDisplay.WScreen[map_area->left + lbDisplay.GraphicsScreenWidth * map_area->top];
@@ -388,10 +409,7 @@ void draw_overhead_room_icons(const struct TbRect *map_area, long block_size, Pl
       if (room_exists(room))
       {
           long room_visibility = abs(rkind_select - room->kind);
-          if ((room_visibility < 2) || (room_visibility >= 4))
-            lbDisplay.DrawFlags &= ~Lb_SPRITE_TRANSPAR4;
-          else
-              lbDisplay.DrawFlags |= Lb_SPRITE_TRANSPAR4;
+          TbBool dimmed = (room_visibility >= 2) && (room_visibility < 4);
           if (room_visibility < 4)
           {
             if (subtile_revealed(room->central_stl_x, room->central_stl_y, plyr_idx))
@@ -403,7 +421,15 @@ void draw_overhead_room_icons(const struct TbRect *map_area, long block_size, Pl
                     const struct TbSprite* spr = get_panel_sprite(sprite_idx);
                     long pos_x = map_area->left + (block_size * room->central_stl_x / STL_PER_SLB) - (spr->SWidth * ps_units_per_px / 16 / 2);
                     long pos_y = map_area->top + (block_size * room->central_stl_y / STL_PER_SLB) - (spr->SHeight * ps_units_per_px / 16 / 2);
-                    UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, ps_units_per_px, spr);
+                    // In GL mode draw via UIRenderer; dimmed rooms are skipped (binary blink vs TRANSPAR4 dim).
+                    // In software mode set DrawFlags so LbSpriteDrawResized respects the dimming effect.
+                    if (!dimmed) {
+                        UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, ps_units_per_px, spr);
+                    } else {
+                        lbDisplay.DrawFlags |= Lb_SPRITE_TRANSPAR4;
+                        UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, ps_units_per_px, spr);
+                        lbDisplay.DrawFlags &= ~Lb_SPRITE_TRANSPAR4;
+                    }
                 }
             }
           }
@@ -420,13 +446,15 @@ int draw_overhead_call_to_arms(const struct TbRect *map_area, long block_size, P
         if (player_uses_power_call_to_arms(i))
         {
             struct Dungeon* dungeon = get_dungeon(i);
-            lbDisplay.DrawFlags = Lb_SPRITE_OUTLINE;
             const struct PowerConfigStats *powerst = get_power_model_stats(PwrK_CALL2ARMS);
             long m = (4 * ((i + game.play_gameturn) & 7) * subtile_slab(powerst->strength[dungeon->cta_power_level]));
             long pos_x = map_area->left + block_size * (int)dungeon->cta_stl_x / STL_PER_SLB;
             long pos_y = map_area->top + block_size * (int)dungeon->cta_stl_y / STL_PER_SLB;
-            long radius = (((m & 7) + m) >> 3);
-            LbDrawCircle(pos_x, pos_y, radius/pixel_size, player_room_colours[get_player_color_idx(i)]);
+            long radius = (((m & 7) + m) >> 3) / pixel_size;
+            unsigned char col = player_room_colours[get_player_color_idx(i)];
+            // GPU path: approximate pulsing circle as an outline rectangle.
+            // Software path: LbDrawCircle via DrawFlags=Lb_SPRITE_OUTLINE.
+            UIRenderer_SubmitOutlineBox(pos_x - radius, pos_y - radius, radius * 2, radius * 2, col);
             n++;
         }
     }
@@ -480,13 +508,9 @@ int draw_overhead_creatures(const struct TbRect *map_area, long block_size, Play
                     col = col1;
                 }
                 pixel_end = get_pixels_scaled_and_zoomed(TWO_PIXELS);
-                if (RendererIsGpuComposited()) {
-                    UIRenderer_SubmitSolidBox(pos_x, pos_y, pixel_end, pixel_end, col);
-                } else {
-                    for (p = 0; p < pixel_end; p++)
-                    {
-                        LbDrawPixel(pos_x + draw_square[p].delta_x, pos_y+draw_square[p].delta_y, col);
-                    }
+                for (p = 0; p < pixel_end; p++)
+                {
+                    UIRenderer_SubmitSolidBox(pos_x + draw_square[p].delta_x, pos_y + draw_square[p].delta_y, 1, 1, col);
                 }
                 n++;
             } else
@@ -515,13 +539,9 @@ int draw_overhead_creatures(const struct TbRect *map_area, long block_size, Play
                     long pos_x = map_area->left + block_size * stl_num_decode_x(memberpos) / STL_PER_SLB;
                     long pos_y = map_area->top + block_size * stl_num_decode_y(memberpos) / STL_PER_SLB;
                     pixel_end = get_pixels_scaled_and_zoomed(TWO_PIXELS);
-                    if (RendererIsGpuComposited()) {
-                        UIRenderer_SubmitSolidBox(pos_x, pos_y, pixel_end, pixel_end, col);
-                    } else {
-                        for (p = 0; p < pixel_end; p++)
-                        {
-                            LbDrawPixel(pos_x + draw_square[p].delta_x, pos_y + draw_square[p].delta_y, col);
-                        }
+                    for (p = 0; p < pixel_end; p++)
+                    {
+                        UIRenderer_SubmitSolidBox(pos_x + draw_square[p].delta_x, pos_y + draw_square[p].delta_y, 1, 1, col);
                     }
                     n++;
                 }
@@ -565,19 +585,14 @@ int draw_overhead_traps(const struct TbRect *map_area, long block_size, PlayerNu
                     short pixels_amount = scale_pixel(ONE_PIXEL);
                     short pixel_end = get_pixels_scaled_and_zoomed(ONE_PIXEL);
                     short colour = 60;
-                    if (RendererIsGpuComposited()) {
-                        UIRenderer_SubmitSolidBox(pos_x - pixels_amount, pos_y, pixels_amount*2 + pixel_end, pixel_end, colour);
-                        UIRenderer_SubmitSolidBox(pos_x, pos_y - pixels_amount, pixel_end, pixels_amount*2 + pixel_end, colour);
-                    } else {
-                        for (int p = 0; p < pixel_end; p++)
-                        {
-                            // Draw a cross
-                            LbDrawPixel(pos_x + draw_square[p].delta_x, pos_y + draw_square[p].delta_y, colour);
-                            LbDrawPixel(pos_x + pixels_amount + draw_square[p].delta_x, pos_y + draw_square[p].delta_y, colour);
-                            LbDrawPixel(pos_x - pixels_amount + draw_square[p].delta_x, pos_y + draw_square[p].delta_y, colour);
-                            LbDrawPixel(pos_x + draw_square[p].delta_x, pos_y + pixels_amount + draw_square[p].delta_y, colour);
-                            LbDrawPixel(pos_x + draw_square[p].delta_x, pos_y - pixels_amount + draw_square[p].delta_y, colour);
-                        }
+                    for (int p = 0; p < pixel_end; p++)
+                    {
+                        // Draw a cross
+                        UIRenderer_SubmitSolidBox(pos_x + draw_square[p].delta_x, pos_y + draw_square[p].delta_y, 1, 1, colour);
+                        UIRenderer_SubmitSolidBox(pos_x + pixels_amount + draw_square[p].delta_x, pos_y + draw_square[p].delta_y, 1, 1, colour);
+                        UIRenderer_SubmitSolidBox(pos_x - pixels_amount + draw_square[p].delta_x, pos_y + draw_square[p].delta_y, 1, 1, colour);
+                        UIRenderer_SubmitSolidBox(pos_x + draw_square[p].delta_x, pos_y + pixels_amount + draw_square[p].delta_y, 1, 1, colour);
+                        UIRenderer_SubmitSolidBox(pos_x + draw_square[p].delta_x, pos_y - pixels_amount + draw_square[p].delta_y, 1, 1, colour);
                     }
                     n++;
                 }
@@ -619,13 +634,9 @@ int draw_overhead_spells(const struct TbRect *map_area, long block_size, PlayerN
                   long pos_x = map_area->left + block_size * (int)thing->mappos.x.stl.num / STL_PER_SLB  + ((block_size + 1)/5);
                   long pos_y = map_area->top + block_size * (int)thing->mappos.y.stl.num / STL_PER_SLB + ((block_size + 1)/5);
                   short pixel_end = get_pixels_scaled_and_zoomed(TWO_PIXELS);
-                  if (RendererIsGpuComposited()) {
-                      UIRenderer_SubmitSolidBox(pos_x, pos_y, pixel_end, pixel_end, colours[15][0][15]);
-                  } else {
-                      for (int p = 0; p < pixel_end; p++)
-                      {
-                          LbDrawPixel(pos_x + draw_square[p].delta_x, pos_y + draw_square[p].delta_y, colours[15][0][15]);
-                      }
+                  for (int p = 0; p < pixel_end; p++)
+                  {
+                      UIRenderer_SubmitSolidBox(pos_x + draw_square[p].delta_x, pos_y + draw_square[p].delta_y, 1, 1, colours[15][0][15]);
                   }
               }
               else if ( thing_is_workshop_crate(thing) )
@@ -633,13 +644,9 @@ int draw_overhead_spells(const struct TbRect *map_area, long block_size, PlayerN
                   long pos_x = map_area->left + block_size * (int)thing->mappos.x.stl.num / STL_PER_SLB  + ((block_size + 1)/5);
                   long pos_y = map_area->top + block_size * (int)thing->mappos.y.stl.num / STL_PER_SLB + ((block_size + 1)/5);
                   short pixel_end = get_pixels_scaled_and_zoomed(TWO_PIXELS);
-                  if (RendererIsGpuComposited()) {
-                      UIRenderer_SubmitSolidBox(pos_x, pos_y, pixel_end, pixel_end, colours[7][6][7]);
-                  } else {
-                      for (int p = 0; p < pixel_end; p++)
-                      {
-                          LbDrawPixel(pos_x + draw_square[p].delta_x, pos_y + draw_square[p].delta_y, colours[7][6][7]);
-                      }
+                  for (int p = 0; p < pixel_end; p++)
+                  {
+                      UIRenderer_SubmitSolidBox(pos_x + draw_square[p].delta_x, pos_y + draw_square[p].delta_y, 1, 1, colours[7][6][7]);
                   }
               }
             }
@@ -806,11 +813,44 @@ void draw_zoom_box_things_on_mapblk(struct Map *mapblk,unsigned short subtile_si
 
 void draw_zoom_box_terrain(long scrtop_x, long scrtop_y, int stl_x, int stl_y, PlayerNumber plyr_idx, long draw_tiles_x, long draw_tiles_y, int subtile_size)
 {
-    lbDisplay.DrawFlags = 0;
     scrtop_x += 4*units_per_pixel/16;
     scrtop_y -= 4*units_per_pixel/16;
+
+    if (RendererGetActiveType() == RENDERER_OPENGL)
+    {
+        // GPU path: build a per-subtile texture-block index buffer and submit it
+        // as textured tile quads via the zoom-tile shader (actual tile textures,
+        // matching the software renderer's draw_texture appearance).
+        // Unrevealed tiles use sentinel 0xFFFF and are skipped (transparent).
+        unsigned short* tile_buf = (unsigned short*)KfxAlloc((size_t)draw_tiles_x * (size_t)draw_tiles_y * sizeof(unsigned short));
+        if (tile_buf)
+        {
+            for (int dy = 0; dy < draw_tiles_y; dy++)
+                for (int dx = 0; dx < draw_tiles_x; dx++)
+                {
+                    struct Map* mapblk = get_map_block_at(stl_x + dx, stl_y + dy);
+                    struct SlabMap* slb = get_slabmap_for_subtile(stl_x + dx, stl_y + dy);
+                    if (map_block_revealed(mapblk, plyr_idx) && slb->kind != SlbT_ROCK)
+                    {
+                        int k = element_top_face_texture(mapblk);
+                        k = engine_remap_texture_blocks(stl_x + dx, stl_y + dy, k);
+                        tile_buf[dy * draw_tiles_x + dx] = (unsigned short)k;
+                    }
+                    else
+                    {
+                        tile_buf[dy * draw_tiles_x + dx] = 0xFFFF;  // rock / unrevealed — show black background
+                    }
+                }
+            RendererSubmitZoomBoxTiles(tile_buf, draw_tiles_x, draw_tiles_y,
+                scrtop_x, scrtop_y, subtile_size, subtile_size);
+            KfxFree(tile_buf);
+        }
+        return;
+    }
+
+    // Software path: direct pixel write via the SW rasteriser.
+    lbDisplay.DrawFlags = 0;
     setup_vecs(lbDisplay.WScreen, NULL, (unsigned int)lbDisplay.GraphicsScreenWidth, (unsigned int)(MyScreenWidth/pixel_size), (unsigned int)(MyScreenHeight/pixel_size));
-    // Draw the actual map
     int scr_y = scrtop_y;
     for (int map_dy = 0; map_dy < draw_tiles_y; map_dy++)
     {
@@ -838,6 +878,29 @@ void draw_zoom_box_terrain(long scrtop_x, long scrtop_y, int stl_x, int stl_y, P
 
 void draw_zoom_box_things(long scrtop_x, long scrtop_y, int stl_x, int stl_y, PlayerNumber plyr_idx, long draw_tiles_x, long draw_tiles_y, int subtile_size)
 {
+    if (RendererGetActiveType() == RENDERER_OPENGL)
+    {
+        // GPU: UIRenderer_Submit* calls take absolute screen coordinates.
+        // Use scrtop_x/scrtop_y as the tile-grid origin rather than a
+        // graphics window, so each tile position is correct on screen.
+        int scr_y = scrtop_y;
+        for (int map_dy = 0; map_dy < draw_tiles_y; map_dy++)
+        {
+            int scr_x = scrtop_x;
+            for (int map_dx = 0; map_dx < draw_tiles_x; map_dx++)
+            {
+                struct Map* mapblk = get_map_block_at(stl_x + map_dx, stl_y + map_dy);
+                if (map_block_revealed(mapblk, plyr_idx))
+                    draw_zoom_box_things_on_mapblk(mapblk, subtile_size, scr_x, scr_y);
+                scr_x += subtile_size;
+            }
+            scr_y += subtile_size;
+        }
+        return;
+    }
+
+    // Software path: use a graphics window so drawing is clipped to the box
+    // and sprites are positioned relative to its top-left corner.
     LbScreenSetGraphicsWindow(scrtop_x + 2*units_per_pixel/16, scrtop_y + 2*units_per_pixel/16,
         draw_tiles_x*subtile_size - 4*units_per_pixel/16, draw_tiles_y*subtile_size - 4*units_per_pixel/16);
     int scr_y = 0;
@@ -925,35 +988,58 @@ void draw_zoom_box(void)
      || (stl_y < -draw_tiles_y/2) || (stl_y >= game.map_subtiles_y+1-draw_tiles_y/2))
       return;
 
-    draw_zoom_box_terrain(scrtop_x, scrtop_y, stl_x, stl_y, player->id_number, draw_tiles_x, draw_tiles_y, subtile_size);
-    // Draw thing sprites on the map
-    draw_zoom_box_things(scrtop_x, scrtop_y, stl_x, stl_y, player->id_number, draw_tiles_x, draw_tiles_y, subtile_size);
-    // Draw sprites surrounding the box
+    ZoomBoxMode zbm = RendererGetZoomBoxMode();
+    if (zbm == ZBM_ISOMETRIC && UIRenderer_IsGpuActive())
+    {
+        // PiP isometric view: schedule a GPU world render into an FBO.
+        // The FBO colour attachment is composited by UIFlushFront() at EndFrame(),
+        // underneath the corner-frame sprites that are submitted below.
+        // Use the isometric camera (not acamera which points at CamIV_Parchment on this view).
+        struct Camera pip_cam = player->cameras[CamIV_Isometric];
+        int stl_cx = stl_x + draw_tiles_x / 2;
+        int stl_cy = stl_y + draw_tiles_y / 2;
+        pip_cam.mappos.x.val = stl_cx * 256 + 128;
+        pip_cam.mappos.y.val = stl_cy * 256 + 128;
+        // Scale camera zoom so that minimap_zoom controls how many tiles fill the box.
+        // Default draw_tiles=13; fewer tiles → zoom in (higher zoom value), more → zoom out.
+        {
+            long base_zoom = get_camera_zoom(&player->cameras[CamIV_Isometric]);
+            long scaled_zoom = base_zoom * 13 / draw_tiles_x;
+            if (scaled_zoom > CAMERA_ZOOM_MAX) scaled_zoom = CAMERA_ZOOM_MAX;
+            if (scaled_zoom < CAMERA_ZOOM_MIN) scaled_zoom = CAMERA_ZOOM_MIN;
+            set_camera_zoom(&pip_cam, scaled_zoom);
+        }
+        int pip_w = draw_tiles_x * subtile_size;
+        int pip_h = draw_tiles_y * subtile_size;
+        RendererSchedulePiPRender(&pip_cam, scrtop_x, scrtop_y, pip_w, pip_h);
+    }
+    else
+    {
+        // draw_zoom_box_terrain handles both GPU and software paths internally.
+        draw_zoom_box_terrain(scrtop_x, scrtop_y, stl_x, stl_y, player->id_number, draw_tiles_x, draw_tiles_y, subtile_size);
+        // draw_zoom_box_things uses UIRenderer for sprites — works in both modes.
+        draw_zoom_box_things(scrtop_x, scrtop_y, stl_x, stl_y, player->id_number, draw_tiles_x, draw_tiles_y, subtile_size);
+    }
+    // Draw corner frame sprites — GPU path via UIRenderer.
     int bs_units_per_px;
     {
         const struct TbSprite* spr = get_button_sprite(GBS_parchment_map_frame_deco_b_tl);
         bs_units_per_px = (74 * units_per_pixel) / spr->SWidth;
     }
-    LbScreenSetGraphicsWindow(0/pixel_size, 0/pixel_size, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
     int beg_x = scrtop_x - scale_value_for_resolution(20);
     int beg_y = scrtop_y - scale_value_for_resolution(24);
     int end_x = scrtop_x - scale_value_for_resolution(46) + draw_tiles_x * subtile_size;
     int end_y = scrtop_y - scale_value_for_resolution(58) + draw_tiles_y * subtile_size;
-    UIRenderer_SubmitPanelSpriteRaw(beg_x, beg_y, bs_units_per_px, get_button_sprite(GBS_parchment_map_frame_deco_b_tl));
-    UIRenderer_SubmitPanelSpriteRaw(end_x, beg_y, bs_units_per_px, get_button_sprite(GBS_parchment_map_frame_deco_b_tr));
-    UIRenderer_SubmitPanelSpriteRaw(beg_x, end_y, bs_units_per_px, get_button_sprite(GBS_parchment_map_frame_deco_b_bl));
-    UIRenderer_SubmitPanelSpriteRaw(end_x, end_y, bs_units_per_px, get_button_sprite(GBS_parchment_map_frame_deco_b_br));
-    // Finish
+    UIRenderer_SubmitButtonSprite(beg_x, beg_y, bs_units_per_px, GBS_parchment_map_frame_deco_b_tl);
+    UIRenderer_SubmitButtonSprite(end_x, beg_y, bs_units_per_px, GBS_parchment_map_frame_deco_b_tr);
+    UIRenderer_SubmitButtonSprite(beg_x, end_y, bs_units_per_px, GBS_parchment_map_frame_deco_b_bl);
+    UIRenderer_SubmitButtonSprite(end_x, end_y, bs_units_per_px, GBS_parchment_map_frame_deco_b_br);
     LbScreenSetGraphicsWindow(0/pixel_size, 0/pixel_size, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
 }
 
 void redraw_parchment_view(void)
 {
   SYNCDBG(5,"Starting");
-  // Clear the staging buffer so stale pixels from the previous 3D-world frame
-  // don't composite over the GPU-rendered parchment background.
-  if (RendererIsGpuComposited())
-      memset(lbDisplay.WScreen, 0, (size_t)lbDisplay.GraphicsScreenWidth * lbDisplay.GraphicsScreenHeight);
   // Load and draw background
   load_parchment_file();
   draw_map_parchment();
@@ -966,20 +1052,14 @@ void redraw_parchment_view(void)
   draw_zoom_box();
   draw_map_level_name();
   draw_tooltip();
-  // Composite all WScreen writes (parchment bg candles, overhead map tiles,
-  // room icons, GUI boxes, zoom box) onto the GL frame.
-  RendererSubmitStagingOverlay();
 }
 
 void redraw_minimal_overhead_view(void)
 {
-    if (RendererIsGpuComposited())
-        memset(lbDisplay.WScreen, 0, (size_t)lbDisplay.GraphicsScreenWidth * lbDisplay.GraphicsScreenHeight);
     draw_map_parchment();
     draw_2d_map();
     draw_gui();
     draw_tooltip();
-    RendererSubmitStagingOverlay();
 }
 
 void zoom_to_parchment_map(void)

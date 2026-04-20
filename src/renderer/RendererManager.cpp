@@ -191,6 +191,44 @@ TbBool RendererSubmitOverheadMap(const unsigned char* tile_colors, int tiles_x, 
                                    dst_x, dst_y, dst_w, dst_h) ? true : false;
 }
 
+void RendererSubmitZoomBoxTiles(const unsigned short* tile_block_ids, int tiles_x, int tiles_y,
+                                int dst_x, int dst_y, int tile_w, int tile_h)
+{
+#ifdef RENDERER_OPENGL_ENABLED
+    RendererOpenGL* rend = dynamic_cast<RendererOpenGL*>(RendererGetActive());
+    if (rend)
+        rend->SubmitZoomBoxTiles((const uint16_t*)tile_block_ids, tiles_x, tiles_y,
+                                  dst_x, dst_y, tile_w, tile_h);
+#endif
+}
+
+/******************************************************************************/
+/* Zoom-box render mode                                                       */
+/******************************************************************************/
+
+static ZoomBoxMode s_zoom_box_mode = ZBM_ISOMETRIC;
+
+ZoomBoxMode RendererGetZoomBoxMode(void)
+{
+    return s_zoom_box_mode;
+}
+
+void RendererSetZoomBoxMode(ZoomBoxMode mode)
+{
+    s_zoom_box_mode = mode;
+}
+
+void RendererSchedulePiPRender(struct Camera* cam, int x, int y, int w, int h)
+{
+#ifdef RENDERER_OPENGL_ENABLED
+    RendererOpenGL* rend = dynamic_cast<RendererOpenGL*>(RendererGetActive());
+    if (rend)
+        rend->SubmitPiPRender(cam, x, y, w, h);
+#else
+    (void)cam; (void)x; (void)y; (void)w; (void)h;
+#endif
+}
+
 /** Append any newly-built custom_sprites into the live atlas.
  *  Call this after every init_custom_sprites() so per-level icons are available. */
 void RendererNotifyCustomSpritesReloaded()
@@ -1190,7 +1228,10 @@ void RendererApplySettings(const RendererSettings* s)
         RendererNotifySpritesReloaded();
     }
 
-    // TODO: push shade/filter uniforms to the active world-view renderer (Phase 2).
+    // Propagate zoom-box mode to the runtime selector.
+    RendererSetZoomBoxMode((ZoomBoxMode)g_renderer_settings.zoom_box_mode);
+
+    // TODO: push shade/filter uniforms to the active world-view renderer
 }
 
 const RendererSettings* RendererGetSettings(void)

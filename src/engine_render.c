@@ -7015,6 +7015,12 @@ void draw_view(struct Camera *cam, unsigned char a2)
     }
 
     WorldViewRenderer_FlushIsometricView();
+    /* NSP overlays (health bars, room flags, gold text) only belong in the
+     * isometric/creature gameplay view, not in the overhead parchment map.
+     * The parchment camera uses PVM_ParchmentView; all other modes that reach
+     * this code path (IsoWibble, IsoStraight, Creature) should see NSPs. */
+    if (cam->view_mode != PVM_ParchmentView)
+        draw_nonspatial_sprites_gpu();
     cam->zoom = zoom_mem;//TODO [zoom] remove when all cam->zoom will be changed to camera_zoom
     SYNCDBG(9,"Finished");
 }

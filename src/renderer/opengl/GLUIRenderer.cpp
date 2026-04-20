@@ -32,11 +32,13 @@ GLUIRenderer::GLUIRenderer()
     , m_prog_font(0)
     , m_prog_solid(0)
     , m_prog_remap(0)
+    , m_prog_fbo(0)
     , m_loc_screen_sprite(-1)
     , m_loc_screen_font(-1)
     , m_loc_screen_solid(-1)
     , m_loc_screen_remap(-1)
     , m_loc_remap_row(-1)
+    , m_loc_screen_fbo(-1)
     , m_vao(0)
     , m_vbo(0)
     , m_uniform_mvp(0)
@@ -61,6 +63,7 @@ GLUIRenderer::GLUIRenderer()
     m_ui_lines.reserve(256);
     m_remap_quads.reserve(32);
     m_vertices.reserve(3072);
+    m_fbo_quads.reserve(4);
 }
 
 GLUIRenderer::~GLUIRenderer()
@@ -106,6 +109,7 @@ void GLUIRenderer::Shutdown()
     if (m_prog_font)   { glDeleteProgram(m_prog_font);   m_prog_font   = 0; }
     if (m_prog_solid)  { glDeleteProgram(m_prog_solid);  m_prog_solid  = 0; }
     if (m_prog_remap)  { glDeleteProgram(m_prog_remap);  m_prog_remap  = 0; }
+    if (m_prog_fbo)    { glDeleteProgram(m_prog_fbo);    m_prog_fbo    = 0; }
     if (m_slab_texture) { glDeleteTextures(1, &m_slab_texture); m_slab_texture = 0; }
 }
 
@@ -364,12 +368,52 @@ void GLUIRenderer::FlushBack()
     glUseProgram(0);
 }
 
+// Draw all queued FBO/PiP composite quads.  Called at the start of FlushFront()
+// so that decorative frame sprites (layer 1) render on top.
+static void FlushFBOQuads_impl(const std::vector<FBOQuad>& quads, GLuint prog, GLint loc_screen, GLuint vao, GLuint vbo,
+                               int screen_w, int screen_h) {
+    if (quads.empty() || !prog)
+        return;
+
+    glUseProgram(prog);
+    glUniform2f(loc_screen, (float)screen_w, (float)screen_h);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindVertexArray(vao);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+
+    for (const FBOQuad& q : quads) {
+        glBindTexture(GL_TEXTURE_2D, q.tex_id);
+
+        // Build two-triangle quad: screen-pixel coords, V flipped.
+        // GL FBOs store Y=0 at the bottom, so the world-render puts game-screen
+        // y=0 (far tiles) at texture V=1.  Flip V so the top of the PiP box
+        // shows the far end of the view rather than the near end.
+        // GLUIVertex: x, y, u, v, r, g, b, a, z, mode
+        GLUIVertex verts[6] = {
+            {q.x0, q.y0, 0.f, 1.f, 1, 1, 1, 1, 0.f, 0.f}, {q.x1, q.y0, 1.f, 1.f, 1, 1, 1, 1, 0.f, 0.f},
+            {q.x1, q.y1, 1.f, 0.f, 1, 1, 1, 1, 0.f, 0.f}, {q.x0, q.y0, 0.f, 1.f, 1, 1, 1, 1, 0.f, 0.f},
+            {q.x1, q.y1, 1.f, 0.f, 1, 1, 1, 1, 0.f, 0.f}, {q.x0, q.y1, 0.f, 0.f, 1, 1, 1, 1, 0.f, 0.f},
+        };
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(verts), verts);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+    }
+
+    glBindVertexArray(0);
+    glDepthMask(GL_TRUE);
+    glActiveTexture(GL_TEXTURE0);
+}
+
 void GLUIRenderer::FlushFront()
 {
     KFX_ZONE("UIRenderer::FlushFront");
     KFX_GPU_ZONE("UIPass::Front");
     KFX_GL_SCOPE(front_grp, "UIPass/Front");
-    if (m_ui_quads.empty() && m_ui_lines.empty() && !m_minimap_pending)
+    if (m_ui_quads.empty() && m_ui_lines.empty() && !m_minimap_pending && m_fbo_quads.empty())
         return;
 
     { // Diagnostic: count front-layer elements
@@ -388,10 +432,23 @@ void GLUIRenderer::FlushFront()
         m_screen_height = MyScreenHeight;
     }
 
+    // Guarantee full-screen viewport.  The PiP path leaves the viewport at
+    // pip_w×pip_h after FlushPiPSprites(); without this reset every draw call
+    // below would be clipped to the tiny pip-sized scissor region.
+    glViewport(0, 0, (int)MyScreenWidth, (int)MyScreenHeight);
+
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
+
+    // FBO/PiP composite quads drawn first so frame-corner sprites sit on top.
+    FlushFBOQuads_impl(m_fbo_quads, m_prog_fbo, m_loc_screen_fbo,
+                       m_vao, m_vbo, m_screen_width, m_screen_height);
+    m_fbo_quads.clear();
+    // Re-enable blend for atlas sprites.
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     // Flush all remaining (layer-1 / front) quads.
     FlushQuads(1);
@@ -470,6 +527,110 @@ void GLUIRenderer::FlushFront()
     glUseProgram(0);
 }
 
+void GLUIRenderer::BeginPiPSprites()
+{
+    m_pip_quad_watermark  = (int)m_ui_quads.size();
+    m_pip_remap_watermark = (int)m_remap_quads.size();
+    m_pip_line_watermark  = (int)m_ui_lines.size();
+    m_pip_capture_active  = true;
+}
+
+void GLUIRenderer::FlushPiPSprites(int pip_w, int pip_h)
+{
+    if (!m_pip_capture_active)
+        return;
+    m_pip_capture_active = false;
+
+    const int nq = (int)m_ui_quads.size()   - m_pip_quad_watermark;
+    const int nr = (int)m_remap_quads.size() - m_pip_remap_watermark;
+    const int nl = (int)m_ui_lines.size()   - m_pip_line_watermark;
+
+    if (nq > 0 || nr > 0 || nl > 0)
+    {
+        // FBO is already bound by caller.  Use pip dimensions for NDC conversion.
+        glViewport(0, 0, pip_w, pip_h);
+        const int saved_w = m_screen_width;
+        const int saved_h = m_screen_height;
+        m_screen_width  = pip_w;
+        m_screen_height = pip_h;
+
+        glActiveTexture(GL_TEXTURE0);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glDepthMask(GL_FALSE);
+
+        // Temporarily move pip-tail entries to the front of each vector so that
+        // FlushQuads/FlushRemapQuads/FlushLines (which operate on the whole vector
+        // filtered by layer) only see pip-sourced entries.
+        // We swap them into temporary vectors, flush, then restore the originals.
+        std::vector<UIQuad>      pip_quads(m_ui_quads.begin()   + m_pip_quad_watermark,  m_ui_quads.end());
+        std::vector<UIRemapQuad> pip_remap(m_remap_quads.begin() + m_pip_remap_watermark, m_remap_quads.end());
+        std::vector<UILine>      pip_lines(m_ui_lines.begin()   + m_pip_line_watermark,  m_ui_lines.end());
+
+        // Erase pip tail from the main queues now — corner sprites at [0..watermark) remain.
+        m_ui_quads.erase(  m_ui_quads.begin()   + m_pip_quad_watermark,  m_ui_quads.end());
+        m_remap_quads.erase(m_remap_quads.begin() + m_pip_remap_watermark, m_remap_quads.end());
+        m_ui_lines.erase(  m_ui_lines.begin()   + m_pip_line_watermark,  m_ui_lines.end());
+
+        // Swap pip entries in as the active queues for the flush calls.
+        m_ui_quads.swap(pip_quads);
+        m_remap_quads.swap(pip_remap);
+        m_ui_lines.swap(pip_lines);
+
+        // Layer-2: creature status / gold text — depth-tested against FBO geometry.
+        {
+            bool has2q = false, has2r = false, has2l = false;
+            for (const auto& q : m_ui_quads)    if (q.layer == 2) { has2q = true; break; }
+            for (const auto& r : m_remap_quads) if (r.layer == 2) { has2r = true; break; }
+            for (const auto& l : m_ui_lines)    if (l.layer == 2) { has2l = true; break; }
+            if (has2q || has2r || has2l)
+            {
+                glEnable(GL_DEPTH_TEST);
+                glDepthFunc(GL_LEQUAL);
+                if (has2q) FlushQuads(2);
+                if (has2r) FlushRemapQuads(2);
+                if (has2l) FlushLines(2);
+                glDisable(GL_DEPTH_TEST);
+            }
+        }
+        // Layer-1: room flags — always on top inside the zoom box.
+        {
+            bool has1q = false, has1r = false, has1l = false;
+            for (const auto& q : m_ui_quads)    if (q.layer == 1) { has1q = true; break; }
+            for (const auto& r : m_remap_quads) if (r.layer == 1) { has1r = true; break; }
+            for (const auto& l : m_ui_lines)    if (l.layer == 1) { has1l = true; break; }
+            if (has1q || has1r || has1l)
+            {
+                glDisable(GL_DEPTH_TEST);
+                if (has1q) FlushQuads(1);
+                if (has1r) FlushRemapQuads(1);
+                if (has1l) FlushLines(1);
+            }
+        }
+
+        glDepthMask(GL_TRUE);
+        glDisable(GL_BLEND);
+        glUseProgram(0);
+        m_screen_width  = saved_w;
+        m_screen_height = saved_h;
+
+        // Discard any remaining pip entries (layer-3 top-overlay etc.).
+        m_ui_quads.clear();
+        m_remap_quads.clear();
+        m_ui_lines.clear();
+
+        // Restore the saved corner-frame entries as the active queues.
+        m_ui_quads.swap(pip_quads);
+        m_remap_quads.swap(pip_remap);
+        m_ui_lines.swap(pip_lines);
+    }
+    else
+    {
+        // No pip-sourced sprites — nothing to render into the FBO.
+        // The queues already contain only pre-PiP entries; nothing to restore.
+    }
+}
+
 void GLUIRenderer::FlushCursorSprites()
 {
     // Flush atlas-quad sprites submitted since the last FlushFront().
@@ -501,10 +662,24 @@ void GLUIRenderer::Flush()
     FlushFront();
 }
 
+void GLUIRenderer::SubmitFBOQuad(int x, int y, int w, int h, GLuint tex_id)
+{
+    FBOQuad q;
+    q.x0     = (float)x;
+    q.y0     = (float)y;
+    q.x1     = (float)(x + w);
+    q.y1     = (float)(y + h);
+    q.tex_id = tex_id;
+    m_fbo_quads.push_back(q);
+}
+
+
+
 void GLUIRenderer::Clear()
 {
     m_ui_quads.clear();
     m_ui_lines.clear();
+    m_fbo_quads.clear();
     m_remap_quads.clear();
     m_vertices.clear();
     m_minimap_pending = false;
@@ -629,6 +804,19 @@ bool GLUIRenderer::CreateShaders()
         }
     }
 
+    // --- FBO/PiP composite program (RGBA8 direct, no palette lookup) ---
+    if (ok) {
+        GLuint frag = CompileStage(GL_FRAGMENT_SHADER, UI_FBO_FRAGMENT_SHADER, "UI_FBO_FRAG");
+        if (!frag) { ok = false; }
+        else {
+            SamplerBinding bindings[] = {{"u_fbo_tex", 0}};
+            m_prog_fbo = LinkProgram(vert, frag, "UI_FBO", bindings, 1);
+            glDeleteShader(frag);
+            if (!m_prog_fbo) ok = false;
+            else m_loc_screen_fbo = glGetUniformLocation(m_prog_fbo, "u_screen_size");
+        }
+    }
+
     glDeleteShader(vert);
     // Label all successfully-created shader programs (GL_KHR_debug).
     if (m_prog_sprite)         KFX_GL_LABEL(GL_PROGRAM, m_prog_sprite,         "UIR/SpriteProg");
@@ -636,6 +824,7 @@ bool GLUIRenderer::CreateShaders()
     if (m_prog_font)           KFX_GL_LABEL(GL_PROGRAM, m_prog_font,           "UIR/FontProg");
     if (m_prog_solid)          KFX_GL_LABEL(GL_PROGRAM, m_prog_solid,          "UIR/SolidProg");
     if (m_prog_remap)          KFX_GL_LABEL(GL_PROGRAM, m_prog_remap,          "UIR/RemapProg");
+    if (m_prog_fbo)            KFX_GL_LABEL(GL_PROGRAM, m_prog_fbo,            "UIR/FBOProg");
     return ok;
 }
 

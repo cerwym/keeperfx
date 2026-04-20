@@ -53,6 +53,11 @@ static GLuint compile_shader(GLenum type, const char* src)
 
 /******************************************************************************/
 
+GLMapFadePass::GLMapFadePass()
+{
+    Init();
+}
+
 GLMapFadePass::~GLMapFadePass()
 {
     Shutdown();
@@ -140,6 +145,20 @@ void GLMapFadePass::Shutdown()
 
 bool GLMapFadePass::CaptureAndUploadFrames()
 {
+    if (!poly_pool)
+    {
+        WARNLOG("GLMapFadePass::CaptureAndUploadFrames — poly_pool not initialised");
+        return false;
+    }
+
+    // ----- Capture both views into 320 × (MyScreenHeight/pixel_size) CPU buffers -----
+    // Layout in poly_pool matches map_fade_in / map_fade_out:
+    //   offset 0                         — ghost table (PALETTE_COLORS²)
+    //   offset PALETTE_COLORS²           — src  = 3D   world view
+    //   offset PALETTE_COLORS² + 320*200 — dest = parchment view
+    unsigned char* fade_src  = poly_pool + (PALETTE_COLORS * PALETTE_COLORS);
+    unsigned char* fade_dest = fade_src  + 320 * 200;
+
     int tex_w = MyScreenWidth  / pixel_size;
     int tex_h = MyScreenHeight / pixel_size;
     if (tex_w < 1 || tex_h < 1)
@@ -148,59 +167,35 @@ bool GLMapFadePass::CaptureAndUploadFrames()
         return false;
     }
 
+    prepare_map_fade_buffers(fade_src, fade_dest, 320, tex_h);
+
     m_tex_w = tex_w;
     m_tex_h = tex_h;
 
-    // ── Tex[1]: 3D world snapshot ─────────────────────────────────────────────
-    // SnapshotFrame() is called by RendererOpenGL::EndFrame just before each
-    // platform_swap_gl_buffers(), storing the fully-composited RGBA frame.
-    // Use that snapshot directly — no re-render or WScreen read needed.
-    if (!m_snapshot_rgba.empty()
-        && m_snapshot_w == tex_w && m_snapshot_h == tex_h)
-    {
-        glBindTexture(GL_TEXTURE_2D, m_tex[1]);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, tex_w, tex_h, 0,
-                     GL_RGBA, GL_UNSIGNED_BYTE, m_snapshot_rgba.data());
-    }
-    else
-    {
-        // No valid snapshot yet (first frame of session).  Upload a black frame.
-        std::vector<uint8_t> black(tex_w * tex_h * 4, 0);
-        glBindTexture(GL_TEXTURE_2D, m_tex[1]);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, tex_w, tex_h, 0,
-                     GL_RGBA, GL_UNSIGNED_BYTE, black.data());
-    }
+    // ----- Decode palette indices to RGBA8 and upload -----
+    std::vector<uint8_t> rgba(tex_w * tex_h * 4);
 
-    // ── Tex[0]: parchment view — rendered to WScreen then palette-decoded ────
-    // prepare_map_fade_buffers writes the parchment background and map tiles
-    // into lbDisplay.WScreen via the CPU blit path (engine_redraw.c).
-    // We only use fade_dest (the parchment side); fade_src is the world snapshot.
-    if (!poly_pool)
-    {
-        WARNLOG("GLMapFadePass::CaptureAndUploadFrames — poly_pool not initialised");
-        return false;
-    }
-    unsigned char* fade_src  = poly_pool + (PALETTE_COLORS * PALETTE_COLORS);
-    unsigned char* fade_dest = fade_src  + 320 * 200;
+    // [0] = parchment (fade_dest), [1] = 3D world (fade_src)
+    const unsigned char* cpu_bufs[2] = { fade_dest, fade_src };
 
-    prepare_map_fade_buffers(fade_src, fade_dest, 320, tex_h);
-
-    // Palette-decode fade_dest (parchment, 320-wide) to RGBA8 at native res.
-    std::vector<uint8_t> rgba(tex_w * tex_h * 4, 0);
-    for (int row = 0; row < tex_h; ++row)
+    for (int b = 0; b < 2; ++b)
     {
-        for (int col = 0; col < tex_w; ++col)
+        const unsigned char* src = cpu_bufs[b];
+        for (int row = 0; row < tex_h; ++row)
         {
-            uint8_t idx = fade_dest[row * 320 + col];
-            rgba[(row * tex_w + col) * 4 + 0] = (uint8_t)(lbPalette[idx * 3 + 0] << 2);
-            rgba[(row * tex_w + col) * 4 + 1] = (uint8_t)(lbPalette[idx * 3 + 1] << 2);
-            rgba[(row * tex_w + col) * 4 + 2] = (uint8_t)(lbPalette[idx * 3 + 2] << 2);
-            rgba[(row * tex_w + col) * 4 + 3] = 255;
+            for (int col = 0; col < tex_w; ++col)
+            {
+                uint8_t idx = src[row * 320 + col];
+                rgba[(row * tex_w + col) * 4 + 0] = (uint8_t)(lbPalette[idx * 3 + 0] << 2);
+                rgba[(row * tex_w + col) * 4 + 1] = (uint8_t)(lbPalette[idx * 3 + 1] << 2);
+                rgba[(row * tex_w + col) * 4 + 2] = (uint8_t)(lbPalette[idx * 3 + 2] << 2);
+                rgba[(row * tex_w + col) * 4 + 3] = 255;
+            }
         }
+        glBindTexture(GL_TEXTURE_2D, m_tex[b]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, tex_w, tex_h, 0,
+                     GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
     }
-    glBindTexture(GL_TEXTURE_2D, m_tex[0]);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, tex_w, tex_h, 0,
-                 GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
     glBindTexture(GL_TEXTURE_2D, 0);
 
     return true;
@@ -210,31 +205,6 @@ void GLMapFadePass::MarkDone()
 {
     m_active = false;
     m_step   = 0;
-}
-
-/******************************************************************************/
-
-void GLMapFadePass::SnapshotFrame()
-{
-    int w = MyScreenWidth  / pixel_size;
-    int h = MyScreenHeight / pixel_size;
-    if (w < 1 || h < 1) return;
-
-    m_snapshot_rgba.resize((size_t)w * h * 4);
-
-    // glReadPixels returns rows bottom-up (GL convention); flip vertically so
-    // row 0 = screen top, matching the CPU-side convention expected by the
-    // fade shader's texture lookups (fy = 1 - v_uv.y path in MAP_FADE_FRAG).
-    glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, m_snapshot_rgba.data());
-    for (int y = 0; y < h / 2; ++y)
-    {
-        uint8_t* rowA = m_snapshot_rgba.data() + (size_t)y * w * 4;
-        uint8_t* rowB = m_snapshot_rgba.data() + (size_t)(h - 1 - y) * w * 4;
-        for (int x = 0; x < w * 4; ++x)
-            std::swap(rowA[x], rowB[x]);
-    }
-    m_snapshot_w = w;
-    m_snapshot_h = h;
 }
 
 /******************************************************************************/

@@ -85,6 +85,7 @@
 #include "creature_states_barck.h"
 
 #include "keeperfx.hpp"
+#include "kfx/profiling/KfxProfilingC.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -5492,16 +5493,20 @@ long process_piss_need(struct Thing *thing, const struct CreatureModelConfig *cr
 
 void process_person_moods_and_needs(struct Thing *thing)
 {
+    KFX_C_ZONE_BEGIN_COLOR(ctx, "Creature/MoodsNeeds", KFX_COLOR_CREATURE);
     if (is_hero_thing(thing) || is_neutral_thing(thing)) {
         // Heroes and neutral creatures have no special needs
+        KFX_C_ZONE_END(ctx);
         return;
     }
     if (creature_is_kept_in_custody(thing)) {
         // And creatures being tortured, imprisoned, etc.
+        KFX_C_ZONE_END(ctx);
         return;
     }
     if (creature_is_leaving_and_cannot_be_stopped(thing))
     {
+        KFX_C_ZONE_END(ctx);
         return;
     }
     struct CreatureModelConfig* crconf = creature_stats_get_from_thing(thing);
@@ -5527,6 +5532,7 @@ void process_person_moods_and_needs(struct Thing *thing)
     }
     process_training_need(thing, crconf);
     process_piss_need(thing, crconf);
+    KFX_C_ZONE_END(ctx);
 }
 
 TbBool setup_move_off_lava(struct Thing* thing)

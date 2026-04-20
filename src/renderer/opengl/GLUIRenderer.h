@@ -64,6 +64,14 @@ struct UIRemapQuad {
     int   remap_row;       // Row in fade table (0–255)
 };
 
+/** Picture-in-picture FBO composite quad.  Uses the FBO colour texture directly
+ *  (no palette lookup).  Rendered before layer-1 atlas sprites so the zoom-box
+ *  frame corners appear on top of the isometric PiP content. */
+struct FBOQuad {
+    float x0, y0, x1, y1;   // Screen rectangle (pixels)
+    GLuint tex_id;           // RGBA8 FBO colour texture
+};
+
 /**
  * OpenGL implementation of IUIRenderer.
  * Batches UI elements and renders with GPU shaders to eliminate flickering.
@@ -89,6 +97,12 @@ public:
     virtual bool SubmitSlabBackground(int x, int y, int w, int h) override;
     virtual uint8_t* AcquireMinimapBuffer(int size) override;
     virtual void SubmitMinimap(int screen_x, int screen_y, int size) override;
+
+    /** Submit an RGBA8 FBO colour texture as a picture-in-picture quad.
+     *  Rendered during FlushFront() before atlas-sprite layer-1 quads so that
+     *  decorative frame sprites appear on top of the isometric content.  Not
+     *  part of IUIRenderer — called directly from RendererOpenGL::EndFrame(). */
+    void SubmitFBOQuad(int x, int y, int w, int h, GLuint tex_id);
     virtual void SetLayer(int layer) override;
     virtual void SetWorldDepth(float ndc_z) override;
     virtual void ClearWorldDepth() override;
@@ -105,6 +119,24 @@ public:
      *  Called by GLCursorLayer::Flush() to render the OS pointer sprite
      *  as the final draw before the buffer swap. */
     void FlushCursorSprites();
+
+    /** Record the current queue sizes as the PiP "start of pass" snapshot.
+     *  Call this immediately before the PiP draw_view() call.  Any quads
+     *  submitted after this point (up until FlushPiPSprites()) are treated
+     *  as PiP-sourced and will be routed into the FBO rather than the main
+     *  frame. */
+    void BeginPiPSprites();
+
+    /** Flush all UIRenderer quads queued since BeginPiPSprites() into the
+     *  currently-bound PiP FBO (call while the FBO is still bound), then
+     *  remove them from the queue so FlushFront() never sees them at
+     *  full-screen coordinates.
+     *  - Layer-2 quads (creature status/gold text): rendered with GL_LEQUAL
+     *    depth test so they occlude correctly behind walls.
+     *  - Layer-1 quads (room flags, slab selector): rendered without depth
+     *    test so they always appear on top inside the zoom box.
+     *  Uses pip_w x pip_h for NDC conversion. */
+    void FlushPiPSprites(int pip_w, int pip_h);
 
     /** Initialize OpenGL resources.
      *  @return true if successful */
@@ -144,6 +176,7 @@ private:
     GLuint m_prog_font;     // glyph rendering (unit 0 = font atlas RGBA)
     GLuint m_prog_solid;    // solid-colour quads and lines (no textures)
     GLuint m_prog_remap;    // fade-table remap sprites (units 0 atlas, 1 palette, 2 fade)
+    GLuint m_prog_fbo;      // FBO/PiP composite (unit 0: RGBA8 colour attachment)
 
     // Per-program u_screen_size uniform locations.
     GLint  m_loc_screen_sprite;
@@ -152,6 +185,7 @@ private:
     GLint  m_loc_screen_solid;
     GLint  m_loc_screen_remap;
     GLint  m_loc_remap_row;
+    GLint  m_loc_screen_fbo;
 
     GLuint m_vao;
     GLuint m_vbo;
@@ -161,6 +195,7 @@ private:
     // Rendering data
     std::vector<UIQuad> m_ui_quads;
     std::vector<UILine> m_ui_lines;
+    std::vector<FBOQuad> m_fbo_quads;   // PiP composite quads — drawn first in FlushFront
     std::vector<GLUIVertex> m_vertices;
     
     // Screen properties
@@ -180,6 +215,16 @@ private:
 
     // Batched player-colour remap quads (flushed alongside front-layer quads)
     std::vector<UIRemapQuad> m_remap_quads;
+
+    // PiP sprite watermarks: queue sizes recorded at BeginPiPSprites() time.
+    // Quads/lines at indices [0..watermark) were submitted before the PiP draw_view
+    // (i.e. corner-frame sprites) and must survive into FlushFront() untouched.
+    // Quads at [watermark..end) were submitted during draw_view(pip_cam) (NSP sprites,
+    // room flags) and are rendered into the FBO by FlushPiPSprites(), then erased.
+    int  m_pip_quad_watermark  = 0;
+    int  m_pip_remap_watermark = 0;
+    int  m_pip_line_watermark  = 0;
+    bool m_pip_capture_active  = false;
 
     // Minimap: renderer-owned CPU scratch buffer + deferred GL texture upload
     uint8_t* m_minimap_cpu_buf;    // renderer-owned; returned by AcquireMinimapBuffer

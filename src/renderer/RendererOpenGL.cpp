@@ -16,14 +16,18 @@
 #include "renderer/opengl/GLTileAtlas.h"
 #include "renderer/opengl/GLSpriteAtlas.h"
 #include "renderer/opengl/GLWorldViewRenderer.h"
+#include "renderer/opengl/GLUIRenderer.h"
 #include "renderer/opengl/GLShaderLoader.h"
 #include "kfx/profiling/KfxProfiling.h"
 
 #include "bflib_video.h"    // lbDisplay, lbPaletteColors, MyScreenWidth/Height
 #include "bflib_render.h"   // render_fade_tables
+#include "bflib_vidraw.h"   // vec_window_width/height (PiP projection override)
 #include "platform.h"       // platform_create_gl_context / swap / destroy
 #include "renderer/RenderPass_C.h"
 #include "engine_textures.h" // update_animating_texture_maps()
+#include "engine_render.h"   // draw_view()
+#include "engine_redraw.h"   // setup_engine_window / store_engine_window (PiP viewport)
 
 #include <glad/glad.h>
 #include <SDL2/SDL.h>
@@ -93,7 +97,19 @@ bool RendererOpenGL::Init()
     }
 
     // Initialise Tracy GPU profiling context (requires GL function pointers).
-    KFX_GPU_CTX_CREATE();
+    // Skip when RenderDoc is injected: TracyGpuContext allocates 65536 GL timer
+    // queries that RenderDoc's per-frame state serialisation enumerates.  When
+    // RenderDoc then captures or tracks those query objects its internal tables
+    // can overflow or corrupt Tracy's query pool, producing a blank C++ exception
+    // (Access Violation surfaced through RenderDoc's VEH) in TracyGpuCollect the
+    // first time the ring-buffer wraps — typically at the heartzoom→dungeon
+    // transition after ~16 frames.  Skipping the create leaves GetGpuCtx().ptr
+    // as nullptr; KFX_GPU_COLLECT and KFX_GPU_ZONE both guard against that.
+    if (!platform_is_renderdoc_present()) {
+        KFX_GPU_CTX_CREATE();
+    } else {
+        SYNCLOG("RenderDoc detected — Tracy GPU profiling disabled to avoid timer-query conflict");
+    }
 
     if (!compile_shaders())
     {
@@ -205,6 +221,98 @@ bool RendererOpenGL::Init()
         glUniform1i(glGetUniformLocation(m_rawblit_shader, "u_index"),   0);
         glUniform1i(glGetUniformLocation(m_rawblit_shader, "u_palette"), 1);
         KFX_GL_LABEL(GL_PROGRAM, m_rawblit_shader, "RawBlit/Program");
+    }
+
+    // ── Overhead map tile colour shader ────────────────────────────────────────
+    // Same vertex shader as rawblit, but the fragment shader discards palette
+    // index 0 so that unrevealed tiles are transparent (parchment shows through).
+    // Blending is enabled for the overhead map pass.
+    {
+        std::string rv_src = get_embedded_shader_source("palette_blit_vert.glsl");
+        std::string rf_src = get_embedded_shader_source("overhead_map_frag.glsl");
+        if (!rv_src.empty() && !rf_src.empty())
+        {
+            unsigned int rv = compile_shader(GL_VERTEX_SHADER,   rv_src.c_str());
+            unsigned int rf = compile_shader(GL_FRAGMENT_SHADER, rf_src.c_str());
+            if (rv && rf)
+            {
+                m_overhead_map_shader = glCreateProgram();
+                glAttachShader(m_overhead_map_shader, rv);
+                glAttachShader(m_overhead_map_shader, rf);
+                glLinkProgram(m_overhead_map_shader);
+                glDeleteShader(rv);
+                glDeleteShader(rf);
+                int ok = 0;
+                glGetProgramiv(m_overhead_map_shader, GL_LINK_STATUS, &ok);
+                if (ok)
+                {
+                    glUseProgram(m_overhead_map_shader);
+                    glUniform1i(glGetUniformLocation(m_overhead_map_shader, "u_index"),   0);
+                    glUniform1i(glGetUniformLocation(m_overhead_map_shader, "u_palette"), 1);
+                    KFX_GL_LABEL(GL_PROGRAM, m_overhead_map_shader, "OverheadMap/Program");
+                }
+                else
+                {
+                    char log[512];
+                    glGetProgramInfoLog(m_overhead_map_shader, sizeof(log), nullptr, log);
+                    WARNLOG("RendererOpenGL::Init: overhead map shader link error: %s", log);
+                    glDeleteProgram(m_overhead_map_shader);
+                    m_overhead_map_shader = 0;
+                }
+            }
+            else
+            {
+                if (rv) glDeleteShader(rv);
+                if (rf) glDeleteShader(rf);
+                WARNLOG("RendererOpenGL::Init: overhead map shader compile failed — falling back to rawblit");
+            }
+        }
+    }
+
+    // ── Zoom-box tile shader ───────────────────────────────────────────────────
+    // Samples the R8 tile atlas per quad UV and performs a palette lookup.
+    // Index 0 is discarded so transparent tile pixels let the parchment show
+    // through.  Non-fatal: falls back to no-draw if compile fails.
+    {
+        std::string rv_src = get_embedded_shader_source("palette_blit_vert.glsl");
+        std::string rf_src = get_embedded_shader_source("zoom_tile_frag.glsl");
+        if (!rv_src.empty() && !rf_src.empty())
+        {
+            unsigned int rv = compile_shader(GL_VERTEX_SHADER,   rv_src.c_str());
+            unsigned int rf = compile_shader(GL_FRAGMENT_SHADER, rf_src.c_str());
+            if (rv && rf)
+            {
+                m_zoom_tile_shader = glCreateProgram();
+                glAttachShader(m_zoom_tile_shader, rv);
+                glAttachShader(m_zoom_tile_shader, rf);
+                glLinkProgram(m_zoom_tile_shader);
+                glDeleteShader(rv);
+                glDeleteShader(rf);
+                int ok = 0;
+                glGetProgramiv(m_zoom_tile_shader, GL_LINK_STATUS, &ok);
+                if (ok)
+                {
+                    glUseProgram(m_zoom_tile_shader);
+                    glUniform1i(glGetUniformLocation(m_zoom_tile_shader, "u_index"),   0);
+                    glUniform1i(glGetUniformLocation(m_zoom_tile_shader, "u_palette"), 1);
+                    KFX_GL_LABEL(GL_PROGRAM, m_zoom_tile_shader, "ZoomTile/Program");
+                }
+                else
+                {
+                    char log[512];
+                    glGetProgramInfoLog(m_zoom_tile_shader, sizeof(log), nullptr, log);
+                    WARNLOG("RendererOpenGL::Init: zoom tile shader link error: %s", log);
+                    glDeleteProgram(m_zoom_tile_shader);
+                    m_zoom_tile_shader = 0;
+                }
+            }
+            else
+            {
+                if (rv) glDeleteShader(rv);
+                if (rf) glDeleteShader(rf);
+                WARNLOG("RendererOpenGL::Init: zoom tile shader compile failed");
+            }
+        }
     }
 
     // Raw-blit quad VAO/VBO — positions/UVs updated per blit in EndFrame().
@@ -373,7 +481,9 @@ void RendererOpenGL::Shutdown()
     if (m_texIndex)   { glDeleteTextures(1, &m_texIndex);   m_texIndex = 0; }
     if (m_texPalette) { glDeleteTextures(1, &m_texPalette); m_texPalette = 0; }
     if (m_texFade)    { glDeleteTextures(1, &m_texFade);    m_texFade = 0; }
-    if (m_rawblit_shader) { glDeleteProgram(m_rawblit_shader);            m_rawblit_shader = 0; }
+    if (m_rawblit_shader)       { glDeleteProgram(m_rawblit_shader);            m_rawblit_shader = 0; }
+    if (m_overhead_map_shader)  { glDeleteProgram(m_overhead_map_shader);       m_overhead_map_shader = 0; }
+    if (m_zoom_tile_shader)     { glDeleteProgram(m_zoom_tile_shader);          m_zoom_tile_shader = 0; }
     if (m_rawblit_vao)    { glDeleteVertexArrays(1, &m_rawblit_vao);      m_rawblit_vao = 0; }
     if (m_rawblit_vbo)    { glDeleteBuffers(1, &m_rawblit_vbo);           m_rawblit_vbo = 0; }
     if (m_rawblit_tex)    { glDeleteTextures(1, &m_rawblit_tex);          m_rawblit_tex = 0; }
@@ -384,6 +494,9 @@ void RendererOpenGL::Shutdown()
     if (m_fmv_palette_tex)  { glDeleteTextures(1, &m_fmv_palette_tex);    m_fmv_palette_tex = 0; }
     if (m_zoom_shader)      { glDeleteProgram(m_zoom_shader);              m_zoom_shader = 0; }
     if (m_zoom_tex)         { glDeleteTextures(1, &m_zoom_tex);            m_zoom_tex = 0; }
+    if (m_pip_fbo)          { glDeleteFramebuffers(1, &m_pip_fbo);         m_pip_fbo = 0; }
+    if (m_pip_color_tex)    { glDeleteTextures(1, &m_pip_color_tex);       m_pip_color_tex = 0; }
+    if (m_pip_depth_rb)     { glDeleteRenderbuffers(1, &m_pip_depth_rb);   m_pip_depth_rb = 0; }
 
     platform_destroy_gl_context();
 }
@@ -404,6 +517,18 @@ bool RendererOpenGL::BeginFrame()
         init_fade_table_texture();
     if (m_tile_atlas && !m_tile_atlas->IsInitialized())
         init_tile_atlas();
+
+    // Pre-warm world renderer GL resources as soon as the tile atlas is ready.
+    // Without this, all shader/VAO/VBO creation bursts onto the FIRST isometric
+    // render frame (the heartzoom transition tick), which races with RenderDoc's
+    // per-frame bookkeeping and was the root cause of the "blank exception at
+    // heartzoom" crash.  Doing it here spreads the work across earlier frames.
+    if (m_tile_atlas && m_tile_atlas->IsInitialized())
+    {
+        GLWorldViewRenderer* glwr = dynamic_cast<GLWorldViewRenderer*>(m_world_renderer);
+        if (glwr)
+            glwr->TryEarlyInit();
+    }
 
     // Re-upload the animated tile atlas rows only when the game-logic tick has
     // actually advanced the animation (update_animating_texture_maps() called from
@@ -605,28 +730,32 @@ void RendererOpenGL::EndFrame()
     // (room icons, creatures, call-to-arms circles).  Uses the same rawblit shader
     // (palette_blit_vert + rawimage_blit_frag — opaque) and VAO/VBO layout, scaled
     // to the map_area dest rect supplied by draw_overhead_map().
-    if (m_overhead_map_pending)
+    // Multiple commands allowed per frame (e.g. full map + zoom box).
+    for (const OverheadMapCmd& cmd : m_overhead_map_cmds)
     {
-        const OverheadMapCmd& cmd = m_overhead_map_cmd;
-
         glViewport(0, 0, m_screenW, m_screenH);
         glDisable(GL_DEPTH_TEST);
         glDepthMask(GL_FALSE);
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, m_overhead_map_tex);
+        // Tile rows are tightly packed (1 byte each).  Map width is arbitrary
+        // and not guaranteed to be a multiple of 4, so override GL's default
+        // 4-byte row alignment to avoid row-start drift.
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
         if (cmd.tiles_x != m_overhead_map_tex_w || cmd.tiles_y != m_overhead_map_tex_h)
         {
             glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, cmd.tiles_x, cmd.tiles_y,
-                         0, GL_RED, GL_UNSIGNED_BYTE, cmd.tile_buf);
+                         0, GL_RED, GL_UNSIGNED_BYTE, cmd.pixels.data());
             m_overhead_map_tex_w = cmd.tiles_x;
             m_overhead_map_tex_h = cmd.tiles_y;
         }
         else
         {
             glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, cmd.tiles_x, cmd.tiles_y,
-                            GL_RED, GL_UNSIGNED_BYTE, cmd.tile_buf);
+                            GL_RED, GL_UNSIGNED_BYTE, cmd.pixels.data());
         }
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 4);  // restore default
 
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_1D, m_texPalette);
@@ -649,17 +778,182 @@ void RendererOpenGL::EndFrame()
         glBindBuffer(GL_ARRAY_BUFFER, m_rawblit_vbo);
         glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(verts), verts);
 
-        glDisable(GL_BLEND);
-        glUseProgram(m_rawblit_shader);
+        // Use the overhead-map shader (discards index 0 = unrevealed tiles) so
+        // the parchment background shows through unrevealed/undug areas.
+        GLuint prog = m_overhead_map_shader ? m_overhead_map_shader : m_rawblit_shader;
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glUseProgram(prog);
         glDrawArrays(GL_TRIANGLES, 0, 6);
+        glDisable(GL_BLEND);
         glBindVertexArray(0);
 
         glDepthMask(GL_TRUE);
         glActiveTexture(GL_TEXTURE0);
-        m_overhead_map_pending = false;
     }
+    m_overhead_map_cmds.clear();
 
-    // FMV video frame GPU blit — queued by SubmitVideoFrame() in output_video_frame().
+    // ── Zoom-box tile quads (ZBM_OVERHEAD with actual tile textures) ───────
+    // Queued by SubmitZoomBoxTiles(); each entry is one tile quad with UV into
+    // the tile atlas.  Drawn on top of the overhead map.
+    // Step 1: fill each zoom box region with solid black so unrevealed tiles
+    //         and skipped rock tiles appear black rather than showing whatever
+    //         is underneath (overhead map, parchment).
+    if (!m_zoom_box_bg_cmds.empty())
+    {
+        glViewport(0, 0, m_screenW, m_screenH);
+        glDisable(GL_DEPTH_TEST);
+        glDisable(GL_BLEND);
+        glDepthMask(GL_FALSE);
+        // Use GL scissor + clear — no shader or texture needed.
+        float saved_cc[4];
+        glGetFloatv(GL_COLOR_CLEAR_VALUE, saved_cc);
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glEnable(GL_SCISSOR_TEST);
+        for (const ZoomBoxBgCmd& bg : m_zoom_box_bg_cmds)
+        {
+            // GL scissor origin is bottom-left; screen coords are top-left.
+            int gl_y = m_screenH - (bg.y + bg.h);
+            glScissor(bg.x, gl_y, bg.w, bg.h);
+            glClear(GL_COLOR_BUFFER_BIT);
+        }
+        glDisable(GL_SCISSOR_TEST);
+        glClearColor(saved_cc[0], saved_cc[1], saved_cc[2], saved_cc[3]);
+        glDepthMask(GL_TRUE);
+    }
+    m_zoom_box_bg_cmds.clear();
+
+    // Step 2: draw textured tile quads on top of the black background.
+    if (!m_zoom_tile_cmds.empty() && m_zoom_tile_shader && m_tile_atlas)
+    {
+        GLuint atlas_tex = m_tile_atlas->GetAtlasTexture(0);
+        if (atlas_tex)
+        {
+            glViewport(0, 0, m_screenW, m_screenH);
+            glDisable(GL_DEPTH_TEST);
+            glDepthMask(GL_FALSE);
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, atlas_tex);
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(GL_TEXTURE_1D, m_texPalette);
+
+            glUseProgram(m_zoom_tile_shader);
+            glBindVertexArray(m_rawblit_vao);
+            glBindBuffer(GL_ARRAY_BUFFER, m_rawblit_vbo);
+
+            const float sw = (float)m_screenW;
+            const float sh = (float)m_screenH;
+
+            for (const ZoomTileCmd& c : m_zoom_tile_cmds)
+            {
+                const float x0 = c.dst_x               / sw * 2.0f - 1.0f;
+                const float x1 = (c.dst_x + c.dst_w)   / sw * 2.0f - 1.0f;
+                const float y0 = 1.0f - c.dst_y               / sh * 2.0f;
+                const float y1 = 1.0f - (c.dst_y + c.dst_h)   / sh * 2.0f;
+                const float verts[6][4] = {
+                    { x0, y1,  c.u0, c.v1 },
+                    { x1, y1,  c.u1, c.v1 },
+                    { x1, y0,  c.u1, c.v0 },
+                    { x0, y1,  c.u0, c.v1 },
+                    { x1, y0,  c.u1, c.v0 },
+                    { x0, y0,  c.u0, c.v0 },
+                };
+                glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(verts), verts);
+                glDrawArrays(GL_TRIANGLES, 0, 6);
+            }
+
+            glBindVertexArray(0);
+            glDisable(GL_BLEND);
+            glDepthMask(GL_TRUE);
+            glActiveTexture(GL_TEXTURE0);
+        }
+    }
+    m_zoom_tile_cmds.clear();
+
+    // ── PiP isometric render (ZBM_ISOMETRIC zoom-box mode) ────────────────
+    // Scheduled by RendererSchedulePiPRender() during draw_zoom_box().
+    // Re-runs draw_view() with the stored camera into a dedicated FBO whose
+    // colour attachment is then submitted to GLUIRenderer for compositing
+    // during UIFlushFront() — before the corner-frame sprites.
+    if (m_pip_scheduled && m_world_renderer)
+    {
+        m_pip_scheduled = false;
+        const PiPCmd& pcmd = m_pip_cmd;
+        const int pw = pcmd.w;
+        const int ph = pcmd.h;
+
+        if (pw > 0 && ph > 0)
+        {
+            ensure_pip_fbo(pw, ph);
+
+            SYNCDBG(7, "PiP: fbo=%u pos=(%d,%d) size=(%dx%d) vec_wh=(%ld x %ld) cam=(%d,%d,%d)",
+                    m_pip_fbo, pcmd.x, pcmd.y, pw, ph,
+                    vec_window_width, vec_window_height,
+                    (int)pcmd.cam_copy.mappos.x.val,
+                    (int)pcmd.cam_copy.mappos.y.val,
+                    (int)pcmd.cam_copy.zoom);
+            // draw_view() → setup_rotate_stuff() derives view_width/height_over_2 from
+            // vec_window_width/height (the main game viewport, e.g. 1280×720).  If left
+            // unchanged, fill_in_points_isometric projects tile vertices around pixel
+            // (ewnd.width/2, ewnd.height/2) but the tile shader expects coordinates in
+            // [0,pip_w)×[0,pip_h), so everything lands far outside NDC clip bounds.
+            // Override to pip_w×pip_h so the projection is centred on (pip_w/2, pip_h/2).
+            const long saved_vw = vec_window_width;
+            const long saved_vh = vec_window_height;
+            vec_window_width  = pw;
+            vec_window_height = ph;
+
+            // compute_cells_away() uses player->engine_window_* to determine how many
+            // map tiles to project.  Override it to the PiP size so the tile grid fills
+            // the FBO rather than the full game viewport (which produces out-of-bounds
+            // xcell/ycell values and get_floor_pointed_at errors).
+            TbGraphicsWindow saved_ewnd;
+            store_engine_window(&saved_ewnd, 1);
+            setup_engine_window(0, 0, pw, ph);
+
+            // Stash main-view UIRenderer quads so only pip-sourced submissions
+            // accumulate during draw_view(pip_cam).  FlushPiPSprites() renders
+            // them into the FBO and then restores the main-view queues.
+            GLUIRenderer* ui = dynamic_cast<GLUIRenderer*>(RendererGetUIRenderer());
+            if (ui)
+                ui->BeginPiPSprites();
+
+            m_world_renderer->BeginWorldPass(nullptr, 0, pw, ph, 0, 0);
+            // draw_view() calls WorldViewRenderer_FlushIsometricView() internally
+            // at the end of engine_render.c — do NOT call FlushIsometricView again
+            // here or tile geometry will be submitted twice into the vertex buffer.
+            draw_view(const_cast<Camera*>(&pcmd.cam_copy), 0);
+
+            setup_engine_window(saved_ewnd.x, saved_ewnd.y,
+                                saved_ewnd.width, saved_ewnd.height);
+            vec_window_width  = saved_vw;
+            vec_window_height = saved_vh;
+
+            // Render the accumulated world draw-cmds into the FBO. [[TODO : Add exlcusions for non-isometric passes like overhead-map sprites and text?]]
+            glBindFramebuffer(GL_FRAMEBUFFER, m_pip_fbo);
+            glViewport(0, 0, pw, ph);
+            // Opaque dark background: unexplored/off-map areas show as dark rather
+            // than being transparent (which makes them indistinguishable from the
+            // parchment map behind the FBO quad when hovering over undug rock). Another transparency inconsitency ffs.
+            glClearColor(0.05f, 0.05f, 0.12f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            m_world_renderer->GPUFlushNow_ToFBO(pw, ph);
+            // Render NSP sprites (health bars, room flags, gold text) that were
+            // submitted to UIRenderer during draw_view(pip_cam) into the FBO at
+            // pip-space coordinates, then erase them so FlushFront() never sees
+            // them at wrong full-screen coordinates.
+            if (ui)
+                ui->FlushPiPSprites(pw, ph);
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+            // Queue the PiP colour texture for compositing by UIFlushFront().
+            if (ui)
+                ui->SubmitFBOQuad(pcmd.x, pcmd.y, pw, ph, m_pip_color_tex);
+        }
+    }
     // Uses the same palette-indexed quad shader as rawblit, but with a per-video-frame
     // palette texture on unit 1 instead of the game palette.
     // The glClear() at the top of EndFrame already fills letterbox areas with black.
@@ -976,9 +1270,109 @@ bool RendererOpenGL::SubmitTransparentBlit(const uint8_t* buf, int w, int h)
 bool RendererOpenGL::SubmitOverheadMap(const uint8_t* tile_colors, int tiles_x, int tiles_y,
                                         int dst_x, int dst_y, int dst_w, int dst_h)
 {
-    m_overhead_map_cmd = { tile_colors, tiles_x, tiles_y, dst_x, dst_y, dst_w, dst_h };
-    m_overhead_map_pending = true;
+    OverheadMapCmd cmd;
+    cmd.pixels.assign(tile_colors, tile_colors + (size_t)tiles_x * (size_t)tiles_y);
+    cmd.tiles_x = tiles_x;
+    cmd.tiles_y = tiles_y;
+    cmd.dst_x   = dst_x;
+    cmd.dst_y   = dst_y;
+    cmd.dst_w   = dst_w;
+    cmd.dst_h   = dst_h;
+    m_overhead_map_cmds.push_back(std::move(cmd));
     return true;
+}
+
+void RendererOpenGL::SubmitZoomBoxTiles(const uint16_t* tile_block_ids, int tiles_x, int tiles_y,
+                                        int dst_x, int dst_y, int tile_w, int tile_h)
+{
+    if (!tile_block_ids || tiles_x <= 0 || tiles_y <= 0) return;
+
+    // Record the bounding rect so EndFrame can fill it with solid black before
+    // drawing tile quads.  This makes unrevealed and rock tiles (skipped with
+    // 0xFFFF) appear as black rather than showing whatever is underneath.
+    ZoomBoxBgCmd bg;
+    bg.x = dst_x;
+    bg.y = dst_y;
+    bg.w = tiles_x * tile_w;
+    bg.h = tiles_y * tile_h;
+    m_zoom_box_bg_cmds.push_back(bg);
+
+    m_zoom_tile_cmds.reserve(m_zoom_tile_cmds.size() + (size_t)tiles_x * tiles_y);
+    for (int ty = 0; ty < tiles_y; ty++)
+    {
+        for (int tx = 0; tx < tiles_x; tx++)
+        {
+            uint16_t id = tile_block_ids[ty * tiles_x + tx];
+            if (id == 0xFFFF) continue;  // unrevealed — skip
+            float u0, v0, u1, v1;
+            TileAtlasPacker::GetTileUV((int)id, &u0, &v0, &u1, &v1);
+            ZoomTileCmd cmd;
+            cmd.u0    = u0;  cmd.v0    = v0;
+            cmd.u1    = u1;  cmd.v1    = v1;
+            cmd.dst_x = dst_x + tx * tile_w;
+            cmd.dst_y = dst_y + ty * tile_h;
+            cmd.dst_w = tile_w;
+            cmd.dst_h = tile_h;
+            m_zoom_tile_cmds.push_back(cmd);
+        }
+    }
+}
+
+void RendererOpenGL::SubmitPiPRender(struct Camera* cam, int x, int y, int w, int h)
+{
+    if (!cam) return;
+    m_pip_cmd.cam_copy = *cam;
+    m_pip_cmd.x = x;
+    m_pip_cmd.y = y;
+    m_pip_cmd.w = w;
+    m_pip_cmd.h = h;
+    m_pip_scheduled = true;
+}
+
+void RendererOpenGL::ensure_pip_fbo(int w, int h)
+{
+    if (m_pip_fbo && m_pip_fbo_w == w && m_pip_fbo_h == h)
+        return;
+
+    // Destroy any existing FBO.
+    if (m_pip_fbo)
+    {
+        glDeleteFramebuffers(1, &m_pip_fbo);
+        glDeleteTextures(1, &m_pip_color_tex);
+        glDeleteRenderbuffers(1, &m_pip_depth_rb);
+        m_pip_fbo = 0;
+        m_pip_color_tex = 0;
+        m_pip_depth_rb  = 0;
+    }
+
+    // Create colour attachment.
+    glGenTextures(1, &m_pip_color_tex);
+    glBindTexture(GL_TEXTURE_2D, m_pip_color_tex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    // Create depth renderbuffer.
+    glGenRenderbuffers(1, &m_pip_depth_rb);
+    glBindRenderbuffer(GL_RENDERBUFFER, m_pip_depth_rb);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, w, h);
+    glBindRenderbuffer(GL_RENDERBUFFER, 0);
+
+    // Assemble FBO.
+    glGenFramebuffers(1, &m_pip_fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_pip_fbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_pip_color_tex, 0);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, m_pip_depth_rb);
+
+    GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (status != GL_FRAMEBUFFER_COMPLETE)
+        WARNLOG("PiP FBO incomplete: 0x%x", (unsigned)status);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    m_pip_fbo_w = w;
+    m_pip_fbo_h = h;
 }
 
 const char* RendererOpenGL::GetName() const

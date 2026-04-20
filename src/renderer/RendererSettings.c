@@ -15,6 +15,7 @@ void RendererSettings_Reset(void)
 {
     /* Startup-only */
     g_renderer_settings.palette_mode          = RENDERER_PALETTE_INDEXED;
+    g_renderer_settings.zoom_box_mode         = RENDERER_ZBM_OVERHEAD;
 
     /* Shade / brightness */
     g_renderer_settings.shade_fullbright      = 0.0f;

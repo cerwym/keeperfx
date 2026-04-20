@@ -9,6 +9,12 @@
 #define RENDERER_OPENGL_H
 
 #include "IRenderer.h"
+#include <vector>
+
+// engine_camera.h defines struct Camera, which RendererOpenGL stores by value
+// in PiPCmd.  The include chain is short (globals.h only) and the renderer
+// already has a conceptual dependency on Camera via its C API.
+#include "engine_camera.h"
 
 class GLTileAtlas;
 class GLSpriteAtlas;
@@ -41,6 +47,7 @@ public:
     void     Shutdown() override;
     bool     BeginFrame() override;
     void     EndFrame() override;
+    void     ClearScreen(uint8_t colour_index) override;
     uint8_t* LockFramebuffer(int* out_pitch) override;
     void     UnlockFramebuffer() override;
     const char* GetName() const override;
@@ -63,6 +70,24 @@ public:
                             float scale) override;
 
     bool SubmitStagingOverlay() override;
+
+    bool SubmitTransparentBlit(const uint8_t* buf, int w, int h) override;
+
+    bool SubmitOverheadMap(const uint8_t* tile_colors, int tiles_x, int tiles_y,
+                           int dst_x, int dst_y, int dst_w, int dst_h) override;
+
+    /** Queue a grid of texture-mapped tile quads for the zoom-box terrain view.
+     *  @param tile_block_ids  Array of tile_block indices (from element_top_face_texture),
+     *                         tiles_x × tiles_y row-major; 0xFFFF = unrevealed (skip draw).
+     *  @param dst_x/dst_y     Screen top-left of the zoom-box tile grid (pixels).
+     *  @param tile_w/tile_h   On-screen size of each tile (pixels). */
+    void SubmitZoomBoxTiles(const uint16_t* tile_block_ids, int tiles_x, int tiles_y,
+                            int dst_x, int dst_y, int tile_w, int tile_h);
+
+    /** Schedule a picture-in-picture isometric render for draw_zoom_box (ZBM_ISOMETRIC).
+     *  The camera is copied immediately; the render executes in EndFrame() after the
+     *  overhead-map draw but before UIFlushFront. */
+    void SubmitPiPRender(struct Camera* cam, int x, int y, int w, int h);
 
     // Sub-renderer access
     IWorldViewRenderer* GetWorldViewRenderer() override;
@@ -91,22 +116,34 @@ private:
     bool init_fade_table_texture();
     bool init_tile_atlas();
 
-    // Staging buffer (CPU-side, 8-bit paletted, width * height bytes)
-    uint8_t* m_stagingBuf     = nullptr;
-    int      m_stagingW       = 0;
-    int      m_stagingH       = 0;
-    bool     m_staging_cleared = false; // true after first LockFramebuffer clears for this frame
+    // Screen dimensions — set in Init() once, used throughout EndFrame() for viewport sizing.
+    int      m_screenW        = 0;
+    int      m_screenH        = 0;
     bool     m_frame_begun     = false; // true after first BeginFrame; reset by EndFrame
+
+    // Write-discard CPU buffer — returned by LockFramebuffer() so LbScreenLock() succeeds.
+    // Content is NEVER uploaded to the GPU; this buffer exists solely to prevent null
+    // dereferences in surviving CPU drawing paths (front_network, legal screen, etc.).
+    // Any pixels written here are silently discarded.
+    uint8_t* m_discardBuf      = nullptr;
+    bool     m_discard_cleared = false;
+
+    // Palette index requested by ClearScreen(); resolved to RGBA at glClear() time in EndFrame().
+    uint8_t  m_clearColourIndex = 0;
 
     // GL objects — fullscreen palette-blit quad
     unsigned int m_vao          = 0;
     unsigned int m_vbo          = 0;
     unsigned int m_shader       = 0;
     unsigned int m_tintProg     = 0;  // fullscreen screen-tint overlay shader
-    unsigned int m_texIndex     = 0; // R8: 8-bit index texture (staging upload)
+    unsigned int m_texIndex     = 0; // GL_R8 screenW×screenH: transparent overlay texture
     unsigned int m_texPalette   = 0; // RGBA8 256-entry 1D palette
     int          m_uTintFactor  = -1; // uniform location for u_tint_factor
     int          m_uTintColor   = -1; // uniform location for u_tint_color
+
+    // Whether a transparent overlay was submitted this frame via SubmitTransparentBlit().
+    // Source data is already uploaded to m_texIndex by SubmitTransparentBlit().
+    bool         m_transparent_blit_pending = false;
 
     // Shared GPU resources (owned here, injected into world renderer)
     unsigned int m_texFade      = 0; // R8 256×256: render_fade_tables lighting LUT
@@ -132,12 +169,51 @@ private:
     };
     bool              m_rawblit_pending  = false;
     RawBlitCmd        m_rawblit_cmd      = {};
-    unsigned int      m_rawblit_shader   = 0;  // palette_blit_vert + rawimage_blit_frag
+    bool              m_rawblit_cached   = false;  // last rawblit retained for palette-fade re-renders
+    RawBlitCmd        m_rawblit_cached_cmd = {};
+    unsigned int      m_rawblit_shader        = 0;  // palette_blit_vert + rawimage_blit_frag
+    unsigned int      m_overhead_map_shader   = 0;  // palette_blit_vert + overhead_map_frag (discards idx 0)
     unsigned int      m_rawblit_vao      = 0;
     unsigned int      m_rawblit_vbo      = 0;  // GL_DYNAMIC_DRAW — updated per blit
     unsigned int      m_rawblit_tex      = 0;  // GL_R8 — source image indices
     int               m_rawblit_tex_w    = 0;  // current texture dimensions
     int               m_rawblit_tex_h    = 0;
+
+    // ── Overhead map tile colour GPU blit ─────────────────────────────────
+    // Queued by SubmitOverheadMap(); drawn as opaque rect-positioned quads
+    // after the rawblit parchment background and before the staging overlay.
+    // A vector supports multiple submits per frame (e.g. full map + zoom box).
+    // Pixel data is copied on submit so callers may free their buffer immediately.
+    struct OverheadMapCmd {
+        std::vector<uint8_t> pixels;
+        int tiles_x = 0, tiles_y = 0;
+        int dst_x = 0, dst_y = 0, dst_w = 0, dst_h = 0;
+    };
+    std::vector<OverheadMapCmd> m_overhead_map_cmds;
+    unsigned int      m_overhead_map_tex     = 0;  // GL_R8, resized to max seen
+    int               m_overhead_map_tex_w   = 0;
+    int               m_overhead_map_tex_h   = 0;
+
+    // ── Zoom-box tile GPU rendering ────────────────────────────────────────
+    // Queued by SubmitZoomBoxTiles(); drawn at EndFrame() using the tile atlas
+    // (GLTileAtlas variation 0) and the ZOOM_TILE_FRAGMENT_SHADER.  Each entry
+    // represents one tile quad: UV into the tile atlas + screen destination rect.
+    struct ZoomTileCmd {
+        float u0, v0, u1, v1;       // normalised UV rect in the tile atlas
+        int   dst_x, dst_y;         // screen top-left (pixels)
+        int   dst_w, dst_h;         // tile size on screen (pixels)
+    };
+    std::vector<ZoomTileCmd> m_zoom_tile_cmds;
+    unsigned int      m_zoom_tile_shader = 0;  // palette_blit_vert + zoom_tile_frag
+    // Reuses m_rawblit_vao / m_rawblit_vbo (same quad vertex layout).
+
+    // Bounding rect of each zoom box submission — drawn as a solid black fill
+    // BEFORE the tile quads so unrevealed/rock tiles show as black, not as
+    // whatever is underneath (parchment, overhead map).
+    struct ZoomBoxBgCmd {
+        int x, y, w, h;
+    };
+    std::vector<ZoomBoxBgCmd> m_zoom_box_bg_cmds;
 
     // ── FMV video frame GPU blit (Phase C) ────────────────────────────────
     // Queued by SubmitVideoFrame(); drawn at EndFrame() using the same shader
@@ -185,10 +261,25 @@ private:
     int               m_zoom_u_inv_map_sz  = -1;
     int               m_zoom_u_screen_h    = -1;
 
-    // ── Explicit staging overlay (Phase E) ────────────────────────────────
-    // Set by SubmitStagingOverlay(); EndFrame composites m_stagingBuf over the
-    // current frame with index-0 transparency (same as the old implicit blit).
-    bool              m_overlay_pending    = false;
+    // ── Picture-in-Picture isometric render (ZBM_ISOMETRIC zoom-box mode) ─
+    // SubmitPiPRender() stores a camera snapshot and rect; EndFrame() re-runs
+    // draw_view() into a dedicated FBO, then submits the colour attachment to
+    // GLUIRenderer::SubmitFBOQuad() for compositing during UIFlushFront().
+    struct PiPCmd {
+        Camera  cam_copy;
+        int     x = 0, y = 0, w = 0, h = 0;
+    };
+    bool              m_pip_scheduled  = false;
+    PiPCmd            m_pip_cmd        = {};
+    unsigned int      m_pip_fbo        = 0;   // FBO for PiP render target
+    unsigned int      m_pip_color_tex  = 0;   // RGBA8 colour attachment
+    unsigned int      m_pip_depth_rb   = 0;   // depth renderbuffer
+    int               m_pip_fbo_w      = 0;
+    int               m_pip_fbo_h      = 0;
+
+    /** (Re-)create (or resize) the PiP FBO to at least w×h.  No-op if size matches. */
+    void ensure_pip_fbo(int w, int h);
+
 };
 
 /******************************************************************************/

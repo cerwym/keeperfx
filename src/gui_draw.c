@@ -698,7 +698,7 @@ void draw_gui_panel_sprite_occentered(long x, long y, int units_per_px, long spr
     const struct TbSprite* spr = get_panel_sprite(spridx);
     x -= ((spr->SWidth*units_per_px/16) >> 1);
     y -= ((spr->SHeight*units_per_px/16) >> 1);
-    LbSpriteDrawResizedOneColour(x, y, units_per_px, spr, color);
+    UIRenderer_SubmitPanelSpriteRawColored(x, y, units_per_px, spr, color);
 }
 
 void draw_button_sprite_left(long x, long y, int units_per_px, long spridx)

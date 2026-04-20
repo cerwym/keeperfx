@@ -1,6 +1,6 @@
 /******************************************************************************/
 /** @file KfxProfiling.h
- *   Tracy + RenderDoc instrumentation helpers — C++ renderer files only.
+ *   Tracy GPU profiling and GL debug label helpers — C++ renderer files only.
  *
  *   Include this after pre_inc.h in any renderer .cpp file that wants zones.
  *   Compiles to zero overhead when neither TRACY_ENABLE nor RENDERER_OPENGL_ENABLED
@@ -9,15 +9,29 @@
 /******************************************************************************/
 #pragma once
 
+// ── Subsystem colour palette (0xRRGGBB, Tracy uses uint32_t) ────────────────
+#define KFX_COLOR_SIMULATION   0x2266FFu  // Blue
+#define KFX_COLOR_RENDER_CPU   0xFF8C00u  // Orange
+#define KFX_COLOR_RENDER_GPU   0xFF3344u  // Red
+#define KFX_COLOR_CREATURE     0x44BB44u  // Green
+#define KFX_COLOR_PATHFINDING  0xAA44CCu  // Purple
+#define KFX_COLOR_AI           0xDDCC00u  // Yellow
+#define KFX_COLOR_SCRIPT       0x00BBCCu  // Cyan
+#define KFX_COLOR_LIGHTING     0xFFEE66u  // Light Yellow
+
 // ── Tracy CPU zones ──────────────────────────────────────────────────────────
 #ifdef TRACY_ENABLE
 #  include <tracy/Tracy.hpp>
-#  define KFX_ZONE(name)        ZoneScopedN(name)
-#  define KFX_PLOT(name, val)   TracyPlot(name, static_cast<int64_t>(val))
-#  define KFX_FRAMEMARK()       FrameMark
+#  define KFX_ZONE(name)                        ZoneScopedN(name)
+#  define KFX_ZONE_COLOR(name, color)           ZoneScopedNC(name, color)
+#  define KFX_PLOT(name, val)                   TracyPlot(name, static_cast<int64_t>(val))
+#  define KFX_PLOT_CONFIG(name,type,step,fill,color) TracyPlotConfig(name, type, step, fill, color)
+#  define KFX_FRAMEMARK()                       FrameMark
 #else
 #  define KFX_ZONE(name)
+#  define KFX_ZONE_COLOR(name, color)
 #  define KFX_PLOT(name, val)
+#  define KFX_PLOT_CONFIG(name,type,step,fill,color)
 #  define KFX_FRAMEMARK()
 #endif
 
@@ -30,18 +44,26 @@
 
 // ── Tracy GPU zones (OpenGL backend) ─────────────────────────────────────────
 // Caller is responsible for TracyGpuContext (init) and TracyGpuCollect (per-frame).
+// When RenderDoc is present, RendererOpenGL::Init() skips KFX_GPU_CTX_CREATE(),
+// leaving GetGpuCtx().ptr == nullptr.  KFX_GPU_COLLECT and KFX_GPU_ZONE guard
+// against that to stay safe even if the Tracy profiler connects later at runtime.
 #if defined(TRACY_ENABLE) && defined(RENDERER_OPENGL_ENABLED)
 #  include <tracy/TracyOpenGL.hpp>
-#  define KFX_GPU_ZONE(name)    TracyGpuZone(name)
 #  define KFX_GPU_CTX_CREATE()  TracyGpuContext
-#  define KFX_GPU_COLLECT()     TracyGpuCollect
+// Only collect when the GPU context was actually created (ptr != nullptr).
+#  define KFX_GPU_COLLECT() \
+    do { if (tracy::GetGpuCtx().ptr) { TracyGpuCollect; } } while(0)
+// Pass ptr-liveness as the 'active' flag so GpuCtxScope::m_active is false
+// (and no glQueryCounter is issued) when the GPU context was never created.
+#  define KFX_GPU_ZONE(name) \
+    TracyGpuNamedZone(___tracy_gpu_zone, name, tracy::GetGpuCtx().ptr != nullptr)
 #else
 #  define KFX_GPU_ZONE(name)
 #  define KFX_GPU_CTX_CREATE()
 #  define KFX_GPU_COLLECT()
 #endif
 
-// ── RenderDoc GL debug labels & groups ───────────────────────────────────────
+// ── GL debug labels & groups (GL_KHR_debug) ──────────────────────────────────
 // glObjectLabel / glPushDebugGroup are GL_KHR_debug (core in 4.3, extension in
 // 3.3).  All calls are guarded at runtime by GLAD_GL_KHR_debug.  When
 // RENDERER_OPENGL_ENABLED is not defined the macros expand to nothing.

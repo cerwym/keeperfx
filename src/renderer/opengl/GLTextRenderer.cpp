@@ -47,6 +47,11 @@ GLTextRenderer::GLTextRenderer()
     , m_dbc_colour0(0)
     , m_dbc_colour1(0)
     , m_dbc_enabled(false)
+    , m_batch_scissor_x(0)
+    , m_batch_scissor_y(0)
+    , m_batch_scissor_w(0)
+    , m_batch_scissor_h(0)
+    , m_batch_scissor_enabled(false)
 {
 }
 
@@ -74,8 +79,8 @@ bool GLTextRenderer::Init()
     glBindVertexArray(m_vao);
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
 
-    // Allocate dynamic buffer for text vertices (reserve space for ~100 characters)
-    glBufferData(GL_ARRAY_BUFFER, 600 * sizeof(TextVertex), nullptr, GL_DYNAMIC_DRAW);
+    // Allocate dynamic buffer for text vertices
+    glBufferData(GL_ARRAY_BUFFER, 32768 * sizeof(TextVertex), nullptr, GL_DYNAMIC_DRAW);
 
     // Vertex attributes: position (vec2) + UV (vec2) + forced_palette_idx (float)
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(TextVertex), (void*)0);
@@ -114,6 +119,7 @@ bool GLTextRenderer::Init()
         glUniform1i(m_loc_palette, 1);     // GL_TEXTURE1
     glUseProgram(0);
 
+    m_vertex_batch.reserve(32768);
     SYNCLOG("GLTextRenderer: initialized");
     return true;
 }
@@ -487,6 +493,10 @@ void GLTextRenderer::Flush()
     // We must rebind the font atlas texture for the first draw of each frame.
     m_active_atlas = nullptr;
     m_active_dbc_atlas = nullptr;
+    // Reset batch accumulation state
+    m_vertex_batch.clear();
+    m_batch_scissor_enabled = false;
+    m_batch_scissor_x = m_batch_scissor_y = m_batch_scissor_w = m_batch_scissor_h = 0;
 
     // Save globals that FlushSegment control codes will overwrite
     unsigned char               saved_colour     = lbDisplay.DrawColour;
@@ -554,6 +564,7 @@ void GLTextRenderer::Flush()
 
             if (dbc_atlas != m_active_dbc_atlas)
             {
+                FlushBatch();
                 glActiveTexture(GL_TEXTURE0);
                 glBindTexture(GL_TEXTURE_2D, dbc_atlas->GetTextureID());
                 m_active_dbc_atlas = dbc_atlas;
@@ -607,8 +618,7 @@ void GLTextRenderer::Flush()
 
             if (atlas != m_active_atlas)
             {
-                SYNCLOG("GLTextRenderer: Rebinding atlas from %p to %p for font %p",
-                       m_active_atlas, atlas, d.font);
+                FlushBatch();
                 glActiveTexture(GL_TEXTURE0);
                 glBindTexture(GL_TEXTURE_2D, atlas->GetTextureID());
                 m_active_atlas = atlas;
@@ -631,12 +641,22 @@ void GLTextRenderer::Flush()
         lbDisplay.DrawColour = d.draw_colour;
         lbDisplay.DrawFlags  = d.draw_flags;
 
-        // Scissor to the captured clip window
-        if (d.clip_w > 0 && d.clip_h > 0)
+        // Update batch scissor — flush if it changed so pending vertices use the old rect
         {
-            glEnable(GL_SCISSOR_TEST);
-            int gl_y = m_screen_height - (d.clip_y + d.clip_h);
-            glScissor(d.clip_x, gl_y, d.clip_w, d.clip_h);
+            bool new_enabled = (d.clip_w > 0 && d.clip_h > 0);
+            if (new_enabled != m_batch_scissor_enabled
+                || (new_enabled && (d.clip_x != m_batch_scissor_x
+                                 || d.clip_y != m_batch_scissor_y
+                                 || d.clip_w != m_batch_scissor_w
+                                 || d.clip_h != m_batch_scissor_h)))
+            {
+                FlushBatch();
+                m_batch_scissor_enabled = new_enabled;
+                m_batch_scissor_x = d.clip_x;
+                m_batch_scissor_y = d.clip_y;
+                m_batch_scissor_w = d.clip_w;
+                m_batch_scissor_h = d.clip_h;
+            }
         }
 
         // Build layout context from the deferred draw's captured state
@@ -651,10 +671,10 @@ void GLTextRenderer::Flush()
 
         TextLayout(ctx, d.posx, d.posy, d.units_per_px, d.text.c_str(),
                    gl_draw_segment, this);
-
-        glDisable(GL_SCISSOR_TEST);
     }
 
+    FlushBatch();
+    glDisable(GL_SCISSOR_TEST);
     m_pending.clear();
 
     // Restore globals overwritten during layout
@@ -668,11 +688,34 @@ void GLTextRenderer::Flush()
     glUseProgram(0);
 }
 
+void GLTextRenderer::FlushBatch()
+{
+    if (m_vertex_batch.empty())
+        return;
+
+    if (m_batch_scissor_enabled)
+    {
+        glEnable(GL_SCISSOR_TEST);
+        int gl_y = m_screen_height - (m_batch_scissor_y + m_batch_scissor_h);
+        glScissor(m_batch_scissor_x, gl_y, m_batch_scissor_w, m_batch_scissor_h);
+    }
+    else
+    {
+        glDisable(GL_SCISSOR_TEST);
+    }
+
+    GLsizeiptr byte_size = (GLsizeiptr)(m_vertex_batch.size() * sizeof(TextVertex));
+    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
+    glBufferData(GL_ARRAY_BUFFER, byte_size, nullptr, GL_DYNAMIC_DRAW);  // orphan old storage
+    glBufferSubData(GL_ARRAY_BUFFER, 0, byte_size, m_vertex_batch.data());
+    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_vertex_batch.size());
+    m_vertex_batch.clear();
+}
+
 void GLTextRenderer::FlushSegment(const char* sbuf, const char* ebuf,
                                    float screen_x, float screen_y,
                                    float space_len, float scale_factor)
 {
-    KFX_ZONE("TextRenderer::FlushSegment");
     if (!sbuf || sbuf >= ebuf || (!m_active_atlas && !m_active_dbc_atlas))
         return;
 
@@ -752,9 +795,7 @@ void GLTextRenderer::FlushSegment(const char* sbuf, const char* ebuf,
 
     if (vertex_count > 0)
     {
-        glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, vertex_count * sizeof(TextVertex), vertices);
-        glDrawArrays(GL_TRIANGLES, 0, vertex_count);
+        m_vertex_batch.insert(m_vertex_batch.end(), vertices, vertices + vertex_count);
     }
 }
 

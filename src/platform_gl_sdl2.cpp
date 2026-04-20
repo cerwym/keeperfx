@@ -27,6 +27,9 @@
 #  include <SDL2/SDL_syswm.h>
 #  include <dxgi1_6.h>
 #endif
+#ifdef __linux__
+#  include <dlfcn.h>
+#endif
 #include "post_inc.h"
 #include "bflib_basics.h"
 
@@ -241,4 +244,22 @@ extern "C" void platform_destroy_gl_context(void)
 extern "C" void platform_swap_gl_buffers(void *sdl_window)
 {
     SDL_GL_SwapWindow(static_cast<SDL_Window*>(sdl_window));
+}
+
+extern "C" int platform_is_renderdoc_present(void)
+{
+#ifdef _WIN32
+    // RenderDoc injects renderdoc.dll into the target process before attaching.
+    // GetModuleHandleA does NOT load the DLL; it only returns non-NULL if it is
+    // already mapped into our address space.
+    return GetModuleHandleA("renderdoc.dll") != NULL;
+#elif defined(__linux__)
+    // On Linux, RenderDoc injects librenderdoc.so.  dlopen with RTLD_NOLOAD
+    // returns a handle only if the library is already loaded; it never loads it.
+    void* h = dlopen("librenderdoc.so", RTLD_NOW | RTLD_NOLOAD);
+    if (h) { dlclose(h); return 1; }
+    return 0;
+#else
+    return 0;
+#endif
 }

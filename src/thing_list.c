@@ -49,6 +49,7 @@
 #include "game_legacy.h"
 #include "keeperfx.hpp"
 #include "bflib_planar.h"
+#include "kfx/profiling/KfxProfilingC.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -981,6 +982,7 @@ TngUpdateRet switch_object_on_destoyed_slab_to_new_owner(struct Thing *thing, Mo
  */
 void update_things_in_list(struct StructureList *list)
 {
+    KFX_C_ZONE_BEGIN_COLOR(ctx, "Sim/ThingList", KFX_COLOR_SIMULATION);
     SYNCDBG(18,"Starting");
     unsigned long k = 0;
     int i = list->index;
@@ -1012,6 +1014,7 @@ void update_things_in_list(struct StructureList *list)
       }
     }
     SYNCDBG(19,"Finished, %d items",(int)k);
+    KFX_C_ZONE_END(ctx);
 }
 
 /**
@@ -1119,6 +1122,7 @@ unsigned long update_creatures_not_in_list(void)
 
 void update_things(void)
 {
+    KFX_C_ZONE_BEGIN_COLOR(ctx, "Sim/UpdateThings", KFX_COLOR_SIMULATION);
     SYNCDBG(7,"Starting");
     optimised_lights = 0;
     total_lights = 0;
@@ -1136,6 +1140,8 @@ void update_things(void)
     update_things_sounds_in_list(&game.thing_lists[TngList_AmbientSnds]);
     update_cave_in_things();
     game.map_changed_for_nagivation = 0;
+    KFX_C_PLOT("Sim/CreatureCount", (double)game.thing_lists[TngList_Creatures].count);
+    KFX_C_ZONE_END(ctx);
     SYNCDBG(9,"Finished");
 }
 

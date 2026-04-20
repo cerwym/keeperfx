@@ -887,6 +887,24 @@ void compressed_window_draw(void)
     long default_movement_scale = 1024;
     long xshift = map_info.screen_shift_x * landview_frame_movement_scale_x / default_movement_scale / 2; // X speed is slower on aspect ratios wider than 4:3
     long yshift = map_info.screen_shift_y *landview_frame_movement_scale_y / default_movement_scale / 2; // Y speed is slower on aspect ratios taller than 4:3
+
+    // In GL mode draw the huge sprite into a zero-initialized bounce buffer so
+    // lbDisplay.WScreen is not written (WScreen is imminent to be nulled).
+    if (RendererGetActiveType() == RENDERER_OPENGL)
+    {
+        int w = lbDisplay.GraphicsScreenWidth;
+        int h = lbDisplay.PhysicalScreenHeight;
+        unsigned char* bounce = (unsigned char*)KfxCalloc((size_t)w, (size_t)h);
+        if (bounce)
+        {
+            LbHugeSpriteDraw(&map_window, map_window_len,
+                bounce, w, h, xshift, yshift, units_per_pixel_landview_frame);
+            RendererSubmitTransparentBlit(bounce, w, h);
+            KfxFree(bounce);
+            return;
+        }
+    }
+
     LbHugeSpriteDraw(&map_window, map_window_len,
         lbDisplay.WScreen, lbDisplay.GraphicsScreenWidth, lbDisplay.PhysicalScreenHeight,
         xshift, yshift, units_per_pixel_landview_frame);

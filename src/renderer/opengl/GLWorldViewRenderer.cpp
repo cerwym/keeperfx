@@ -36,6 +36,7 @@
 #include <cstdlib>
 #include <cstring>
 #include "kfx/profiling/KfxProfiling.h"
+#include "platform.h"
 #include "post_inc.h"
 
 /******************************************************************************/
@@ -133,8 +134,14 @@ bool GLWorldViewRenderer::init_gl_resources()
     if (m_initialized)
         return true;
 
+    SYNCLOG("GLWorldViewRenderer: init_gl_resources starting (RenderDoc=%d)",
+            platform_is_renderdoc_present());
+
     if (!compile_world_shaders())
+    {
+        ERRORLOG("GLWorldViewRenderer: compile_world_shaders failed");
         return false;
+    }
 
     // VAO + dynamic VBO for world geometry
     glGenVertexArrays(1, &m_vao);
@@ -297,7 +304,11 @@ bool GLWorldViewRenderer::compile_world_shaders()
     std::string vert_src = get_embedded_shader_source("world_vert.glsl");
     std::string frag_src = get_embedded_shader_source("world_frag.glsl");
     if (vert_src.empty() || frag_src.empty())
+    {
+        ERRORLOG("GLWorldViewRenderer: world shader source missing (vert=%zu frag=%zu)",
+                 vert_src.size(), frag_src.size());
         return false;
+    }
 
     GLuint vert = compile_shader_src(GL_VERTEX_SHADER,   vert_src.c_str(), "world_vert.glsl");
     GLuint frag = compile_shader_src(GL_FRAGMENT_SHADER, frag_src.c_str(), "world_frag.glsl");
@@ -535,7 +546,19 @@ bool GLWorldViewRenderer::init_keeper_sprite_shader()
     // and per-draw upload are both eliminated for non-remapped sprites.
     // If the driver does not support GL_TEXTURE_2D_ARRAY the atlas is skipped
     // and the existing single-texture fallback path is used unchanged.
+    //
+    // RenderDoc note: skip entirely when RenderDoc is injected.  RenderDoc's
+    // glTexImage3D interceptor for null-data GL_TEXTURE_2D_ARRAY allocations
+    // has been observed to raise a blank access-violation (SEH 0xC0000005)
+    // caught by RenderDoc's VEH — precisely the "blank exception at heartzoom
+    // transition" the user reported.  The atlas is a performance optimisation
+    // only; the single-texture fallback path is correct and sufficient.
     do {
+        if (platform_is_renderdoc_present()) {
+            SYNCLOG("GLWorldViewRenderer: skipping kspr decode atlas (RenderDoc injected)");
+            break;
+        }
+
         std::string af_src = get_embedded_shader_source("kspr_array_frag.glsl");
         if (af_src.empty()) break;
 
@@ -1316,7 +1339,39 @@ void GLWorldViewRenderer::GPUFlushNow()
     if (m_draw_cmds.empty())
         return;
 
-    // Upload the full vertex buffer once (all batches are already packed in order).
+    const int vp_y_gl = (int)MyScreenHeight - m_vp_y - m_screen_h;
+    gpu_execute_passes(m_vp_x, vp_y_gl);
+}
+
+void GLWorldViewRenderer::GPUFlushNow_ToFBO(int pip_w, int pip_h)
+{
+    KFX_ZONE("WVR::GPUFlushNow_ToFBO");
+
+    // m_world_pass_active is already false (cleared by the main GPUFlushNow
+    // call earlier in the same EndFrame).  m_screen_w/h are pip_w/pip_h as
+    // set by the preceding BeginWorldPass(nullptr, 0, pip_w, pip_h, 0, 0).
+    if (!m_initialized)
+    {
+        m_draw_cmds.clear();
+        m_vert_count     = 0;
+        m_cmd_vert_start = 0;
+        return;
+    }
+
+    gpu_flush();
+
+    SYNCDBG(7, "GPUFlushNow_ToFBO: cmds=%d verts=%d pip=%dx%d",
+            (int)m_draw_cmds.size(), m_vert_count, pip_w, pip_h);
+
+    if (m_draw_cmds.empty())
+        return;
+
+    // FBO is pip_w × pip_h — fill it entirely.
+    gpu_execute_passes(0, 0);
+}
+
+void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
+{
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
     glBufferSubData(GL_ARRAY_BUFFER, 0,
                     (GLsizeiptr)(m_vert_count * sizeof(WorldVertex)),
@@ -1324,8 +1379,7 @@ void GLWorldViewRenderer::GPUFlushNow()
 
     // Execute all draw commands in submission order, interleaving tile batches
     // and 3D sprite flushes to maintain the painter's-algorithm depth order.
-    const int vp_y_gl = (int)MyScreenHeight - m_vp_y - m_screen_h;
-    glViewport(m_vp_x, vp_y_gl, m_screen_w, m_screen_h);
+    glViewport(vp_x, vp_y_gl, m_screen_w, m_screen_h);
     glUseProgram(m_shader);
     glBindVertexArray(m_vao);
 
@@ -1811,10 +1865,9 @@ void GLWorldViewRenderer::FlushIsometricView()
         }
     }
 
-    // Draw non-spatial elements (slab selector, status icons, floating gold text,
-    // room flags) using GPU-accelerated UI renderer instead of CPU staging buffer.
-    // Creature shadows are handled above via CMD_SHADOWS and rendered GPU-side.
-    draw_nonspatial_sprites_gpu();
+    // draw_nonspatial_sprites_gpu() is intentionally NOT called here.
+    // It is called from engine_render.c immediately after WorldViewRenderer_FlushIsometricView(),
+    // guarded by cam->view_mode so it only runs for isometric/creature views (not parchment map).
 }
 
 void GLWorldViewRenderer::FlushFrontView(struct Camera* cam)

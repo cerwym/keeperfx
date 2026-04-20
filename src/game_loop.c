@@ -35,6 +35,7 @@
 #include "game_legacy.h"
 #include "game_loop.h"
 #include "lua_triggers.h"
+#include "kfx/profiling/KfxProfilingC.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -252,6 +253,7 @@ void process_dungeon_destroy(struct Thing* heartng)
 
 void update_research(void)
 {
+    KFX_C_ZONE_BEGIN_COLOR(ctx, "Sim/Research", KFX_COLOR_SIMULATION);
     int i;
     struct PlayerInfo *player;
     SYNCDBG(6,"Starting");
@@ -263,10 +265,12 @@ void update_research(void)
             process_player_research(i);
         }
     }
+    KFX_C_ZONE_END(ctx);
 }
 
 void update_manufacturing(void)
 {
+    KFX_C_ZONE_BEGIN_COLOR(ctx, "Sim/Manufacturing", KFX_COLOR_SIMULATION);
     int i;
     struct PlayerInfo *player;
     SYNCDBG(16,"Starting");
@@ -278,6 +282,7 @@ void update_manufacturing(void)
             process_player_manufacturing(i);
         }
     }
+    KFX_C_ZONE_END(ctx);
 }
 
 /******************************************************************************/

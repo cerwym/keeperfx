@@ -40,6 +40,7 @@
 #include "map_columns.h"
 #include "map_utils.h"
 #include "game_legacy.h"
+#include "kfx/profiling/KfxProfilingC.h"
 #include "post_inc.h"
 
 #define EDGEFIT_LEN           64

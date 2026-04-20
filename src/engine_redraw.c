@@ -23,7 +23,6 @@
 #include "globals.h"
 #include "bflib_basics.h"
 #include "bflib_math.h"
-#include "bflib_planar.h"
 #include "bflib_sprfnt.h"
 #include "bflib_sound.h"
 #include "bflib_mouse.h"
@@ -68,6 +67,7 @@
 #include "custom_sprites.h"
 #include "keeperfx.hpp"
 #include "renderer/RendererManager.h"
+#include "kfx/profiling/KfxProfilingC.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -415,23 +415,6 @@ void prepare_map_fade_buffers(unsigned char *fade_src, unsigned char *fade_dest,
     }
     // create the parchment screen
     load_parchment_file();
-    // In GL mode RendererBlitRaw8 queues a GPU blit and does not write to
-    // WScreen.  Write the parchment background directly via the CPU path so
-    // that fade_dest captures the complete parchment image including the bg.
-    {
-        struct TbRect bkgnd_area;
-        int units_per_px = get_parchment_background_area_rect(&bkgnd_area);
-        int img_width  = (LbScreenWidth() >= 640) ? 640 : 320;
-        int img_height = (LbScreenWidth() >= 640) ? 480 : 200;
-        unsigned char* pbuf = (LbScreenWidth() >= 640) ? hires_parchment : poly_pool;
-        if (pbuf != NULL)
-            copy_raw8_image_buffer(
-                lbDisplay.WScreen,
-                lbDisplay.GraphicsScreenWidth, lbDisplay.GraphicsScreenHeight,
-                img_width * units_per_px / 16, img_height * units_per_px / 16,
-                bkgnd_area.left, bkgnd_area.top,
-                pbuf, img_width, img_height);
-    }
     redraw_minimal_overhead_view();
     // Copy the screen to fade destination temp buffer
     fadebuf_pos = 0;
@@ -650,6 +633,7 @@ void draw_overlay_compass(long base_x, long base_y)
 // understand the setup required for the fly-in and how to make it work with the new rendering system.
 void redraw_creature_view(void)
 {
+    KFX_C_ZONE_BEGIN_COLOR(ctx, "Render/CreatureView", KFX_COLOR_RENDER_CPU);
     SYNCDBG(6, "Starting");
     struct PlayerInfo* player = get_my_player();
     update_explored_flags_for_power_sight(player);
@@ -681,12 +665,13 @@ void redraw_creature_view(void)
             }
         }
     }
-
+    KFX_C_ZONE_END(ctx);
 }
 
 // The default angled view.
 void redraw_isometric_view(void)
 {
+    KFX_C_ZONE_BEGIN_COLOR(ctx, "Render/IsometricView", KFX_COLOR_RENDER_CPU);
     struct PlayerInfo* player = get_my_player();
     if (player->acamera == NULL)
         return;
@@ -697,10 +682,12 @@ void redraw_isometric_view(void)
     engine(player,render_cam);
     remove_explored_flags_for_power_sight(player);
     draw_2d_elements(player);
+    KFX_C_ZONE_END(ctx);
 }
 
 void redraw_frontview(void)
 {
+    KFX_C_ZONE_BEGIN_COLOR(ctx, "Render/FrontView", KFX_COLOR_RENDER_CPU);
     SYNCDBG(6,"Starting");
     struct PlayerInfo* player = get_my_player();
     struct Camera* render_cam = get_local_camera(&player->cameras[CamIV_FrontView]);
@@ -708,6 +695,7 @@ void redraw_frontview(void)
     draw_frontview_engine(render_cam);
     remove_explored_flags_for_power_sight(player);
     draw_2d_elements(player);
+    KFX_C_ZONE_END(ctx);
 }
 
 // Draws 2D elements on top of 3D view, like spell cursor. Called from redraw_isometric_view() and redraw_frontview()

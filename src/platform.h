@@ -48,6 +48,12 @@ void platform_destroy_gl_context(void);
  *  @param sdl_window  The SDL_Window to swap. */
 void platform_swap_gl_buffers(void *sdl_window);
 
+/** Returns non-zero if RenderDoc is injected into this process.
+ *  When true, Tracy GPU timer-query profiling must be disabled to prevent
+ *  RenderDoc's per-frame GL state serialisation from corrupting Tracy's
+ *  query pool and crashing in TracyGpuCollect. */
+int platform_is_renderdoc_present(void);
+
 #ifdef __cplusplus
 }
 #endif

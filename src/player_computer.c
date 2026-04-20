@@ -49,6 +49,7 @@
 #include "thing_navigate.h"
 #include "thing_traps.h"
 
+#include "kfx/profiling/KfxProfilingC.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -1399,6 +1400,7 @@ void computer_check_events(struct Computer2 *comp)
 
 TbBool process_checks(struct Computer2 *comp)
 {
+    KFX_C_ZONE_BEGIN_COLOR(ctx, "AI/Checks", KFX_COLOR_AI);
     SYNCDBG(17,"Starting");
     for (long i = 0; i < COMPUTER_CHECKS_COUNT; i++)
     {
@@ -1418,6 +1420,7 @@ TbBool process_checks(struct Computer2 *comp)
             }
         }
     }
+    KFX_C_ZONE_END(ctx);
     return true;
 }
 
@@ -1550,6 +1553,7 @@ TbBool computer_player_demands_gold_check(PlayerNumber plyr_idx)
 
 void process_computer_players2(void)
 {
+    KFX_C_ZONE_BEGIN_COLOR(ctx, "AI/AllComputerPlayers", KFX_COLOR_AI);
     TbBool needs_gold_check = false;
     for (int i = 0; i < PLAYERS_COUNT; i++)
     {
@@ -1574,6 +1578,7 @@ void process_computer_players2(void)
         SYNCDBG(0,"Computer players demand gold check.");
         check_map_for_gold();
     }
+    KFX_C_ZONE_END(ctx);
 }
 
 void setup_computer_players2(void)

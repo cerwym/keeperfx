@@ -59,6 +59,16 @@ extern "C" {
 #define RENDERER_GLOW_SCREEN   1  /**< Screen blend (softer, no over-exposure)       */
 
 /* ---------------------------------------------------------------------------
+ * Zoom-box render mode constants (zoom_box_mode field)
+ * These mirror ZoomBoxMode in RendererManager.h; duplicated here so that the
+ * C-only config / console layers do not need to pull in the C++ renderer header.
+ * ------------------------------------------------------------------------- */
+/** Default: flat palette-indexed overhead map tiles. */
+#define RENDERER_ZBM_OVERHEAD   0
+/** Picture-in-picture isometric 3D view via FBO (OpenGL only). */
+#define RENDERER_ZBM_ISOMETRIC  1
+
+/* ---------------------------------------------------------------------------
  * Lighting pipeline mode constants (lighting_mode field)
  * ------------------------------------------------------------------------- */
 /** Software-accurate lighting: per-vertex Gouraud shade from the DK fade table.
@@ -139,6 +149,12 @@ typedef struct RendererSettings {
     /** Shadow depth test.  0 = disabled (original); 1 = wall-clipped (future).
      *  Default: 0. */
     int   shadow_depth_test;
+
+    /** Zoom-box render mode.
+     *  RENDERER_ZBM_OVERHEAD (0) = flat palette-indexed tiles (default, all backends).
+     *  RENDERER_ZBM_ISOMETRIC (1) = picture-in-picture isometric 3D view via FBO
+     *  (OpenGL only; other backends silently fall back to OVERHEAD at draw time). */
+    int   zoom_box_mode;
 
     /* --- Palette remap / tint mode --- */
 

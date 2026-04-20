@@ -1004,43 +1004,52 @@ void setup_background(long units_per_px)
         MapShapeEnd[i] = radius + LbSqrL(n);
     }
 
-    int num_colours;
-    num_colours = 0;
-    long out_scanline;
-    out_scanline = lbDisplay.GraphicsScreenWidth;
-    long bkgnd_pos;
-    bkgnd_pos = 0;
-    TbPixel *out;
-    out = &lbDisplay.WScreen[PanelMapX + out_scanline * PanelMapY];
-    int w;
-    int h;
-    for (h=0; h < MapDiagonalLength; h++)
-    {
-        for (w = MapShapeStart[h]; w < MapShapeEnd[h]; w++)
+    if (UIRenderer_IsGpuActive()) {
+        // GPU mode: WScreen is the CPU staging buffer — not a composited background.
+        // MapBackground[] is already zeroed by KfxCalloc; bkcol=0 is the only entry
+        // needed because s_minimap_pixels is pre-zeroed by AcquireMinimapBuffer.
+        // Skip the WScreen read/write that would corrupt the staging buffer.
+        NumBackColours = 1;
+        MapBackColours[0] = 0;
+    } else {
+        int num_colours;
+        num_colours = 0;
+        long out_scanline;
+        out_scanline = lbDisplay.GraphicsScreenWidth;
+        long bkgnd_pos;
+        bkgnd_pos = 0;
+        TbPixel *out;
+        out = &lbDisplay.WScreen[PanelMapX + out_scanline * PanelMapY];
+        int w;
+        int h;
+        for (h=0; h < MapDiagonalLength; h++)
         {
-            if (w < 0) continue;
+            for (w = MapShapeStart[h]; w < MapShapeEnd[h]; w++)
+            {
+                if (w < 0) continue;
 
-            TbPixel orig;
-            orig = out[w];
-            out[w] = 255;
-            int colour;
-            for (colour=0; colour < num_colours; colour++)
-            {
-                if (MapBackColours[colour] == orig) {
-                    break;
+                TbPixel orig;
+                orig = out[w];
+                out[w] = 255;
+                int colour;
+                for (colour=0; colour < num_colours; colour++)
+                {
+                    if (MapBackColours[colour] == orig) {
+                        break;
+                    }
                 }
+                if (num_colours == colour)
+                {
+                    MapBackColours[num_colours] = orig;
+                    num_colours++;
+                }
+                MapBackground[bkgnd_pos+w] = colour;
             }
-            if (num_colours == colour)
-            {
-                MapBackColours[num_colours] = orig;
-                num_colours++;
-            }
-            MapBackground[bkgnd_pos+w] = colour;
+            bkgnd_pos += MapDiagonalLength;
+            out += out_scanline;
         }
-        bkgnd_pos += MapDiagonalLength;
-        out += out_scanline;
+        NumBackColours = num_colours;
     }
-    NumBackColours = num_colours;
 }
 
 void setup_panel_colors(void)
@@ -1078,6 +1087,31 @@ void setup_panel_colors(void)
         PanelColours[n + PnC_purplePath]    = 255;
         PanelColours[n + PnC_Gems]      = 102 + (pixmap.ghost[bkcol] >> 6);
         PanelColours[n + PnC_RockFloor] = 145;
+        if (UIRenderer_IsGpuActive()) {
+            // GPU sprite shader discards palette index 0 (transparent); ensure all
+            // visible terrain types map to a non-zero entry.
+            // For rock: it should appear as black on the minimap. Palette index 0
+            // IS black, but 0 is the discard sentinel. Find the darkest non-zero
+            // palette entry (lbPalette is 6-bit, values 0-63) to use instead.
+            {
+                uint8_t black_idx = 1;
+                uint32_t best_lum = UINT32_MAX;
+                for (int i = 1; i < 256; i++)
+                {
+                    uint32_t r = lbPalette[i * 3 + 0];
+                    uint32_t g = lbPalette[i * 3 + 1];
+                    uint32_t b = lbPalette[i * 3 + 2];
+                    uint32_t lum = r * r + g * g + b * b;
+                    if (lum < best_lum) { best_lum = lum; black_idx = (uint8_t)i; }
+                }
+                PanelColours[n + PnC_Rock] = black_idx;
+            }
+            if (PanelColours[n + PnC_Wall]        == 0) PanelColours[n + PnC_Wall]        = 1;
+            if (PanelColours[n + PnC_Unexplored]  == 0) PanelColours[n + PnC_Unexplored]  = 1;
+            if (PanelColours[n + PnC_Tagged_Gold] == 0) PanelColours[n + PnC_Tagged_Gold] = 1;
+            if (PanelColours[n + PnC_Gold]        == 0) PanelColours[n + PnC_Gold]        = 1;
+            if (PanelColours[n + PnC_Gems]        == 0) PanelColours[n + PnC_Gems]        = 1;
+        }
 
         n = pncol_idx + PnC_RoomsStart;
         int i;
@@ -1386,13 +1420,17 @@ void panel_map_draw_slabs(long x, long y, long units_per_px, long zoom)
             int pnmap_idx;
             pnmap_idx = ((precor_x>>16)) + (((precor_y>>16)) * (game.map_subtiles_x + 1) );
             int pncol_idx;
-            //TODO reenable background
-            pncol_idx = PanelMap[pnmap_idx] + (*bkgnd * PnC_End);
+            if (s_minimap_pixels != NULL) {
+                // GPU mode: MapBackground is all-zeros; skip the multiply entirely.
+                pncol_idx = PanelMap[pnmap_idx];
+            } else {
+                pncol_idx = PanelMap[pnmap_idx] + (*bkgnd * PnC_End);
+                bkgnd++;
+            }
             *out = PanelColours[pncol_idx];
             precor_x += shift_y;
             precor_y -= shift_x;
             out++;
-            bkgnd++;
         }
         out_line += out_stride;
         bkgnd_line += MapDiagonalLength;

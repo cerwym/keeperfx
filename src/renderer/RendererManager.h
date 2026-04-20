@@ -302,6 +302,43 @@ TbBool RendererSubmitTransparentBlit(const unsigned char* buf, int w, int h);
 TbBool RendererSubmitOverheadMap(const unsigned char* tile_colors, int tiles_x, int tiles_y,
                                   int dst_x, int dst_y, int dst_w, int dst_h);
 
+/** Submit a grid of texture-mapped tile quads for the zoom-box terrain view.
+ *  Called from draw_zoom_box_terrain() in ZBM_OVERHEAD GPU mode to replace
+ *  flat palette-colour tiles with the actual top-face tile textures.
+ *  @param tile_block_ids  Array of tile_block indices (element_top_face_texture),
+ *                         tiles_x × tiles_y row-major; use 0xFFFF for unrevealed.
+ *  @param dst_x/dst_y     Screen top-left of the zoom box tile grid (pixels).
+ *  @param tile_w/tile_h   On-screen size of each tile (pixels). */
+void RendererSubmitZoomBoxTiles(const unsigned short* tile_block_ids, int tiles_x, int tiles_y,
+                                int dst_x, int dst_y, int tile_w, int tile_h);
+
+/******************************************************************************/
+/* Zoom-box render mode selection                                              */
+/******************************************************************************/
+
+/** Controls which renderer is used for the floating zoom-box terrain content. */
+typedef enum {
+    ZBM_OVERHEAD   = 0,  /**< Default: flat palette-indexed overhead map tiles. */
+    ZBM_ISOMETRIC  = 1,  /**< Picture-in-picture isometric 3D view via FBO.     */
+    ZBM_FRONTVIEW  = 2,  /**< Forced-perspective FP view (not yet implemented).  */
+} ZoomBoxMode;
+
+/** Get the current zoom-box render mode. */
+ZoomBoxMode RendererGetZoomBoxMode(void);
+
+/** Set the zoom-box render mode.
+ *  ZBM_ISOMETRIC is only functional in GL mode; other backends silently fall
+ *  back to ZBM_OVERHEAD behaviour at draw time. */
+void RendererSetZoomBoxMode(ZoomBoxMode mode);
+
+/** Schedule a picture-in-picture isometric render for the zoom box.
+ *  Call from draw_zoom_box() when the mode is ZBM_ISOMETRIC.
+ *  @param cam  Pointer to the camera whose view should be rendered.  The struct
+ *              is copied immediately; the caller may modify it afterwards.
+ *  @param x/y  Top-left corner of the destination on screen (pixels).
+ *  @param w/h  Width and height of the destination rect (pixels). */
+void RendererSchedulePiPRender(struct Camera* cam, int x, int y, int w, int h);
+
 /******************************************************************************/
 /* C-callable UI renderer wrappers                                            */
 /******************************************************************************/

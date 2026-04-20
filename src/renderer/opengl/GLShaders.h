@@ -409,6 +409,51 @@ void main()
 }
 )glsl";
 
+// Overhead map tile fragment shader.
+// Like RAWIMAGE_BLIT_FRAGMENT_SHADER but transparent (alpha=0) for palette
+// index 0, allowing the parchment background to show through for unrevealed
+// tiles.  Revealed solid tiles (rock, etc.) must supply a non-zero index so
+// they are rendered as opaque colour.  Blending must be enabled by the caller.
+constexpr const char* OVERHEAD_MAP_FRAGMENT_SHADER = R"glsl(
+#version 330 core
+in  vec2 v_uv;
+out vec4 fragColor;
+uniform sampler2D u_index;    // R8  — 8-bit palette indices
+uniform sampler1D u_palette;  // RGBA8 — 256-entry palette
+void main()
+{
+    float idx = texture(u_index, v_uv).r;
+    // Discard palette index 0: used as the "unrevealed" sentinel so the
+    // parchment background shows through those tiles.
+    if (idx < (0.5 / 255.0)) discard;
+    vec4 pal = texture(u_palette, idx);
+    fragColor = vec4(pal.rgb, 1.0);
+}
+)glsl";
+
+// Zoom-box tile fragment shader.
+// Draws individual dungeon tile quads from the R8 tile atlas for the
+// ZBM_OVERHEAD zoom box, replacing the flat palette-color tiles with the
+// actual top-face texture.  Index 0 is discarded (transparent pixels within
+// tiles).  Blending must be enabled by the caller.
+// Vertex shader: PALETTE_BLIT_VERTEX_SHADER (plain UV passthrough quad).
+constexpr const char* ZOOM_TILE_FRAGMENT_SHADER = R"glsl(
+#version 330 core
+in  vec2 v_uv;
+out vec4 fragColor;
+uniform sampler2D u_index;    // R8  — tile atlas (32×32 texels per tile)
+uniform sampler1D u_palette;  // RGBA8 — 256-entry game palette
+void main()
+{
+    float idx = texture(u_index, v_uv).r;
+    // Index 0 within tile data is a transparent/padding pixel — discard so the
+    // parchment background or unrevealed fill shows through tile edges/borders.
+    if (idx < (0.5 / 255.0)) discard;
+    vec4 pal = texture(u_palette, idx);
+    fragColor = vec4(pal.rgb, 1.0);
+}
+)glsl";
+
 // Landview zoom fragment shader.
 // Used by RendererOpenGL::SubmitLandviewZoom() for the campaign-map zoom
 // transition (frontzoom_to_point).  Draws map_screen (GL_R8, 1280×960) as
@@ -556,6 +601,21 @@ void main()
     float remapped_f = texture(u_fade_table, vec2(idx_f, remap_y)).r;
     vec4 pal = texture(u_palette, remapped_f);
     fragColor = vec4(pal.rgb * v_color.rgb, v_color.a);
+}
+)glsl";
+
+// ── FBO / PiP composite shader ────────────────────────────────────────────────
+// Blits an RGBA8 FBO colour attachment directly to the screen quad.
+// Used by GLUIRenderer::SubmitFBOQuad() to composite the picture-in-picture
+// isometric viewport over the parchment map.  No palette lookup needed.
+constexpr const char* UI_FBO_FRAGMENT_SHADER = R"glsl(
+#version 330 core
+in vec2 v_uv;
+uniform sampler2D u_fbo_tex;   // unit 0: RGBA8 FBO colour texture
+out vec4 fragColor;
+void main()
+{
+    fragColor = texture(u_fbo_tex, v_uv);
 }
 )glsl";
 

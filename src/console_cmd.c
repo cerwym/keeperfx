@@ -2244,6 +2244,30 @@ TbBool cmd_renderer_tile_filter(PlayerNumber plyr_idx, char* args)
     return true;
 }
 
+TbBool cmd_renderer_zoom_box_mode(PlayerNumber plyr_idx, char* args)
+{
+    char* tok = strsep(&args, " ");
+    if (tok == NULL) {
+        targeted_message_add(MsgType_Player, plyr_idx, plyr_idx, GUI_MESSAGES_DELAY,
+            "renderer.zoom_box_mode = %s",
+            g_renderer_settings.zoom_box_mode == RENDERER_ZBM_ISOMETRIC
+                ? "ISOMETRIC" : "OVERHEAD");
+        return true;
+    }
+    int newmode;
+    if (strcasecmp(tok, "ISOMETRIC") == 0 || strcasecmp(tok, "ISO") == 0)
+        newmode = RENDERER_ZBM_ISOMETRIC;
+    else
+        newmode = RENDERER_ZBM_OVERHEAD;
+    RendererSettings tmp = *RendererGetSettings();
+    tmp.zoom_box_mode = newmode;
+    RendererApplySettings(&tmp);
+    targeted_message_add(MsgType_Player, plyr_idx, plyr_idx, GUI_MESSAGES_DELAY,
+        "renderer.zoom_box_mode = %s",
+        newmode == RENDERER_ZBM_ISOMETRIC ? "ISOMETRIC" : "OVERHEAD");
+    return true;
+}
+
 TbBool cmd_cheat_menu(PlayerNumber plyr_idx, char * args)
 {
     if (game.easter_eggs_enabled == false) {
@@ -2406,6 +2430,7 @@ static const struct ConsoleCommand console_commands[] = {
     { "renderer.shade_gamma",   cmd_renderer_shade_gamma },
     { "renderer.palette_mode",  cmd_renderer_palette_mode },
     { "renderer.tile_filter",    cmd_renderer_tile_filter },
+    { "renderer.zoom_box_mode",  cmd_renderer_zoom_box_mode },
 };
 static const int console_command_count = sizeof(console_commands) / sizeof(*console_commands);
 
