@@ -262,23 +262,25 @@ private:
     int               m_zoom_u_screen_h    = -1;
 
     // ── Picture-in-Picture isometric render (ZBM_ISOMETRIC zoom-box mode) ─
-    // SubmitPiPRender() stores a camera snapshot and rect; EndFrame() re-runs
-    // draw_view() into a dedicated FBO, then submits the colour attachment to
-    // GLUIRenderer::SubmitFBOQuad() for compositing during UIFlushFront().
+    // SubmitPiPRender() appends to m_pip_queue; EndFrame() iterates the queue,
+    // renders each into its own FBO slot, submits the colour texture to
+    // GLUIRenderer::SubmitFBOQuad() for compositing, then clears the queue.
     struct PiPCmd {
         Camera  cam_copy;
         int     x = 0, y = 0, w = 0, h = 0;
     };
-    bool              m_pip_scheduled  = false;
-    PiPCmd            m_pip_cmd        = {};
-    unsigned int      m_pip_fbo        = 0;   // FBO for PiP render target
-    unsigned int      m_pip_color_tex  = 0;   // RGBA8 colour attachment
-    unsigned int      m_pip_depth_rb   = 0;   // depth renderbuffer
-    int               m_pip_fbo_w      = 0;
-    int               m_pip_fbo_h      = 0;
+    struct PiPFBO {
+        unsigned int fbo       = 0;
+        unsigned int color_tex = 0;
+        unsigned int depth_rb  = 0;
+        int          w         = 0;
+        int          h         = 0;
+    };
+    std::vector<PiPCmd> m_pip_queue;  ///< Commands accumulated this frame.
+    std::vector<PiPFBO> m_pip_fbos;   ///< Per-slot FBO resources (grown on demand).
 
-    /** (Re-)create (or resize) the PiP FBO to at least w×h.  No-op if size matches. */
-    void ensure_pip_fbo(int w, int h);
+    /** (Re-)create (or resize) FBO slot at index @p idx to at least w×h. */
+    void ensure_pip_fbo(std::size_t idx, int w, int h);
 
 };
 

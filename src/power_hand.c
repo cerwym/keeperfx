@@ -63,6 +63,7 @@
 #include "game_legacy.h"
 #include "sprites.h"
 #include "frontmenu_ingame_tabs.h"
+#include "gui/gui_bridge.h"
 
 #include "keeperfx.hpp"
 #include "post_inc.h"
@@ -568,6 +569,25 @@ void draw_power_hand(void)
         {
             roomst = get_room_kind_stats(room->kind);
 
+            UIRenderer_SubmitPanelSpriteCentered(GetMouseX()+scale_ui_value(24*global_hand_scale), GetMouseY()+scale_ui_value(32*global_hand_scale), ps_units_per_px, roomst->medsym_sprite_idx);
+        }
+        if ((!power_hand_is_empty(player)) && (game.small_map_state == 1))
+        {
+            draw_mini_things_in_hand(GetMouseX()+scale_ui_value(10*global_hand_scale), GetMouseY()+scale_ui_value(10*global_hand_scale));
+        }
+        return;
+    }
+    if (GUIBridge_IsMouseOverPiP())
+    {
+        // Mouse is over a PiP window: draw the same lightweight overlay as the minimap.
+        // game.hand_over_subtile_x/y and game.small_map_state were set by GUIBridge_HandleGameViewPiPInput().
+        MapSubtlCoord stl_x = game.hand_over_subtile_x;
+        MapSubtlCoord stl_y = game.hand_over_subtile_y;
+        SYNCDBG(7,"Drawing over PiP window");
+        room = subtile_room_get(stl_x, stl_y);
+        if ((!room_is_invalid(room)) && (subtile_revealed(stl_x, stl_y, player->id_number)))
+        {
+            roomst = get_room_kind_stats(room->kind);
             UIRenderer_SubmitPanelSpriteCentered(GetMouseX()+scale_ui_value(24*global_hand_scale), GetMouseY()+scale_ui_value(32*global_hand_scale), ps_units_per_px, roomst->medsym_sprite_idx);
         }
         if ((!power_hand_is_empty(player)) && (game.small_map_state == 1))

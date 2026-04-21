@@ -494,9 +494,13 @@ void RendererOpenGL::Shutdown()
     if (m_fmv_palette_tex)  { glDeleteTextures(1, &m_fmv_palette_tex);    m_fmv_palette_tex = 0; }
     if (m_zoom_shader)      { glDeleteProgram(m_zoom_shader);              m_zoom_shader = 0; }
     if (m_zoom_tex)         { glDeleteTextures(1, &m_zoom_tex);            m_zoom_tex = 0; }
-    if (m_pip_fbo)          { glDeleteFramebuffers(1, &m_pip_fbo);         m_pip_fbo = 0; }
-    if (m_pip_color_tex)    { glDeleteTextures(1, &m_pip_color_tex);       m_pip_color_tex = 0; }
-    if (m_pip_depth_rb)     { glDeleteRenderbuffers(1, &m_pip_depth_rb);   m_pip_depth_rb = 0; }
+    for (PiPFBO& slot : m_pip_fbos)
+    {
+        if (slot.fbo)       { glDeleteFramebuffers(1,   &slot.fbo);       slot.fbo       = 0; }
+        if (slot.color_tex) { glDeleteTextures(1,        &slot.color_tex); slot.color_tex = 0; }
+        if (slot.depth_rb)  { glDeleteRenderbuffers(1,  &slot.depth_rb);  slot.depth_rb  = 0; }
+    }
+    m_pip_fbos.clear();
 
     platform_destroy_gl_context();
 }
@@ -518,11 +522,6 @@ bool RendererOpenGL::BeginFrame()
     if (m_tile_atlas && !m_tile_atlas->IsInitialized())
         init_tile_atlas();
 
-    // Pre-warm world renderer GL resources as soon as the tile atlas is ready.
-    // Without this, all shader/VAO/VBO creation bursts onto the FIRST isometric
-    // render frame (the heartzoom transition tick), which races with RenderDoc's
-    // per-frame bookkeeping and was the root cause of the "blank exception at
-    // heartzoom" crash.  Doing it here spreads the work across earlier frames.
     if (m_tile_atlas && m_tile_atlas->IsInitialized())
     {
         GLWorldViewRenderer* glwr = dynamic_cast<GLWorldViewRenderer*>(m_world_renderer);
@@ -874,107 +873,82 @@ void RendererOpenGL::EndFrame()
     m_zoom_tile_cmds.clear();
 
     // ── PiP isometric render (ZBM_ISOMETRIC zoom-box mode) ────────────────
-    // Scheduled by RendererSchedulePiPRender() during draw_zoom_box().
-    // Re-runs draw_view() with the stored camera into a dedicated FBO whose
-    // colour attachment is then submitted to GLUIRenderer for compositing
-    // during UIFlushFront() — before the corner-frame sprites.
-    if (m_pip_scheduled && m_world_renderer)
+    // Each entry in m_pip_queue is rendered into its own FBO slot (grown on
+    // demand) then submitted to GLUIRenderer for compositing.  Queue cleared.
+    if (m_world_renderer && !m_pip_queue.empty())
     {
-        m_pip_scheduled = false;
-        const PiPCmd& pcmd = m_pip_cmd;
-        const int pw = pcmd.w;
-        const int ph = pcmd.h;
+        GLUIRenderer* ui = dynamic_cast<GLUIRenderer*>(RendererGetUIRenderer());
 
-        if (pw > 0 && ph > 0)
+        for (std::size_t qi = 0; qi < m_pip_queue.size(); ++qi)
         {
-            ensure_pip_fbo(pw, ph);
+            const PiPCmd& pcmd = m_pip_queue[qi];
+            const int pw = pcmd.w;
+            const int ph = pcmd.h;
+            if (pw <= 0 || ph <= 0)
+                continue;
 
-            SYNCDBG(7, "PiP: fbo=%u pos=(%d,%d) size=(%dx%d) vec_wh=(%ld x %ld) cam=(%d,%d,%d)",
-                    m_pip_fbo, pcmd.x, pcmd.y, pw, ph,
-                    vec_window_width, vec_window_height,
+            ensure_pip_fbo(qi, pw, ph);
+            const PiPFBO& fbo = m_pip_fbos[qi];
+            if (!fbo.fbo)
+                continue;
+
+            SYNCDBG(7, "PiP[%zu]: fbo=%u pos=(%d,%d) size=(%dx%d) cam=(%d,%d,%d)",
+                    qi, fbo.fbo, pcmd.x, pcmd.y, pw, ph,
                     (int)pcmd.cam_copy.mappos.x.val,
                     (int)pcmd.cam_copy.mappos.y.val,
                     (int)pcmd.cam_copy.zoom);
-            // draw_view() → setup_rotate_stuff() derives view_width/height_over_2 from
-            // vec_window_width/height (the main game viewport, e.g. 1280×720).  If left
-            // unchanged, fill_in_points_isometric projects tile vertices around pixel
-            // (ewnd.width/2, ewnd.height/2) but the tile shader expects coordinates in
-            // [0,pip_w)×[0,pip_h), so everything lands far outside NDC clip bounds.
-            // Override to pip_w×pip_h so the projection is centred on (pip_w/2, pip_h/2).
+
             const long saved_vw = vec_window_width;
             const long saved_vh = vec_window_height;
             vec_window_width  = pw;
             vec_window_height = ph;
 
-            // compute_cells_away() uses player->engine_window_* to determine how many
-            // map tiles to project.  Override it to the PiP size so the tile grid fills
-            // the FBO rather than the full game viewport (which produces out-of-bounds
-            // xcell/ycell values and get_floor_pointed_at errors).
             TbGraphicsWindow saved_ewnd;
             store_engine_window(&saved_ewnd, 1);
             setup_engine_window(0, 0, pw, ph);
 
-            // Stash main-view UIRenderer quads so only pip-sourced submissions
-            // accumulate during draw_view(pip_cam).  FlushPiPSprites() renders
-            // them into the FBO and then restores the main-view queues.
-            GLUIRenderer* ui = dynamic_cast<GLUIRenderer*>(RendererGetUIRenderer());
             if (ui)
                 ui->BeginPiPSprites();
 
             m_world_renderer->BeginWorldPass(nullptr, 0, pw, ph, 0, 0);
-            // draw_view() calls WorldViewRenderer_FlushIsometricView() internally
-            // at the end of engine_render.c — do NOT call FlushIsometricView again
-            // here or tile geometry will be submitted twice into the vertex buffer.
+
+            // Save projection globals so main-view mouse→world unprojection is unaffected.
+            const Offset saved_vert[3] = { vert_offset[0], vert_offset[1], vert_offset[2] };
+            const Offset saved_hori[3] = { hori_offset[0], hori_offset[1], hori_offset[2] };
+            const long   saved_x_init  = x_init_off;
+            const long   saved_y_init  = y_init_off;
+
             draw_view(const_cast<Camera*>(&pcmd.cam_copy), 0);
+
+            vert_offset[0] = saved_vert[0]; vert_offset[1] = saved_vert[1]; vert_offset[2] = saved_vert[2];
+            hori_offset[0] = saved_hori[0]; hori_offset[1] = saved_hori[1]; hori_offset[2] = saved_hori[2];
+            x_init_off = saved_x_init;
+            y_init_off = saved_y_init;
 
             setup_engine_window(saved_ewnd.x, saved_ewnd.y,
                                 saved_ewnd.width, saved_ewnd.height);
             vec_window_width  = saved_vw;
             vec_window_height = saved_vh;
 
-            // Render the accumulated world draw-cmds into the FBO.
-            // [[TODO : Add exclusions for non-isometric passes like overhead-map sprites and text?]]
-            // Disable scissor: if a parent pass (e.g. viewport clamping or UI clipping) left the
-            // scissor test enabled, the FBO clear and draw calls would be silently clipped to the
-            // wrong region.  Re-enable only if it was active before.
             GLboolean scissor_was_enabled = glIsEnabled(GL_SCISSOR_TEST);
             glDisable(GL_SCISSOR_TEST);
-            // [[TODO : PiP draw-mode flags — future work.  The original zoom box was a top-down
-            //          sprite view, so certain game elements (traps, spells, placed objects) are
-            //          harder to read in isometric mode.  A per-element opt-in/out flag on this
-            //          draw pass would allow accessibility tuning without rebuilding the full view.
-            //          Health bars and creature status flowers are currently absent because
-            //          draw_nonspatial_sprites_gpu() uses player->engine_window_* for coordinate
-            //          offsets, which are set to the pip viewport during draw_view(pip_cam);
-            //          they land at incorrect screen positions and are discarded by FlushPiPSprites.
-            //          Fixing that requires either remapping NSP coordinates or a dedicated
-            //          pip-space NSP pass. ]]
-            glBindFramebuffer(GL_FRAMEBUFFER, m_pip_fbo);
+            glBindFramebuffer(GL_FRAMEBUFFER, fbo.fbo);
             glViewport(0, 0, pw, ph);
-            // Opaque dark background: unexplored/off-map areas show as dark rather
-            // than being transparent (which makes them indistinguishable from the
-            // parchment map behind the FBO quad when hovering over undug rock). Another transparency inconsitency ffs.
             glClearColor(0.05f, 0.05f, 0.12f, 1.0f);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             m_world_renderer->GPUFlushNow_ToFBO(pw, ph);
-            // Render NSP sprites (health bars, room flags, gold text) that were
-            // submitted to UIRenderer during draw_view(pip_cam) into the FBO at
-            // pip-space coordinates, then erase them so FlushFront() never sees
-            // them at wrong full-screen coordinates.
             if (ui)
                 ui->FlushPiPSprites(pw, ph);
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
-            // Restore full-screen viewport immediately.  FlushPiPSprites() leaves the
-            // viewport set to pip_w×pip_h; any EndFrame pass that draws before
-            // UIRenderer_FlushFront() would be clipped to the PiP region otherwise.
             glViewport(0, 0, m_screenW, m_screenH);
             if (scissor_was_enabled)
                 glEnable(GL_SCISSOR_TEST);
 
-            // Queue the PiP colour texture for compositing by UIFlushFront().
             if (ui)
-                ui->SubmitFBOQuad(pcmd.x, pcmd.y, pw, ph, m_pip_color_tex);
+                ui->SubmitFBOQuad(pcmd.x, pcmd.y, pw, ph, fbo.color_tex);
         }
+
+        m_pip_queue.clear();
     }
     // Uses the same palette-indexed quad shader as rawblit, but with a per-video-frame
     // palette texture on unit 1 instead of the game palette.
@@ -1343,68 +1317,66 @@ void RendererOpenGL::SubmitZoomBoxTiles(const uint16_t* tile_block_ids, int tile
 void RendererOpenGL::SubmitPiPRender(struct Camera* cam, int x, int y, int w, int h)
 {
     if (!cam) return;
-    m_pip_cmd.cam_copy = *cam;
-    m_pip_cmd.x = x;
-    m_pip_cmd.y = y;
-    m_pip_cmd.w = w;
-    m_pip_cmd.h = h;
-    m_pip_scheduled = true;
+    PiPCmd cmd;
+    cmd.cam_copy = *cam;
+    cmd.x = x; cmd.y = y; cmd.w = w; cmd.h = h;
+    m_pip_queue.push_back(cmd);
 }
 
-void RendererOpenGL::ensure_pip_fbo(int w, int h)
+void RendererOpenGL::ensure_pip_fbo(std::size_t idx, int w, int h)
 {
-    if (m_pip_fbo && m_pip_fbo_w == w && m_pip_fbo_h == h)
-        return;
+    // Grow the slot vector if needed.
+    if (idx >= m_pip_fbos.size())
+        m_pip_fbos.resize(idx + 1);
 
-    // Destroy any existing FBO.
-    if (m_pip_fbo)
+    PiPFBO& slot = m_pip_fbos[idx];
+    if (slot.fbo && slot.w == w && slot.h == h)
+        return;  // Already correct size.
+
+    // Destroy existing resources for this slot.
+    if (slot.fbo)
     {
-        glDeleteFramebuffers(1, &m_pip_fbo);
-        glDeleteTextures(1, &m_pip_color_tex);
-        glDeleteRenderbuffers(1, &m_pip_depth_rb);
-        m_pip_fbo = 0;
-        m_pip_color_tex = 0;
-        m_pip_depth_rb  = 0;
+        glDeleteFramebuffers(1, &slot.fbo);
+        glDeleteTextures(1, &slot.color_tex);
+        glDeleteRenderbuffers(1, &slot.depth_rb);
+        slot = PiPFBO{};
     }
 
-    // Create colour attachment.
-    glGenTextures(1, &m_pip_color_tex);
-    glBindTexture(GL_TEXTURE_2D, m_pip_color_tex);
+    // Colour attachment.
+    glGenTextures(1, &slot.color_tex);
+    glBindTexture(GL_TEXTURE_2D, slot.color_tex);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glBindTexture(GL_TEXTURE_2D, 0);
 
-    // Create depth renderbuffer.
-    glGenRenderbuffers(1, &m_pip_depth_rb);
-    glBindRenderbuffer(GL_RENDERBUFFER, m_pip_depth_rb);
+    // Depth renderbuffer.
+    glGenRenderbuffers(1, &slot.depth_rb);
+    glBindRenderbuffer(GL_RENDERBUFFER, slot.depth_rb);
     glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, w, h);
     glBindRenderbuffer(GL_RENDERBUFFER, 0);
 
     // Assemble FBO.
-    glGenFramebuffers(1, &m_pip_fbo);
-    glBindFramebuffer(GL_FRAMEBUFFER, m_pip_fbo);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_pip_color_tex, 0);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, m_pip_depth_rb);
+    glGenFramebuffers(1, &slot.fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, slot.fbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, slot.color_tex, 0);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, slot.depth_rb);
 
     GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
     if (status != GL_FRAMEBUFFER_COMPLETE)
     {
-        ERRORLOG("PiP FBO incomplete (0x%x) — PiP render disabled for this frame", (unsigned)status);
+        ERRORLOG("PiP FBO[%zu] incomplete (0x%x) — slot disabled", idx, (unsigned)status);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glDeleteFramebuffers(1, &m_pip_fbo);
-        glDeleteTextures(1, &m_pip_color_tex);
-        glDeleteRenderbuffers(1, &m_pip_depth_rb);
-        m_pip_fbo = 0;
-        m_pip_color_tex = 0;
-        m_pip_depth_rb  = 0;
+        glDeleteFramebuffers(1, &slot.fbo);
+        glDeleteTextures(1, &slot.color_tex);
+        glDeleteRenderbuffers(1, &slot.depth_rb);
+        slot = PiPFBO{};
         return;
     }
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-    m_pip_fbo_w = w;
-    m_pip_fbo_h = h;
+    slot.w = w;
+    slot.h = h;
 }
 
 const char* RendererOpenGL::GetName() const

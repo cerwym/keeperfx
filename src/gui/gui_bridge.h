@@ -61,6 +61,30 @@ void GUIBridge_SetMapRotation(int angle);
 /// @return non-zero if the event was consumed by the scene stack.
 int GUIBridge_HandleMouseDown(int x, int y, int button);
 
+/// Toggle the game-view PiP zoom box on/off.
+/// When turning on, snapshots cursor_subtile_x/y from the current player.
+/// Shortcut: Ctrl+1.
+void GUIBridge_ToggleGameViewPiP1(void);
+
+/// Toggle a second game-view PiP zoom box on/off.
+/// When turning on, snapshots cursor_subtile_x/y from the current player.
+/// Shortcut: Ctrl+2.
+void GUIBridge_ToggleGameViewPiP2(void);
+
+/// Draw all active game-view PiP boxes stacked vertically in the top-right of
+/// the engine window.  Called after redraw_isometric_view() in engine_redraw.c.
+void GUIBridge_DrawGameViewPiP(void);
+
+/** Handle mouse input over any active PiP window.
+ *  Right-release drops a held creature/object; left-release navigates the main camera.
+ *  Mirrors do_right_map_click / do_left_map_click for the minimap.
+ *  Returns non-zero if the event was consumed (mouse was over a PiP). */
+int  GUIBridge_HandleGameViewPiPInput(void);
+
+/** Returns non-zero for the duration of a frame when the cursor is inside a PiP window.
+ *  Used by draw_power_hand() to draw the keeper hand / mini-things at the cursor. */
+int  GUIBridge_IsMouseOverPiP(void);
+
 #ifdef __cplusplus
 } // extern "C"
 #endif

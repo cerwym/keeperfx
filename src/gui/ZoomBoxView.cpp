@@ -39,7 +39,7 @@ extern "C" {
 // ---------------------------------------------------------------------------
 
 ZoomBoxView::ZoomBoxView(int mode)
-    : m_mode(mode)
+    : m_mode(mode), m_fixed_zoom(0), m_fixed_rotation(-1)
 {}
 
 // ---------------------------------------------------------------------------
@@ -109,15 +109,20 @@ void ZoomBoxView::drawIsometric(const DrawContext&    ctx,
     pip_cam.mappos.x.val = stl_cx * 256 + 128;
     pip_cam.mappos.y.val = stl_cy * 256 + 128;
 
+    // Apply fixed rotation if set, so PiP orientation is independent of main camera.
+    if (m_fixed_rotation >= 0)
+        pip_cam.rotation_angle_x = (long)m_fixed_rotation;
+
     const int pip_w = draw_tiles_x * subtile_size;
     const int pip_h = draw_tiles_y * subtile_size;
 
     // Scale zoom so tile density is proportional to the pip viewport height
-    // relative to the main window height.  Formula derivation (see comment in
-    // original gui_parchment.c): zoom_pip = base_zoom * 13 * pip_h / (draw_tiles * ref_h)
+    // relative to the main window height.  If a fixed zoom was set, use it
+    // directly so the PiP is independent of the main camera zoom.
     {
-        const long base_zoom = get_camera_zoom(
-            const_cast<Camera*>(&view.cameras[CamIV_Isometric]));
+        const long base_zoom = (m_fixed_zoom > 0)
+            ? m_fixed_zoom
+            : get_camera_zoom(const_cast<Camera*>(&view.cameras[CamIV_Isometric]));
         const long ref_h = (long)vec_window_height;
         long scaled_zoom = (ref_h > 0)
             ? base_zoom * 13 * pip_h / (draw_tiles_x * ref_h)
