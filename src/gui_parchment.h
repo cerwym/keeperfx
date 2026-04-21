@@ -39,12 +39,13 @@ extern unsigned char *hires_parchment;
 #pragma pack()
 /******************************************************************************/
 void draw_map_parchment(void);
+void draw_2d_map(void);
+void draw_map_level_name(void);
 TbBool parchment_copy_background_at(const struct TbRect *bkgnd_area, int m);
 
 void load_parchment_file(void);
 void reload_parchment_file(TbBool hires);
 
-void redraw_parchment_view(void);
 void redraw_minimal_overhead_view(void);
 
 long get_parchment_map_area_rect(struct TbRect *map_area);

@@ -375,6 +375,11 @@ static void FlushFBOQuads_impl(const std::vector<FBOQuad>& quads, GLuint prog, G
     if (quads.empty() || !prog)
         return;
 
+    // Scissor test must be off: a stale scissor rect from a previous pass (e.g. a UI
+    // clipping region) would silently discard parts of the FBO quad.
+    GLboolean scissor_was_enabled = glIsEnabled(GL_SCISSOR_TEST);
+    glDisable(GL_SCISSOR_TEST);
+
     glUseProgram(prog);
     glUniform2f(loc_screen, (float)screen_w, (float)screen_h);
     glEnable(GL_BLEND);
@@ -406,6 +411,8 @@ static void FlushFBOQuads_impl(const std::vector<FBOQuad>& quads, GLuint prog, G
     glBindVertexArray(0);
     glDepthMask(GL_TRUE);
     glActiveTexture(GL_TEXTURE0);
+    if (scissor_was_enabled)
+        glEnable(GL_SCISSOR_TEST);
 }
 
 void GLUIRenderer::FlushFront()

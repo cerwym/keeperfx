@@ -68,6 +68,7 @@
 #include "keeperfx.hpp"
 #include "renderer/RendererManager.h"
 #include "kfx/profiling/KfxProfilingC.h"
+#include "gui/gui_bridge.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -988,18 +989,21 @@ void redraw_display(void)
         break;
     case PVM_CreatureView:
         redraw_creature_view();
+        GUIBridge_LeaveParchmentView();
         parchment_loaded = 0;
         break;
     case PVM_IsoWibbleView:
     case PVM_IsoStraightView:
         redraw_isometric_view();
+        GUIBridge_LeaveParchmentView();
         parchment_loaded = 0;
         break;
     case PVM_ParchmentView:
-        redraw_parchment_view();
+        GUIBridge_DrawParchmentView();
         break;
     case PVM_FrontView:
         redraw_frontview();
+        GUIBridge_LeaveParchmentView();
         parchment_loaded = 0;
         break;
     case PVM_ParchFadeIn:

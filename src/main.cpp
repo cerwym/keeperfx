@@ -132,6 +132,7 @@
 #include "config_settings.h"
 #include "config_keeperfx.h"
 #include "renderer/RendererManager.h"
+#include "gui/gui_bridge.h"
 #include "game_legacy.h"
 #include "room_list.h"
 #include "steam_api.hpp"
@@ -3344,6 +3345,10 @@ void gameplay_loop_draw()
 {
     // Floats are used a lot in the drawing related functions. But keep in mind integers are typically preferred for logic related functions.
     frametime_start_measurement(Frametime_Draw);
+
+    // Tick the GUI scene stack.  Must happen before keeper_screen_redraw() so
+    // that ClientViewState is up to date before any scene draws this frame.
+    GUIBridge_Update(game.delta_time);
 
     // Update lights
     if ((game.operation_flags & GOF_Paused) == 0) {

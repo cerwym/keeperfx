@@ -797,6 +797,9 @@ TbBool process_players_global_packet_action(PlayerNumber plyr_idx)
       }
       return 0;
   case PckA_SetMinimapConf:
+      // Retired: minimap_zoom is a local display preference and must not be
+      // network-synced.  Callers now write directly via GUIBridge_SetMinimapZoom().
+      // This branch is kept only for savegame / old-packet compatibility.
       player->minimap_zoom = pckt->actn_par1;
       if (is_my_player(player))
       {
@@ -805,6 +808,9 @@ TbBool process_players_global_packet_action(PlayerNumber plyr_idx)
       }
       return 0;
   case PckA_SetMapRotation:
+      // Retired: camera rotation is a local view preference and must not be
+      // network-synced.  Callers now write directly via GUIBridge_SetMapRotation().
+      // This branch is kept only for savegame / old-packet compatibility.
       player->cameras[CamIV_Parchment].rotation_angle_x = pckt->actn_par1;
       player->cameras[CamIV_FrontView].rotation_angle_x = pckt->actn_par1;
       player->cameras[CamIV_Isometric].rotation_angle_x = pckt->actn_par1;

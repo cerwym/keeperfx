@@ -932,7 +932,23 @@ void RendererOpenGL::EndFrame()
             vec_window_width  = saved_vw;
             vec_window_height = saved_vh;
 
-            // Render the accumulated world draw-cmds into the FBO. [[TODO : Add exlcusions for non-isometric passes like overhead-map sprites and text?]]
+            // Render the accumulated world draw-cmds into the FBO.
+            // [[TODO : Add exclusions for non-isometric passes like overhead-map sprites and text?]]
+            // Disable scissor: if a parent pass (e.g. viewport clamping or UI clipping) left the
+            // scissor test enabled, the FBO clear and draw calls would be silently clipped to the
+            // wrong region.  Re-enable only if it was active before.
+            GLboolean scissor_was_enabled = glIsEnabled(GL_SCISSOR_TEST);
+            glDisable(GL_SCISSOR_TEST);
+            // [[TODO : PiP draw-mode flags — future work.  The original zoom box was a top-down
+            //          sprite view, so certain game elements (traps, spells, placed objects) are
+            //          harder to read in isometric mode.  A per-element opt-in/out flag on this
+            //          draw pass would allow accessibility tuning without rebuilding the full view.
+            //          Health bars and creature status flowers are currently absent because
+            //          draw_nonspatial_sprites_gpu() uses player->engine_window_* for coordinate
+            //          offsets, which are set to the pip viewport during draw_view(pip_cam);
+            //          they land at incorrect screen positions and are discarded by FlushPiPSprites.
+            //          Fixing that requires either remapping NSP coordinates or a dedicated
+            //          pip-space NSP pass. ]]
             glBindFramebuffer(GL_FRAMEBUFFER, m_pip_fbo);
             glViewport(0, 0, pw, ph);
             // Opaque dark background: unexplored/off-map areas show as dark rather
@@ -948,6 +964,12 @@ void RendererOpenGL::EndFrame()
             if (ui)
                 ui->FlushPiPSprites(pw, ph);
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            // Restore full-screen viewport immediately.  FlushPiPSprites() leaves the
+            // viewport set to pip_w×pip_h; any EndFrame pass that draws before
+            // UIRenderer_FlushFront() would be clipped to the PiP region otherwise.
+            glViewport(0, 0, m_screenW, m_screenH);
+            if (scissor_was_enabled)
+                glEnable(GL_SCISSOR_TEST);
 
             // Queue the PiP colour texture for compositing by UIFlushFront().
             if (ui)
@@ -1367,7 +1389,17 @@ void RendererOpenGL::ensure_pip_fbo(int w, int h)
 
     GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
     if (status != GL_FRAMEBUFFER_COMPLETE)
-        WARNLOG("PiP FBO incomplete: 0x%x", (unsigned)status);
+    {
+        ERRORLOG("PiP FBO incomplete (0x%x) — PiP render disabled for this frame", (unsigned)status);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteFramebuffers(1, &m_pip_fbo);
+        glDeleteTextures(1, &m_pip_color_tex);
+        glDeleteRenderbuffers(1, &m_pip_depth_rb);
+        m_pip_fbo = 0;
+        m_pip_color_tex = 0;
+        m_pip_depth_rb  = 0;
+        return;
+    }
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 

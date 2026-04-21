@@ -76,6 +76,7 @@
 
 #include "keeperfx.hpp"
 #include "KeeperSpeech.h"
+#include "gui/gui_bridge.h"
 
 #include <math.h>
 #include "platform/kfx_breadcrumb.h"
@@ -532,7 +533,7 @@ short get_minimap_control_inputs(void)
         }
         if (player->minimap_zoom < 2048)
         {
-            set_players_packet_action(player, PckA_SetMinimapConf, 2 * (long)player->minimap_zoom, 0, 0, 0);
+            GUIBridge_SetMinimapZoom(2 * (unsigned short)player->minimap_zoom);
             packet_made = true;
         }
         clear_key_pressed(KC_SUBTRACT);
@@ -547,7 +548,7 @@ short get_minimap_control_inputs(void)
       }
       if ( player->minimap_zoom > 128 )
       {
-          set_players_packet_action(player, PckA_SetMinimapConf, player->minimap_zoom >> 1, 0, 0, 0);
+          GUIBridge_SetMinimapZoom(player->minimap_zoom >> 1);
           packet_made = true;
       }
       clear_key_pressed(KC_ADD);
@@ -1164,7 +1165,7 @@ TbBool get_dungeon_control_pausable_action_inputs(void)
         {
             (angle = ANGLE_NORTH);
         }
-        set_packet_action(pckt,PckA_SetMapRotation,angle,0,0,0);
+        GUIBridge_SetMapRotation(angle);
         clear_key_pressed(val);
         return true;
       }
@@ -1204,7 +1205,7 @@ TbBool get_dungeon_control_pausable_action_inputs(void)
             {
                 (angle = ANGLE_NORTH);
             }
-        set_packet_action(pckt,PckA_SetMapRotation,angle,0,0,0);
+        GUIBridge_SetMapRotation(angle);
         }
         clear_key_pressed(val);
         return true;
