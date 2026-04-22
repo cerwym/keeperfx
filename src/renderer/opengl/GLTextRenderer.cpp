@@ -675,9 +675,9 @@ void GLTextRenderer::Flush()
     lbDisplay.DrawColour = saved_colour;
     lbDisplay.DrawFlags  = saved_draw_flags;
 
-    // Restore GL state
+    // Restore GL state — depth test stays OFF; all passes after text
+    // (screen tint, cursor) are 2D overlays that must not depth-test.
     glDisable(GL_BLEND);
-    glEnable(GL_DEPTH_TEST);
     glBindVertexArray(0);
     glUseProgram(0);
 }
