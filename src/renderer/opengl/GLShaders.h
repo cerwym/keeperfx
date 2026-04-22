@@ -277,13 +277,20 @@ constexpr const char* WORLD_VERTEX_SHADER = R"glsl(
 layout(location = 0) in vec3  a_pos;
 layout(location = 1) in vec2  a_uv;
 layout(location = 2) in float a_shade;
-layout(location = 3) in vec2  a_stl;   // subtile coords for lightmap (mode 1)
+layout(location = 3) in vec2  a_stl;       // subtile coords for lightmap (mode 1)
+layout(location = 4) in float a_camera_z;  // camera-space Z for perspective correction
 out vec2  v_uv;
 out float v_shade;
 out vec2  v_stl;
 void main()
 {
-    gl_Position = vec4(a_pos, 1.0);
+    // Perspective-correct interpolation trick: multiply clip-space position by
+    // camera_z (= gl_Position.w).  The rasterizer divides by w, restoring the
+    // original NDC position, but now it also perspective-corrects all varyings
+    // (v_uv, v_shade, v_stl) using the per-vertex w values.
+    // When camera_z == 1.0 (unknown depth), this degrades to affine (no-op).
+    float w = max(a_camera_z, 1.0);
+    gl_Position = vec4(a_pos.xy * w, a_pos.z * w, w);
     v_uv        = a_uv;
     v_shade     = a_shade;
     v_stl       = a_stl;

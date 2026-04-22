@@ -119,10 +119,13 @@ private:
     // Append one triangle (3 PolyPoint vertices, integer screen pixels) to the staging array.
     // tile_id is the flat block_ptrs[] index from p->block;
     // variation = tile_id / TEXTURE_BLOCKS_COUNT, tile_local = tile_id % TEXTURE_BLOCKS_COUNT.
+    // cam_z0/1/2: camera-space Z for each vertex (for perspective-correct interpolation).
+    //             Pass 0 for unknown/no-correction (defaults to 1.0).
     bool append_triangle(int tile_id,
                          const struct PolyPoint* p0,
                          const struct PolyPoint* p1,
-                         const struct PolyPoint* p2);
+                         const struct PolyPoint* p2,
+                         long cam_z0 = 0, long cam_z1 = 0, long cam_z2 = 0);
 
     // Append one triangle from compact-format fields (unsigned short xy, unsigned char uv/shade)
     bool append_triangle_compact(int sx0, int sy0, int u0, int v0, int shade0,

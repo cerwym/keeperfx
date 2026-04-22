@@ -171,6 +171,10 @@ bool GLWorldViewRenderer::init_gl_resources()
     glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(WorldVertex),
                           (void*)(6 * sizeof(float)));
     glEnableVertexAttribArray(3);
+    // layout(location=4) float a_camera_z — camera-space depth for perspective correction, byte offset 32
+    glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, sizeof(WorldVertex),
+                          (void*)(8 * sizeof(float)));
+    glEnableVertexAttribArray(4);
 
     glBindVertexArray(0);
 
@@ -1182,7 +1186,8 @@ void GLWorldViewRenderer::BeginWorldPass(unsigned char* framebuf, int pitch,
 bool GLWorldViewRenderer::append_triangle(int tile_id,
                                            const struct PolyPoint* p0,
                                            const struct PolyPoint* p1,
-                                           const struct PolyPoint* p2)
+                                           const struct PolyPoint* p2,
+                                           long cam_z0, long cam_z1, long cam_z2)
 {
     const int variation  = tile_id / TEXTURE_BLOCKS_COUNT;
     const int tile_local = tile_id % TEXTURE_BLOCKS_COUNT;
@@ -1211,6 +1216,7 @@ bool GLWorldViewRenderer::append_triangle(int tile_id,
     const float z_ndc = 2.0f * (float)m_current_bucket / (float)(BUCKETS_COUNT - 1) - 1.0f;
 
     const struct PolyPoint* pts[3] = { p0, p1, p2 };
+    const long cam_z[3] = { cam_z0, cam_z1, cam_z2 };
     for (int i = 0; i < 3; i++)
     {
         WorldVertex* wv = &m_verts[m_vert_count + i];
@@ -1227,6 +1233,9 @@ bool GLWorldViewRenderer::append_triangle(int tile_id,
         wv->shade = (float)(pts[i]->S >> 16) / 32.0f;
         wv->stl_x = 0.0f;  // Phase 3: fill from tile map position
         wv->stl_y = 0.0f;
+        // Camera-space Z for perspective-correct interpolation.
+        // 0 or negative means unknown — default to 1.0 (affine, no correction).
+        wv->camera_z = (cam_z[i] > 0) ? (float)cam_z[i] : 1.0f;
     }
     m_vert_count += 3;
     return true;
@@ -1688,7 +1697,10 @@ void GLWorldViewRenderer::FlushIsometricView()
                     append_triangle(p->block,
                                     &p->vertex_first,
                                     &p->vertex_second,
-                                    &p->vertex_third);
+                                    &p->vertex_third,
+                                    p->camera_z_first,
+                                    p->camera_z_second,
+                                    p->camera_z_third);
                     break;
                 }
                 case QK_PolygonSimple:
@@ -1703,17 +1715,13 @@ void GLWorldViewRenderer::FlushIsometricView()
                 case QK_PolygonNearFP:
                 {
                     auto* p = (struct BucketKindPolygonNearFP*)q;
-                    // m_current_bucket is already correct here: it was set by
-                    // do_a_trig_gourad_tr using max(ec1->z, ec2->z, ec3->z)/16.
-                    // The coordinate_first/second/third.z fields are only filled
-                    // in the actual near-plane split branches; "just close but not
-                    // behind" cases leave them at 0 (poly_pool is memset'd each
-                    // frame), so reading them would send triangles to bucket 0
-                    // which is skipped by the bi > 0 bucket walk loop.
                     append_triangle(p->block,
                                     &p->vertex_first,
                                     &p->vertex_second,
-                                    &p->vertex_third);
+                                    &p->vertex_third,
+                                    p->coordinate_first.z,
+                                    p->coordinate_second.z,
+                                    p->coordinate_third.z);
                     break;
                 }
                 // ── Compact types (unsigned short x/y, unsigned char uv) ────

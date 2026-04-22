@@ -30,14 +30,15 @@
 
 /** One vertex in the GPU world geometry pipeline. */
 struct WorldVertex {
-    float x;      /**< NDC horizontal: [-1, 1], left = -1 */
-    float y;      /**< NDC vertical:   [-1, 1], bottom = -1 */
-    float z;      /**< NDC depth:      [-1, 1], -1 = near, +1 = far (bucket-derived) */
-    float u;      /**< Texture U:  [0, 1] */
-    float v;      /**< Texture V:  [0, 1] */
-    float shade;  /**< Lighting:   [0, 1], 0 = dark, 1 = full-bright */
-    float stl_x;  /**< Map subtile X [0..511]; for lightmap sampling in modern mode */
-    float stl_y;  /**< Map subtile Y [0..511]; for lightmap sampling in modern mode */
+    float x;         /**< NDC horizontal: [-1, 1], left = -1 */
+    float y;         /**< NDC vertical:   [-1, 1], bottom = -1 */
+    float z;         /**< NDC depth:      [-1, 1], -1 = near, +1 = far (bucket-derived) */
+    float u;         /**< Texture U:  [0, 1] */
+    float v;         /**< Texture V:  [0, 1] */
+    float shade;     /**< Lighting:   [0, 1], 0 = dark, 1 = full-bright */
+    float stl_x;     /**< Map subtile X [0..511]; for lightmap sampling in modern mode */
+    float stl_y;     /**< Map subtile Y [0..511]; for lightmap sampling in modern mode */
+    float camera_z;  /**< Camera-space Z for perspective-correct interpolation; 1.0 = no correction */
 };
 
 /******************************************************************************/
@@ -101,6 +102,7 @@ struct WorldVertex {
         (wv)->shade = FP_S_TO_SHADE((pp)->S); \
         (wv)->stl_x = 0.0f; \
         (wv)->stl_y = 0.0f; \
+        (wv)->camera_z = 1.0f; \
     } while (0)
 
 /**
@@ -126,6 +128,7 @@ struct WorldVertex {
         (wv)->shade = (float)(shade8) / 255.0f; \
         (wv)->stl_x = 0.0f; \
         (wv)->stl_y = 0.0f; \
+        (wv)->camera_z = 1.0f; \
     } while (0)
 
 /******************************************************************************/

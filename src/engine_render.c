@@ -3051,6 +3051,9 @@ static void do_a_trig_gourad_tr(struct EngineCoord *engine_coordinate_1, struct 
                 buckets[divided_z] = &triangle_bucket_far->b;
 
                 triangle_bucket_far->block = textr_idx;
+                triangle_bucket_far->camera_z_first  = engine_coordinate_1->z;
+                triangle_bucket_far->camera_z_second = engine_coordinate_2->z;
+                triangle_bucket_far->camera_z_third  = engine_coordinate_3->z;
                 triangle_bucket_far->vertex_first.X = engine_coordinate_1->view_width;
                 triangle_bucket_far->vertex_first.Y = engine_coordinate_1->view_height;
                 triangle_bucket_far->vertex_first.U = 0;
@@ -3520,6 +3523,9 @@ static void do_a_trig_gourad_bl(struct EngineCoord *engine_coordinate_1, struct 
                 triangle_bucket_far->b.kind = QK_PolygonStandard;
                 buckets[divided_z] = &triangle_bucket_far->b;
                 triangle_bucket_far->block = argument4;
+                triangle_bucket_far->camera_z_first  = engine_coordinate_1->z;
+                triangle_bucket_far->camera_z_second = engine_coordinate_2->z;
+                triangle_bucket_far->camera_z_third  = engine_coordinate_3->z;
 
                 triangle_bucket_far->vertex_first.X = engine_coordinate_1->view_width;
                 triangle_bucket_far->vertex_first.Y = engine_coordinate_1->view_height;
@@ -4031,6 +4037,9 @@ static void do_a_gpoly_gourad_tr(struct EngineCoord *ec1, struct EngineCoord *ec
             current_polygon_bucket->b.kind = 0;
             buckets[bucket_index] = &current_polygon_bucket->b;
             current_polygon_bucket->block = textr_id;
+            current_polygon_bucket->camera_z_first  = ec1->z;
+            current_polygon_bucket->camera_z_second = ec2->z;
+            current_polygon_bucket->camera_z_third  = ec3->z;
             ec1_fieldA = ec1->shade_intensity;
             ec2_fieldA = ec2->shade_intensity;
             ec3_fieldA = ec3->shade_intensity;
@@ -4090,6 +4099,9 @@ static void do_a_gpoly_unlit_tr(struct EngineCoord *ec1, struct EngineCoord *ec2
             current_polygon_bucket->b.kind = 0;
             buckets[bucket_index] = &current_polygon_bucket->b;
             current_polygon_bucket->block = textr_id;
+            current_polygon_bucket->camera_z_first  = ec1->z;
+            current_polygon_bucket->camera_z_second = ec2->z;
+            current_polygon_bucket->camera_z_third  = ec3->z;
             current_polygon_bucket->vertex_first.X = ec1->view_width;
             current_polygon_bucket->vertex_first.Y = ec1->view_height;
             current_polygon_bucket->vertex_first.U = 0;
@@ -4136,6 +4148,9 @@ static void do_a_gpoly_unlit_bl(struct EngineCoord *ec1, struct EngineCoord *ec2
         current_polygon_bucket->b.kind = 0;
         buckets[bucket_index] = &current_polygon_bucket->b;
         current_polygon_bucket->block = textr_id;
+        current_polygon_bucket->camera_z_first  = ec1->z;
+        current_polygon_bucket->camera_z_second = ec2->z;
+        current_polygon_bucket->camera_z_third  = ec3->z;
         current_polygon_bucket->vertex_first.X = ec1->view_width;
         current_polygon_bucket->vertex_first.Y = ec1->view_height;
         current_polygon_bucket->vertex_first.U = 0x1FFFFF;
@@ -4191,6 +4206,9 @@ static void do_a_gpoly_gourad_bl(struct EngineCoord *ec1, struct EngineCoord *ec
             current_polygon_bucket->b.kind = 0;
             buckets[zdiv16] = &current_polygon_bucket->b;
             current_polygon_bucket->block = textr_id;
+            current_polygon_bucket->camera_z_first  = ec1->z;
+            current_polygon_bucket->camera_z_second = ec2->z;
+            current_polygon_bucket->camera_z_third  = ec3->z;
             ec1_fieldA = ec1->shade_intensity;
             ec2_fieldA = ec2->shade_intensity;
             ec3_fieldA = ec3->shade_intensity;

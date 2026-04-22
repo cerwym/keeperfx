@@ -804,20 +804,56 @@ void RendererOpenGL::EndFrame()
         glDisable(GL_DEPTH_TEST);
         glDisable(GL_BLEND);
         glDepthMask(GL_FALSE);
-        // Use GL scissor + clear — no shader or texture needed.
-        float saved_cc[4];
-        glGetFloatv(GL_COLOR_CLEAR_VALUE, saved_cc);
-        glClearColor(KFX_GL_CLEAR_COLOR);
-        glEnable(GL_SCISSOR_TEST);
-        for (const ZoomBoxBgCmd& bg : m_zoom_box_bg_cmds)
+        // Draw a solid-black opaque quad for each zoom-box slot using the
+        // screen-tint shader (flat colour, no texture).  This is more robust
+        // than glClear+scissor because it goes through the same render pipeline
+        // as every other 2-D draw (no scissor state to manage, no glClearColor
+        // side-effects, pixel-perfect NDC coverage guaranteed).
+        if (m_tintProg)
         {
-            // GL scissor origin is bottom-left; screen coords are top-left.
-            int gl_y = m_screenH - (bg.y + bg.h);
-            glScissor(bg.x, gl_y, bg.w, bg.h);
-            glClear(GL_COLOR_BUFFER_BIT);
+            static const float k_black[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+            glUseProgram(m_tintProg);
+            glUniform4fv(m_uTintColor, 1, k_black);
+            glBindVertexArray(m_rawblit_vao);
+            glBindBuffer(GL_ARRAY_BUFFER, m_rawblit_vbo);
+            const float sw = (float)m_screenW;
+            const float sh = (float)m_screenH;
+            for (const ZoomBoxBgCmd& bg : m_zoom_box_bg_cmds)
+            {
+                const float x0 = (float)bg.x           / sw * 2.0f - 1.0f;
+                const float x1 = (float)(bg.x + bg.w)  / sw * 2.0f - 1.0f;
+                const float y0 = 1.0f - (float)bg.y           / sh * 2.0f;
+                const float y1 = 1.0f - (float)(bg.y + bg.h)  / sh * 2.0f;
+                // Two triangles; UV ignored by tint shader (location 1 unused).
+                const float verts[6][4] = {
+                    { x0, y1,  0.f, 0.f },
+                    { x1, y1,  0.f, 0.f },
+                    { x1, y0,  0.f, 0.f },
+                    { x0, y1,  0.f, 0.f },
+                    { x1, y0,  0.f, 0.f },
+                    { x0, y0,  0.f, 0.f },
+                };
+                glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(verts), verts);
+                glDrawArrays(GL_TRIANGLES, 0, 6);
+            }
+            glBindVertexArray(0);
         }
-        glDisable(GL_SCISSOR_TEST);
-        glClearColor(saved_cc[0], saved_cc[1], saved_cc[2], saved_cc[3]);
+        else
+        {
+            // Fallback for the rare case m_tintProg is unavailable.
+            float saved_cc[4];
+            glGetFloatv(GL_COLOR_CLEAR_VALUE, saved_cc);
+            glClearColor(KFX_GL_CLEAR_COLOR);
+            glEnable(GL_SCISSOR_TEST);
+            for (const ZoomBoxBgCmd& bg : m_zoom_box_bg_cmds)
+            {
+                int gl_y = m_screenH - (bg.y + bg.h);
+                glScissor(bg.x, gl_y, bg.w, bg.h);
+                glClear(GL_COLOR_BUFFER_BIT);
+            }
+            glDisable(GL_SCISSOR_TEST);
+            glClearColor(saved_cc[0], saved_cc[1], saved_cc[2], saved_cc[3]);
+        }
         glDepthMask(GL_TRUE);
     }
     m_zoom_box_bg_cmds.clear();

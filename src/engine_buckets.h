@@ -66,6 +66,9 @@ struct BucketKindPolygonStandard {
     struct PolyPoint vertex_first;
     struct PolyPoint vertex_second;
     struct PolyPoint vertex_third;
+    long camera_z_first;   // camera-space Z for perspective-correct GPU interpolation
+    long camera_z_second;
+    long camera_z_third;
 };
 
 struct BucketKindPolygonSimple {
