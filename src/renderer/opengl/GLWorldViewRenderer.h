@@ -214,7 +214,6 @@ private:
     GLuint m_kspr_shader        = 0;
     GLuint m_kspr_glow_shader   = 0;  // Additive glow variant — no palette, computes RGB delta directly
     GLuint m_kspr_sprite_tex    = 0;  // 256x256 GL_R8  — overwritten per sprite (fallback path)
-    GLuint m_kspr_palette_tex   = 0;  // 256x1  GL_RGBA8 — palette LUT
     GLuint m_kspr_vao           = 0;
     GLuint m_kspr_vbo           = 0;
 
@@ -238,7 +237,7 @@ private:
 
     // Uniform locations (cached at shader compile time)
     GLint  m_loc_tile_atlas  = -1;
-    GLint  m_loc_palette     = -1;   // sampler1D u_palette (unit 1)
+    GLint  m_loc_palette     = -1;   // sampler2D u_palette (unit 1)
     // Shade / lighting uniforms (world fragment shader)
     GLint  m_loc_fullbright    = -1;  // u_fullbright
     GLint  m_loc_ambient       = -1;  // u_ambient
@@ -292,8 +291,6 @@ private:
     GLint  m_kspr_atlas_outline_loc_z_ndc        = -1;
     GLint  m_kspr_atlas_outline_loc_color        = -1;
     GLint  m_kspr_atlas_outline_loc_layer        = -1;
-
-    bool   m_kspr_palette_dirty = true;
 
     // Per-frame state
     int            m_screen_w   = 0;

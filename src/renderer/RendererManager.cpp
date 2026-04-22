@@ -364,6 +364,7 @@ static ITextRenderer* create_text_renderer(RendererType type)
             auto* glt = new GLTextRenderer();
             if (glt->Init())
             {
+                glt->SetPaletteTexture(ogl->GetPaletteTex());
                 glt->SetScreenSize(lbDisplay.PhysicalScreenWidth, lbDisplay.PhysicalScreenHeight);
                 return glt;
             }
@@ -416,7 +417,7 @@ static IUIRenderer* create_ui_renderer(RendererType type)
             }
             glui->SetSpriteAtlas(ogl->GetSpriteAtlas());
             glui->SetFontAtlas(ogl->GetFontAtlas());
-            glui->SetPaletteTexture(ogl->GetPaletteTex(), GL_TEXTURE_1D);
+            glui->SetPaletteTexture(ogl->GetPaletteTex(), GL_TEXTURE_2D);
             glui->SetFadeTexture(ogl->GetFadeTex());
             glui->SetScreenDimensions(lbDisplay.PhysicalScreenWidth, lbDisplay.PhysicalScreenHeight);
             s_spriteAtlas = ogl->GetSpriteAtlas();

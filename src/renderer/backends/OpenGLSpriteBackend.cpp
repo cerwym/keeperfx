@@ -54,7 +54,7 @@ in float v_mode;
 in float v_pal_row;
 
 uniform sampler2D u_atlas;
-uniform sampler1D u_palette;
+uniform sampler2D u_palette;
 uniform sampler2D u_remap;   // 256 x N RGBA8: each row is a resolved colortable
 
 out vec4 fragColor;
@@ -71,7 +71,7 @@ void main() {
         fragColor = v_tint;
     } else {
         // mode 0 — normal palette lookup.
-        fragColor = texture(u_palette, idx) * v_tint;
+        fragColor = texture(u_palette, vec2(idx, 0.5)) * v_tint;
     }
 }
 )";
@@ -180,15 +180,16 @@ bool OpenGLSpriteBackend::Initialize()
     glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, stride, (void*)40);  // a_pal_row
     glBindVertexArray(0);
 
-    // ── Palette texture (1D, 256 RGBA8 entries) ──────────────────────────────
+    // ── Palette texture (256×1, RGBA8) ────────────────────────────────────────────
     glGenTextures(1, &m_texPalette);
-    glBindTexture(GL_TEXTURE_1D, m_texPalette);
-    glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexImage1D(GL_TEXTURE_1D, 0, GL_RGBA8, 256, 0,
+    glBindTexture(GL_TEXTURE_2D, m_texPalette);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 256, 1, 0,
                  GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-    glBindTexture(GL_TEXTURE_1D, 0);
+    glBindTexture(GL_TEXTURE_2D, 0);
 
     // ── Remap palette texture (2D, 256 × m_remap_capacity RGBA8) ─────────────
     // Each row stores one fully-resolved colortable (palette[colortable[i]]).
@@ -466,8 +467,8 @@ void OpenGLSpriteBackend::upload_palette()
         rgba[i * 4 + 3] = 255;
     }
     glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_1D, m_texPalette);
-    glTexSubImage1D(GL_TEXTURE_1D, 0, 0, 256, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+    glBindTexture(GL_TEXTURE_2D, m_texPalette);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 256, 1, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
 }
 
 void OpenGLSpriteBackend::flush()
@@ -518,7 +519,7 @@ void OpenGLSpriteBackend::flush()
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_atlas.GetTexture());
     glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_1D, m_texPalette);
+    glBindTexture(GL_TEXTURE_2D, m_texPalette);
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, m_texRemap);
 

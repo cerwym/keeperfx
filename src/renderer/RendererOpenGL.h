@@ -27,7 +27,7 @@ class GLWorldViewRenderer;
  * OpenGL renderer backend.
  *
  * The CPU-rendered 8-bit paletted framebuffer is blitted to screen via a
- * fullscreen palette-decode shader (index texture → RGBA via 1D palette).
+ * fullscreen palette-decode shader (index texture → RGBA via 256×1 palette).
  *
  * Also owns the shared GPU resources (fade table texture, tile atlas,
  * palette texture) and manages all sub-renderers internally.
@@ -137,7 +137,7 @@ private:
     unsigned int m_shader       = 0;
     unsigned int m_tintProg     = 0;  // fullscreen screen-tint overlay shader
     unsigned int m_texIndex     = 0; // GL_R8 screenW×screenH: transparent overlay texture
-    unsigned int m_texPalette   = 0; // RGBA8 256-entry 1D palette
+    unsigned int m_texPalette   = 0; // RGBA8 256×1 GL_TEXTURE_2D palette
     int          m_uTintFactor  = -1; // uniform location for u_tint_factor
     int          m_uTintColor   = -1; // uniform location for u_tint_color
 
@@ -232,7 +232,7 @@ private:
     unsigned int      m_fmv_index_tex      = 0;  // GL_R8 — per-frame pixel indices
     int               m_fmv_index_tex_w    = 0;
     int               m_fmv_index_tex_h    = 0;
-    unsigned int      m_fmv_palette_tex    = 0;  // GL_RGBA8 1D — per-video palette
+    unsigned int      m_fmv_palette_tex    = 0;  // GL_RGBA8 256×1 — per-video palette
 
     // ── Landview zoom GPU blit (Phase D campaign-map zoom transition) ─────
     // Queued by SubmitLandviewZoom(); executed at EndFrame() using a

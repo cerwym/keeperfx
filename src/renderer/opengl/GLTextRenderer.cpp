@@ -92,15 +92,8 @@ bool GLTextRenderer::Init()
 
     glBindVertexArray(0);
 
-    // Create palette texture
-    glGenTextures(1, &m_palette_tex);
-    glBindTexture(GL_TEXTURE_2D, m_palette_tex);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, 256, 1, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    // Palette texture is injected via SetPaletteTexture() after Init().
+    // No local palette creation needed.
 
     // Get uniform locations
     glUseProgram(m_shader_program);
@@ -139,7 +132,8 @@ void GLTextRenderer::Shutdown()
     if (m_shader_program) { glDeleteProgram(m_shader_program); m_shader_program = 0; }
     if (m_vao)            { glDeleteVertexArrays(1, &m_vao); m_vao = 0; }
     if (m_vbo)            { glDeleteBuffers(1, &m_vbo); m_vbo = 0; }
-    if (m_palette_tex)    { glDeleteTextures(1, &m_palette_tex); m_palette_tex = 0; }
+    // m_palette_tex is NOT owned — shared from RendererOpenGL; do not delete.
+    m_palette_tex = 0;
 }
 
 bool GLTextRenderer::CompileShaders()
@@ -484,7 +478,7 @@ void GLTextRenderer::Flush()
     if (m_loc_text_color >= 0)
         glUniform4f(m_loc_text_color, 1.0f, 1.0f, 1.0f, 1.0f);
 
-    UpdatePaletteTexture();
+    // Bind the shared palette texture (already uploaded by RendererOpenGL::EndFrame)
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, m_palette_tex);
 
@@ -844,59 +838,6 @@ void GLTextRenderer::ScreenToNDC(float screen_x, float screen_y, float* ndc_x, f
 {
     *ndc_x = (screen_x / (float)m_screen_width) * 2.0f - 1.0f;
     *ndc_y = 1.0f - (screen_y / (float)m_screen_height) * 2.0f;
-}
-
-void GLTextRenderer::UpdatePaletteTexture()
-{
-    // CRITICAL: Check if the game palette has been initialized.
-    // lbPalette is loaded during level/menu initialization. If all entries are zero,
-    // the palette isn't ready yet and we'd render invisible black text.
-    bool palette_valid = false;
-    for (int i = 0; i < 256 * 3; ++i)
-    {
-        if (lbPalette[i] != 0)
-        {
-            palette_valid = true;
-            break;
-        }
-    }
-
-    if (!palette_valid)
-    {
-        static bool warned = false;
-        if (!warned)
-        {
-            WARNLOG("GLTextRenderer::UpdatePaletteTexture: lbPalette is all zeros - palette not loaded yet");
-            warned = true;
-        }
-        // Don't upload an all-black palette - keep whatever was there before or skip rendering
-        return;
-    }
-
-    // Convert game palette to RGB format for GPU
-    unsigned char rgb_palette[256 * 3];
-    for (int i = 0; i < 256; ++i)
-    {
-        // lbPalette is 6-bit per channel, convert to 8-bit
-        rgb_palette[i*3 + 0] = (unsigned char)((int)lbPalette[i*3 + 0] << 2);
-        rgb_palette[i*3 + 1] = (unsigned char)((int)lbPalette[i*3 + 1] << 2);  
-        rgb_palette[i*3 + 2] = (unsigned char)((int)lbPalette[i*3 + 2] << 2);
-    }
-
-    // Log palette entries every frame to track corruption
-    static int palette_frame_count = 0;
-    palette_frame_count++;
-    if ((palette_frame_count % 500) == 1) {  // Log every 500 frames
-        SYNCLOG("GLTextRenderer: Palette entries at frame %d:", palette_frame_count);
-        for (int i = 0; i < 10; ++i) {
-            SYNCLOG("  [%d] = RGB(%d, %d, %d)", i,
-                   rgb_palette[i*3 + 0], rgb_palette[i*3 + 1], rgb_palette[i*3 + 2]);
-        }
-    }
-
-    glBindTexture(GL_TEXTURE_2D, m_palette_tex);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 256, 1, GL_RGB, GL_UNSIGNED_BYTE, rgb_palette);
-    glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 /******************************************************************************/

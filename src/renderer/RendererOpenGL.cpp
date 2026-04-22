@@ -150,13 +150,15 @@ bool RendererOpenGL::Init()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, m_screenW, m_screenH, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
 
-    // Palette texture (256 RGBA entries)
+    // Palette texture (256×1 RGBA8 — shared across all subsystems)
     glGenTextures(1, &m_texPalette);
     KFX_GL_LABEL(GL_TEXTURE, m_texPalette, "Blit/PaletteTex");
-    glBindTexture(GL_TEXTURE_1D, m_texPalette);
-    glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexImage1D(GL_TEXTURE_1D, 0, GL_RGBA8, 256, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    glBindTexture(GL_TEXTURE_2D, m_texPalette);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 256, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
     upload_palette_texture();
 
     // Bind sampler uniforms once — used by all transparent/palette-decoded blit paths.
@@ -374,15 +376,16 @@ bool RendererOpenGL::Init()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glBindTexture(GL_TEXTURE_2D, 0);
 
-    // Per-video palette texture (1D RGBA8, 256 entries; GL_BGRA upload swaps B/R automatically).
+    // Per-video palette texture (256×1 RGBA8; GL_BGRA upload swaps B/R automatically).
     glGenTextures(1, &m_fmv_palette_tex);
     KFX_GL_LABEL(GL_TEXTURE, m_fmv_palette_tex, "FmvBlit/PaletteTex");
-    glBindTexture(GL_TEXTURE_1D, m_fmv_palette_tex);
-    glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexImage1D(GL_TEXTURE_1D, 0, GL_RGBA8, 256, 0, GL_BGRA, GL_UNSIGNED_BYTE, nullptr);
-    glBindTexture(GL_TEXTURE_1D, 0);
+    glBindTexture(GL_TEXTURE_2D, m_fmv_palette_tex);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 256, 1, 0, GL_BGRA, GL_UNSIGNED_BYTE, nullptr);
+    glBindTexture(GL_TEXTURE_2D, 0);
 
     // ── Landview zoom GPU blit (Phase D campaign-map zoom transition) ──────────
     // Compile shader: reuse palette_blit_vert.glsl + landview_zoom_frag.glsl.
@@ -616,9 +619,23 @@ bool RendererOpenGL::BeginFrame()
  *  ============================================================ */
 void RendererOpenGL::EndFrame()
 {
+    // ── Flicker diagnostic: GL error audit ──────────────────────────────────
+    // Check for accumulated GL errors from previous frame's deferred operations.
+    // A GL error set by any call silently causes subsequent operations to fail
+    // (e.g. textures fail to bind, draw calls produce nothing).  Drain them.
+    {
+        GLenum err;
+        while ((err = glGetError()) != GL_NO_ERROR)
+        {
+            static int s_glerr_count = 0;
+            if (++s_glerr_count <= 50)
+                SYNCLOG("FLICKER-DIAG: GL error 0x%X at start of EndFrame (count=%d)", err, s_glerr_count);
+        }
+    }
+
     // Upload palette unconditionally — it may have changed this frame via LbPaletteSet.
     // Palette switches happen rarely (level load, possession), so the overhead of a
-    // 1 KB CPU expand + glTexSubImage1D is negligible compared to other frame work.
+    // 1 KB CPU expand + glTexSubImage2D is negligible compared to other frame work.
     upload_palette_texture();
 
     // Restore depth mask before clearing — GPUFlushNow() ends with
@@ -642,6 +659,14 @@ void RendererOpenGL::EndFrame()
     {
         m_world_renderer->GPUFlushNow();
         m_rawblit_cached = false;  // gameplay frame — don't replay frontend background
+    }
+    // GL error check after world pass
+    {
+        GLenum err = glGetError();
+        if (err != GL_NO_ERROR) {
+            static int s_cnt = 0;
+            if (++s_cnt <= 20) SYNCLOG("FLICKER-DIAG: GL error 0x%X after GPUFlushNow (%d)", err, s_cnt);
+        }
     }
 
     // Flush layer-0 (back) GPU UI elements — sidebar background panels.
@@ -687,7 +712,7 @@ void RendererOpenGL::EndFrame()
 
         // Palette texture already on unit 1 from upload_palette_texture() above.
         glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_1D, m_texPalette);
+        glBindTexture(GL_TEXTURE_2D, m_texPalette);
 
         // Build a rect quad in NDC covering [dst_x..dst_x+dst_w] x [dst_y..dst_y+dst_h].
         // Screen-space: y increases downward; NDC: y increases upward.
@@ -757,7 +782,7 @@ void RendererOpenGL::EndFrame()
         glPixelStorei(GL_UNPACK_ALIGNMENT, 4);  // restore default
 
         glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_1D, m_texPalette);
+        glBindTexture(GL_TEXTURE_2D, m_texPalette);
 
         const float sw = (float)m_screenW;
         const float sh = (float)m_screenH;
@@ -873,7 +898,7 @@ void RendererOpenGL::EndFrame()
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, atlas_tex);
             glActiveTexture(GL_TEXTURE1);
-            glBindTexture(GL_TEXTURE_1D, m_texPalette);
+            glBindTexture(GL_TEXTURE_2D, m_texPalette);
 
             glUseProgram(m_zoom_tile_shader);
             glBindVertexArray(m_rawblit_vao);
@@ -1019,8 +1044,8 @@ void RendererOpenGL::EndFrame()
 
         // Upload per-video palette (BGRA data; GL swaps B/R into RGBA storage).
         glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_1D, m_fmv_palette_tex);
-        glTexSubImage1D(GL_TEXTURE_1D, 0, 0, 256, GL_BGRA, GL_UNSIGNED_BYTE, cmd.bgra_pal);
+        glBindTexture(GL_TEXTURE_2D, m_fmv_palette_tex);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 256, 1, GL_BGRA, GL_UNSIGNED_BYTE, cmd.bgra_pal);
 
         // Build NDC rect for the pre-computed letterboxed/scaled destination.
         const float sw = (float)m_screenW;
@@ -1082,7 +1107,7 @@ void RendererOpenGL::EndFrame()
 
         // Game palette on unit 1.
         glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_1D, m_texPalette);
+        glBindTexture(GL_TEXTURE_2D, m_texPalette);
 
         // Draw a fullscreen NDC quad; position/UV matches k_quadVerts convention.
         // The zoom fragment shader ignores v_uv and uses gl_FragCoord instead.
@@ -1129,7 +1154,7 @@ void RendererOpenGL::EndFrame()
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, m_texIndex);
         glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_1D, m_texPalette);
+        glBindTexture(GL_TEXTURE_2D, m_texPalette);
 
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -1157,6 +1182,14 @@ void RendererOpenGL::EndFrame()
     // Flush layer-1 (front) GPU UI elements — escape menu, minimap, slab
     // selectors, power-hand — on top of everything else.
     UIRenderer_FlushFront();
+    // GL error check after UI front pass
+    {
+        GLenum err = glGetError();
+        if (err != GL_NO_ERROR) {
+            static int s_cnt = 0;
+            if (++s_cnt <= 20) SYNCLOG("FLICKER-DIAG: GL error 0x%X after FlushFront (%d)", err, s_cnt);
+        }
+    }
 
     // Text on top of all sprites (sidebar labels, event messages, tooltips).
     TextRenderer_Flush();
@@ -1184,6 +1217,15 @@ void RendererOpenGL::EndFrame()
 
     RenderPass_EndFrame();
     platform_swap_gl_buffers(lbWindow);
+
+    // Clear per-frame queues AFTER the swap — not in BeginFrame().
+    // LbScreenSwap() can be called multiple times per game tick (fade loops,
+    // loading screens, video playback).  If these queues are only cleared in
+    // BeginFrame(), the second+ swap re-renders stale UI/cursor entries over
+    // a glClear'd background (world geometry was already consumed on the first
+    // swap), causing visible flicker.
+    UIRenderer_Clear();
+    CursorLayer_Clear();
 
     // Collect pending GPU timer query results for Tracy GPU zones.
     KFX_GPU_COLLECT();
@@ -1528,8 +1570,8 @@ void RendererOpenGL::upload_palette_texture()
         rgba[i * 4 + 3] = 255;
     }
     glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_1D, m_texPalette);
-    glTexSubImage1D(GL_TEXTURE_1D, 0, 0, 256, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+    glBindTexture(GL_TEXTURE_2D, m_texPalette);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 256, 1, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
 }
 
 bool RendererOpenGL::init_fade_table_texture()

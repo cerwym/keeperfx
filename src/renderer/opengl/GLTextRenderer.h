@@ -63,6 +63,10 @@ public:
      *  @return true if successful */
     bool Init();
 
+    /** Inject the shared palette texture from RendererOpenGL (256\u00d71 GL_TEXTURE_2D RGBA8).
+     *  Must be called after Init() and before the first Flush(). */
+    void SetPaletteTexture(unsigned int tex) { m_palette_tex = tex; }
+
     /** Clean up GPU resources. */
     void Shutdown();
 
@@ -162,9 +166,6 @@ private:
      *  @return Character width in pixels */
     int GenerateCharQuad(unsigned long chr, float x, float y, float scale_factor,
                          float forced_palette_idx, TextVertex* verts);
-
-    /** Update palette texture from current game palette. */
-    void UpdatePaletteTexture();
 
     /** Convert screen pixel coordinates to NDC. */
     void ScreenToNDC(float screen_x, float screen_y, float* ndc_x, float* ndc_y) const;

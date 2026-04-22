@@ -117,6 +117,7 @@ GLWorldViewRenderer::GLWorldViewRenderer(ITileAtlas* atlas,
 {
     m_sw_fallback = new SoftwareWorldViewRenderer();
     m_text_renderer = new GLTextRenderer();
+    m_text_renderer->SetPaletteTexture(palette_tex);
     init_gl_resources();
 }
 
@@ -287,7 +288,6 @@ void GLWorldViewRenderer::free_gl_resources()
     if (m_kspr_outline_shader)       { glDeleteProgram(m_kspr_outline_shader);       m_kspr_outline_shader = 0; }
     if (m_kspr_atlas_outline_shader) { glDeleteProgram(m_kspr_atlas_outline_shader); m_kspr_atlas_outline_shader = 0; }
     if (m_kspr_sprite_tex)  { glDeleteTextures(1, &m_kspr_sprite_tex);      m_kspr_sprite_tex = 0; }
-    if (m_kspr_palette_tex) { glDeleteTextures(1, &m_kspr_palette_tex);     m_kspr_palette_tex = 0; }
     if (m_kspr_sprite_array){ glDeleteTextures(1, &m_kspr_sprite_array);    m_kspr_sprite_array = 0; }
     if (m_kspr_atlas_shader){ glDeleteProgram(m_kspr_atlas_shader);         m_kspr_atlas_shader = 0; }
     m_kspr_atlas_used = 0;
@@ -515,16 +515,6 @@ bool GLWorldViewRenderer::init_keeper_sprite_shader()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glBindTexture(GL_TEXTURE_2D, 0);
 
-    // 256x1 RGBA8 palette LUT
-    glGenTextures(1, &m_kspr_palette_tex);
-    glBindTexture(GL_TEXTURE_2D, m_kspr_palette_tex);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 256, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
     // VAO + VBO: 6 vertices × (vec2 pos + vec2 uv) = 4 floats each
     glGenVertexArrays(1, &m_kspr_vao);
     glGenBuffers(1, &m_kspr_vbo);
@@ -540,7 +530,6 @@ bool GLWorldViewRenderer::init_keeper_sprite_shader()
     KFX_GL_LABEL(GL_PROGRAM,      m_kspr_shader,      "WVR/KSprProg");
     KFX_GL_LABEL(GL_PROGRAM,      m_kspr_glow_shader, "WVR/KSprGlowProg");
     KFX_GL_LABEL(GL_TEXTURE,      m_kspr_sprite_tex,  "WVR/KSprSpriteTex");
-    KFX_GL_LABEL(GL_TEXTURE,      m_kspr_palette_tex, "WVR/KSprPaletteTex");
     KFX_GL_LABEL(GL_VERTEX_ARRAY, m_kspr_vao,         "WVR/KSprVAO");
     KFX_GL_LABEL(GL_BUFFER,       m_kspr_vbo,         "WVR/KSprVBO");
 
@@ -824,32 +813,19 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
     // Always return 1 (handled) when GPU resources exist — never fall back
     // to the CPU software rasteriser.  If the sprite can't be drawn (invalid
     // dimensions, off-screen, oversized), we silently skip it.
-    if (!m_kspr_shader || !m_kspr_sprite_tex || !m_kspr_palette_tex) {
+    if (!m_kspr_shader || !m_kspr_sprite_tex || !m_palette_tex) {
         static int s_miss = 0;
         if (s_miss++ < 5)
             SYNCLOG("render_keepersprite_gpu: no kspr resources (shader=%u, sprite_tex=%u, palette_tex=%u)",
-                    m_kspr_shader, m_kspr_sprite_tex, m_kspr_palette_tex);
+                    m_kspr_shader, m_kspr_sprite_tex, m_palette_tex);
         return 0;
     }
     if (src_w <= 0 || src_h <= 0 || src_w > 256 || src_h > 256)      return 1;
     if (dst_w <= 0 || dst_h <= 0)                                      return 1;
 
     // Upload palette on first sprite of this frame
-    if (m_kspr_palette_dirty)
-    {
-        uint8_t rgba[256 * 4];
-        for (int i = 0; i < 256; ++i)
-        {
-            rgba[i*4+0] = (uint8_t)((int)lbPalette[i*3+0] << 2);
-            rgba[i*4+1] = (uint8_t)((int)lbPalette[i*3+1] << 2);
-            rgba[i*4+2] = (uint8_t)((int)lbPalette[i*3+2] << 2);
-            rgba[i*4+3] = 255;
-        }
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, m_kspr_palette_tex);
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 256, 1, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
-        m_kspr_palette_dirty = false;
-    }
+    // Palette is shared from RendererOpenGL — already uploaded every frame.
+    // No per-subsystem palette upload needed.
 
     // --- Sprite decode atlas (non-remapped, non-additive sprites only) ---
     // The atlas caches pre-decoded sprites for the lifetime of a level so
@@ -1001,7 +977,7 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
         glUniform1f(m_kspr_atlas_loc_z_ndc,    m_current_sprite_z);
         glUniform1f(m_kspr_atlas_loc_layer,    (float)atlas_layer);
         glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, m_kspr_palette_tex);
+        glBindTexture(GL_TEXTURE_2D, m_palette_tex);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D_ARRAY, m_kspr_sprite_array);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -1066,7 +1042,7 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
         glUniform1f(m_kspr_loc_z_ndc,    m_current_sprite_z);
 
         glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, m_kspr_palette_tex);
+        glBindTexture(GL_TEXTURE_2D, m_palette_tex);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, m_kspr_sprite_tex);
 
@@ -1140,7 +1116,6 @@ void GLWorldViewRenderer::BeginWorldPass(unsigned char* framebuf, int pitch,
     m_pitch           = pitch;
     m_current_variation = 0;
     m_current_bucket    = 0;
-    m_kspr_palette_dirty = true;
     m_world_pass_active  = true;
     m_kspr_atlas_hits    = 0;
     m_kspr_atlas_misses  = 0;
@@ -1461,11 +1436,11 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
                     m_tile_filter_applied = wanted_filter;
                 }
             }
-            // Always rebind the 1D palette at unit 1 — keeper-sprite and other
-            // passes bind their own textures to unit 1 (GL_TEXTURE_2D), which
-            // causes sampler1D u_palette to return black for subsequent tile draws.
+            // Always rebind the palette at unit 1 — keeper-sprite and other
+            // passes bind their own textures to unit 1, which can leave a stale
+            // binding for subsequent tile draws.
             glActiveTexture(GL_TEXTURE1);
-            glBindTexture(GL_TEXTURE_1D, m_palette_tex);
+            glBindTexture(GL_TEXTURE_2D, m_palette_tex);
             glDrawArrays(GL_TRIANGLES, cmd.vert_start, cmd.vert_count);
             KFX_GL_POP();
         }
@@ -1631,6 +1606,7 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
 
     glBindVertexArray(0);
     glUseProgram(0);
+    glActiveTexture(GL_TEXTURE0);  // restore — sprite pass may leave unit 1/2 active
     glDepthMask(GL_FALSE);
     glDisable(GL_DEPTH_TEST);
     glViewport(0, 0, (int)MyScreenWidth, (int)MyScreenHeight);
@@ -1880,21 +1856,18 @@ void GLWorldViewRenderer::FlushIsometricView()
 
 void GLWorldViewRenderer::FlushFrontView(struct Camera* cam)
 {
-    // Front-view uses the same bucket mechanism; delegate to software for now.
+    // When the GPU renderer is active, front-view geometry is already captured
+    // via the bucket walk in FlushIsometricView (the engine fills the same
+    // bucket list for both iso and front views).  Calling the software fallback
+    // would draw into the staging buffer and then we'd have to zero it to
+    // prevent those CPU-rasterised pixels from compositing over the GPU output,
+    // which causes a visible flicker frame.  Skip it entirely.
+    if (m_initialized)
+        return;
+
+    // GPU not ready — fall back to software.
     if (m_sw_fallback)
         m_sw_fallback->FlushFrontView(cam);
-
-    // The software fallback just drew CPU-rasterised polygons into the staging
-    // buffer.  When the GPU renderer is active those pixels would composite on
-    // top of the glClear colour in EndFrame, producing flickering artefacts
-    // (untextured geometry fighting the GPU output).  Re-zero the viewport so
-    // the staging blit is fully transparent and the front-view shows only the
-    // clear colour — a clean "not yet ported" placeholder.
-    if (m_initialized && m_framebuf)
-    {
-        for (int row = 0; row < m_screen_h; row++)
-            memset(m_framebuf + (long)row * m_pitch, 0, (size_t)m_screen_w);
-    }
 }
 
 /******************************************************************************/

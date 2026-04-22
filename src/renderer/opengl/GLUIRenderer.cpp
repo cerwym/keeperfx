@@ -881,7 +881,7 @@ void GLUIRenderer::FlushQuads(int layer)
 
     // Reset texture unit state from whatever GPUFlushNow (or a previous pass) left
     // behind.  The world renderer leaves the tile atlas bound at unit 0 (GL_TEXTURE_2D)
-    // and the palette at unit 1 (GL_TEXTURE_1D) with GL_TEXTURE1 as the active unit.
+    // and the palette at unit 1 (GL_TEXTURE_2D 256×1) with GL_TEXTURE1 as the active unit.
     // Without this reset the wrong atlas would be sampled by the UI sprite shader.
     glActiveTexture(GL_TEXTURE0);
 

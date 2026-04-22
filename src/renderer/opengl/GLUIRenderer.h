@@ -206,7 +206,7 @@ private:
     GLSpriteAtlas* m_sprite_atlas;
     GLFontAtlas* m_font_atlas;
     GLuint m_palette_texture;
-    GLenum m_palette_texture_target;   // GL_TEXTURE_1D or GL_TEXTURE_2D — set by SetPaletteTexture()
+    GLenum m_palette_texture_target;   // GL_TEXTURE_2D — set by SetPaletteTexture()
     GLuint m_fade_texture;             // R8 256×256 remap LUT — set by SetFadeTexture(), not owned
 
     // Slab background tile texture (64×64 R8, GL_REPEAT) — uploaded via UpdateSlabTexture()

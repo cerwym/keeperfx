@@ -207,13 +207,13 @@ constexpr const char* PALETTE_BLIT_FRAGMENT_SHADER = R"glsl(
 in  vec2 v_uv;
 out vec4 fragColor;
 uniform sampler2D u_index;    // R8 — 8-bit palette index
-uniform sampler1D u_palette;  // RGBA8 — 256-entry palette
+uniform sampler2D u_palette;  // RGBA8 — 256×1 palette
 uniform float     u_tint_factor; // possession/pain red tint: 0.0=none 1.0=full red
 void main()
 {
     float idx        = texture(u_index, v_uv).r;
     float is_nonzero = step(0.5 / 256.0, idx);
-    vec4  pal_color  = texture(u_palette, idx);
+    vec4  pal_color  = texture(u_palette, vec2(idx, 0.5));
     pal_color.a = 1.0;
     // Index 0: transparent with optional red tint (possession/pain effect).
     // Non-zero: opaque palette color (GUI already has red-shifted palette).
@@ -303,7 +303,7 @@ in vec2  v_uv;
 in float v_shade;
 in vec2  v_stl;                         // subtile coords [0..511], mode 1 only
 uniform sampler2D  u_tile_atlas;        // R8 palette-index atlas (unit 0)
-uniform sampler1D  u_palette;           // RGBA8 256-entry palette (unit 1)
+uniform sampler2D  u_palette;           // RGBA8 256×1 palette (unit 1)
 uniform usampler2D u_lightmap;          // R16UI subtile_lightness map (unit 2), mode 1
 uniform float      u_fullbright;        // 0=normal shading, 1=bypass shade
 uniform float      u_ambient;           // darkness floor added to shade [0,1]
@@ -337,13 +337,13 @@ void main()
         vec2 f    = fract(px);
         vec2 base = (floor(px) + 0.5) / tex_size;
         vec2 st   = 1.0 / tex_size;
-        vec4 c00 = texture(u_palette, texture(u_tile_atlas, base).r);
-        vec4 c10 = texture(u_palette, texture(u_tile_atlas, base + vec2(st.x, 0.0)).r);
-        vec4 c01 = texture(u_palette, texture(u_tile_atlas, base + vec2(0.0, st.y)).r);
-        vec4 c11 = texture(u_palette, texture(u_tile_atlas, base + st).r);
+        vec4 c00 = texture(u_palette, vec2(texture(u_tile_atlas, base).r, 0.5));
+        vec4 c10 = texture(u_palette, vec2(texture(u_tile_atlas, base + vec2(st.x, 0.0)).r, 0.5));
+        vec4 c01 = texture(u_palette, vec2(texture(u_tile_atlas, base + vec2(0.0, st.y)).r, 0.5));
+        vec4 c11 = texture(u_palette, vec2(texture(u_tile_atlas, base + st).r, 0.5));
         col = mix(mix(c00, c10, f.x), mix(c01, c11, f.x), f.y);
     } else {
-        col = texture(u_palette, texture(u_tile_atlas, v_uv).r);
+        col = texture(u_palette, vec2(texture(u_tile_atlas, v_uv).r, 0.5));
     }
     float shade;
     if (u_lighting_mode == 0) {
@@ -406,11 +406,11 @@ constexpr const char* RAWIMAGE_BLIT_FRAGMENT_SHADER = R"glsl(
 in  vec2 v_uv;
 out vec4 fragColor;
 uniform sampler2D u_index;    // R8  — 8-bit palette indices (raw image)
-uniform sampler1D u_palette;  // RGBA8 — 256-entry palette (same as staging blit)
+uniform sampler2D u_palette;  // RGBA8 — 256×1 palette (same as staging blit)
 void main()
 {
     float idx = texture(u_index, v_uv).r;
-    vec4  pal = texture(u_palette, idx);
+    vec4  pal = texture(u_palette, vec2(idx, 0.5));
     // Always opaque: raw background images fill the entire rect.
     fragColor  = vec4(pal.rgb, 1.0);
 }
@@ -426,14 +426,14 @@ constexpr const char* OVERHEAD_MAP_FRAGMENT_SHADER = R"glsl(
 in  vec2 v_uv;
 out vec4 fragColor;
 uniform sampler2D u_index;    // R8  — 8-bit palette indices
-uniform sampler1D u_palette;  // RGBA8 — 256-entry palette
+uniform sampler2D u_palette;  // RGBA8 — 256×1 palette
 void main()
 {
     float idx = texture(u_index, v_uv).r;
     // Discard palette index 0: used as the "unrevealed" sentinel so the
     // parchment background shows through those tiles.
     if (idx < (0.5 / 255.0)) discard;
-    vec4 pal = texture(u_palette, idx);
+    vec4 pal = texture(u_palette, vec2(idx, 0.5));
     fragColor = vec4(pal.rgb, 1.0);
 }
 )glsl";
@@ -449,14 +449,14 @@ constexpr const char* ZOOM_TILE_FRAGMENT_SHADER = R"glsl(
 in  vec2 v_uv;
 out vec4 fragColor;
 uniform sampler2D u_index;    // R8  — tile atlas (32×32 texels per tile)
-uniform sampler1D u_palette;  // RGBA8 — 256-entry game palette
+uniform sampler2D u_palette;  // RGBA8 — 256×1 game palette
 void main()
 {
     float idx = texture(u_index, v_uv).r;
     // Index 0 within tile data is a transparent/padding pixel — discard so the
     // parchment background or unrevealed fill shows through tile edges/borders.
     if (idx < (0.5 / 255.0)) discard;
-    vec4 pal = texture(u_palette, idx);
+    vec4 pal = texture(u_palette, vec2(idx, 0.5));
     fragColor = vec4(pal.rgb, 1.0);
 }
 )glsl";
@@ -472,7 +472,7 @@ constexpr const char* LANDVIEW_ZOOM_FRAGMENT_SHADER = R"glsl(
 out vec4 fragColor;
 
 uniform sampler2D u_index;       // R8  — map_screen palette indices
-uniform sampler1D u_palette;     // RGBA8 — 256-entry game palette
+uniform sampler2D u_palette;     // RGBA8 — 256×1 game palette
 uniform vec2  u_center_map;      // zoom centre in map texels (map_x, map_y)
 uniform vec2  u_screen_center;   // zoom centre in screen pixels (game y-down)
 uniform float u_scale;           // src_delta / 256.0  (source texels per screen pixel)
@@ -493,7 +493,7 @@ void main()
     vec2 uv = srcXY * u_inv_map_size;
 
     float idx = texture(u_index, uv).r;
-    fragColor  = vec4(texture(u_palette, idx).rgb, 1.0);
+    fragColor  = vec4(texture(u_palette, vec2(idx, 0.5)).rgb, 1.0);
 }
 )glsl";
 
@@ -524,19 +524,19 @@ void main()
 )glsl";
 
 // Program 1: palette-indexed atlas sprites (panel icons, buttons, minimap).
-// Unit 0 = sprite atlas (R8 GL_TEXTURE_2D).  Unit 1 = palette (sampler1D).
+// Unit 0 = sprite atlas (R8 GL_TEXTURE_2D).  Unit 1 = palette (sampler2D 256×1).
 constexpr const char* UI_SPRITE_FRAGMENT_SHADER = R"glsl(
 #version 330 core
 in vec2 v_uv;
 in vec4 v_color;
 uniform sampler2D u_sprite_atlas;  // unit 0: R8 palette-index atlas
-uniform sampler1D u_palette;       // unit 1: RGBA8 256-entry palette
+uniform sampler2D u_palette;       // unit 1: RGBA8 256×1 palette
 out vec4 fragColor;
 void main()
 {
     float idx = texture(u_sprite_atlas, v_uv).r;
     if (idx < (0.5 / 255.0)) discard;
-    vec4 pal = texture(u_palette, idx);
+    vec4 pal = texture(u_palette, vec2(idx, 0.5));
     fragColor = vec4(pal.rgb * v_color.rgb, v_color.a);
 }
 )glsl";
@@ -588,7 +588,7 @@ void main()
 
 // Program 4: palette-indexed atlas sprites with a player-colour remap table.
 // Unit 0 = sprite atlas (R8 GL_TEXTURE_2D).
-// Unit 1 = palette (sampler1D, 256 RGBA entries).
+// Unit 1 = palette (sampler2D 256×1, RGBA8).
 // Unit 2 = fade table (R8 GL_TEXTURE_2D, 256 columns × 256 rows).
 // uniform u_remap_row selects which row of the fade table to apply.
 constexpr const char* UI_REMAP_FRAGMENT_SHADER = R"glsl(
@@ -596,7 +596,7 @@ constexpr const char* UI_REMAP_FRAGMENT_SHADER = R"glsl(
 in vec2 v_uv;
 in vec4 v_color;
 uniform sampler2D u_sprite_atlas;  // unit 0: R8 palette-index atlas
-uniform sampler1D u_palette;       // unit 1: RGBA8 256-entry palette
+uniform sampler2D u_palette;       // unit 1: RGBA8 256×1 palette
 uniform sampler2D u_fade_table;    // unit 2: R8 256x256 remap LUT
 uniform float u_remap_row;         // 0..255 — which row of the fade table
 out vec4 fragColor;
@@ -606,7 +606,7 @@ void main()
     if (idx_f < (0.5 / 255.0)) discard;
     float remap_y = (u_remap_row + 0.5) / 256.0;
     float remapped_f = texture(u_fade_table, vec2(idx_f, remap_y)).r;
-    vec4 pal = texture(u_palette, remapped_f);
+    vec4 pal = texture(u_palette, vec2(remapped_f, 0.5));
     fragColor = vec4(pal.rgb * v_color.rgb, v_color.a);
 }
 )glsl";
