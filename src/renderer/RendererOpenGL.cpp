@@ -808,6 +808,7 @@ void RendererOpenGL::EndFrame()
         float saved_cc[4];
         glGetFloatv(GL_COLOR_CLEAR_VALUE, saved_cc);
         glClearColor(KFX_GL_CLEAR_COLOR);
+        glEnable(GL_SCISSOR_TEST);
         for (const ZoomBoxBgCmd& bg : m_zoom_box_bg_cmds)
         {
             // GL scissor origin is bottom-left; screen coords are top-left.
@@ -934,6 +935,7 @@ void RendererOpenGL::EndFrame()
             glBindFramebuffer(GL_FRAMEBUFFER, fbo.fbo);
             glViewport(0, 0, pw, ph);
             glClearColor(KFX_GL_CLEAR_COLOR);
+            glDepthMask(GL_TRUE);  // GPUFlushNow_ToFBO leaves mask false; ensure depth is cleared
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             m_world_renderer->GPUFlushNow_ToFBO(pw, ph);
             if (ui)
