@@ -77,6 +77,10 @@ void RendererEndFrame(void);
  *  Call once per frame before any drawing. */
 void RendererClearScreen(unsigned char colour_index);
 
+/** Standard clear colour matching DK palette index 0 (pure black).
+ *  Use for all glClearColor calls so they stay consistent with LbScreenClear(0). */
+#define KFX_GL_CLEAR_COLOR  0.0f, 0.0f, 0.0f, 1.0f
+
 /** Call immediately after load_texture_map_file() to discard the cached GPU tile
  *  atlas so it is rebuilt on the next frame with fresh block_mem data.  Safe to
  *  call at any time; no-op if no GL renderer is active. */

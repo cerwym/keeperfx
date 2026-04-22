@@ -807,8 +807,7 @@ void RendererOpenGL::EndFrame()
         // Use GL scissor + clear — no shader or texture needed.
         float saved_cc[4];
         glGetFloatv(GL_COLOR_CLEAR_VALUE, saved_cc);
-        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-        glEnable(GL_SCISSOR_TEST);
+        glClearColor(KFX_GL_CLEAR_COLOR);
         for (const ZoomBoxBgCmd& bg : m_zoom_box_bg_cmds)
         {
             // GL scissor origin is bottom-left; screen coords are top-left.
@@ -934,7 +933,7 @@ void RendererOpenGL::EndFrame()
             glDisable(GL_SCISSOR_TEST);
             glBindFramebuffer(GL_FRAMEBUFFER, fbo.fbo);
             glViewport(0, 0, pw, ph);
-            glClearColor(0.05f, 0.05f, 0.12f, 1.0f);
+            glClearColor(KFX_GL_CLEAR_COLOR);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             m_world_renderer->GPUFlushNow_ToFBO(pw, ph);
             if (ui)
