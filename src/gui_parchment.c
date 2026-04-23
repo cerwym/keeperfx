@@ -902,7 +902,7 @@ void draw_zoom_box_things(long scrtop_x, long scrtop_y, int stl_x, int stl_y, Pl
 
     // Software path: use a graphics window so drawing is clipped to the box
     // and sprites are positioned relative to its top-left corner.
-    LbScreenSetGraphicsWindow(scrtop_x + 2*units_per_pixel/16, scrtop_y + 2*units_per_pixel/16,
+    RendererSetViewport(scrtop_x + 2*units_per_pixel/16, scrtop_y + 2*units_per_pixel/16,
         draw_tiles_x*subtile_size - 4*units_per_pixel/16, draw_tiles_y*subtile_size - 4*units_per_pixel/16);
     int scr_y = 0;
     for (int map_dy = 0; map_dy < draw_tiles_y; map_dy++)

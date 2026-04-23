@@ -9170,9 +9170,9 @@ void draw_frontview_engine(struct Camera *cam)
     cam_y = cam->mappos.y.val;
     pointer_x = (GetMouseX() - player->engine_window_x) / pixel_size;
     pointer_y = (GetMouseY() - player->engine_window_y) / pixel_size;
-    LbScreenStoreGraphicsWindow(&grwnd);
+    RendererStoreViewport(&grwnd);
     store_engine_window(&ewnd,pixel_size);
-    LbScreenSetGraphicsWindow(ewnd.x, ewnd.y, ewnd.width, ewnd.height);
+    RendererSetViewport(ewnd.x, ewnd.y, ewnd.width, ewnd.height);
     WorldViewRenderer_BeginWorldPass(lbDisplay.GraphicsWindowPtr, lbDisplay.GraphicsScreenWidth, ewnd.width, ewnd.height, ewnd.x, ewnd.y);
     clear_fast_bucket_list();
     store_engine_window(&ewnd,1);
@@ -9221,7 +9221,7 @@ void draw_frontview_engine(struct Camera *cam)
         break;
     default:
         ERRORLOG("Illegal quadrant, %d.",qdrant);
-        LbScreenLoadGraphicsWindow(&grwnd);
+        RendererLoadViewport(&grwnd);
         return;
     }
 
@@ -9273,7 +9273,7 @@ void draw_frontview_engine(struct Camera *cam)
     }
 
     WorldViewRenderer_FlushFrontView(cam);
-    LbScreenLoadGraphicsWindow(&grwnd);
+    RendererLoadViewport(&grwnd);
     cam->zoom = zoom_mem;//TODO [zoom] remove when all cam->zoom will be changed to camera_zoom
     SYNCDBG(9,"Finished");
 }

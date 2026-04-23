@@ -239,7 +239,7 @@ TbBool copy_raw8_image_to_screen_center(const unsigned char *buf, const int img_
         (int)coord_x,  (int)coord_y);
 
     // Lock the screen
-    if (LbScreenLock() != Lb_SUCCESS)
+    if (!RendererLockScreen())
         return false;
 
     // Copy image buffer to screen buffer
@@ -249,10 +249,10 @@ TbBool copy_raw8_image_to_screen_center(const unsigned char *buf, const int img_
     perform_any_screen_capturing();
 
     // Unlock the screen
-    LbScreenUnlock();
+    RendererUnlockScreen();
 
     // Swap video buffers to make the image visible
-    LbScreenSwap();
+    RendererPresentFrame();
 
     return true;
 }
@@ -405,8 +405,8 @@ TbBool draw_clear_screen(void)
 {
     LbPaletteDataFillBlack(palette_buf);
     LbPaletteSet(palette_buf);
-    LbScreenClear(0);
-    LbScreenSwap();
+    RendererClearScreen(0);
+    RendererPresentFrame();
     return true;
 }
 
@@ -461,12 +461,12 @@ TbBool display_loading_screen(void)
 TbBool wait_for_installation_files(void)
 {
   char ffullpath[2048];
-  short was_locked = LbScreenIsLocked();
+  short was_locked = RendererIsScreenLocked();
   prepare_file_path_buf(ffullpath, sizeof(ffullpath), FGrp_StdData, "bluepal.dat");
   if ( LbFileExists(ffullpath) )
     return true;
   if ( was_locked )
-    LbScreenUnlock();
+    RendererUnlockScreen();
   SYNCMSG("Installation file not found, waiting");
   if (!init_bitmap_screen(&nocd_bmp,RBmp_WaitNoCD))
   {
@@ -511,7 +511,7 @@ TbBool wait_for_installation_files(void)
   SYNCMSG("Finished waiting for installation after %lu seconds",counter);
   free_bitmap_screen(&nocd_bmp);
   if ( was_locked )
-    LbScreenLock();
+    RendererLockScreen();
   return (!exit_keeper);
 }
 

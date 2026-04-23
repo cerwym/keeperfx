@@ -77,8 +77,46 @@ void RendererEndFrame(void);
  *  Call once per frame before any drawing. */
 void RendererClearScreen(unsigned char colour_index);
 
+/******************************************************************************/
+/* High-level screen lifecycle (replaces LbScreen* trampolines)               */
+/******************************************************************************/
+
+/** Begin a frame and lock the framebuffer for CPU access.
+ *  Updates lbDisplay.WScreen, GraphicsScreenWidth and GraphicsWindowPtr.
+ *  @return Non-zero on success (frame is locked and drawable). */
+int RendererLockScreen(void);
+
+/** Unlock the framebuffer and clear lbDisplay CPU pointers. */
+void RendererUnlockScreen(void);
+
+/** Present the completed frame: runs platform tick, mouse cursor
+ *  compositing, and the backend EndFrame/buffer swap. */
+void RendererPresentFrame(void);
+
+/** Query whether the screen is currently locked (WScreen is valid). */
+int RendererIsScreenLocked(void);
+
+/******************************************************************************/
+/* Graphics viewport (replaces LbScreenSetGraphicsWindow / Store / Load)      */
+/******************************************************************************/
+
+/** Set the graphics viewport with bounds clamping.
+ *  Updates lbDisplay.GraphicsWindow* fields and recomputes GraphicsWindowPtr.
+ *  Replaces LbScreenSetGraphicsWindow(). */
+void RendererSetViewport(long x, long y, long width, long height);
+
+/** Save the current viewport into a TbGraphicsWindow struct.
+ *  Use when you need named save slots (e.g. saving before a clip window swap).
+ *  Replaces LbScreenStoreGraphicsWindow(). */
+void RendererStoreViewport(TbGraphicsWindow *grwnd);
+
+/** Restore a previously saved viewport from a TbGraphicsWindow struct.
+ *  Values are loaded without clamping (assumes they came from RendererStoreViewport).
+ *  Replaces LbScreenLoadGraphicsWindow(). */
+void RendererLoadViewport(TbGraphicsWindow *grwnd);
+
 /** Standard clear colour matching DK palette index 0 (pure black).
- *  Use for all glClearColor calls so they stay consistent with LbScreenClear(0). */
+ *  Use for all glClearColor calls so they stay consistent with RendererClearScreen(0). */
 #define KFX_GL_CLEAR_COLOR  0.0f, 0.0f, 0.0f, 1.0f
 
 /** Call immediately after load_texture_map_file() to discard the cached GPU tile
@@ -133,11 +171,6 @@ void WorldViewRenderer_FlushIsometricView(void);
 /** Flush the front-view bucket list to the framebuffer.
  *  Call this after the front-view geometry has been added to the bucket list. */
 void WorldViewRenderer_FlushFrontView(struct Camera* cam);
-
-/** Returns non-zero when the active world-view renderer is GPU-accelerated.
- *  Use to skip CPU staging-buffer writes (lens effects, swipe, front-view
- *  rasterisation) that would pollute the GPU-composited frame. */
-TbBool WorldViewRenderer_IsGpuActive(void);
 
 /** Submit a keeper-sprite (creature/object) for GPU rendering during the bucket walk.
  *  Returns 1 if the GPU handled it (CPU blit should be skipped), 0 to fall back. */
@@ -480,11 +513,6 @@ void UIRenderer_FlushFront(void);
 void UIRenderer_Flush(void);
 void UIRenderer_Clear(void);
 
-/** Returns non-zero when the active UI renderer is GPU-accelerated.
- *  Use to skip CPU-only fallback paths (e.g. LbSpriteDrawResized with DrawFlags) 
- *  that are redundant when GPU sprites are already submitted. */
-TbBool UIRenderer_IsGpuActive(void);
-
 /** Apply a complete RendererSettings snapshot to the active renderer.
  *  Also copies *s into g_renderer_settings so subsequent reads are consistent.
  *  Safe to call from C translation units. */
@@ -506,6 +534,14 @@ extern float g_screen_tint[4];
  *  r/g/b/a are in [0,1].  Alpha 0 disables the tint entirely.
  *  No-op when no renderer is active. */
 void RendererSetScreenTint(float r, float g, float b, float a);
+
+/** Tell the GPU renderer to preserve the rawblit cache across EndFrame().
+ *  Call with 1 before entering a blocking palette-fade loop, 0 after.
+ *  This allows palette-based fading to re-render the last frontend image. */
+void RendererPreserveFadeCache(int active);
+
+/** Returns non-zero when fade cache preservation is active. */
+int  RendererIsFadeCachePreserved(void);
 
 /******************************************************************************/
 #ifdef __cplusplus

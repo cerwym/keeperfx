@@ -420,8 +420,14 @@ void GLUIRenderer::FlushFront()
     KFX_ZONE("UIRenderer::FlushFront");
     KFX_GPU_ZONE("UIPass::Front");
     KFX_GL_SCOPE(front_grp, "UIPass/Front");
-    if (m_ui_quads.empty() && m_ui_lines.empty() && !m_minimap_pending && m_fbo_quads.empty())
+    if (m_ui_quads.empty() && m_ui_lines.empty() && !m_minimap_pending && m_fbo_quads.empty()
+        && m_remap_quads.empty())
+    {
+        static int s_empty_count = 0;
+        if (++s_empty_count <= 100)
+            SYNCLOG("FLICKER-DIAG: FlushFront EMPTY (frame %d)", s_empty_count);
         return;
+    }
 
     { // Diagnostic: count front-layer elements
         int front_quads = 0;
@@ -443,6 +449,25 @@ void GLUIRenderer::FlushFront()
     // pip_w×pip_h after FlushPiPSprites(); without this reset every draw call
     // below would be clipped to the tiny pip-sized scissor region.
     glViewport(0, 0, (int)MyScreenWidth, (int)MyScreenHeight);
+
+    // ── FLICKER-DIAG: snapshot GL state entering FlushFront ──
+    {
+        GLint vp[4];
+        glGetIntegerv(GL_VIEWPORT, vp);
+        GLboolean depth_test  = glIsEnabled(GL_DEPTH_TEST);
+        GLboolean scissor     = glIsEnabled(GL_SCISSOR_TEST);
+        GLboolean blend       = glIsEnabled(GL_BLEND);
+        GLint     draw_fbo    = 0;
+        glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &draw_fbo);
+        static int s_state_log = 0;
+        // Log every frame for the first 200, then every 300th.
+        if (s_state_log < 200 || (s_state_log % 300) == 0)
+            SYNCLOG("FLICKER-DIAG: FlushFront state: vp=(%d,%d,%d,%d) depth=%d scissor=%d blend=%d fbo=%d quads=%d lines=%d",
+                    vp[0], vp[1], vp[2], vp[3],
+                    (int)depth_test, (int)scissor, (int)blend, draw_fbo,
+                    (int)m_ui_quads.size(), (int)m_ui_lines.size());
+        s_state_log++;
+    }
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);

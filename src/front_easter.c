@@ -36,6 +36,7 @@
 #include "front_credits.h"
 #include "game_legacy.h"
 #include "keeperfx.hpp"
+#include "renderer/RendererManager.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -260,7 +261,7 @@ void draw_eastegg(void)
       vy[i] = -vy[i];
       py[i] = height-k-1;
     }
-    if (LbScreenIsLocked())
+    if (RendererIsScreenLocked())
     {
       LbTextDrawResized(scale_fixed_DK_value(px[i]/pixel_size), scale_fixed_DK_value(py[i]/pixel_size), ee_units_per_px, text);
     }
@@ -300,7 +301,7 @@ void draw_eastegg(void)
       vy[i] = -vy[i];
       py[i] = height-k-1;
     }
-    if (LbScreenIsLocked())
+    if (RendererIsScreenLocked())
     {
         LbTextDrawResized(scale_fixed_DK_value(px[i]/pixel_size), scale_fixed_DK_value(py[i]/pixel_size), ee_units_per_px, text);
     }

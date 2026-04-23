@@ -35,6 +35,7 @@
 #include "vidfade.h"
 #include "game_legacy.h"
 #include "keeperfx.hpp"
+#include "renderer/RendererManager.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -77,8 +78,8 @@ short play_smacker_file(char *filename, FrontendMenuState nstate)
     if ( setup_screen_mode_minimal(get_movies_vidmode()) )
     {
       LbMouseChangeSprite(NULL);
-      LbScreenClear(0);
-      LbScreenSwap();
+      RendererClearScreen(0);
+      RendererPresentFrame();
     } else
     {
       ERRORLOG("Can't enter movies video mode to play a Smacker file");
@@ -106,8 +107,8 @@ short play_smacker_file(char *filename, FrontendMenuState nstate)
   {
     memset(frontend_palette, 0, PALETTE_SIZE);
   }
-  LbScreenClear(0);
-  LbScreenSwap();
+  RendererClearScreen(0);
+  RendererPresentFrame();
   LbPaletteSet(frontend_palette);
   if (nstate >= 0)
     frontend_set_state(nstate);

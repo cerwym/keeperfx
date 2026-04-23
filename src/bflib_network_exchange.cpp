@@ -32,6 +32,7 @@
 #include "game_legacy.h"
 #include "packets.h"
 #include "keeperfx.hpp"
+#include "renderer/RendererManager.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -42,7 +43,6 @@ extern "C" short frontend_draw();
 extern "C" long double last_draw_completed_time;
 extern "C" void LbNetwork_TimesyncBarrier(void);
 extern "C" TbBool keeper_screen_redraw(void);
-extern "C" TbResult LbScreenSwap(void);
 long double get_time_tick_ns();
 #endif
 
@@ -204,7 +204,7 @@ TbError ProcessMessage(NetUserId source, void* server_buf, size_t frame_size) {
         MULTIPLAYER_LOG("ProcessMessage NETMSG_UNPAUSE: initiating timesync");
         unpausing_in_progress = 1;
         keeper_screen_redraw();
-        LbScreenSwap();
+        RendererPresentFrame();
         if (my_player_number == get_host_player_id()) {
             LbNetwork_BroadcastUnpauseTimesync();
         }

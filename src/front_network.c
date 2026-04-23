@@ -44,6 +44,7 @@
 #include "config_strings.h"
 #include "game_merge.h"
 #include "game_legacy.h"
+#include "renderer/RendererManager.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -123,7 +124,7 @@ void draw_out_of_sync_box(long a1, long a2, long box_width)
         min_width = 0;
     }
     int units_per_px = units_per_pixel;
-    if (LbScreenLock() == Lb_SUCCESS)
+    if (RendererLockScreen())
     {
         long ornate_width = 200 * units_per_px / 16;
         long ornate_height = 100 * units_per_px / 16;
@@ -140,8 +141,8 @@ void draw_out_of_sync_box(long a1, long a2, long box_width)
         LbTextDrawResized(0, 50*units_per_px/16 - text_h, tx_units_per_px, get_string(GUIStr_NetResyncing));
         LbDrawBox(text_x, text_y, 2*max_width, 16*units_per_px/16, 0);
         LbDrawBox(text_x, text_y, 2*min_width, 16*units_per_px/16, 133);
-        LbScreenUnlock();
-        LbScreenSwap();
+        RendererUnlockScreen();
+        RendererPresentFrame();
     }
 }
 
@@ -420,12 +421,12 @@ void frontnet_start_update(void)
 
 void display_attempting_to_join_message(void)
 {
-  if (LbScreenLock() == Lb_SUCCESS)
+  if (RendererLockScreen())
   {
     draw_text_box(get_string(GUIStr_NetAttemptingToJoin));
-    LbScreenUnlock();
+    RendererUnlockScreen();
   }
-  LbScreenSwap();
+  RendererPresentFrame();
 }
 
 void net_load_config_file(void)

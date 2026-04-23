@@ -28,6 +28,7 @@
 #include "bflib_sprfnt.h"
 #include "bflib_vidsurface.h"
 #include "globals.h"
+#include "renderer/RendererManager.h"
 
 #include "gui_topmsg.h"
 #include "game_legacy.h"
@@ -47,10 +48,10 @@ unsigned char cap_palette[768];
 /******************************************************************************/
 TbBool take_screenshot(char *fname)
 {
-    TbBool lock_mem = LbScreenIsLocked();
+    TbBool lock_mem = RendererIsScreenLocked();
     if (!lock_mem)
     {
-        if (LbScreenLock() != Lb_SUCCESS)
+        if (!RendererLockScreen())
         {
             ERRORLOG("Can't lock canvas");
             return false;
@@ -81,7 +82,7 @@ TbBool take_screenshot(char *fname)
     }
     if (!lock_mem)
     {
-        LbScreenUnlock();
+        RendererUnlockScreen();
     }
     return success;
 }
@@ -144,16 +145,16 @@ TbBool movie_record_stop(void)
 
 TbBool movie_record_frame(void)
 {
-    short lock_mem = LbScreenIsLocked();
+    short lock_mem = RendererIsScreenLocked();
     if (!lock_mem)
     {
-        if (LbScreenLock() != Lb_SUCCESS)
+        if (!RendererLockScreen())
             return false;
   }
   LbPaletteGet(cap_palette);
   short result = anim_record_frame(lbDisplay.WScreen, cap_palette);
   if (!lock_mem)
-    LbScreenUnlock();
+    RendererUnlockScreen();
   return result;
 }
 

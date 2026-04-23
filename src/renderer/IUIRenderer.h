@@ -188,10 +188,6 @@ public:
 
     virtual const char* GetName() const;
 
-    /** Returns true when this renderer submits GPU quads.
-     *  CPU base returns false; GPU subclasses override to return true. */
-    virtual bool IsGpuAccelerated() const { return false; }
-
 protected:
     /** Sprite handle → raw TbSprite* map, used by CPU default implementations. */
     std::unordered_map<SpriteHandle, const struct TbSprite*> m_handle_to_sprite;

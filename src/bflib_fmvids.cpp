@@ -609,7 +609,7 @@ struct movie_t {
 		LbScreenWaitVbi(); // this is a no-op today
 		// LbPaletteSet expects values in range 0-63 for reasons, nuking 75% of the color range
 		SDL_SetPaletteColors(lbDrawSurface->format->palette, palette, 0, PALETTE_COLORS);
-		if (LbScreenLock() != Lb_SUCCESS) {
+		if (!RendererLockScreen()) {
 			return;
 		}
 		// Try GPU video frame path first.
@@ -633,8 +633,8 @@ struct movie_t {
 					m_frame->data[0], m_frame->width, m_frame->height, m_frame->linesize[0],
 					m_frame->data[1], dst_x, dst_y, dst_w, dst_h))
 			{
-				LbScreenUnlock();
-				LbScreenSwap();
+				RendererUnlockScreen();
+				RendererPresentFrame();
 				return;
 			}
 		}
@@ -644,8 +644,8 @@ struct movie_t {
 		} else {
 			copy_to_screen(*m_frame, m_flags);
 		}
-		LbScreenUnlock();
-		LbScreenSwap();
+		RendererUnlockScreen();
+		RendererPresentFrame();
 	}
 
 	bool output_audio_frames() {

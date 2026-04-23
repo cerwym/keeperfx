@@ -37,8 +37,11 @@
 #include "globals.h"
 #include "bflib_video.h"
 #include "bflib_vidraw.h"      // LbSpriteDrawResized
+#include "bflib_mouse.h"       // LbMouseOnBeginSwap / LbMouseOnEndSwap
 #include "bflib_sprite.h"      // TbSprite
 #include "engine_render.h"     // thing_being_displayed
+#include "platform/PlatformManager.h" // PlatformManager_FrameTick
+#include "platform/kfx_breadcrumb.h"  // KFX_BREADCRUMB
 #include "gui_draw.h"          // get_panel_sprite
 #include "config_spritecolors.h" // get_player_colored_icon_idx
 #include "custom_sprites.h"    // get_button_sprite_for_player
@@ -681,6 +684,116 @@ void RendererClearScreen(unsigned char colour_index)
 }
 
 /******************************************************************************/
+/* High-level screen lifecycle (replaces LbScreen* trampolines)               */
+/******************************************************************************/
+
+int RendererLockScreen(void)
+{
+    if (!RendererBeginFrame())
+        return 0;
+    int pitch = 0;
+    unsigned char *pixels = RendererLockFramebuffer(&pitch);
+    if (!pixels) {
+        lbDisplay.GraphicsWindowPtr = NULL;
+        lbDisplay.WScreen = NULL;
+        return 0;
+    }
+    lbDisplay.WScreen = pixels;
+    lbDisplay.GraphicsScreenWidth = pitch;
+    lbDisplay.GraphicsWindowPtr = &lbDisplay.WScreen[lbDisplay.GraphicsWindowX +
+        lbDisplay.GraphicsScreenWidth * lbDisplay.GraphicsWindowY];
+    return 1;
+}
+
+void RendererUnlockScreen(void)
+{
+    lbDisplay.WScreen = NULL;
+    lbDisplay.GraphicsWindowPtr = NULL;
+    RendererUnlockFramebuffer();
+}
+
+void RendererPresentFrame(void)
+{
+    PlatformManager_FrameTick();
+    TbResult ret = LbMouseOnBeginSwap();
+    if (ret == Lb_SUCCESS) {
+#if defined(VITA_PERF_LOG)
+        {
+            static Uint32 _ef_accum = 0;
+            static int    _ef_cnt   = 0;
+            Uint32 _ef_t0 = SDL_GetTicks();
+            RendererEndFrame();
+            _ef_accum += SDL_GetTicks() - _ef_t0;
+            if (++_ef_cnt >= 60) {
+                JUSTLOG("[perf] EndFrame   avg %u ms/frame (60-frame window)", _ef_accum / 60u);
+                _ef_accum = 0; _ef_cnt = 0;
+            }
+        }
+#else
+        RendererEndFrame();
+#endif
+    }
+    LbMouseOnEndSwap();
+}
+
+int RendererIsScreenLocked(void)
+{
+    return (lbDisplay.WScreen != NULL) ? 1 : 0;
+}
+
+/******************************************************************************/
+/* Graphics viewport (replaces LbScreenSetGraphicsWindow / Store / Load)      */
+/******************************************************************************/
+
+void RendererSetViewport(long x, long y, long width, long height)
+{
+    long right_edge = x + width;
+    long bottom_edge = y + height;
+    // Swap if inverted
+    if (right_edge < x) { long t = x; x = right_edge; right_edge = t; }
+    if (bottom_edge < y) { long t = y; y = bottom_edge; bottom_edge = t; }
+    // Clamp to screen
+    if (x < 0) x = 0;
+    if (right_edge < 0) right_edge = 0;
+    if (y < 0) y = 0;
+    if (bottom_edge < 0) bottom_edge = 0;
+    if (x > lbDisplay.GraphicsScreenWidth) x = lbDisplay.GraphicsScreenWidth;
+    if (right_edge > lbDisplay.GraphicsScreenWidth) right_edge = lbDisplay.GraphicsScreenWidth;
+    if (y > lbDisplay.GraphicsScreenHeight) y = lbDisplay.GraphicsScreenHeight;
+    if (bottom_edge > lbDisplay.GraphicsScreenHeight) bottom_edge = lbDisplay.GraphicsScreenHeight;
+    lbDisplay.GraphicsWindowX = x;
+    lbDisplay.GraphicsWindowY = y;
+    lbDisplay.GraphicsWindowWidth = right_edge - x;
+    lbDisplay.GraphicsWindowHeight = bottom_edge - y;
+    if (lbDisplay.WScreen != NULL)
+        lbDisplay.GraphicsWindowPtr = lbDisplay.WScreen + lbDisplay.GraphicsScreenWidth * y + x;
+    else
+        lbDisplay.GraphicsWindowPtr = NULL;
+}
+
+void RendererStoreViewport(TbGraphicsWindow *grwnd)
+{
+    grwnd->x = lbDisplay.GraphicsWindowX;
+    grwnd->y = lbDisplay.GraphicsWindowY;
+    grwnd->width = lbDisplay.GraphicsWindowWidth;
+    grwnd->height = lbDisplay.GraphicsWindowHeight;
+    grwnd->ptr = NULL;
+}
+
+void RendererLoadViewport(TbGraphicsWindow *grwnd)
+{
+    lbDisplay.GraphicsWindowX = grwnd->x;
+    lbDisplay.GraphicsWindowY = grwnd->y;
+    lbDisplay.GraphicsWindowWidth = grwnd->width;
+    lbDisplay.GraphicsWindowHeight = grwnd->height;
+    if (lbDisplay.WScreen != NULL)
+        lbDisplay.GraphicsWindowPtr = lbDisplay.WScreen
+            + lbDisplay.GraphicsScreenWidth * lbDisplay.GraphicsWindowY + lbDisplay.GraphicsWindowX;
+    else
+        lbDisplay.GraphicsWindowPtr = NULL;
+}
+
+/******************************************************************************/
 /* C-callable world-view renderer wrappers */
 /******************************************************************************/
 
@@ -701,11 +814,6 @@ void WorldViewRenderer_FlushFrontView(struct Camera* cam)
 {
     if (s_worldViewRenderer)
         s_worldViewRenderer->FlushFrontView(cam);
-}
-
-TbBool WorldViewRenderer_IsGpuActive(void)
-{
-    return (s_worldViewRenderer && s_worldViewRenderer->IsGpuAccelerated()) ? 1 : 0;
 }
 
 int WorldViewRenderer_SubmitKeeperSprite(long dst_x, long dst_y, long dst_w, long dst_h,
@@ -1211,11 +1319,6 @@ void UIRenderer_Clear(void)
         s_uiRenderer->Clear();
 }
 
-TbBool UIRenderer_IsGpuActive(void)
-{
-    return (s_uiRenderer && s_uiRenderer->IsGpuAccelerated()) ? 1 : 0;
-}
-
 void RendererApplySettings(const RendererSettings* s)
 {
     if (!s) return;
@@ -1252,4 +1355,16 @@ void RendererSetScreenTint(float r, float g, float b, float a)
     g_screen_tint[1] = g;
     g_screen_tint[2] = b;
     g_screen_tint[3] = a;
+}
+
+static int g_fade_cache_preserve = 0;
+
+void RendererPreserveFadeCache(int active)
+{
+    g_fade_cache_preserve = active;
+}
+
+int RendererIsFadeCachePreserved(void)
+{
+    return g_fade_cache_preserve;
 }

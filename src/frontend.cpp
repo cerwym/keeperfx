@@ -686,12 +686,12 @@ void versions_different_error(void)
       if (lbKeyOn[KC_ESCAPE] || lbKeyOn[KC_SPACE] || lbKeyOn[KC_RETURN])
         break;
       LbWindowsControl();
-      if (LbScreenLock() == Lb_SUCCESS)
+      if (RendererLockScreen())
       {
         draw_text_box(text);
-        LbScreenUnlock();
+        RendererUnlockScreen();
       }
-      LbScreenSwap();
+      RendererPresentFrame();
     }
     // Checking where to go back
     init_menu_state_on_net_stats_exit();
@@ -3507,7 +3507,7 @@ short frontend_draw(void)
         return 0;
     }
 
-    if (LbScreenLock() != Lb_SUCCESS)
+    if (!RendererLockScreen())
         return 2;
 
     result = 1;
@@ -3562,7 +3562,7 @@ short frontend_draw(void)
     }
     draw_debug_messages();
     perform_any_screen_capturing();
-    LbScreenUnlock();
+    RendererUnlockScreen();
     last_draw_completed_time = get_time_tick_ns();
     return result;
 }

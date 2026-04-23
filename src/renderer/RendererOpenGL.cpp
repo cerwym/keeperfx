@@ -135,7 +135,7 @@ bool RendererOpenGL::Init()
     m_screenW = MyScreenWidth;
     m_screenH = MyScreenHeight;
 
-    // Write-discard buffer: returned by LockFramebuffer() so LbScreenLock() succeeds.
+    // Write-discard buffer: returned by LockFramebuffer() so RendererLockScreen() succeeds.
     // Content is never uploaded to the GPU. Allocation is zero-initialised.
     m_discardBuf = new uint8_t[(size_t)m_screenW * (size_t)m_screenH]();
     m_discard_cleared = true;
@@ -515,7 +515,7 @@ void RendererOpenGL::ClearScreen(uint8_t colour_index)
 
 bool RendererOpenGL::BeginFrame()
 {
-    // Idempotent: multiple LbScreenLock calls per frame must not clear the UI queue again.
+    // Idempotent: multiple RendererLockScreen calls per frame must not clear the UI queue again.
     if (m_frame_begun) return true;
     m_frame_begun = true;
 
@@ -658,7 +658,12 @@ void RendererOpenGL::EndFrame()
     if (m_world_renderer)
     {
         m_world_renderer->GPUFlushNow();
-        m_rawblit_cached = false;  // gameplay frame — don't replay frontend background
+        // Clear the rawblit cache unless a blocking palette-fade loop has
+        // explicitly requested preservation (RendererPreserveFadeCache(1)).
+        // Without this guard the cache is destroyed on the first EndFrame
+        // inside ProperFadePalette, making GPU palette fading invisible.
+        if (!RendererIsFadeCachePreserved())
+            m_rawblit_cached = false;
     }
     // GL error check after world pass
     {
@@ -677,7 +682,7 @@ void RendererOpenGL::EndFrame()
     // here as an opaque quad so that the staging-blit overlay (which composites
     // any CPU-drawn menu sprites above index 0) lands on top.
     // During blocking palette-fade loops (ProperFadePalette / fade_in / fade_out),
-    // the game calls LbScreenSwap repeatedly without issuing any new draw commands.
+    // the game calls RendererPresentFrame repeatedly without issuing any new draw commands.
     // Re-issue the last frontend rawblit with the freshly-uploaded (darkened) palette
     // so the fade is visible in GPU mode.  Only kicks in when nothing new was queued.
     if (!m_rawblit_pending && m_rawblit_cached)
@@ -1194,6 +1199,14 @@ void RendererOpenGL::EndFrame()
     // Text on top of all sprites (sidebar labels, event messages, tooltips).
     TextRenderer_Flush();
 
+    // ── Final overlay passes: screen tint + cursor ──────────────────────────
+    // Ensure depth test is OFF and depth mask is ON before the 2D overlay
+    // passes.  Multiple upstream passes (FlushFront layer-2, MapFadePass,
+    // TextRenderer) may leave GL_DEPTH_TEST in an indeterminate state
+    // depending on which layers had content this frame.
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
+
     // Screen-tint overlay — composites over all rendered layers (tiles, sprites,
     // UI, text). Driven by g_screen_tint set from palette-effect callbacks:
     // possession/pain (red), dungeon-heart death flash (white), zoom-to-heart.
@@ -1219,7 +1232,7 @@ void RendererOpenGL::EndFrame()
     platform_swap_gl_buffers(lbWindow);
 
     // Clear per-frame queues AFTER the swap — not in BeginFrame().
-    // LbScreenSwap() can be called multiple times per game tick (fade loops,
+    // RendererPresentFrame() can be called multiple times per game tick (fade loops,
     // loading screens, video playback).  If these queues are only cleared in
     // BeginFrame(), the second+ swap re-renders stale UI/cursor entries over
     // a glClear'd background (world geometry was already consumed on the first
@@ -1238,8 +1251,8 @@ void RendererOpenGL::EndFrame()
 
 uint8_t* RendererOpenGL::LockFramebuffer(int* out_pitch)
 {
-    // Return the write-discard buffer so LbScreenLock() reports Lb_SUCCESS.
-    // This keeps LbScreenLock-gated GPU paths (legal screen, menus, engine_redraw)
+    // Return the write-discard buffer so RendererLockScreen() reports success.
+    // This keeps RendererLockScreen-gated GPU paths (legal screen, menus, engine_redraw)
     // alive in GL mode. Content written here is never uploaded to the GPU.
     if (!m_discard_cleared && m_discardBuf)
     {

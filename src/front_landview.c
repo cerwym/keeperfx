@@ -1166,8 +1166,8 @@ TbBool frontmap_update_zoom(void)
         if (map_info.state_trigger != FeSt_INITIAL)
         {
             frontend_set_state(map_info.state_trigger);
-            LbScreenClear(0);
-            LbScreenSwap();
+            RendererClearScreen(0);
+            RendererPresentFrame();
             map_info.state_trigger = FeSt_INITIAL;
             return true;
         }

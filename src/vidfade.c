@@ -57,7 +57,7 @@ void fade_in(void)
 void fade_out(void)
 {
     ProperFadePalette(NULL, 8, Lb_PALETTE_FADE_CLOSED);
-    LbScreenClear(0);
+    RendererClearScreen(0);
 }
 
 void compute_fade_tables(struct TbColorTables *coltbl,unsigned char *spal,unsigned char *dpal)
@@ -229,10 +229,11 @@ void ProperFadePalette(unsigned char *pal, long fade_steps, enum TbPaletteFadeFl
     } else*/
     if (lbAdvancedFade)
     {
+        RendererPreserveFadeCache(1);
         TbClockMSec latest_loop_time = LbTimerClock();
         while (LbPaletteFade(pal, fade_steps, Lb_PALETTE_FADE_OPEN) < fade_steps)
         {
-          LbScreenSwap();
+          RendererPresentFrame();
           if (!is_key_pressed(KC_SPACE,KMod_DONTCARE) &&
               !is_key_pressed(KC_ESCAPE,KMod_DONTCARE) &&
               !is_key_pressed(KC_RETURN,KMod_DONTCARE) &&
@@ -242,6 +243,7 @@ void ProperFadePalette(unsigned char *pal, long fade_steps, enum TbPaletteFadeFl
             LbSleepUntil(latest_loop_time);
           }
         }
+        RendererPreserveFadeCache(0);
     } else
     if (pal != NULL)
     {
@@ -262,16 +264,18 @@ void ProperForcedFadePalette(unsigned char *pal, long fade_steps, enum TbPalette
     }
     if (lbAdvancedFade)
     {
+        RendererPreserveFadeCache(1);
         TbClockMSec latest_loop_time = LbTimerClock();
         while (LbPaletteFade(pal, fade_steps, Lb_PALETTE_FADE_OPEN) < fade_steps)
         {
-          LbScreenSwap();
+          RendererPresentFrame();
           latest_loop_time += lbFadeDelay;
 
           if (flag_is_set(start_params.startup_flags, (SFlg_Legal|SFlg_FX))) {
               LbSleepUntil(latest_loop_time);
           }
         }
+        RendererPreserveFadeCache(0);
     } else
     if (pal != NULL)
     {

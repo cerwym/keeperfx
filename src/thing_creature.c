@@ -4270,7 +4270,7 @@ void draw_creature_view(struct Thing *thing)
   // The GPU renders the first-person view through engine() → FlushIsometricView
   // just like the isometric view.  The lens distortion and swipe overlay are
   // purely cosmetic CPU post-effects that will be replaced by GPU shaders later.
-  if (WorldViewRenderer_IsGpuActive())
+  if (RendererGetActiveType() == RENDERER_OPENGL)
   {
       engine(player, render_cam);
       return;
@@ -4293,13 +4293,13 @@ void draw_creature_view(struct Thing *thing)
   // Store previous graphics settings
   unsigned char* wscr_cp = lbDisplay.WScreen;
   TbGraphicsWindow grwnd;
-  LbScreenStoreGraphicsWindow(&grwnd);
+  RendererStoreViewport(&grwnd);
   // Prepare new settings
   memset(scrmem, 0, render_width*render_height*sizeof(TbPixel));
   lbDisplay.WScreen = scrmem;
   lbDisplay.GraphicsScreenHeight = render_height;
   lbDisplay.GraphicsScreenWidth = render_width;
-  LbScreenSetGraphicsWindow(0, 0, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
+  RendererSetViewport(0, 0, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
   // Draw on our buffer
   setup_engine_window(0, 0, MyScreenWidth, MyScreenHeight);
   engine(player, render_cam);
@@ -4312,7 +4312,7 @@ void draw_creature_view(struct Thing *thing)
   long view_y = player->engine_window_y / pixel_size;
   // Restore original graphics settings
   lbDisplay.WScreen = wscr_cp;
-  LbScreenLoadGraphicsWindow(&grwnd);
+  RendererLoadViewport(&grwnd);
   // Draw the buffer on real screen using actual viewport dimensions
   setup_engine_window(0, 0, MyScreenWidth, MyScreenHeight);
   // Apply lens effect to the viewport area only (not including sidebar)

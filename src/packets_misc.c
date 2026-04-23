@@ -30,6 +30,7 @@
 #include "game_saves.h"
 #include "gui_topmsg.h"
 #include "config_settings.h"
+#include "renderer/RendererManager.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -47,7 +48,6 @@ extern TbBool get_skip_heart_zoom_feature(void);
 extern unsigned long get_host_player_id(void);
 extern void LbNetwork_TimesyncBarrier(void);
 extern TbBool keeper_screen_redraw(void);
-extern TbResult LbScreenSwap(void);
 /******************************************************************************/
 #ifdef __cplusplus
 }
@@ -419,7 +419,7 @@ void set_packet_pause_toggle()
         MULTIPLAYER_LOG("set_packet_pause_toggle: Initiating unpause timesync");
         unpausing_in_progress = 1;
         keeper_screen_redraw();
-        LbScreenSwap();
+        RendererPresentFrame();
         LbNetwork_BroadcastUnpauseTimesync();
         if (my_player_number == get_host_player_id()) {
             LbNetwork_TimesyncBarrier();

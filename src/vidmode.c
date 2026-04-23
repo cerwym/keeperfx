@@ -705,8 +705,8 @@ TbScreenMode setup_screen_mode(TbScreenMode nmode, TbBool failsafe)
     }
     load_pointer_file(hi_res);
   }
-  LbScreenClear(0);
-  LbScreenSwap();
+  RendererClearScreen(0);
+  RendererPresentFrame();
   update_screen_mode_data(new_mdinfo->Width, new_mdinfo->Height);
   if (parchment_loaded)
     reload_parchment_file(hi_res);
@@ -764,7 +764,7 @@ TbBool update_screen_mode_data(long width, long height)
 
   LbMouseChangeMoveRatio(base_mouse_sensitivity*units_per_pixel/16, base_mouse_sensitivity*units_per_pixel/16);
   LbMouseSetPointerHotspot(0, 0);
-  LbScreenSetGraphicsWindow(0, 0, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
+  RendererSetViewport(0, 0, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
   LbTextSetWindow(0, 0, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
   LbMouseSetup(NULL);
   return true;
@@ -869,8 +869,8 @@ TbScreenMode setup_screen_mode_minimal(TbScreenMode nmode)
         }
     }
   }
-  LbScreenClear(0);
-  LbScreenSwap();
+  RendererClearScreen(0);
+  RendererPresentFrame();
   update_screen_mode_data(new_mdinfo->Width, new_mdinfo->Height);
   lbDisplay.DrawFlags = flg_mem;
   force_video_mode_reset = false;

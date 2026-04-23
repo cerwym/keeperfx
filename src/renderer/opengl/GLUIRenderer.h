@@ -113,7 +113,6 @@ public:
     virtual void Flush() override;
     virtual void Clear() override;
     virtual const char* GetName() const override { return "OPENGL_UI"; }
-    virtual bool IsGpuAccelerated() const override { return true; }
 
     /** Flush any atlas-quad sprites submitted since the last FlushFront().
      *  Called by GLCursorLayer::Flush() to render the OS pointer sprite

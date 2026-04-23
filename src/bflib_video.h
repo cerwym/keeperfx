@@ -306,12 +306,6 @@ unsigned short LbGraphicsScreenBPP(void);
 TbScreenCoord LbGraphicsScreenWidth(void);
 TbScreenCoord LbGraphicsScreenHeight(void);
 
-TbResult LbScreenLock(void);
-TbResult LbScreenUnlock(void);
-TbBool LbScreenIsLocked(void);
-
-TbResult LbScreenSwap(void);
-TbResult LbScreenClear(TbPixel colour);
 TbResult LbScreenWaitVbi(void);
 unsigned short LbGetCurrentDisplayIndex();
 
@@ -322,11 +316,6 @@ TbResult LbPaletteGet(unsigned char *palette);
 TbPixel LbPaletteFindColour(const unsigned char *pal, unsigned char r, unsigned char g, unsigned char b);
 TbResult LbPaletteDataFillBlack(unsigned char *palette);
 TbResult LbPaletteDataFillWhite(unsigned char *palette);
-
-TbResult LbScreenStoreGraphicsWindow(TbGraphicsWindow *grwnd);
-TbResult LbScreenLoadGraphicsWindow(TbGraphicsWindow *grwnd);
-TbResult LbScreenSetGraphicsWindow(TbScreenCoord x, TbScreenCoord y,
-    TbScreenCoord width, TbScreenCoord height);
 
 TbResult LbSetTitle(const char *title);
 TbResult LbSetIcon(unsigned short nicon);

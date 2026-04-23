@@ -9,6 +9,7 @@
 /******************************************************************************/
 #include "pre_inc.h"
 #include "renderer/backends/SoftwareTextRenderer.h"
+#include "renderer/RendererManager.h"
 
 #include "bflib_sprfnt.h"
 #include "bflib_sprite.h"
@@ -329,7 +330,7 @@ TbBool SoftwareTextRenderer::DrawTextResized(int32_t posx, int32_t posy,
         return true;
 
     TbGraphicsWindow grwnd;
-    LbScreenStoreGraphicsWindow(&grwnd);
+    RendererStoreViewport(&grwnd);
 
     // Load the clip window into the graphics window state so put_down functions
     // write to the correct region of lbDisplay.WScreen.
@@ -339,12 +340,12 @@ TbBool SoftwareTextRenderer::DrawTextResized(int32_t posx, int32_t posy,
     clip_grwnd.width  = m_clip_window.width;
     clip_grwnd.height = m_clip_window.height;
     clip_grwnd.ptr    = nullptr;
-    LbScreenLoadGraphicsWindow(&clip_grwnd);
+    RendererLoadViewport(&clip_grwnd);
 
     TextLayoutContext ctx = BuildLayoutContext();
     TextLayout(ctx, posx, posy, units_per_px, text, SwDrawSegment, this);
 
-    LbScreenLoadGraphicsWindow(&grwnd);
+    RendererLoadViewport(&grwnd);
     return true;
 }
 
@@ -355,7 +356,7 @@ TbBool SoftwareTextRenderer::DrawTextAt(int32_t screen_x, int32_t screen_y,
         return true;
 
     TbGraphicsWindow grwnd;
-    LbScreenStoreGraphicsWindow(&grwnd);
+    RendererStoreViewport(&grwnd);
 
     TbGraphicsWindow clip_grwnd;
     clip_grwnd.x      = m_clip_window.x;
@@ -363,12 +364,12 @@ TbBool SoftwareTextRenderer::DrawTextAt(int32_t screen_x, int32_t screen_y,
     clip_grwnd.width  = m_clip_window.width;
     clip_grwnd.height = m_clip_window.height;
     clip_grwnd.ptr    = nullptr;
-    LbScreenLoadGraphicsWindow(&clip_grwnd);
+    RendererLoadViewport(&clip_grwnd);
 
     int32_t space_w = CharWidthScaled(' ', units_per_px);
     PutDownSprites(text, text + strlen(text), screen_x, screen_y, space_w, units_per_px);
 
-    LbScreenLoadGraphicsWindow(&grwnd);
+    RendererLoadViewport(&grwnd);
     return true;
 }
 

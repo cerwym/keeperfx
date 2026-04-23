@@ -1299,10 +1299,8 @@ void GLWorldViewRenderer::GPUFlushNow()
     KFX_GL_SCOPE(world_pass_dbg, "WorldPass");
 
     // Reset the per-frame active flag immediately — before any early returns.
-    // EndFrame caches WorldViewRenderer_IsGpuActive() BEFORE calling this
-    // function, so the CURRENT frame's staging-blit decision is already made.
-    // Clearing here ensures that on the NEXT frame, IsGpuAccelerated() returns
-    // false when no BeginWorldPass has been issued yet (e.g. main menu).
+    // This ensures m_world_pass_active is false on frames where no
+    // BeginWorldPass was issued (e.g. main menu).
     m_world_pass_active = false;
 
     if (!m_initialized)

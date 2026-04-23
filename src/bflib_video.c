@@ -99,85 +99,6 @@ void *LbExeReferenceNumber(void)
   return NULL;
 }
 
-/** Locks the graphics screen.
- *  This function gives access to the WScreen pointer, which contains buffer
- *  of size GraphicsScreenWidth x GraphicsScreenHeight.
- *  It also allows accessing GraphicsWindowPtr buffer, of size
- *  GraphicsWindowWidth x GraphicsWindowHeight, but with pitch (scanline length)
- *   same as graphics screen (which is GraphicsScreenWidth).
- *
- * @return Lb_SUCCESS if the lock was successful.
- * @see LbScreenUnlock()
- */
-TbResult LbScreenLock(void)
-{
-    SYNCDBG(12,"Starting");
-    if (!lbScreenInitialised)
-        return Lb_FAIL;
-
-    RendererBeginFrame();
-    int pitch = 0;
-    unsigned char *pixels = RendererLockFramebuffer(&pitch);
-    if (!pixels) {
-        lbDisplay.GraphicsWindowPtr = NULL;
-        lbDisplay.WScreen = NULL;
-        return Lb_FAIL;
-    }
-
-    lbDisplay.WScreen = pixels;
-    lbDisplay.GraphicsScreenWidth = pitch;
-    lbDisplay.GraphicsWindowPtr = &lbDisplay.WScreen[lbDisplay.GraphicsWindowX +
-        lbDisplay.GraphicsScreenWidth * lbDisplay.GraphicsWindowY];
-    return Lb_SUCCESS;
-}
-
-TbResult LbScreenUnlock(void)
-{
-    SYNCDBG(12,"Starting");
-    if (!lbScreenInitialised)
-        return Lb_FAIL;
-    lbDisplay.WScreen = NULL;
-    lbDisplay.GraphicsWindowPtr = NULL;
-    RendererUnlockFramebuffer();
-    return Lb_SUCCESS;
-}
-
-TbResult LbScreenSwap(void)
-{
-    KFX_BREADCRUMB("LbScreenSwap");
-    SYNCDBG(12,"Starting");
-    PlatformManager_FrameTick();
-    TbResult ret = LbMouseOnBeginSwap();
-    if (ret == Lb_SUCCESS) {
-#if defined(VITA_PERF_LOG)
-        {
-            static Uint32 _ef_accum = 0;
-            static int    _ef_cnt   = 0;
-            Uint32 _ef_t0 = SDL_GetTicks();
-            RendererEndFrame();
-            _ef_accum += SDL_GetTicks() - _ef_t0;
-            if (++_ef_cnt >= 60) {
-                JUSTLOG("[perf] EndFrame   avg %u ms/frame (60-frame window)", _ef_accum / 60u);
-                _ef_accum = 0; _ef_cnt = 0;
-            }
-        }
-#else
-        RendererEndFrame();
-#endif
-    }
-    LbMouseOnEndSwap();
-    return ret;
-}
-
-TbResult LbScreenClear(TbPixel colour)
-{
-    SYNCDBG(12,"Starting");
-    if (!lbScreenInitialised)
-        return Lb_FAIL;
-    RendererClearScreen(colour);
-    return Lb_SUCCESS;
-}
-
 /** Returns the currently active screen mode.
  *
  * @return Screen mode index.
@@ -663,7 +584,7 @@ TbResult LbScreenSetup(TbScreenMode mode, TbScreenCoord width, TbScreenCoord hei
     {
         LbPaletteSet(palette);
     }
-    LbScreenSetGraphicsWindow(0, 0, mdinfo->Width, mdinfo->Height);
+    RendererSetViewport(0, 0, mdinfo->Width, mdinfo->Height);
     LbTextSetWindow(0, 0, mdinfo->Width, mdinfo->Height);
     SYNCDBG(8,"Done filling display properties struct");
     if ( LbMouseIsInstalled() )
@@ -804,11 +725,6 @@ TbScreenModeInfo *LbScreenGetModeInfo(TbScreenMode mode)
     return &lbScreenModeInfo[0];
 }
 
-TbBool LbScreenIsLocked(void)
-{
-    return (lbDisplay.WScreen != NULL);
-}
-
 TbResult LbScreenReset(TbBool exiting_application)
 {
     if (!lbScreenInitialised)
@@ -833,91 +749,6 @@ TbResult LbScreenReset(TbBool exiting_application)
         finish_bflib_render();
     }
     return Lb_SUCCESS;
-}
-
-/**
- * Stores the current graphics window coords into TbGraphicsWindow structure.
- * Intended to use with LbScreenLoadGraphicsWindow() when changing the window
- * temporary.
- */
-TbResult LbScreenStoreGraphicsWindow(TbGraphicsWindow *grwnd)
-{
-  grwnd->x = lbDisplay.GraphicsWindowX;
-  grwnd->y = lbDisplay.GraphicsWindowY;
-  grwnd->width = lbDisplay.GraphicsWindowWidth;
-  grwnd->height = lbDisplay.GraphicsWindowHeight;
-  grwnd->ptr = NULL;
-  return Lb_SUCCESS;
-}
-
-/**
- * Sets the current graphics window coords from those in TbGraphicsWindow structure.
- * Use it only with TbGraphicsWindow which was filled using function
- * LbScreenStoreGraphicsWindow(), because the values are not checked for sanity!
- * To set values from other sources, use LbScreenSetGraphicsWindow() instead.
- */
-TbResult LbScreenLoadGraphicsWindow(TbGraphicsWindow *grwnd)
-{
-  lbDisplay.GraphicsWindowX = grwnd->x;
-  lbDisplay.GraphicsWindowY = grwnd->y;
-  lbDisplay.GraphicsWindowWidth = grwnd->width;
-  lbDisplay.GraphicsWindowHeight = grwnd->height;
-  if (lbDisplay.WScreen != NULL)
-  {
-      lbDisplay.GraphicsWindowPtr = lbDisplay.WScreen
-        + lbDisplay.GraphicsScreenWidth*lbDisplay.GraphicsWindowY + lbDisplay.GraphicsWindowX;
-  } else
-  {
-      lbDisplay.GraphicsWindowPtr = NULL;
-  }
-  return Lb_SUCCESS;
-}
-
-TbResult LbScreenSetGraphicsWindow(long x, long y, long width, long height)
-{
-    long i;
-    long right_edge = x + width;
-    long bottom_edge = y + height;
-    if (right_edge < x)  //Alarm! Voodoo magic detected!
-    {
-        i = (x ^ right_edge);
-        x = x ^ i;
-        right_edge = x ^ i ^ i;
-  }
-  if (bottom_edge < y)
-  {
-    i = (y^bottom_edge);
-    y = y^i;
-    bottom_edge = y^i^i;
-  }
-  if (x < 0)
-    x = 0;
-  if (right_edge < 0)
-    right_edge = 0;
-  if (y < 0)
-    y = 0;
-  if (bottom_edge < 0)
-    bottom_edge = 0;
-  if (x > lbDisplay.GraphicsScreenWidth)
-    x = lbDisplay.GraphicsScreenWidth;
-  if (right_edge > lbDisplay.GraphicsScreenWidth)
-    right_edge = lbDisplay.GraphicsScreenWidth;
-  if (y > lbDisplay.GraphicsScreenHeight)
-    y = lbDisplay.GraphicsScreenHeight;
-  if (bottom_edge > lbDisplay.GraphicsScreenHeight)
-    bottom_edge = lbDisplay.GraphicsScreenHeight;
-  lbDisplay.GraphicsWindowX = x;
-  lbDisplay.GraphicsWindowY = y;
-  lbDisplay.GraphicsWindowWidth = right_edge - x;
-  lbDisplay.GraphicsWindowHeight = bottom_edge - y;
-  if (lbDisplay.WScreen != NULL)
-  {
-    lbDisplay.GraphicsWindowPtr = lbDisplay.WScreen + lbDisplay.GraphicsScreenWidth*y + x;
-  } else
-  {
-    lbDisplay.GraphicsWindowPtr = NULL;
-  }
-  return Lb_SUCCESS;
 }
 
 TbBool LbScreenIsModeAvailable(TbScreenMode mode, unsigned short display)

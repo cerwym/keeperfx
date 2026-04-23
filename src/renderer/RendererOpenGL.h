@@ -121,7 +121,7 @@ private:
     int      m_screenH        = 0;
     bool     m_frame_begun     = false; // true after first BeginFrame; reset by EndFrame
 
-    // Write-discard CPU buffer — returned by LockFramebuffer() so LbScreenLock() succeeds.
+    // Write-discard CPU buffer — returned by LockFramebuffer() so RendererLockScreen() succeeds.
     // Content is NEVER uploaded to the GPU; this buffer exists solely to prevent null
     // dereferences in surviving CPU drawing paths (front_network, legal screen, etc.).
     // Any pixels written here are silently discarded.

@@ -293,9 +293,6 @@ void GLMapFadePass::RenderGPUComposePass()
 
     glUseProgram(0);
     glActiveTexture(GL_TEXTURE0);
-
-    // Re-enable depth test for subsequent passes.
-    glEnable(GL_DEPTH_TEST);
 }
 
 /******************************************************************************/

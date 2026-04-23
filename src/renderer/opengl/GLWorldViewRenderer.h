@@ -55,12 +55,6 @@ public:
     void FlushIsometricView() override;
     void FlushFrontView(struct Camera* cam) override;
     const char* GetName() const override { return "GLWorldViewRenderer"; }
-    // Returns true only when the world renderer is initialised AND a world pass
-    // (BeginWorldPass) was issued this frame — resets to false in GPUFlushNow.
-    // The main menu never calls BeginWorldPass, so this returns false there,
-    // allowing RendererOpenGL::EndFrame to run the CPU staging blit.
-    bool IsGpuAccelerated() const override { return m_initialized && m_world_pass_active; }
-
     // Called by RendererOpenGL::EndFrame() to issue the accumulated draw call
     // after glClear() and before the CPU framebuffer blit overlay.
     void GPUFlushNow();

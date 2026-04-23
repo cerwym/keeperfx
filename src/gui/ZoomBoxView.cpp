@@ -12,13 +12,13 @@
 
 // Renderer abstraction
 #include "renderer/RendererManager.h"   // RendererSchedulePiPRender, RendererGetZoomBoxMode,
-                                        // UIRenderer_IsGpuActive, UIRenderer_SubmitButtonSprite
+                                        // RendererGetActiveType, UIRenderer_SubmitButtonSprite
 #include "renderer/RendererSettings.h"  // ZoomBoxMode, ZBM_ISOMETRIC, ZBM_OVERHEAD
 
 // Game headers
 #include "player_data.h"    // PlayerInfo
 #include "engine_camera.h"  // Camera, get_camera_zoom, set_camera_zoom, CAMERA_ZOOM_MIN/MAX
-#include "bflib_video.h"    // MyScreenWidth/Height, pixel_size, units_per_pixel, LbScreenSetGraphicsWindow
+#include "bflib_video.h"    // MyScreenWidth/Height, pixel_size, units_per_pixel
 #include "bflib_vidraw.h"   // vec_window_height
 #include "bflib_planar.h"  // TbRect
 #include "bflib_sprite.h"   // TbSprite (SWidth/SHeight fields)
@@ -72,7 +72,7 @@ void ZoomBoxView::draw(const DrawContext&    ctx,
     const int scr_x = screen_rect.left;
     const int scr_y = screen_rect.top;
 
-    if (m_mode == ZBM_ISOMETRIC && UIRenderer_IsGpuActive())
+    if (m_mode == ZBM_ISOMETRIC && RendererGetActiveType() == RENDERER_OPENGL)
         drawIsometric(ctx, view, player, scr_x, scr_y,
                       stl_x, stl_y, draw_tiles_x, draw_tiles_y, subtile_size);
     else
@@ -83,9 +83,9 @@ void ZoomBoxView::draw(const DrawContext&    ctx,
                      subtile_size, ctx.units_per_pixel);
 
     // Restore the full-screen graphics window (legacy C draw paths may clip it).
-    LbScreenSetGraphicsWindow(0, 0,
-                              ctx.screen_w / ctx.pixel_size,
-                              ctx.screen_h / ctx.pixel_size);
+    RendererSetViewport(0, 0,
+                        ctx.screen_w / ctx.pixel_size,
+                        ctx.screen_h / ctx.pixel_size);
 }
 
 // ---------------------------------------------------------------------------
