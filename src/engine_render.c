@@ -8912,7 +8912,7 @@ static void do_map_who_for_thing(struct Thing *thing)
             }
         }
         rotpers(&ecor, &camera_matrix);
-        if (getpoly < poly_pool_end)
+        if (getpoly < poly_pool_end && ecor.z >= 64)
         {
             if ( lens_mode )
               bckt_idx = (ecor.z - 64) / 16;
