@@ -27,7 +27,7 @@ public:
                                         unsigned char sprgroup,
                                         int32_t scale) override;
 
-    virtual void Flush() override;
+    virtual void Draw() override;
     virtual void Clear() override;
     virtual const char* GetName() const override { return "SW_CURSOR"; }
 

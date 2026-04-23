@@ -109,7 +109,7 @@ void SWCursorLayer::SubmitKeeperHandSprite(short x, short y,
     process_keeper_sprite(x, y, kspr_base, angle, sprgroup, scale);
 }
 
-void SWCursorLayer::Flush()
+void SWCursorLayer::Draw()
 {
     // Draw the pointer sprite into WScreen right before the SDL blit.
     // WScreen is fully rebuilt each frame so no backup/restore is needed.

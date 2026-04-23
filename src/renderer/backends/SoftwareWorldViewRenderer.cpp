@@ -19,12 +19,12 @@ void SoftwareWorldViewRenderer::BeginWorldPass(uint8_t* framebuf, int pitch, int
     setup_vecs(framebuf, NULL, (unsigned int)pitch, (unsigned int)w, (unsigned int)h);
 }
 
-void SoftwareWorldViewRenderer::FlushIsometricView()
+void SoftwareWorldViewRenderer::DrawIsometricView()
 {
     display_drawlist();
 }
 
-void SoftwareWorldViewRenderer::FlushFrontView(struct Camera* cam)
+void SoftwareWorldViewRenderer::DrawFrontView(struct Camera* cam)
 {
     display_fast_drawlist(cam);
 }
