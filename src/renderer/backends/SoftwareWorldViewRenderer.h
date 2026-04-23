@@ -27,8 +27,8 @@ public:
 
     void BeginWorldPass(uint8_t* framebuf, int pitch, int w, int h,
                         int vp_x, int vp_y) override;
-    void FlushIsometricView() override;
-    void FlushFrontView(struct Camera* cam) override;
+    void DrawIsometricView() override;
+    void DrawFrontView(struct Camera* cam) override;
 
     const char* GetName() const override { return "SOFTWARE"; }
 };
