@@ -12,12 +12,12 @@
 
 /******************************************************************************/
 
-long SoftwareMapFadePass::StepFadeIn(long step)
+int32_t SoftwareMapFadePass::StepFadeIn(int32_t step)
 {
     return map_fade_in(step);
 }
 
-long SoftwareMapFadePass::StepFadeOut(long step)
+int32_t SoftwareMapFadePass::StepFadeOut(int32_t step)
 {
     return map_fade_out(step);
 }

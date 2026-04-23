@@ -151,7 +151,7 @@ TbBool movie_record_frame(void)
         if (!RendererLockScreen())
             return false;
   }
-  LbPaletteGet(cap_palette);
+  RendererPaletteGet(cap_palette);
   short result = anim_record_frame(RendererGetWScreen(), cap_palette);
   if (!lock_mem)
     RendererUnlockScreen();

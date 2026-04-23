@@ -606,7 +606,7 @@ struct movie_t {
 			lbPalette[i*3+1] = palette[i].g >> 2;
 			lbPalette[i*3+2] = palette[i].b >> 2;
 		}
-		LbScreenWaitVbi(); // this is a no-op today
+        RendererWaitVbi(); // this is a no-op today
 		// LbPaletteSet expects values in range 0-63 for reasons, nuking 75% of the color range
 		SDL_SetPaletteColors(lbDrawSurface->format->palette, palette, 0, PALETTE_COLORS);
 		if (!RendererLockScreen()) {

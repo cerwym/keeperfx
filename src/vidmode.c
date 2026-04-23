@@ -600,7 +600,7 @@ TbScreenMode setup_screen_mode(TbScreenMode nmode, TbBool failsafe)
 {
   SYNCDBG(4,"Setting up mode %d",(int)nmode);
   TbScreenModeInfo* new_mdinfo = LbScreenGetModeInfo(nmode);
-  TbScreenMode old_mode = LbScreenActiveMode();
+  TbScreenMode old_mode = RendererActiveMode();
   TbScreenModeInfo* old_mdinfo = LbScreenGetModeInfo(old_mode);
   // we don't want to get the current display when using the "fill all" mode, we want to keep the old version
   if (!(old_mdinfo->VideoFlags & Lb_VF_FILLALL))
@@ -781,7 +781,7 @@ TbScreenMode setup_screen_mode_minimal(TbScreenMode nmode)
   SYNCDBG(4,"Setting up mode %d",(int)nmode);
   TbScreenModeInfo* new_mdinfo = LbScreenGetModeInfo(nmode);
   // we don't want to get the current display when using the "fill all" mode, we want to keep the old version
-  TbScreenMode old_mode = LbScreenActiveMode();
+  TbScreenMode old_mode = RendererActiveMode();
   TbScreenModeInfo* old_mdinfo = LbScreenGetModeInfo(old_mode);
   if (!(old_mdinfo->VideoFlags & Lb_VF_FILLALL))
   {
@@ -888,7 +888,7 @@ TbScreenMode setup_screen_mode_zero(TbScreenMode nmode)
   SYNCDBG(4,"Setting up mode %d",(int)nmode);
   TbScreenModeInfo* new_mdinfo = LbScreenGetModeInfo(nmode);
   // we don't want to get the current display when using the "fill all" mode, we want to keep the old version
-  TbScreenMode old_mode = LbScreenActiveMode();
+  TbScreenMode old_mode = RendererActiveMode();
   TbScreenModeInfo* old_mdinfo = LbScreenGetModeInfo(old_mode);
   if (!(old_mdinfo->VideoFlags & Lb_VF_FILLALL))
   {
@@ -981,7 +981,7 @@ TbBool switch_to_next_video_mode(void)
     if (i == current)
     {
       // we have done a full loop of switching_vidmodes[]
-      if (get_game_vidmode(i) == LbScreenActiveMode())
+      if (get_game_vidmode(i) == RendererActiveMode())
       {
         SYNCLOG("No new mode to switch to; staying with %s (mode %d).", get_vidmode_name(scrmode),(int)scrmode);
         return true; // only 1 valid video mode, and we are already in it

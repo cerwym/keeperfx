@@ -1279,9 +1279,9 @@ TbBool fronttestfont_input(void)
       num_chars_in_font = num_sprites(testfont[i]);
       SYNCDBG(9,"Characters in font %d: %ld",i,num_chars_in_font);
       if (i < 4)
-        LbPaletteSet(frontend_palette);//testfont_palette[0]
+        RendererPaletteSet(frontend_palette);//testfont_palette[0]
       else
-        LbPaletteSet(testfont_palette[1]);
+        RendererPaletteSet(testfont_palette[1]);
       LbTextSetFont(testfont[i]);
       return true;
     }

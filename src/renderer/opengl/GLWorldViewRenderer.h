@@ -66,12 +66,12 @@ public:
     void GPURenderToFBO(int pip_w, int pip_h);
 
     // IWorldViewRenderer: submit a keeper-sprite through the GPU path.
-    int SubmitKeeperSprite(long dst_x, long dst_y, long dst_w, long dst_h,
+    int SubmitKeeperSprite(int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
                            const unsigned char* data, int src_w, int src_h,
                            unsigned int draw_flags, const unsigned char* remap) override;
 
     // Internal implementation used by SubmitKeeperSprite.
-    int render_keepersprite_gpu(long dst_x, long dst_y, long dst_w, long dst_h,
+    int render_keepersprite_gpu(int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
                                 const unsigned char* data, int src_w, int src_h,
                                 unsigned int draw_flags, const unsigned char* remap);
 
@@ -119,7 +119,7 @@ private:
                          const struct PolyPoint* p0,
                          const struct PolyPoint* p1,
                          const struct PolyPoint* p2,
-                         long cam_z0 = 0, long cam_z1 = 0, long cam_z2 = 0);
+                         int32_t cam_z0 = 0, int32_t cam_z1 = 0, int32_t cam_z2 = 0);
 
     // Append one triangle from compact-format fields (unsigned short xy, unsigned char uv/shade)
     bool append_triangle_compact(int sx0, int sy0, int u0, int v0, int shade0,
@@ -138,7 +138,7 @@ private:
     void gpu_execute_passes(int vp_x, int vp_y_gl);
 
     // Setup world sprite processing for a bucket (replaces global hook approach)
-    void setup_world_sprite_processing(long bucket_num);
+    void setup_world_sprite_processing(int32_t bucket_num);
 
     // Deferred draw command (built during DrawIsometricView, executed by GPURenderNow)
     struct DrawCmd {

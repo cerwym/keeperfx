@@ -763,26 +763,26 @@ void effect_generate_effect_elements(const struct Thing *thing)
         } else
         if (thing->health > i)
         {
-          LbPaletteFade(temp_pal, i, Lb_PALETTE_FADE_OPEN);
+          RendererPaletteFade(temp_pal, i, Lb_PALETTE_FADE_OPEN);
           RendererSetScreenTint(1.0f, 1.0f, 1.0f,
               (float)(effcst->start_health - thing->health) / (float)i);
         } else
         if (thing->health == i)
         {
-          LbPaletteStopOpenFade();
-          LbPaletteSet(temp_pal);
+          RendererPaletteStopFade();
+          RendererPaletteSet(temp_pal);
           RendererSetScreenTint(1.0f, 1.0f, 1.0f, 1.0f);
         } else
         if (thing->health > 0)
         {
-            LbPaletteFade(engine_palette, 8, Lb_PALETTE_FADE_OPEN);
+            RendererPaletteFade(engine_palette, 8, Lb_PALETTE_FADE_OPEN);
             RendererSetScreenTint(1.0f, 1.0f, 1.0f,
                 (float)thing->health / (float)i);
         } else
         {
             player = get_my_player();
             PaletteSetPlayerPalette(player, engine_palette);
-            LbPaletteStopOpenFade();
+            RendererPaletteStopFade();
             RendererSetScreenTint(0.0f, 0.0f, 0.0f, 0.0f);
         }
         break;

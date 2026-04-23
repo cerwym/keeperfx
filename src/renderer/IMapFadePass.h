@@ -29,6 +29,8 @@
 #ifndef IMAP_FADE_PASS_H
 #define IMAP_FADE_PASS_H
 
+#include <stdint.h>
+
 /******************************************************************************/
 
 class IMapFadePass {
@@ -39,13 +41,13 @@ public:
      *  On step == 0, captures the source and destination frames.
      *  @param step  Current step value in [0, 32].
      *  @return      Next step value (step + 4, capped at 32). */
-    virtual long StepFadeIn(long step) = 0;
+    virtual int32_t StepFadeIn(int32_t step) = 0;
 
     /** Render one fade-out frame (3D view → parchment).
      *  On step == 32, captures the source and destination frames.
      *  @param step  Current step value in [0, 32].
      *  @return      Next step value (step - 4, capped at 0). */
-    virtual long StepFadeOut(long step) = 0;
+    virtual int32_t StepFadeOut(int32_t step) = 0;
 
     virtual const char* GetName() const = 0;
 

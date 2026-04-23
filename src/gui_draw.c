@@ -772,7 +772,7 @@ long get_frontmenu_background_area_rect(int rect_x, int rect_y, int rect_w, int 
 void draw_frontmenu_background(int rect_x,int rect_y,int rect_w,int rect_h)
 {
     // Validate parameters with video mode
-    TbScreenModeInfo *mdinfo = LbScreenGetModeInfo(LbScreenActiveMode());
+    TbScreenModeInfo *mdinfo = LbScreenGetModeInfo(RendererActiveMode());
     if (rect_w == POS_AUTO)
       rect_w = mdinfo->Width-rect_x;
     if (rect_h == POS_AUTO)

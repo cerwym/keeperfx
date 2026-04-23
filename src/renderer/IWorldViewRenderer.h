@@ -84,7 +84,7 @@ public:
      *  draw_flags  = lbDisplay.DrawFlags at time of call (flip, transpar, remap, additive).
      *  remap       = colour remap table (may be NULL).
      *  Returns 1 if the GPU handled it (CPU blit should be skipped), 0 to fall back. */
-    virtual int SubmitKeeperSprite(long dst_x, long dst_y, long dst_w, long dst_h,
+    virtual int SubmitKeeperSprite(int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
                                    const unsigned char* data, int src_w, int src_h,
                                    unsigned int draw_flags, const unsigned char* remap)
     {

@@ -1143,7 +1143,7 @@ void process_zoom_palette(void)
     for (int i = 0; i < PALETTE_SIZE; i++) {
         palette[i] = frontend_palette[i] * remaining / half_length;
     }
-    LbPaletteSet(palette);
+    RendererPaletteSet(palette);
 }
 
 TbBool frontmap_update_zoom(void)
@@ -1161,7 +1161,7 @@ TbBool frontmap_update_zoom(void)
     if (map_info.fade_pos < 0 || map_info.fade_pos >= FRONTMAP_ZOOM_LENGTH)
     {
         SYNCDBG(8,"Stopping fade");
-        LbPaletteStopOpenFade();
+        RendererPaletteStopFade();
         map_info.fadeflags &= ~MLInfoFlg_Zooming;
         if (map_info.state_trigger != FeSt_INITIAL)
         {
@@ -1180,7 +1180,7 @@ TbBool frontmap_load(void)
 {
     SYNCDBG(4,"Starting");
     memset(scratch, 0, PALETTE_SIZE);
-    LbPaletteSet(scratch);
+    RendererPaletteSet(scratch);
     initialize_description_speech();
     mouse_over_lvnum = SINGLEPLAYER_NOTSTARTED;
     frontend_load_data_from_cd();
@@ -1550,7 +1550,7 @@ void frontmap_input(void)
         clear_key_pressed(KC_ESCAPE);
         FrontendMenuState nstate = get_menu_state_when_back_from_substate(frontend_menu_state);
         frontend_set_state(nstate);
-        LbPaletteStopOpenFade();
+        RendererPaletteStopFade();
         return;
     }
     if (zoom_done)

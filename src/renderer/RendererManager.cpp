@@ -93,23 +93,23 @@ void RendererNotifySpritesReloaded()
         s_spriteAtlas->Free();
         if (s_spriteAtlas->Init()) {
             if (gui_panel_sprites) {
-                long n = num_sprites(gui_panel_sprites);
+                int32_t n = num_sprites(gui_panel_sprites);
                 s_spriteAtlas->AddSheet(gui_panel_sprites);
-                SYNCLOG("RendererNotifySpritesReloaded: added gui_panel_sprites (%ld sprites)", n);
+                SYNCLOG("RendererNotifySpritesReloaded: added gui_panel_sprites (%d sprites)", n);
             } else {
                 SYNCLOG("RendererNotifySpritesReloaded: gui_panel_sprites is NULL - no panel sprites added!");
             }
             if (button_sprites) {
-                long n = num_sprites(button_sprites);
+                int32_t n = num_sprites(button_sprites);
                 s_spriteAtlas->AddSheet(button_sprites);
-                SYNCLOG("RendererNotifySpritesReloaded: added button_sprites (%ld sprites)", n);
+                SYNCLOG("RendererNotifySpritesReloaded: added button_sprites (%d sprites)", n);
             } else {
                 SYNCLOG("RendererNotifySpritesReloaded: button_sprites is NULL");
             }
             if (custom_sprites && num_sprites(custom_sprites) > 0) {
-                long n = num_sprites(custom_sprites);
+                int32_t n = num_sprites(custom_sprites);
                 s_spriteAtlas->AddSheet(custom_sprites);
-                SYNCLOG("RendererNotifySpritesReloaded: added custom_sprites (%ld sprites)", n);
+                SYNCLOG("RendererNotifySpritesReloaded: added custom_sprites (%d sprites)", n);
             }
         } else {
             ERRORLOG("RendererNotifySpritesReloaded: GLSpriteAtlas::Init() FAILED");
@@ -127,10 +127,10 @@ void RendererNotifyPointerSpritesLoaded()
 {
 #ifdef RENDERER_OPENGL_ENABLED
     if (s_spriteAtlas && pointer_sprites && num_sprites(pointer_sprites) > 0) {
-        long before = (long)s_spriteAtlas->GetRegisteredCount();
+        int32_t before = (int32_t)s_spriteAtlas->GetRegisteredCount();
         s_spriteAtlas->AddSheet(pointer_sprites);
-        long after  = (long)s_spriteAtlas->GetRegisteredCount();
-        SYNCLOG("RendererNotifyPointerSpritesLoaded: pointer_sprites=%p added %ld new sprites (total %ld)",
+        int32_t after  = (int32_t)s_spriteAtlas->GetRegisteredCount();
+        SYNCLOG("RendererNotifyPointerSpritesLoaded: pointer_sprites=%p added %d new sprites (total %d)",
                 (void*)pointer_sprites, after - before, after);
     }
 #endif
@@ -141,10 +141,10 @@ void RendererNotifyFrontendSpritesLoaded()
 {
 #ifdef RENDERER_OPENGL_ENABLED
     if (s_spriteAtlas && frontend_sprite && num_sprites(frontend_sprite) > 0) {
-        long before = (long)s_spriteAtlas->GetRegisteredCount();
+        int32_t before = (int32_t)s_spriteAtlas->GetRegisteredCount();
         s_spriteAtlas->AddSheet(frontend_sprite);
-        long after  = (long)s_spriteAtlas->GetRegisteredCount();
-        SYNCLOG("RendererNotifyFrontendSpritesLoaded: frontend_sprite=%p added %ld new sprites (total %ld)",
+        int32_t after  = (int32_t)s_spriteAtlas->GetRegisteredCount();
+        SYNCLOG("RendererNotifyFrontendSpritesLoaded: frontend_sprite=%p added %d new sprites (total %d)",
                 (void*)frontend_sprite, after - before, after);
     }
 #endif
@@ -158,10 +158,10 @@ void RendererNotifyLandviewFlagLoaded()
 {
 #ifdef RENDERER_OPENGL_ENABLED
     if (s_spriteAtlas && map_flag && num_sprites(map_flag) > 0) {
-        long before = (long)s_spriteAtlas->GetRegisteredCount();
+        int32_t before = (int32_t)s_spriteAtlas->GetRegisteredCount();
         s_spriteAtlas->AddSheet(map_flag);
-        long after  = (long)s_spriteAtlas->GetRegisteredCount();
-        SYNCLOG("RendererNotifyLandviewFlagLoaded: map_flag=%p added %ld new sprites (total %ld)",
+        int32_t after  = (int32_t)s_spriteAtlas->GetRegisteredCount();
+        SYNCLOG("RendererNotifyLandviewFlagLoaded: map_flag=%p added %d new sprites (total %d)",
                 (void*)map_flag, after - before, after);
     }
 #endif
@@ -238,10 +238,10 @@ void RendererNotifyCustomSpritesReloaded()
 {
 #ifdef RENDERER_OPENGL_ENABLED
     if (s_spriteAtlas && custom_sprites && num_sprites(custom_sprites) > 0) {
-        long before = (long)s_spriteAtlas->GetRegisteredCount();
+        int32_t before = (int32_t)s_spriteAtlas->GetRegisteredCount();
         s_spriteAtlas->AddSheet(custom_sprites);
-        long after  = (long)s_spriteAtlas->GetRegisteredCount();
-        SYNCLOG("RendererNotifyCustomSpritesReloaded: custom_sprites=%p added %ld new sprites (total %ld)",
+        int32_t after  = (int32_t)s_spriteAtlas->GetRegisteredCount();
+        SYNCLOG("RendererNotifyCustomSpritesReloaded: custom_sprites=%p added %d new sprites (total %d)",
                 (void*)custom_sprites, after - before, after);
     }
 #endif
@@ -279,8 +279,8 @@ static SpriteHandle resolve_sprite_handle(const TbSprite* spr)
 static void register_sheet_software(const struct TbSpriteSheet* sheet)
 {
     if (!sheet || !s_softwareUIRenderer) return;
-    long n = num_sprites(sheet);
-    for (long i = 0; i < n; ++i) {
+    int32_t n = num_sprites(sheet);
+    for (int32_t i = 0; i < n; ++i) {
         const struct TbSprite* spr = get_sprite(sheet, i);
         if (!spr || !spr->Data || spr->SWidth == 0 || spr->SHeight == 0) continue;
         if (s_sprite_to_handle.count(spr)) continue;
@@ -765,13 +765,13 @@ TbResult RendererResetScreen(TbBool exiting_application)
 /* Graphics viewport (replaces LbScreenSetGraphicsWindow / Store / Load)      */
 /******************************************************************************/
 
-void RendererSetViewport(long x, long y, long width, long height)
+void RendererSetViewport(int32_t x, int32_t y, int32_t width, int32_t height)
 {
-    long right_edge = x + width;
-    long bottom_edge = y + height;
+    int32_t right_edge = x + width;
+    int32_t bottom_edge = y + height;
     // Swap if inverted
-    if (right_edge < x) { long t = x; x = right_edge; right_edge = t; }
-    if (bottom_edge < y) { long t = y; y = bottom_edge; bottom_edge = t; }
+    if (right_edge < x) { int32_t t = x; x = right_edge; right_edge = t; }
+    if (bottom_edge < y) { int32_t t = y; y = bottom_edge; bottom_edge = t; }
     // Clamp to screen
     if (x < 0) x = 0;
     if (right_edge < 0) right_edge = 0;
@@ -824,6 +824,38 @@ TbScreenCoord RendererScreenHeight(void)   { return lbDisplay.GraphicsScreenHeig
 unsigned char* RendererGetWScreen(void)    { return lbDisplay.WScreen; }
 
 /******************************************************************************/
+/* Palette management (replaces LbPalette* functions)                         */
+/******************************************************************************/
+
+extern "C" TbResult LbPaletteSet(unsigned char *palette);
+extern "C" TbResult LbPaletteGet(unsigned char *palette);
+extern "C" long LbPaletteFade(unsigned char *pal, long fade_steps, enum TbPaletteFadeFlag flg);
+extern "C" TbResult LbPaletteStopOpenFade(void);
+
+TbResult RendererPaletteSet(unsigned char *palette) { return LbPaletteSet(palette); }
+TbResult RendererPaletteGet(unsigned char *palette) { return LbPaletteGet(palette); }
+int32_t RendererPaletteFade(unsigned char *pal, int32_t fade_steps, enum TbPaletteFadeFlag flg) { return LbPaletteFade(pal, fade_steps, flg); }
+TbResult RendererPaletteStopFade(void) { return LbPaletteStopOpenFade(); }
+
+/******************************************************************************/
+/* Screen lifecycle helpers                                                   */
+/******************************************************************************/
+
+extern "C" TbResult LbScreenInitialize(void);
+extern "C" TbResult LbScreenSetDoubleBuffering(TbBool state);
+extern "C" TbResult LbSetTitle(const char *title);
+extern "C" TbResult LbSetIcon(unsigned short nicon);
+extern "C" TbScreenMode LbScreenActiveMode(void);
+extern "C" TbResult LbScreenWaitVbi(void);
+
+TbResult RendererScreenInitialize(void)         { return LbScreenInitialize(); }
+TbResult RendererSetDoubleBuffering(TbBool state){ return LbScreenSetDoubleBuffering(state); }
+TbResult RendererSetTitle(const char *title)     { return LbSetTitle(title); }
+TbResult RendererSetIcon(unsigned short nicon)   { return LbSetIcon(nicon); }
+TbScreenMode RendererActiveMode(void)            { return LbScreenActiveMode(); }
+TbResult RendererWaitVbi(void)                   { return LbScreenWaitVbi(); }
+
+/******************************************************************************/
 /* C-callable world-view renderer wrappers */
 /******************************************************************************/
 
@@ -846,7 +878,7 @@ void WorldViewRenderer_DrawFrontView(struct Camera* cam)
         s_worldViewRenderer->DrawFrontView(cam);
 }
 
-int WorldViewRenderer_SubmitKeeperSprite(long dst_x, long dst_y, long dst_w, long dst_h,
+int WorldViewRenderer_SubmitKeeperSprite(int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
                                          const unsigned char* data, int src_w, int src_h,
                                          unsigned int draw_flags, const unsigned char* remap)
 {
@@ -919,14 +951,14 @@ void CursorLayer_SubmitKeeperHandSprite(short x, short y, unsigned short kspr_ba
 }
 /******************************************************************************/
 
-long MapFadePass_StepFadeIn(long step)
+int32_t MapFadePass_StepFadeIn(int32_t step)
 {
     if (s_mapFadePass)
         return s_mapFadePass->StepFadeIn(step);
     return step; // no-op: don't advance if not initialised
 }
 
-long MapFadePass_StepFadeOut(long step)
+int32_t MapFadePass_StepFadeOut(int32_t step)
 {
     if (s_mapFadePass)
         return s_mapFadePass->StepFadeOut(step);
@@ -1156,7 +1188,7 @@ void UIRenderer_DrawHandSprites(void)
 }
 
 void UIRenderer_SubmitKeeperSprite(short x, short y, unsigned short kspr_base,
-                                   short kspr_angle, unsigned char sprgroup, long scale)
+                                   short kspr_angle, unsigned char sprgroup, int32_t scale)
 {
     // Legacy stub — calls route to CursorLayer_SubmitKeeperHandSprite now.
     CursorLayer_SubmitKeeperHandSprite(x, y, kspr_base, kspr_angle, sprgroup, scale);
@@ -1205,8 +1237,8 @@ void UIRenderer_SubmitPanelSpriteCentered(int32_t x, int32_t y, int units_per_px
     if (!s_uiRenderer) return;
     const struct TbSprite* spr = get_panel_sprite(get_player_colored_icon_idx(spridx, my_player_number));
     if (!spr) return;
-    long ox = ((long)spr->SWidth  * units_per_px + 8) / 16 / 2;
-    long oy = ((long)spr->SHeight * units_per_px + 8) / 16 / 2;
+    int32_t ox = ((int32_t)spr->SWidth  * units_per_px + 8) / 16 / 2;
+    int32_t oy = ((int32_t)spr->SHeight * units_per_px + 8) / 16 / 2;
     SpriteHandle h = resolve_sprite_handle(spr);
     s_uiRenderer->SubmitPanelSprite(x - ox, y - oy, units_per_px, h);
 }
@@ -1227,18 +1259,18 @@ void UIRenderer_SubmitButtonSpriteFlipped(int32_t x, int32_t y, int units_per_px
     s_uiRenderer->SubmitPanelSprite(x, y, units_per_px, h, true);
 }
 
-void UIRenderer_SubmitDigitSprites(int32_t center_x, int32_t y, int32_t w, int32_t h, long long value)
+void UIRenderer_SubmitDigitSprites(int32_t center_x, int32_t y, int32_t w, int32_t h, int64_t value)
 {
     if (!s_uiRenderer || value <= 0) return;
 
     // Count digits
     int ndigits = 0;
-    for (long long v = value; v > 0; v /= 10)
+    for (int64_t v = value; v > 0; v /= 10)
         ndigits++;
 
     // Draw right-to-left, centered on center_x
     int32_t pos_x = center_x + w * (ndigits - 1) / 2;
-    for (long long v = value; v > 0; v /= 10)
+    for (int64_t v = value; v > 0; v /= 10)
     {
         const struct TbSprite* spr = get_button_sprite((short)((v % 10) + GBS_fontchars_number_dig0));
         SpriteHandle hspr = resolve_sprite_handle(spr);
@@ -1295,18 +1327,18 @@ void UIRenderer_SubmitMinimap(int screen_x, int screen_y, int size)
 void UIRenderer_SubmitTiledSprite(int32_t x, int32_t y, int units_per_px, const struct TiledSprite* bigspr)
 {
     if (!s_uiRenderer || !bigspr) return;
-    long cur_y = y;
+    int32_t cur_y = y;
     for (int sy = 0; sy < bigspr->y_num; sy++)
     {
-        long cur_x = x;
-        long delta_y = 0;
+        int32_t cur_x = x;
+        int32_t delta_y = 0;
         unsigned short spr_idx = bigspr->spr_idx[sy][0];
         for (int sx = 0; sx < bigspr->x_num; sx++)
         {
             const struct TbSprite* spr = get_panel_sprite(spr_idx);
             if (!spr) { spr_idx++; continue; }
-            long delta_x = (long)spr->SWidth * units_per_px / 16;
-            delta_y      = (long)spr->SHeight * units_per_px / 16;
+            int32_t delta_x = (int32_t)spr->SWidth * units_per_px / 16;
+            delta_y      = (int32_t)spr->SHeight * units_per_px / 16;
             if (spr_idx)
             {
                 SpriteHandle h = resolve_sprite_handle(spr);

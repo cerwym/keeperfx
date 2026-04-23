@@ -49,11 +49,11 @@ public:
      *  Captures both views on step == 0.  Records the current step so
      *  RenderGPUComposePass() can draw the wipe at EndFrame() time.
      *  Falls back to map_fade_in() if Init() or capture failed. */
-    long StepFadeIn(long step) override;
+    int32_t StepFadeIn(int32_t step) override;
 
     /** Render one fade-out frame (3D world → parchment).
      *  Captures both views on step == 32.  Same GPU/fallback logic as above. */
-    long StepFadeOut(long step) override;
+    int32_t StepFadeOut(int32_t step) override;
 
     const char* GetName() const override { return "OPENGL"; }
 

@@ -795,7 +795,7 @@ void GLWorldViewRenderer::EndHandSpriteRendering()
 /******************************************************************************/
 
 int GLWorldViewRenderer::SubmitKeeperSprite(
-    long dst_x, long dst_y, long dst_w, long dst_h,
+    int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
     const unsigned char* data, int src_w, int src_h,
     unsigned int draw_flags, const unsigned char* remap)
 {
@@ -806,7 +806,7 @@ int GLWorldViewRenderer::SubmitKeeperSprite(
 /******************************************************************************/
 
 int GLWorldViewRenderer::render_keepersprite_gpu(
-    long dst_x, long dst_y, long dst_w, long dst_h,
+    int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
     const unsigned char* data, int src_w, int src_h,
     unsigned int draw_flags, const unsigned char* remap)
 {
@@ -1090,7 +1090,7 @@ void GLWorldViewRenderer::AddWorldText(float world_x, float world_y, float world
 /******************************************************************************/
 
 // Simple bridge function to maintain existing sprite logic while using proper abstraction
-void GLWorldViewRenderer::setup_world_sprite_processing(long bucket_num)
+void GLWorldViewRenderer::setup_world_sprite_processing(int32_t bucket_num)
 {
     if (!m_initialized) return;
 
@@ -1144,7 +1144,7 @@ void GLWorldViewRenderer::BeginWorldPass(unsigned char* framebuf, int pitch,
     if (framebuf && m_initialized)
     {
         for (int row = 0; row < h; row++)
-            memset(framebuf + (long)row * pitch, 0, (size_t)w);
+            memset(framebuf + (int32_t)row * pitch, 0, (size_t)w);
     }
 
     // Set screen size for text renderer
@@ -1162,7 +1162,7 @@ bool GLWorldViewRenderer::append_triangle(int tile_id,
                                            const struct PolyPoint* p0,
                                            const struct PolyPoint* p1,
                                            const struct PolyPoint* p2,
-                                           long cam_z0, long cam_z1, long cam_z2)
+                                           int32_t cam_z0, int32_t cam_z1, int32_t cam_z2)
 {
     const int variation  = tile_id / TEXTURE_BLOCKS_COUNT;
     const int tile_local = tile_id % TEXTURE_BLOCKS_COUNT;
@@ -1191,7 +1191,7 @@ bool GLWorldViewRenderer::append_triangle(int tile_id,
     const float z_ndc = 2.0f * (float)m_current_bucket / (float)(BUCKETS_COUNT - 1) - 1.0f;
 
     const struct PolyPoint* pts[3] = { p0, p1, p2 };
-    const long cam_z[3] = { cam_z0, cam_z1, cam_z2 };
+    const int32_t cam_z[3] = { cam_z0, cam_z1, cam_z2 };
     for (int i = 0; i < 3; i++)
     {
         WorldVertex* wv = &m_verts[m_vert_count + i];
@@ -1762,13 +1762,13 @@ void GLWorldViewRenderer::DrawIsometricView()
                     bool flip = ((angle & ANGLE_MASK) > 1151) && ((angle & ANGLE_MASK) < 1919);
                     int quarter = abs(4 - (((angle + DEGREES_22_5) & ANGLE_MASK) >> 8));
 
-                    unsigned long kspr_idx = keepersprite_index(anim);
+                    uint32_t kspr_idx = keepersprite_index(anim);
                     struct KeeperSprite* kspr_arr = keepersprite_array(anim);
                     if (!kspr_arr) break;
 
                     const unsigned char* sprite_data = nullptr;
                     int spr_w = 0, spr_h = 0;
-                    unsigned long kid;
+                    uint32_t kid;
 
                     if (kspr_arr->Rotable == 0) {
                         kid = frame + kspr_idx;

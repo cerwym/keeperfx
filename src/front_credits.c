@@ -65,7 +65,7 @@ void frontstory_load(void)
     } else
     {
         LbDataLoadSetModifyFilenameFunction(defaultModifyDataLoadFilename);
-        LbPaletteSet(frontend_palette);
+        RendererPaletteSet(frontend_palette);
         srand(LbTimerClock());
 #if FUNCTESTING
         ftest_srand();

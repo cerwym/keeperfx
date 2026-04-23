@@ -225,13 +225,13 @@ void ProperFadePalette(unsigned char *pal, long fade_steps, enum TbPaletteFadeFl
 {
 /*    if (flg != Lb_PALETTE_FADE_CLOSED)
     {
-        LbPaletteFade(pal, fade_steps, flg);
+        RendererPaletteFade(pal, fade_steps, flg);
     } else*/
     if (lbAdvancedFade)
     {
         RendererPreserveFadeCache(1);
         TbClockMSec latest_loop_time = LbTimerClock();
-        while (LbPaletteFade(pal, fade_steps, Lb_PALETTE_FADE_OPEN) < fade_steps)
+        while (RendererPaletteFade(pal, fade_steps, Lb_PALETTE_FADE_OPEN) < fade_steps)
         {
           RendererPresentFrame();
           if (!is_key_pressed(KC_SPACE,KMod_DONTCARE) &&
@@ -247,11 +247,11 @@ void ProperFadePalette(unsigned char *pal, long fade_steps, enum TbPaletteFadeFl
     } else
     if (pal != NULL)
     {
-        LbPaletteSet(pal);
+        RendererPaletteSet(pal);
     } else
     {
         LbPaletteDataFillBlack(palette_buf);
-        LbPaletteSet(palette_buf);
+        RendererPaletteSet(palette_buf);
     }
 }
 
@@ -259,14 +259,14 @@ void ProperForcedFadePalette(unsigned char *pal, long fade_steps, enum TbPalette
 {
     if (flg == Lb_PALETTE_FADE_OPEN)
     {
-        LbPaletteFade(pal, fade_steps, flg);
+        RendererPaletteFade(pal, fade_steps, flg);
         return;
     }
     if (lbAdvancedFade)
     {
         RendererPreserveFadeCache(1);
         TbClockMSec latest_loop_time = LbTimerClock();
-        while (LbPaletteFade(pal, fade_steps, Lb_PALETTE_FADE_OPEN) < fade_steps)
+        while (RendererPaletteFade(pal, fade_steps, Lb_PALETTE_FADE_OPEN) < fade_steps)
         {
           RendererPresentFrame();
           latest_loop_time += lbFadeDelay;
@@ -279,11 +279,11 @@ void ProperForcedFadePalette(unsigned char *pal, long fade_steps, enum TbPalette
     } else
     if (pal != NULL)
     {
-        LbPaletteSet(pal);
+        RendererPaletteSet(pal);
     } else
     {
         memset(palette_buf, 0, sizeof(palette_buf));
-        LbPaletteSet(palette_buf);
+        RendererPaletteSet(palette_buf);
     }
 }
 
@@ -348,8 +348,8 @@ long PaletteFadePlayer(struct PlayerInfo *player)
       player->palette_fade_step_possession--;
   }
   // Set the palette to screen
-  LbScreenWaitVbi();
-  LbPaletteSet(palette);
+  RendererWaitVbi();
+  RendererPaletteSet(palette);
   return step;
 }
 

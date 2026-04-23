@@ -964,8 +964,8 @@ void RendererOpenGL::EndFrame()
                     (int)pcmd.cam_copy.mappos.y.val,
                     (int)pcmd.cam_copy.zoom);
 
-            const long saved_vw = vec_window_width;
-            const long saved_vh = vec_window_height;
+            const int32_t saved_vw = vec_window_width;
+            const int32_t saved_vh = vec_window_height;
             vec_window_width  = pw;
             vec_window_height = ph;
 
@@ -981,8 +981,8 @@ void RendererOpenGL::EndFrame()
             // Save projection globals so main-view mouse→world unprojection is unaffected.
             const Offset saved_vert[3] = { vert_offset[0], vert_offset[1], vert_offset[2] };
             const Offset saved_hori[3] = { hori_offset[0], hori_offset[1], hori_offset[2] };
-            const long   saved_x_init  = x_init_off;
-            const long   saved_y_init  = y_init_off;
+            const int32_t saved_x_init  = x_init_off;
+            const int32_t saved_y_init  = y_init_off;
 
             draw_view(const_cast<Camera*>(&pcmd.cam_copy), 0);
 

@@ -209,7 +209,7 @@ void GLMapFadePass::MarkDone()
 
 /******************************************************************************/
 
-long GLMapFadePass::StepFadeIn(long step)
+int32_t GLMapFadePass::StepFadeIn(int32_t step)
 {
     if (!m_initialized && !Init())
     {
@@ -235,12 +235,12 @@ long GLMapFadePass::StepFadeIn(long step)
 
     m_step = step;
 
-    long next = step + 4;
+    int32_t next = step + 4;
     if (next > 32) next = 32;
     return next;
 }
 
-long GLMapFadePass::StepFadeOut(long step)
+int32_t GLMapFadePass::StepFadeOut(int32_t step)
 {
     if (!m_initialized && !Init())
     {
@@ -264,7 +264,7 @@ long GLMapFadePass::StepFadeOut(long step)
 
     m_step = step;
 
-    long next = step - 4;
+    int32_t next = step - 4;
     if (next < 0) next = 0;
     return next;
 }

@@ -109,7 +109,7 @@ short play_smacker_file(char *filename, FrontendMenuState nstate)
   }
   RendererClearScreen(0);
   RendererPresentFrame();
-  LbPaletteSet(frontend_palette);
+  RendererPaletteSet(frontend_palette);
   if (nstate >= 0)
     frontend_set_state(nstate);
   lbDisplay.LeftButton = 0;

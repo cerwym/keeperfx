@@ -119,7 +119,7 @@ TbResult RendererResetScreen(TbBool exiting_application);
 /** Set the graphics viewport with bounds clamping.
  *  Updates lbDisplay.GraphicsWindow* fields and recomputes GraphicsWindowPtr.
  *  Replaces LbScreenSetGraphicsWindow(). */
-void RendererSetViewport(long x, long y, long width, long height);
+void RendererSetViewport(int32_t x, int32_t y, int32_t width, int32_t height);
 
 /** Save the current viewport into a TbGraphicsWindow struct.
  *  Use when you need named save slots (e.g. saving before a clip window swap).
@@ -155,6 +155,54 @@ TbScreenCoord RendererScreenHeight(void);
 /** Pointer to the locked CPU framebuffer, or NULL if not locked.
  *  Replaces lbDisplay.WScreen reads. */
 unsigned char* RendererGetWScreen(void);
+
+/******************************************************************************/
+/* Palette management (replaces LbPalette* functions)                         */
+/******************************************************************************/
+
+/** Set the 8-bit palette (768 bytes, 256 × RGB6).
+ *  Updates the SDL surface palette and lbDisplay.Palette.
+ *  Replaces LbPaletteSet(). */
+TbResult RendererPaletteSet(unsigned char *palette);
+
+/** Copy the current palette into the caller's buffer (768 bytes).
+ *  Replaces LbPaletteGet(). */
+TbResult RendererPaletteGet(unsigned char *palette);
+
+/** Drive one step of a palette fade.
+ *  Returns the current fade step count.
+ *  Replaces LbPaletteFade(). */
+int32_t RendererPaletteFade(unsigned char *pal, int32_t fade_steps, enum TbPaletteFadeFlag flg);
+
+/** Cancel an in-progress open fade.
+ *  Replaces LbPaletteStopOpenFade(). */
+TbResult RendererPaletteStopFade(void);
+
+/******************************************************************************/
+/* Screen lifecycle helpers                                                   */
+/******************************************************************************/
+
+/** One-time SDL video subsystem init and built-in mode registration.
+ *  Replaces LbScreenInitialize(). */
+TbResult RendererScreenInitialize(void);
+
+/** Enable or disable double-buffering for the draw surface.
+ *  Replaces LbScreenSetDoubleBuffering(). */
+TbResult RendererSetDoubleBuffering(TbBool state);
+
+/** Set the window title bar text.  Replaces LbSetTitle(). */
+TbResult RendererSetTitle(const char *title);
+
+/** Set the window icon resource.  Replaces LbSetIcon(). */
+TbResult RendererSetIcon(unsigned short nicon);
+
+/** Return the currently active screen mode enum value.
+ *  Replaces LbScreenActiveMode(). */
+TbScreenMode RendererActiveMode(void);
+
+/** Wait for vertical blanking interval (currently a no-op).
+ *  Replaces LbScreenWaitVbi(). */
+TbResult RendererWaitVbi(void);
 
 /** Standard clear colour matching DK palette index 0 (pure black).
  *  Use for all glClearColor calls so they stay consistent with RendererClearScreen(0). */
@@ -215,7 +263,7 @@ void WorldViewRenderer_DrawFrontView(struct Camera* cam);
 
 /** Submit a keeper-sprite (creature/object) for GPU rendering during the bucket walk.
  *  Returns 1 if the GPU handled it (CPU blit should be skipped), 0 to fall back. */
-int WorldViewRenderer_SubmitKeeperSprite(long dst_x, long dst_y, long dst_w, long dst_h,
+int WorldViewRenderer_SubmitKeeperSprite(int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
                                          const unsigned char* data, int src_w, int src_h,
                                          unsigned int draw_flags, const unsigned char* remap);
 
@@ -242,10 +290,10 @@ int WorldViewRenderer_GetCurrentSpriteWantsOutline(void);
 /******************************************************************************/
 
 /** Render one fade-in step (parchment → 3D view) and return next step value. */
-long MapFadePass_StepFadeIn(long step);
+int32_t MapFadePass_StepFadeIn(int32_t step);
 
 /** Render one fade-out step (3D view → parchment) and return next step value. */
-long MapFadePass_StepFadeOut(long step);
+int32_t MapFadePass_StepFadeOut(int32_t step);
 
 /******************************************************************************/
 /* C-callable text renderer wrappers                                          */
@@ -502,7 +550,7 @@ void UIRenderer_SubmitButtonSpriteFlipped(int32_t x, int32_t y, int units_per_px
  *  Digits are drawn right-to-left, horizontally centered on center_x.
  *  Each digit is scaled to w * h pixels.  Values <= 0 draw nothing.
  *  Used for floating gold text, HUD numbers, etc. */
-void UIRenderer_SubmitDigitSprites(int32_t center_x, int32_t y, int32_t w, int32_t h, long long value);
+void UIRenderer_SubmitDigitSprites(int32_t center_x, int32_t y, int32_t w, int32_t h, int64_t value);
 
 /** Submit a sprite with explicit pixel dimensions to the GPU batch.
  *  Called by game-logic hooks (draw_status_sprites, draw_engine_number, etc.)

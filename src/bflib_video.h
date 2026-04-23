@@ -286,9 +286,6 @@ extern unsigned short display_id;
 extern TbDisplayStruct lbDisplay;
 extern SDL_Window *lbWindow;
 /******************************************************************************/
-TbResult LbScreenInitialize(void);
-TbResult LbScreenSetDoubleBuffering(TbBool state);
-
 TbBool LbScreenIsModeAvailable(TbScreenMode mode, unsigned short display);
 TbScreenMode LbRecogniseVideoModeString(const char *desc);
 TbScreenMode LbRegisterVideoMode(const char *desc, TbScreenCoord width, TbScreenCoord height,
@@ -296,26 +293,17 @@ TbScreenMode LbRegisterVideoMode(const char *desc, TbScreenCoord width, TbScreen
 TbScreenMode LbRegisterVideoModeString(const char *desc);
 TbScreenModeInfo *LbScreenGetModeInfo(TbScreenMode mode);
 
-TbScreenMode LbScreenActiveMode(void);
 TbScreenCoord LbScreenWidth(void);
 TbScreenCoord LbScreenHeight(void);
 unsigned short LbGraphicsScreenBPP(void);
 TbScreenCoord LbGraphicsScreenWidth(void);
 TbScreenCoord LbGraphicsScreenHeight(void);
 
-TbResult LbScreenWaitVbi(void);
 unsigned short LbGetCurrentDisplayIndex();
 
-long LbPaletteFade(unsigned char *pal, long n, enum TbPaletteFadeFlag flg);
-TbResult LbPaletteStopOpenFade(void);
-TbResult LbPaletteSet(unsigned char *palette);
-TbResult LbPaletteGet(unsigned char *palette);
 TbPixel LbPaletteFindColour(const unsigned char *pal, unsigned char r, unsigned char g, unsigned char b);
 TbResult LbPaletteDataFillBlack(unsigned char *palette);
 TbResult LbPaletteDataFillWhite(unsigned char *palette);
-
-TbResult LbSetTitle(const char *title);
-TbResult LbSetIcon(unsigned short nicon);
 
 long scale_value_for_resolution(long base_value);
 long scale_value_for_resolution_with_upp(long base_value, long units_per_px);

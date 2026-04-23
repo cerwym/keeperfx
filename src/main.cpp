@@ -1734,8 +1734,8 @@ void PaletteSetPlayerPalette(struct PlayerInfo *player, unsigned char *pal)
         player->palette_fade_step_possession = 0;
         if (is_my_player(player))
         {
-            LbScreenWaitVbi();
-            LbPaletteSet(pal);
+            RendererWaitVbi();
+            RendererPaletteSet(pal);
         }
     }
 }
@@ -2077,7 +2077,7 @@ void check_players_lost(void)
             //this would easily prevent computer player activities on dead player, but it also makes dead player unable to use
             //floating spirit, so it can't be done this way: player->is_active = 0;
             if (is_my_player_number(i)) {
-                LbPaletteSet(engine_palette);
+                RendererPaletteSet(engine_palette);
             }
           }
       }
@@ -3675,7 +3675,7 @@ static TbBool wait_at_frontend(void)
       return true;
     }
     memset(scratch, 0, PALETTE_SIZE);
-    LbPaletteSet(scratch);
+    RendererPaletteSet(scratch);
     frontend_set_state(get_startup_menu_state());
     try_restore_frontend_error_box();
 
@@ -3744,7 +3744,7 @@ static TbBool wait_at_frontend(void)
 
     } while (!finish_menu);
 
-    LbPaletteFade(0, 8, Lb_PALETTE_FADE_CLOSED);
+    RendererPaletteFade(0, 8, Lb_PALETTE_FADE_CLOSED);
     RendererClearScreen(0);
     RendererPresentFrame();
     FrontendMenuState prev_state;
@@ -4284,11 +4284,11 @@ int LbBullfrogMain(unsigned short argc, char *argv[])
     SDL_Log("KeeperFX: LbTimerInit...");
     retval &= (LbTimerInit() != Lb_FAIL);
     SDL_Log("KeeperFX: LbScreenInitialize... (retval so far=%d)", retval);
-    retval &= (LbScreenInitialize() != Lb_FAIL);
+    retval &= (RendererScreenInitialize() != Lb_FAIL);
     SDL_Log("KeeperFX: screen init done retval=%d", retval);
-    LbSetTitle(PROGRAM_NAME);
-    LbSetIcon(1);
-    LbScreenSetDoubleBuffering(true);
+    RendererSetTitle(PROGRAM_NAME);
+    RendererSetIcon(1);
+    RendererSetDoubleBuffering(true);
     srand(LbTimerClock());
 
 #ifdef FUNCTESTING
