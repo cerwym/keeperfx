@@ -190,11 +190,11 @@ void RenderPassSystem::EndFrame()
     RenderPassProfiler::GetInstance().EndFrame();
 }
 
-void RenderPassSystem::FlushNow()
+void RenderPassSystem::DrawNow()
 {
     static int flush_debug_count = 0;
     if (flush_debug_count < 5) {
-        SYNCLOG("RenderPassSystem::FlushNow: backend=%s active=%d", 
+        SYNCLOG("RenderPassSystem::DrawNow: backend=%s active=%d", 
                 m_backend ? m_backend->GetName() : "nullptr", g_render_pass_active);
         flush_debug_count++;
     }
@@ -202,7 +202,7 @@ void RenderPassSystem::FlushNow()
     if (!m_backend) {
         return;
     }
-    m_backend->FlushNow();
+    m_backend->DrawNow();
 }
 
 void RenderPassSystem::SetScreenSize(int w, int h)
@@ -298,9 +298,9 @@ void RenderPass_EndFrame(void)
     RenderPassSystem::GetInstance().EndFrame();
 }
 
-void RenderPass_FlushNow(void)
+void RenderPass_DrawNow(void)
 {
-    RenderPassSystem::GetInstance().FlushNow();
+    RenderPassSystem::GetInstance().DrawNow();
 }
 
 void RenderPass_OnSpriteSheetLoaded(const struct TbSpriteSheet* sheet)

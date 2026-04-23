@@ -52,18 +52,18 @@ public:
     // IWorldViewRenderer
     void BeginWorldPass(unsigned char* framebuf, int pitch, int w, int h,
                         int vp_x, int vp_y) override;
-    void FlushIsometricView() override;
-    void FlushFrontView(struct Camera* cam) override;
+    void DrawIsometricView() override;
+    void DrawFrontView(struct Camera* cam) override;
     const char* GetName() const override { return "GLWorldViewRenderer"; }
-    // Called by RendererOpenGL::EndFrame() to issue the accumulated draw call
+    // Called by RendererOpenGL::EndFrame() to issue the accumulated draw list
     // after glClear() and before the CPU framebuffer blit overlay.
-    void GPUFlushNow();
+    void GPURenderNow();
 
     /** Render the accumulated draw list into the currently-bound FBO.
      *  The caller is responsible for binding/unbinding the FBO and clearing it.
      *  m_screen_w/h must already be set to pip_w/pip_h via a preceding
      *  BeginWorldPass(nullptr, 0, pip_w, pip_h, 0, 0) call. */
-    void GPUFlushNow_ToFBO(int pip_w, int pip_h);
+    void GPURenderToFBO(int pip_w, int pip_h);
 
     // IWorldViewRenderer: submit a keeper-sprite through the GPU path.
     int SubmitKeeperSprite(long dst_x, long dst_y, long dst_w, long dst_h,
@@ -85,7 +85,7 @@ public:
     void AddWorldText(float world_x, float world_y, float world_z,
                      const char* text, int color, float scale, int bucket_num);
 
-    // Called by GLUIRenderer::Flush() (via UIRenderer_Flush) to render power-hand
+    // Called by GLUIRenderer::Draw() (via UIRenderer_Draw) to render power-hand
     // keeper sprites after glClear() with full-screen NDC coordinates.
     // Saves m_screen_w/h and m_current_sprite_z, sets them to MyScreenWidth/Height
     // and z=-1 (near plane, always on top), restores in EndHandSpriteRendering().
@@ -128,10 +128,10 @@ private:
 
     // Record the current tile batch as a deferred draw command; advances the
     // batch start pointer.  No GL calls are issued — everything is replayed
-    // in GPUFlushNow() after glClear().
+    // in GPURenderNow() after glClear().
     void gpu_flush();
 
-    /** Core GL draw pass shared by GPUFlushNow() and GPUFlushNow_ToFBO().
+    /** Core GL draw pass shared by GPURenderNow() and GPURenderToFBO().
      *  Uploads the vertex buffer, sets the given viewport (already in GL
      *  bottom-origin coords), executes all three draw passes, then resets the
      *  viewport to the full screen and clears the draw-command lists. */
@@ -140,7 +140,7 @@ private:
     // Setup world sprite processing for a bucket (replaces global hook approach)
     void setup_world_sprite_processing(long bucket_num);
 
-    // Deferred draw command (built during FlushIsometricView, executed by GPUFlushNow)
+    // Deferred draw command (built during DrawIsometricView, executed by GPURenderNow)
     struct DrawCmd {
         enum Type { CMD_TILES, CMD_SPRITES, CMD_SHADOWS, CMD_WORLDTEXT, CMD_FLAT_POLYS } type;
         // CMD_TILES fields
@@ -155,8 +155,8 @@ private:
         int worldtext_idx = 0;
     };
 
-    // Per-shadow data recorded during FlushIsometricView, consumed by GPUFlushNow.
-    // Sprite data is resolved eagerly during bucket walk so GPUFlushNow
+    // Per-shadow data recorded during DrawIsometricView, consumed by GPURenderNow.
+    // Sprite data is resolved eagerly during bucket walk so GPURenderNow
     // stays pure-GPU (no calls back into engine_render C functions).
     struct ShadowCmd {
         struct PolyPoint verts[4];      // vertex_first..fourth (screen-px coords + 16.16 UV)
@@ -168,11 +168,11 @@ private:
         float            ndc_z;          // NDC depth of shadow's floor bucket, used for depth testing
     };
 
-    // Per-world-text data recorded during FlushIsometricView, consumed by GPUFlushNow
+    // Per-world-text data recorded during DrawIsometricView, consumed by GPURenderNow
     struct WorldTextCmd {
         float world_x, world_y, world_z; // 3D world position 
         float ndc_z;                     // Computed NDC depth for depth testing
-        const char* text;                // Text string to render (must remain valid until GPUFlushNow)
+        const char* text;                // Text string to render (must remain valid until GPURenderNow)
         int   bucket_num;                // Bucket number for depth sorting
         int   color;                     // Text color index
         float scale;                     // Text scale factor
@@ -184,8 +184,8 @@ private:
     float m_saved_sprite_z   = 0.0f;
 
     // Flat-colour polygon vertex: screen-pixel XY, NDC Z depth, linear RGB.
-    // Built during FlushIsometricView for QK_PolyMode0/4/BasicPolygon,
-    // uploaded once in GPUFlushNow and drawn with the flat-poly shader.
+    // Built during DrawIsometricView for QK_PolyMode0/4/BasicPolygon,
+    // uploaded once in GPURenderNow and drawn with the flat-poly shader.
     struct FlatPolyVertex { float x, y, z, r, g, b; };
 
     // Injected resources (not owned)
@@ -303,7 +303,7 @@ private:
     int          m_cmd_vert_start = 0;  // start index of current accumulating tile batch
     int          m_current_variation = 0; // atlas variation currently staging
 
-    // Deferred draw list — built during FlushIsometricView(), executed in GPUFlushNow()
+    // Deferred draw list — built during DrawIsometricView(), executed in GPURenderNow()
     std::vector<DrawCmd>      m_draw_cmds;
     std::vector<ShadowCmd>    m_shadow_cmds;
     std::vector<WorldTextCmd> m_worldtext_cmds;
@@ -317,7 +317,7 @@ private:
     GLTextRenderer* m_text_renderer = nullptr;
 
     bool m_initialized = false;
-    // Set to true in BeginWorldPass(); reset to false at the end of GPUFlushNow().
+    // Set to true in BeginWorldPass(); reset to false at the end of GPURenderNow().
     // Tracks whether the world renderer is actually being used this frame.
     bool m_world_pass_active = false;
 };

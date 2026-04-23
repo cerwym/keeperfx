@@ -4,27 +4,27 @@
 /** @file IWorldViewRenderer.h
  *     Abstract interface for 3D world-view rendering.
  * @par Purpose:
- *     Separates the 3D world-view rendering pipeline (bucket flush + rasterizer)
+ *     Separates the 3D world-view rendering pipeline (bucket submission + rasterizer)
  *     from the rest of the game. The bucket-fill step (geometry walk, column
  *     traversal, polygon-add calls) is platform-neutral and stays unchanged.
- *     Only the flush step — what is done with the accumulated bucket list —
+ *     Only the draw step — what is done with the accumulated bucket list —
  *     is abstracted here.
  *
  * @par Design:
  *     Three calls per frame for each rendered view:
  *       1. BeginWorldPass()  — bind the target framebuffer and setup rasterizer
  *       2. [game code fills the bucket list via draw_view() / draw_frontview_engine()]
- *       3. FlushIsometricView() or FlushFrontView() — rasterize the bucket list
+ *       3. DrawIsometricView() or DrawFrontView() — rasterize the bucket list
  *
  *     Software implementation:
- *       BeginWorldPass  → setup_vecs(framebuf, NULL, pitch, w, h)
- *       FlushIsometric  → display_drawlist()
- *       FlushFrontView  → display_fast_drawlist(cam)
+ *       BeginWorldPass     → setup_vecs(framebuf, NULL, pitch, w, h)
+ *       DrawIsometricView  → display_drawlist()
+ *       DrawFrontView      → display_fast_drawlist(cam)
  *
  *     Future GPU implementation:
- *       BeginWorldPass  → begin GPU geometry pass
- *       FlushIsometric  → submit bucket list as GPU draw calls
- *       FlushFrontView  → submit front-view bucket list as GPU draw calls
+ *       BeginWorldPass     → begin GPU geometry pass
+ *       DrawIsometricView  → submit bucket list as GPU draw calls
+ *       DrawFrontView      → submit front-view bucket list as GPU draw calls
  */
 /******************************************************************************/
 #ifndef IWORLD_VIEW_RENDERER_H
@@ -57,16 +57,16 @@ public:
                                 int vp_x, int vp_y) = 0;
 
     // =========================================================================
-    // Flush
+    // Draw
 
     /** Rasterize the isometric/1st-person bucket list into the bound framebuffer.
      *  Wraps display_drawlist() on the software path. */
-    virtual void FlushIsometricView() = 0;
+    virtual void DrawIsometricView() = 0;
 
     /** Rasterize the front-view bucket list into the bound framebuffer.
      *  Wraps display_fast_drawlist(cam) on the software path.
      *  @param cam  Camera used for front-view projection. */
-    virtual void FlushFrontView(struct Camera* cam) = 0;
+    virtual void DrawFrontView(struct Camera* cam) = 0;
 
     // =========================================================================
     // Info

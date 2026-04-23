@@ -742,6 +742,26 @@ int RendererIsScreenLocked(void)
 }
 
 /******************************************************************************/
+/* Screen setup / teardown (replaces LbScreenSetup / LbScreenReset)           */
+/******************************************************************************/
+
+// Internal bflib_video.c implementations — kept there because they own SDL statics.
+extern "C" TbResult LbScreenSetup(TbScreenMode mode, TbScreenCoord width, TbScreenCoord height,
+    unsigned char *palette, short buffers_count, TbBool wscreen_vid);
+extern "C" TbResult LbScreenReset(TbBool exiting_application);
+
+TbResult RendererSetupScreen(TbScreenMode mode, TbScreenCoord width, TbScreenCoord height,
+    unsigned char *palette, short buffers_count, TbBool wscreen_vid)
+{
+    return LbScreenSetup(mode, width, height, palette, buffers_count, wscreen_vid);
+}
+
+TbResult RendererResetScreen(TbBool exiting_application)
+{
+    return LbScreenReset(exiting_application);
+}
+
+/******************************************************************************/
 /* Graphics viewport (replaces LbScreenSetGraphicsWindow / Store / Load)      */
 /******************************************************************************/
 
@@ -804,16 +824,16 @@ void WorldViewRenderer_BeginWorldPass(unsigned char* framebuf, int pitch, int w,
         s_worldViewRenderer->BeginWorldPass(framebuf, pitch, w, h, vp_x, vp_y);
 }
 
-void WorldViewRenderer_FlushIsometricView(void)
+void WorldViewRenderer_DrawIsometricView(void)
 {
     if (s_worldViewRenderer)
-        s_worldViewRenderer->FlushIsometricView();
+        s_worldViewRenderer->DrawIsometricView();
 }
 
-void WorldViewRenderer_FlushFrontView(struct Camera* cam)
+void WorldViewRenderer_DrawFrontView(struct Camera* cam)
 {
     if (s_worldViewRenderer)
-        s_worldViewRenderer->FlushFrontView(cam);
+        s_worldViewRenderer->DrawFrontView(cam);
 }
 
 int WorldViewRenderer_SubmitKeeperSprite(long dst_x, long dst_y, long dst_w, long dst_h,
@@ -863,10 +883,10 @@ int WorldViewRenderer_GetCurrentSpriteWantsOutline(void)
 /* C-callable cursor layer wrappers                                           */
 /******************************************************************************/
 
-void CursorLayer_Flush(void)
+void CursorLayer_Draw(void)
 {
     if (s_cursorLayer)
-        s_cursorLayer->Flush();
+        s_cursorLayer->Draw();
 }
 
 void CursorLayer_Clear(void)
@@ -964,10 +984,10 @@ TbBool TextRenderer_DrawTextAt(int32_t screen_x, int32_t screen_y, int32_t units
     return false;
 }
 
-void TextRenderer_Flush(void)
+void TextRenderer_Draw(void)
 {
     if (s_textRenderer)
-        s_textRenderer->Flush();
+        s_textRenderer->Draw();
 }
 
 int32_t TextRenderer_LineHeight(void)
@@ -1119,10 +1139,10 @@ void UIRenderer_EndTopOverlay(void)
         s_uiRenderer->ClearTopOverlay();
 }
 
-void UIRenderer_FlushHandSprites(void)
+void UIRenderer_DrawHandSprites(void)
 {
     // Legacy stub — kept so existing callers compile until fully purged.
-    // Real flush now happens via CursorLayer_Flush().
+    // Real draw now happens via CursorLayer_Draw().
 }
 
 void UIRenderer_SubmitKeeperSprite(short x, short y, unsigned short kspr_base,
@@ -1295,22 +1315,22 @@ void UIRenderer_SetLayer(int layer)
         s_uiRenderer->SetLayer(layer);
 }
 
-void UIRenderer_FlushBack(void)
+void UIRenderer_DrawBack(void)
 {
     if (s_uiRenderer)
-        s_uiRenderer->FlushBack();
+        s_uiRenderer->DrawBack();
 }
 
-void UIRenderer_FlushFront(void)
+void UIRenderer_DrawFront(void)
 {
     if (s_uiRenderer)
-        s_uiRenderer->FlushFront();
+        s_uiRenderer->DrawFront();
 }
 
-void UIRenderer_Flush(void)
+void UIRenderer_Draw(void)
 {
     if (s_uiRenderer)
-        s_uiRenderer->Flush();
+        s_uiRenderer->Draw();
 }
 
 void UIRenderer_Clear(void)

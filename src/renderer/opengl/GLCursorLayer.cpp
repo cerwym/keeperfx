@@ -5,12 +5,12 @@
  *     OpenGL implementation of ICursorLayer.
  *
  *     Pointer sprites are submitted through the existing GLUIRenderer atlas
- *     path (SubmitPanelSprite → FlushCursorSprites), so they share the same
+ *     path (SubmitPanelSprite → DrawCursorSprites), so they share the same
  *     codec as every other UI sprite.  Keeper-hand sprites are rendered via
  *     GLWorldViewRenderer::BeginHandSpriteRendering and process_keeper_sprite,
- *     exactly as the old GLUIRenderer::FlushHandSprites did.
+ *     exactly as the old GLUIRenderer::DrawHandSprites did.
  *
- *     Both are flushed in a single Flush() call as the absolute last step
+ *     Both are drawn in a single Draw() call as the absolute last step
  *     before platform_swap_gl_buffers(), so neither is ever tinted or obscured.
  */
 /******************************************************************************/
@@ -62,11 +62,11 @@ void GLCursorLayer::SubmitKeeperHandSprite(short x, short y,
     m_keepers.push_back(k);
 }
 
-void GLCursorLayer::Flush()
+void GLCursorLayer::Draw()
 {
     // ── Pointer sprites (atlas quad path) ────────────────────────────────────
-    // GLUIRenderer::FlushFront() has already run, so m_ui_quads is empty.
-    // Submitting here and calling FlushCursorSprites() targets only these quads.
+    // GLUIRenderer::DrawFront() has already run, so m_ui_quads is empty.
+    // Submitting here and calling DrawCursorSprites() targets only these quads.
     if (!m_pointers.empty() && m_glui && m_atlas)
     {
         for (const auto& p : m_pointers)
@@ -78,7 +78,7 @@ void GLCursorLayer::Flush()
             m_glui->SubmitPanelSprite((int32_t)p.x, (int32_t)p.y,
                                       p.units_per_px, h);
         }
-        m_glui->FlushCursorSprites();
+        m_glui->DrawCursorSprites();
     }
 
     // ── Keeper-hand sprites (world-view renderer path) ────────────────────────

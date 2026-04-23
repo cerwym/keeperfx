@@ -3919,7 +3919,7 @@ short reset_game(void)
 
     LbMouseSuspend();
     LbIKeyboardClose();
-    LbScreenReset(false);
+    RendererResetScreen(false);
     RendererShutdown();
     free_gui_strings_data();
     free_level_strings_data();
@@ -4345,7 +4345,7 @@ int LbBullfrogMain(unsigned short argc, char *argv[])
         game_loop();
     }
     reset_game();
-    LbScreenReset(true);
+    RendererResetScreen(true);
     if ( retval == 0 )
     {
         static const char *msg_text="Setting up game failed.\n";

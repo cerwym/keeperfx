@@ -25,7 +25,7 @@
 #include "bflib_render.h"      // PolyPoint, render_fade_tables
 #include "bflib_video.h"       // MyScreenWidth, MyScreenHeight
 #include "bflib_basics.h"      // ERRORLOG / SYNCLOG / WARNLOG
-#include "renderer/RenderPass_C.h" // RenderPass_FlushNow()
+#include "renderer/RenderPass_C.h" // RenderPass_DrawNow()
 #include "renderer/RenderPass.h"    // RenderPassSystem::SetScreenSize()
 #include "renderer/backends/OpenGLSpriteBackend.h" // SetCurrentBucketZ()
 #include "creature_graphics.h" // KeeperSprite structure
@@ -1281,7 +1281,7 @@ void GLWorldViewRenderer::gpu_flush()
         return;
 
     // Record the current tile batch as a deferred draw command.
-    // No GL calls are issued here — everything is replayed in GPUFlushNow()
+    // No GL calls are issued here — everything is replayed in GPURenderNow()
     // AFTER RendererOpenGL::EndFrame() calls glClear().
     DrawCmd cmd;
     cmd.type       = DrawCmd::CMD_TILES;
@@ -1292,9 +1292,9 @@ void GLWorldViewRenderer::gpu_flush()
     m_cmd_vert_start = m_vert_count;
 }
 
-void GLWorldViewRenderer::GPUFlushNow()
+void GLWorldViewRenderer::GPURenderNow()
 {
-    KFX_ZONE("WVR::GPUFlushNow");
+    KFX_ZONE("WVR::GPURenderNow");
     KFX_GPU_ZONE("Frame::WorldPass");
     KFX_GL_SCOPE(world_pass_dbg, "WorldPass");
 
@@ -1314,7 +1314,7 @@ void GLWorldViewRenderer::GPUFlushNow()
     // Flush any tile batch that hasn't been recorded yet.
     gpu_flush();
 
-    SYNCDBG(9, "GPUFlushNow: verts=%d cmds=%d vp=(%d,%d %dx%d)",
+    SYNCDBG(9, "GPURenderNow: verts=%d cmds=%d vp=(%d,%d %dx%d)",
             m_vert_count, (int)m_draw_cmds.size(),
             m_vp_x, m_vp_y, m_screen_w, m_screen_h);
 
@@ -1325,11 +1325,11 @@ void GLWorldViewRenderer::GPUFlushNow()
     gpu_execute_passes(m_vp_x, vp_y_gl);
 }
 
-void GLWorldViewRenderer::GPUFlushNow_ToFBO(int pip_w, int pip_h)
+void GLWorldViewRenderer::GPURenderToFBO(int pip_w, int pip_h)
 {
-    KFX_ZONE("WVR::GPUFlushNow_ToFBO");
+    KFX_ZONE("WVR::GPURenderToFBO");
 
-    // m_world_pass_active is already false (cleared by the main GPUFlushNow
+    // m_world_pass_active is already false (cleared by the main GPURenderNow
     // call earlier in the same EndFrame).  m_screen_w/h are pip_w/pip_h as
     // set by the preceding BeginWorldPass(nullptr, 0, pip_w, pip_h, 0, 0).
     if (!m_initialized)
@@ -1342,7 +1342,7 @@ void GLWorldViewRenderer::GPUFlushNow_ToFBO(int pip_w, int pip_h)
 
     gpu_flush();
 
-    SYNCDBG(7, "GPUFlushNow_ToFBO: cmds=%d verts=%d pip=%dx%d",
+    SYNCDBG(7, "GPURenderToFBO: cmds=%d verts=%d pip=%dx%d",
             (int)m_draw_cmds.size(), m_vert_count, pip_w, pip_h);
 
     if (m_draw_cmds.empty())
@@ -1546,7 +1546,7 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
     // ── Pass 3: Sprites and world text ───────────────────────────────────────
     // Sprites depth-test against the tile z-buffer written in pass 1 (wall
     // occlusion).  Back-to-front bucket order is preserved because
-    // FlushIsometricView recorded CMD_SPRITES entries highest-bucket-first.
+    // DrawIsometricView recorded CMD_SPRITES entries highest-bucket-first.
     for (const auto& cmd : m_draw_cmds)
     {
         if (cmd.type == DrawCmd::CMD_SPRITES)
@@ -1563,7 +1563,7 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
 
             setup_world_sprite_processing(cmd.bucket_num);
             draw_3d_sprites_for_bucket(cmd.bucket_num);
-            RenderPass_FlushNow();
+            RenderPass_DrawNow();
 
             RenderPassSystem::GetInstance().SetScreenSize(0, 0);
 
@@ -1629,12 +1629,12 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
 
 /******************************************************************************/
 
-void GLWorldViewRenderer::FlushIsometricView()
+void GLWorldViewRenderer::DrawIsometricView()
 {
-    KFX_ZONE("WVR::FlushIsometricView");
+    KFX_ZONE("WVR::DrawIsometricView");
     if (!m_initialized) {
         // Fall back to software if GL resources not ready
-        if (m_sw_fallback) m_sw_fallback->FlushIsometricView();
+        if (m_sw_fallback) m_sw_fallback->DrawIsometricView();
         return;
     }
 
@@ -1848,14 +1848,14 @@ void GLWorldViewRenderer::FlushIsometricView()
     }
 
     // draw_nonspatial_sprites_gpu() is intentionally NOT called here.
-    // It is called from engine_render.c immediately after WorldViewRenderer_FlushIsometricView(),
+    // It is called from engine_render.c immediately after WorldViewRenderer_DrawIsometricView(),
     // guarded by cam->view_mode so it only runs for isometric/creature views (not parchment map).
 }
 
-void GLWorldViewRenderer::FlushFrontView(struct Camera* cam)
+void GLWorldViewRenderer::DrawFrontView(struct Camera* cam)
 {
     // When the GPU renderer is active, front-view geometry is already captured
-    // via the bucket walk in FlushIsometricView (the engine fills the same
+    // via the bucket walk in DrawIsometricView (the engine fills the same
     // bucket list for both iso and front views).  Calling the software fallback
     // would draw into the staging buffer and then we'd have to zero it to
     // prevent those CPU-rasterised pixels from compositing over the GPU output,
@@ -1865,7 +1865,7 @@ void GLWorldViewRenderer::FlushFrontView(struct Camera* cam)
 
     // GPU not ready — fall back to software.
     if (m_sw_fallback)
-        m_sw_fallback->FlushFrontView(cam);
+        m_sw_fallback->DrawFrontView(cam);
 }
 
 /******************************************************************************/

@@ -65,11 +65,11 @@ void RenderPass_BeginFrame(void);
 void RenderPass_EndFrame(void);
 
 /**
- * Immediately flush any queued sprite draws to the GPU framebuffer.
+ * Immediately draw any queued sprite draws to the GPU framebuffer.
  * Call after gpu_flush() and a sprite draw function to composite sprites
  * at the correct depth during the bucket walk.
  */
-void RenderPass_FlushNow(void);
+void RenderPass_DrawNow(void);
 
 /**
  * Notify backend when sprite sheet is loaded

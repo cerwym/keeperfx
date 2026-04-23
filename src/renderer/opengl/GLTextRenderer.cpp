@@ -62,7 +62,7 @@ GLTextRenderer::~GLTextRenderer()
 
 bool GLTextRenderer::Init()
 {
-    // Atlases are created lazily in Flush() per unique font pointer.
+    // Atlases are created lazily in Draw() per unique font pointer.
 
     // Compile shaders
     if (!CompileShaders())
@@ -444,9 +444,9 @@ void GLTextRenderer::gl_draw_segment(const char* sbuf, const char* ebuf,
                        (float)space_len, scale);
 }
 
-void GLTextRenderer::Flush()
+void GLTextRenderer::Draw()
 {
-    KFX_ZONE("TextRenderer::Flush");
+    KFX_ZONE("TextRenderer::Draw");
     KFX_GPU_ZONE("TextPass");
     KFX_GL_SCOPE(text_grp, "TextPass");
     if (m_pending.empty())
@@ -455,7 +455,7 @@ void GLTextRenderer::Flush()
     { // Diagnostic
         static int s_diag_frame = 0;
         if ((s_diag_frame++ % 300) == 0)
-            SYNCLOG("GLTextRenderer::Flush: %d pending text draws", (int)m_pending.size());
+            SYNCLOG("GLTextRenderer::Draw: %d pending text draws", (int)m_pending.size());
     }
 
     if (m_screen_width <= 0 || m_screen_height <= 0)
@@ -483,7 +483,7 @@ void GLTextRenderer::Flush()
     glBindTexture(GL_TEXTURE_2D, m_palette_tex);
 
     // CRITICAL: Reset active atlas tracker because other renderers (minimap, sprites)
-    // bind their textures to GL_TEXTURE0 between our Flush() calls, corrupting state.
+    // bind their textures to GL_TEXTURE0 between our Draw() calls, corrupting state.
     // We must rebind the font atlas texture for the first draw of each frame.
     m_active_atlas = nullptr;
     m_active_dbc_atlas = nullptr;
@@ -529,7 +529,7 @@ void GLTextRenderer::Flush()
                         glActiveTexture(GL_TEXTURE0);
                         if (!dbc_atlas->Init(d.dbc_font))
                         {
-                            ERRORLOG("GLTextRenderer::Flush: failed to rebuild DBC atlas for font %p", d.dbc_font);
+                            ERRORLOG("GLTextRenderer::Draw: failed to rebuild DBC atlas for font %p", d.dbc_font);
                             m_dbc_atlas_cache.erase(it);
                             delete dbc_atlas;
                             continue;
@@ -546,7 +546,7 @@ void GLTextRenderer::Flush()
                     glActiveTexture(GL_TEXTURE0);
                     if (!dbc_atlas->Init(d.dbc_font))
                     {
-                        ERRORLOG("GLTextRenderer::Flush: failed to init DBC atlas for font %p", d.dbc_font);
+                        ERRORLOG("GLTextRenderer::Draw: failed to init DBC atlas for font %p", d.dbc_font);
                         delete dbc_atlas;
                         continue;
                     }
@@ -583,7 +583,7 @@ void GLTextRenderer::Flush()
                         glActiveTexture(GL_TEXTURE0);
                         if (!atlas->Init(d.font))
                         {
-                            ERRORLOG("GLTextRenderer::Flush: failed to rebuild atlas for font %p", d.font);
+                            ERRORLOG("GLTextRenderer::Draw: failed to rebuild atlas for font %p", d.font);
                             m_atlas_cache.erase(it);
                             delete atlas;
                             continue;
@@ -600,7 +600,7 @@ void GLTextRenderer::Flush()
                     glActiveTexture(GL_TEXTURE0);
                     if (!atlas->Init(d.font))
                     {
-                        ERRORLOG("GLTextRenderer::Flush: failed to init atlas for font %p", d.font);
+                        ERRORLOG("GLTextRenderer::Draw: failed to init atlas for font %p", d.font);
                         delete atlas;
                         continue;
                     }

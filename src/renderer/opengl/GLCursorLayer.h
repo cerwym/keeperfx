@@ -44,15 +44,15 @@ public:
     virtual ~GLCursorLayer() = default;
 
     /** Set the world-view renderer used to drive keeper-sprite GL state.
-     *  Must be called before the first Flush().  Not owned. */
+     *  Must be called before the first Draw().  Not owned. */
     void SetWorldViewRenderer(GLWorldViewRenderer* wvr) { m_wvr = wvr; }
 
     /** Set the sprite atlas used to resolve pointer sprites to UV coordinates.
-     *  Must be called before the first Flush().  Not owned. */
+     *  Must be called before the first Draw().  Not owned. */
     void SetSpriteAtlas(GLSpriteAtlas* atlas) { m_atlas = atlas; }
 
-    /** Set the GLUIRenderer used to flush atlas quads for pointer sprites.
-     *  Must be called before the first Flush().  Not owned. */
+    /** Set the GLUIRenderer used to draw atlas quads for pointer sprites.
+     *  Must be called before the first Draw().  Not owned. */
     void SetGLUIRenderer(GLUIRenderer* glui) { m_glui = glui; }
 
     // ICursorLayer interface
@@ -66,7 +66,7 @@ public:
                                         unsigned char sprgroup,
                                         int32_t scale) override;
 
-    virtual void Flush() override;
+    virtual void Draw() override;
     virtual void Clear() override;
     virtual const char* GetName() const override { return "GL_CURSOR"; }
 

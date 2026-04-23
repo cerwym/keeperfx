@@ -136,7 +136,7 @@ bool RendererSoftware::BeginFrame()
 void RendererSoftware::EndFrame()
 {
     // Draw the cursor into WScreen before blitting to the window.
-    CursorLayer_Flush();
+    CursorLayer_Draw();
 
     // Refresh the window surface pointer each frame (guards against window resize / alt-tab).
     lbScreenSurface = SDL_GetWindowSurface(lbWindow);

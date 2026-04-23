@@ -561,7 +561,7 @@ bool RendererOpenGL::BeginFrame()
  *       Wipes the colour + depth buffer to the GL clear colour (black).
  *       Everything below composites on top of this.
  *
- *  Step 2 — GPUFlushNow()                      [GLWorldViewRenderer]
+ *  Step 2 — GPURenderNow()                      [GLWorldViewRenderer]
  *       Replays the bucket-walk command list:
  *         CMD_TILES    — indexed-colour tile meshes (world geometry)
  *         CMD_SHADOWS  — per-creature floor-shadow quads
@@ -571,8 +571,8 @@ bool RendererOpenGL::BeginFrame()
  *       Shade is per-vertex Gouraud from the DK fade table (mode 0) or
  *       per-fragment lightmap (mode 1, Phase 3+).
  *
- *  Step 3 — UIRenderer_FlushBack()               [GLUIRenderer, layer=0]
- *       Flushes UIQuads tagged layer=0 (back):
+ *  Step 3 — UIRenderer_DrawBack()               [GLUIRenderer, layer=0]
+ *       Draws UIQuads tagged layer=0 (back):
  *         mode 10 — tiled slab-background quads (sidebar panel fill)
  *         mode  3 — solid-colour quads (progress bar trough fills)
  *         mode  0 — palette-indexed atlas sprites (back-layer panel sprites)
@@ -587,16 +587,16 @@ bool RendererOpenGL::BeginFrame()
  *       Index 0 = transparent (alpha 0); non-zero pixels composite over Step 3.
  *       Used by compressed_window_draw() (campaign map window frame) and similar.
  *
- *  Step 5 — TextRenderer_Flush()                 [GLTextRenderer, non-overlay]
+ *  Step 5 — TextRenderer_Draw()                 [GLTextRenderer, non-overlay]
  *       Renders all non-overlay deferred text BEFORE sprite layers so the
  *       tooltip box (layer 3) can composite on top of event messages etc.
  *
- *  Step 6 — UIRenderer_FlushFront()              [GLUIRenderer, layers 1→2→3]
+ *  Step 6 — UIRenderer_DrawFront()              [GLUIRenderer, layers 1→2→3]
  *       Layer 1: panel/button atlas sprites, escape menu, battler icons, gems.
  *       Layer 2: world-depth-tested sprites (creature status flowers, payday digits).
  *       Layer 3: top-overlay sprites (tooltip box, slab selector) — rendered last.
  *
- *  Step 7 — TextRenderer_FlushOverlay()          [GLTextRenderer, overlay]
+ *  Step 7 — TextRenderer_DrawOverlay()          [GLTextRenderer, overlay]
  *       Renders overlay-tagged text (tooltip text) AFTER layer-3 sprites so it
  *       is readable over the tooltip box background.
  *
@@ -604,7 +604,7 @@ bool RendererOpenGL::BeginFrame()
  *       Composites possession/pain (red) or death-flash (white) tint over all
  *       scene content.  Runs before the cursor so the cursor is never tinted.
  *
- *  Step 9 — CursorLayer_Flush()               [GLCursorLayer]
+ *  Step 9 — CursorLayer_Draw()               [GLCursorLayer]
  *       OS pointer sprite (pointer_sprites atlas) + power-hand keeper sprites,
  *       rendered as absolute last layer before the buffer swap.
  *       Cursor drawn absolutely last — after the tint overlay — so it is always
@@ -613,7 +613,7 @@ bool RendererOpenGL::BeginFrame()
  *  Step 9 — platform_swap_gl_buffers()
  *       Flips the back buffer to the display.
  *
- *  The GPUFlushNow tile meshes are one draw per tile variation (all-opaque);
+ *  The GPURenderNow tile meshes are one draw per tile variation (all-opaque);
  *  shadows are one draw call each; sprites are batched by bucket depth.
  *  UI quads are one draw call per render-mode pass per layer.
  *  ============================================================ */
@@ -638,7 +638,7 @@ void RendererOpenGL::EndFrame()
     // 1 KB CPU expand + glTexSubImage2D is negligible compared to other frame work.
     upload_palette_texture();
 
-    // Restore depth mask before clearing — GPUFlushNow() ends with
+    // Restore depth mask before clearing — GPURenderNow() ends with
     // glDepthMask(GL_FALSE) to protect against accidental depth writes during
     // the overlay blit, but glClear(GL_DEPTH_BUFFER_BIT) respects the mask.
     glDepthMask(GL_TRUE);
@@ -653,11 +653,11 @@ void RendererOpenGL::EndFrame()
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     m_clearColourIndex = 0; // reset to black; caller must call ClearScreen() each frame if non-zero
 
-    // Flush GPU world geometry + depth-correct sprites.
+    // Render GPU world geometry + depth-correct sprites.
     // Runs BEFORE the staging buffer upload so both layers composite correctly.
     if (m_world_renderer)
     {
-        m_world_renderer->GPUFlushNow();
+        m_world_renderer->GPURenderNow();
         // Clear the rawblit cache unless a blocking palette-fade loop has
         // explicitly requested preservation (RendererPreserveFadeCache(1)).
         // Without this guard the cache is destroyed on the first EndFrame
@@ -670,12 +670,12 @@ void RendererOpenGL::EndFrame()
         GLenum err = glGetError();
         if (err != GL_NO_ERROR) {
             static int s_cnt = 0;
-            if (++s_cnt <= 20) SYNCLOG("FLICKER-DIAG: GL error 0x%X after GPUFlushNow (%d)", err, s_cnt);
+            if (++s_cnt <= 20) SYNCLOG("FLICKER-DIAG: GL error 0x%X after GPURenderNow (%d)", err, s_cnt);
         }
     }
 
-    // Flush layer-0 (back) GPU UI elements — sidebar background panels.
-    UIRenderer_FlushBack();
+    // Draw layer-0 (back) GPU UI elements — sidebar background panels.
+    UIRenderer_DrawBack();
 
     // Raw-image GPU blit — frontend background images (legal, loading, menu bg,
     // map bg, torture, etc.).  Queued by BlitRaw8GPU() during the frame; drawn
@@ -693,7 +693,7 @@ void RendererOpenGL::EndFrame()
         const RawBlitCmd& cmd = m_rawblit_cmd;
 
         // Ensure full-screen viewport and no depth interaction.
-        // UIRenderer_FlushBack() returns early (no quads) on pure-frontend frames
+        // UIRenderer_DrawBack() returns early (no quads) on pure-frontend frames
         // without disabling depth test, so we must guard here explicitly.
         glViewport(0, 0, m_screenW, m_screenH);
         glDisable(GL_DEPTH_TEST);
@@ -1001,11 +1001,11 @@ void RendererOpenGL::EndFrame()
             glBindFramebuffer(GL_FRAMEBUFFER, fbo.fbo);
             glViewport(0, 0, pw, ph);
             glClearColor(KFX_GL_CLEAR_COLOR);
-            glDepthMask(GL_TRUE);  // GPUFlushNow_ToFBO leaves mask false; ensure depth is cleared
+            glDepthMask(GL_TRUE);  // GPURenderToFBO leaves mask false; ensure depth is cleared
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-            m_world_renderer->GPUFlushNow_ToFBO(pw, ph);
+            m_world_renderer->GPURenderToFBO(pw, ph);
             if (ui)
-                ui->FlushPiPSprites(pw, ph);
+                ui->DrawPiPSprites(pw, ph);
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
             glViewport(0, 0, m_screenW, m_screenH);
             if (scissor_was_enabled)
@@ -1184,20 +1184,20 @@ void RendererOpenGL::EndFrame()
             mfp->RenderGPUComposePass();
     }
 
-    // Flush layer-1 (front) GPU UI elements — escape menu, minimap, slab
+    // Draw layer-1 (front) GPU UI elements — escape menu, minimap, slab
     // selectors, power-hand — on top of everything else.
-    UIRenderer_FlushFront();
+    UIRenderer_DrawFront();
     // GL error check after UI front pass
     {
         GLenum err = glGetError();
         if (err != GL_NO_ERROR) {
             static int s_cnt = 0;
-            if (++s_cnt <= 20) SYNCLOG("FLICKER-DIAG: GL error 0x%X after FlushFront (%d)", err, s_cnt);
+            if (++s_cnt <= 20) SYNCLOG("FLICKER-DIAG: GL error 0x%X after DrawFront (%d)", err, s_cnt);
         }
     }
 
     // Text on top of all sprites (sidebar labels, event messages, tooltips).
-    TextRenderer_Flush();
+    TextRenderer_Draw();
 
     // ── Final overlay passes: screen tint + cursor ──────────────────────────
     // Ensure depth test is OFF and depth mask is ON before the 2D overlay
@@ -1226,7 +1226,7 @@ void RendererOpenGL::EndFrame()
 
     // Cursor drawn last — after the screen-tint overlay — so it is always on
     // top of every other rendered layer including possession/death-flash tints.
-    CursorLayer_Flush();
+    CursorLayer_Draw();
 
     RenderPass_EndFrame();
     platform_swap_gl_buffers(lbWindow);
@@ -1285,7 +1285,7 @@ bool RendererOpenGL::BlitRaw8GPU(int dst_width, int dst_height, int dst_x, int d
                  (const void*)src_buf, src_width, src_height);
         return false;
     }
-    // Queue — executed in EndFrame() after UIRenderer_FlushBack().
+    // Queue — executed in EndFrame() after UIRenderer_DrawBack().
     m_rawblit_cmd            = { src_buf, src_width, src_height,
                                  dst_x, dst_y, dst_width, dst_height };
     m_rawblit_pending        = true;

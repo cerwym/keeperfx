@@ -76,20 +76,20 @@ public:
     /** Draw text at (posx, posy) relative to the current text window,
      *  scaled by units_per_px.  units_per_px == 16 means 100%.
      *  Applies word-wrap and justification via the layout engine.
-     *  GPU backends may defer the actual draw until Flush(). */
+     *  GPU backends may defer the actual draw until Draw(). */
     virtual TbBool DrawTextResized(int32_t posx, int32_t posy,
                                    int32_t units_per_px, const char* text) = 0;
 
     /** Draw text at absolute screen coordinates.  No text window setup needed.
      *  Single line, no word-wrap, no justification.
-     *  GPU backends may defer the actual draw until Flush(). */
+     *  GPU backends may defer the actual draw until Draw(). */
     virtual TbBool DrawTextAt(int32_t screen_x, int32_t screen_y,
                               int32_t units_per_px, const char* text) = 0;
 
-    /** Flush any deferred text draws to the framebuffer.
+    /** Draw all deferred text to the framebuffer.
      *  Called at end-of-frame after the staging-buffer blit.
      *  Software backends may leave this as a no-op. */
-    virtual void Flush() {}
+    virtual void Draw() {}
 
     /**************************************************************************/
     /* Measurement                                                            */

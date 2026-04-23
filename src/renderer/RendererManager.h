@@ -97,6 +97,22 @@ void RendererPresentFrame(void);
 int RendererIsScreenLocked(void);
 
 /******************************************************************************/
+/* Screen setup / teardown (replaces LbScreenSetup / LbScreenReset)           */
+/******************************************************************************/
+
+/** Create or reconfigure the game window and draw surface.
+ *  Handles SDL window creation, fullscreen toggling, surface allocation,
+ *  palette, mouse, and lbDisplay initialisation.
+ *  Replaces LbScreenSetup(). */
+TbResult RendererSetupScreen(TbScreenMode mode, TbScreenCoord width, TbScreenCoord height,
+    unsigned char *palette, short buffers_count, TbBool wscreen_vid);
+
+/** Tear down the draw surface and optionally release render resources.
+ *  @param exiting_application  Pass true when shutting down the process.
+ *  Replaces LbScreenReset(). */
+TbResult RendererResetScreen(TbBool exiting_application);
+
+/******************************************************************************/
 /* Graphics viewport (replaces LbScreenSetGraphicsWindow / Store / Load)      */
 /******************************************************************************/
 
@@ -164,13 +180,13 @@ struct Camera; // forward declaration (defined in game_legacy.h)
 void WorldViewRenderer_BeginWorldPass(unsigned char* framebuf, int pitch, int w, int h,
                                       int vp_x, int vp_y);
 
-/** Flush the isometric/1st-person bucket list to the framebuffer.
+/** Draw the isometric/1st-person bucket list to the framebuffer.
  *  Call this after draw_view() has filled the bucket list. */
-void WorldViewRenderer_FlushIsometricView(void);
+void WorldViewRenderer_DrawIsometricView(void);
 
-/** Flush the front-view bucket list to the framebuffer.
+/** Draw the front-view bucket list to the framebuffer.
  *  Call this after the front-view geometry has been added to the bucket list. */
-void WorldViewRenderer_FlushFrontView(struct Camera* cam);
+void WorldViewRenderer_DrawFrontView(struct Camera* cam);
 
 /** Submit a keeper-sprite (creature/object) for GPU rendering during the bucket walk.
  *  Returns 1 if the GPU handled it (CPU blit should be skipped), 0 to fall back. */
@@ -234,16 +250,16 @@ void TextRenderer_GetJustifyWindow(int32_t* x, int32_t* y, int32_t* w);
 void TextRenderer_GetClipWindow(int32_t* x, int32_t* y, int32_t* w, int32_t* h);
 
 /** Draw text at (posx, posy) relative to the text window with word-wrap.
- *  GPU backends queue the draw; call TextRenderer_Flush() to emit it. */
+ *  GPU backends queue the draw; call TextRenderer_Draw() to emit it. */
 TbBool TextRenderer_DrawTextResized(int32_t posx, int32_t posy, int32_t units_per_px, const char* text);
 
 /** Draw text at absolute screen coordinates. No window setup needed.
- *  GPU backends queue the draw; call TextRenderer_Flush() to emit it. */
+ *  GPU backends queue the draw; call TextRenderer_Draw() to emit it. */
 TbBool TextRenderer_DrawTextAt(int32_t screen_x, int32_t screen_y, int32_t units_per_px, const char* text);
 
-/** Flush all deferred text draws to the framebuffer.
+/** Draw all deferred text to the framebuffer.
  *  Must be called after the staging-buffer blit quad and before buffer swap. */
-void TextRenderer_Flush(void);
+void TextRenderer_Draw(void);
 
 /** Height of one line of text in the current font (unscaled). */
 int32_t TextRenderer_LineHeight(void);
@@ -404,10 +420,10 @@ void UIRenderer_BeginTopOverlay(void);
 /** End the top-overlay batch. */
 void UIRenderer_EndTopOverlay(void);
 
-/** Flush deferred cursor sprites (OS pointer + power-hand).
- *  Must be called AFTER TextRenderer_Flush() so the cursor composites above
- *  all text.  Replaces UIRenderer_FlushHandSprites(). */
-void CursorLayer_Flush(void);
+/** Draw deferred cursor sprites (OS pointer + power-hand).
+ *  Must be called AFTER TextRenderer_Draw() so the cursor composites above
+ *  all text.  Replaces UIRenderer_DrawHandSprites(). */
+void CursorLayer_Draw(void);
 
 /** Reset the cursor layer pending lists at the start of each frame.
  *  Call from BeginFrame() before any submit calls. */
@@ -417,7 +433,7 @@ void CursorLayer_Clear(void);
  *  Replaces the old LbI_PointerHandler::OnEndSwap() path. */
 void CursorLayer_SubmitPointerSprite(const struct TbSprite* spr, int32_t x, int32_t y, int units_per_px);
 
-/** Submit a power-hand keeper sprite; rendered at end-of-frame via CursorLayer_Flush().
+/** Submit a power-hand keeper sprite; rendered at end-of-frame via CursorLayer_Draw().
  *  Replaces UIRenderer_SubmitKeeperSprite(). */
 void CursorLayer_SubmitKeeperHandSprite(short x, short y, unsigned short kspr_base,
                                         short kspr_angle, unsigned char sprgroup, int32_t scale);
@@ -508,9 +524,9 @@ struct TiledSprite;
 void UIRenderer_SubmitTiledSprite(int32_t x, int32_t y, int units_per_px, const struct TiledSprite* bigspr);
 
 void UIRenderer_SetLayer(int layer);
-void UIRenderer_FlushBack(void);
-void UIRenderer_FlushFront(void);
-void UIRenderer_Flush(void);
+void UIRenderer_DrawBack(void);
+void UIRenderer_DrawFront(void);
+void UIRenderer_Draw(void);
 void UIRenderer_Clear(void);
 
 /** Apply a complete RendererSettings snapshot to the active renderer.

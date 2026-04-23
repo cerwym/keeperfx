@@ -162,13 +162,13 @@ void update_engine_settings(struct PlayerInfo *player);
 void draw_view(struct Camera *cam, unsigned char a2);
 void draw_frontview_engine(struct Camera *cam);
 
-/** Bucket-list flush — called by SoftwareWorldViewRenderer. */
+/** Bucket-list draw — called by SoftwareWorldViewRenderer. */
 void display_drawlist(void);
 void display_drawlist_sprites_only(void);
 void display_fast_drawlist(struct Camera *cam);
 
 /** Draw only depth-positioned 3D entity sprites for one bucket.
- *  Called by GLWorldViewRenderer between gpu_flush() and RenderPass_FlushNow(). */
+ *  Called by GLWorldViewRenderer between gpu_flush() and RenderPass_DrawNow(). */
 void draw_3d_sprites_for_bucket(long bucket_num);
 
 /** Draw all non-spatial sprites (shadows, selector, status, text, room flags)

@@ -111,7 +111,7 @@ void IUIRenderer::SubmitMinimap(int /*screen_x*/, int /*screen_y*/, int /*size*/
     // No-op: minimap pixels were written directly to lbDisplay.WScreen.
 }
 
-void IUIRenderer::Flush()
+void IUIRenderer::Draw()
 {
     // No-op: CPU path flushes through existing staging-buffer blit.
 }

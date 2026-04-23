@@ -269,8 +269,8 @@ void LbI_PointerHandler::OnBeginSwap(void)
     if (sprite == NULL || !is_active) return;
     // Submit the pointer sprite to ICursorLayer which renders it last in EndFrame,
     // after the screen-tint overlay.  Both GL and SW backends handle it correctly:
-    //   GL  → GLCursorLayer::Flush() → atlas quad via FlushCursorSprites()
-    //   SW  → SWCursorLayer::Flush() → PointerDraw() into WScreen before SDL blit
+    //   GL  → GLCursorLayer::Draw() → atlas quad via DrawCursorSprites()
+    //   SW  → SWCursorLayer::Draw() → PointerDraw() into WScreen before SDL blit
     int32_t cx = position->x - scale_ui_value_lofi(spr_offset->x);
     int32_t cy = position->y - scale_ui_value_lofi(spr_offset->y);
     int units_per_px = (sprite->SWidth > 0)
@@ -281,7 +281,7 @@ void LbI_PointerHandler::OnBeginSwap(void)
 
 void LbI_PointerHandler::OnEndSwap(void)
 {
-    // No-op: cursor rendering is now deferred entirely to CursorLayer_Flush()
+    // No-op: cursor rendering is now deferred entirely to CursorLayer_Draw()
     // which runs inside RendererEndFrame().  No WScreen restore needed.
 }
 

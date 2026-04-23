@@ -42,11 +42,11 @@ public:
     // Called at the end of each frame after all sprite submissions
     void EndFrame();
 
-    // Immediately flush any queued sprite draws to the GPU.
+    // Immediately draw any queued sprite draws to the GPU.
     // Used by GLWorldViewRenderer during the bucket walk to maintain depth order.
-    void FlushNow();
+    void DrawNow();
 
-    // Override the screen dimensions used for NDC conversion during the next flush.
+    // Override the screen dimensions used for NDC conversion during the next draw.
     // Pass (0, 0) to restore the default (MyScreenWidth / MyScreenHeight).
     void SetScreenSize(int w, int h);
     

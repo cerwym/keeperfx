@@ -238,7 +238,7 @@ void OpenGLSpriteBackend::EndFrame()
     flush();
 }
 
-void OpenGLSpriteBackend::FlushNow()
+void OpenGLSpriteBackend::DrawNow()
 {
     if (m_palette_dirty)
     {

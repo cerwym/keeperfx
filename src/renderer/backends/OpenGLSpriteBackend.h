@@ -69,7 +69,7 @@ public:
 
     void BeginFrame()                      override;
     void EndFrame()                        override;
-    void FlushNow()                        override;
+    void DrawNow()                         override;
     void SetScreenSize(int w, int h)       override;
 
     void OnSpriteSheetLoaded(const struct TbSpriteSheet* sheet) override;
@@ -80,7 +80,7 @@ public:
 
     /**
      * Set the NDC depth assigned to all sprites submitted until the next call.
-     * Called by GLWorldViewRenderer::GPUFlushNow before each bucket's sprite draw.
+     * Called by GLWorldViewRenderer::GPURenderNow before each bucket's sprite draw.
      * @param z_ndc  NDC z in [-1, +1]; -1 = near clip, +1 = far clip.
      */
     static void SetCurrentBucketZ(float z_ndc);

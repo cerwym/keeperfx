@@ -39,16 +39,16 @@ public:
     // CPU default: no-op.
     virtual void BeginFrame();
 
-    // Called at the end of each frame (GPU backends flush batches, software no-op).
+    // Called at the end of each frame (GPU backends submit batches, software no-op).
     // CPU default: no-op.
     virtual void EndFrame();
 
-    // Immediately flush any queued sprite draws to the GPU.
+    // Immediately draw any queued sprite draws to the GPU.
     // Used by GLWorldViewRenderer to interleave sprites at the correct bucket depth.
     // Default is a no-op for backends that render immediately (Software, Vita).
-    virtual void FlushNow() {}
+    virtual void DrawNow() {}
 
-    // Override the screen dimensions used for NDC conversion during the next flush.
+    // Override the screen dimensions used for NDC conversion during the next draw.
     // Pass (0, 0) to restore the default (MyScreenWidth / MyScreenHeight).
     // Used by GLWorldViewRenderer when sprites are rendered inside the game viewport
     // rather than in full-screen space.

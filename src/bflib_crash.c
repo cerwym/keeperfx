@@ -34,6 +34,7 @@
 #include <inttypes.h>
 #include "bflib_basics.h"
 #include "bflib_video.h"
+#include "renderer/RendererManager.h"
 #include "platform/PlatformManager.h"
 #include "post_inc.h"
 
@@ -96,7 +97,7 @@ void ctrl_handler(int sig_id)
 {
     signal(sig_id, SIG_DFL);
     LbErrorLog("Failure signal: %s.\n",sigstr(sig_id));
-    LbScreenReset(true);
+    RendererResetScreen(true);
     LbErrorLogClose();
     raise(sig_id);
 }

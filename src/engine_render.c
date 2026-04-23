@@ -6631,8 +6631,8 @@ void display_drawlist_sprites_only(void)
 
 /** Draws only the depth-positioned 3D entity sprites (JontySprite /
  *  JontyISOSprite) for a single bucket index.  Called by
- *  GLWorldViewRenderer::FlushIsometricView() between gpu_flush() and
- *  RenderPass_FlushNow() so the sprite quads are composited at the correct
+ *  GLWorldViewRenderer::DrawIsometricView() between gpu_flush() and
+ *  RenderPass_DrawNow() so the sprite quads are composited at the correct
  *  depth in the painter's-algorithm bucket walk. */
 void draw_3d_sprites_for_bucket(long bucket_num)
 {
@@ -7032,7 +7032,7 @@ void draw_view(struct Camera *cam, unsigned char a2)
         process_isometric_map_volume_box(x, y, z, my_player_number);
     }
 
-    WorldViewRenderer_FlushIsometricView();
+    WorldViewRenderer_DrawIsometricView();
     /* NSP overlays (health bars, room flags, gold text) only belong in the
      * isometric/creature gameplay view, not in the overhead parchment map.
      * The parchment camera uses PVM_ParchmentView; all other modes that reach
@@ -9272,7 +9272,7 @@ void draw_frontview_engine(struct Camera *cam)
         stl_y += y_step2[qdrant];
     }
 
-    WorldViewRenderer_FlushFrontView(cam);
+    WorldViewRenderer_DrawFrontView(cam);
     RendererLoadViewport(&grwnd);
     cam->zoom = zoom_mem;//TODO [zoom] remove when all cam->zoom will be changed to camera_zoom
     SYNCDBG(9,"Finished");

@@ -99,7 +99,7 @@ public:
     virtual void SubmitMinimap(int screen_x, int screen_y, int size) override;
 
     /** Submit an RGBA8 FBO colour texture as a picture-in-picture quad.
-     *  Rendered during FlushFront() before atlas-sprite layer-1 quads so that
+     *  Rendered during DrawFront() before atlas-sprite layer-1 quads so that
      *  decorative frame sprites appear on top of the isometric content.  Not
      *  part of IUIRenderer — called directly from RendererOpenGL::EndFrame(). */
     void SubmitFBOQuad(int x, int y, int w, int h, GLuint tex_id);
@@ -108,16 +108,16 @@ public:
     virtual void ClearWorldDepth() override;
     virtual void SetTopOverlay() override;
     virtual void ClearTopOverlay() override;
-    virtual void FlushBack() override;
-    virtual void FlushFront() override;
-    virtual void Flush() override;
+    virtual void DrawBack() override;
+    virtual void DrawFront() override;
+    virtual void Draw() override;
     virtual void Clear() override;
     virtual const char* GetName() const override { return "OPENGL_UI"; }
 
     /** Flush any atlas-quad sprites submitted since the last FlushFront().
-     *  Called by GLCursorLayer::Flush() to render the OS pointer sprite
+     *  Called by GLCursorLayer::Draw() to render the OS pointer sprite
      *  as the final draw before the buffer swap. */
-    void FlushCursorSprites();
+    void DrawCursorSprites();
 
     /** Record the current queue sizes as the PiP "start of pass" snapshot.
      *  Call this immediately before the PiP draw_view() call.  Any quads
@@ -126,16 +126,16 @@ public:
      *  frame. */
     void BeginPiPSprites();
 
-    /** Flush all UIRenderer quads queued since BeginPiPSprites() into the
+    /** Draw all UIRenderer quads queued since BeginPiPSprites() into the
      *  currently-bound PiP FBO (call while the FBO is still bound), then
-     *  remove them from the queue so FlushFront() never sees them at
+     *  remove them from the queue so DrawFront() never sees them at
      *  full-screen coordinates.
      *  - Layer-2 quads (creature status/gold text): rendered with GL_LEQUAL
      *    depth test so they occlude correctly behind walls.
      *  - Layer-1 quads (room flags, slab selector): rendered without depth
      *    test so they always appear on top inside the zoom box.
      *  Uses pip_w x pip_h for NDC conversion. */
-    void FlushPiPSprites(int pip_w, int pip_h);
+    void DrawPiPSprites(int pip_w, int pip_h);
 
     /** Initialize OpenGL resources.
      *  @return true if successful */

@@ -18,6 +18,7 @@
 #include <errno.h>
 #include "bflib_crash.h"
 #include "bflib_video.h"
+#include "renderer/RendererManager.h"
 #include "post_inc.h"
 
 // TbFileFind is defined here; it is an opaque type to all callers.
@@ -243,7 +244,7 @@ static LONG CALLBACK ctrl_handler_w32(LPEXCEPTION_POINTERS info)
     {
         LbErrorLog("Failed to init symbol context\n");
     }
-    LbScreenReset(true);
+    RendererResetScreen(true);
     LbErrorLogClose();
     return EXCEPTION_EXECUTE_HANDLER;
 }

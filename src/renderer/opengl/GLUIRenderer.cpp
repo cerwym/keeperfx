@@ -331,9 +331,9 @@ void GLUIRenderer::SetLayer(int layer)
     m_current_layer = layer;
 }
 
-void GLUIRenderer::FlushBack()
+void GLUIRenderer::DrawBack()
 {
-    KFX_ZONE("UIRenderer::FlushBack");
+    KFX_ZONE("UIRenderer::DrawBack");
     KFX_GPU_ZONE("UIPass::Back");
     KFX_GL_SCOPE(back_grp, "UIPass/Back");
     // Render only layer-0 (back) quads — the sidebar background panels that must land
@@ -415,9 +415,9 @@ static void FlushFBOQuads_impl(const std::vector<FBOQuad>& quads, GLuint prog, G
         glEnable(GL_SCISSOR_TEST);
 }
 
-void GLUIRenderer::FlushFront()
+void GLUIRenderer::DrawFront()
 {
-    KFX_ZONE("UIRenderer::FlushFront");
+    KFX_ZONE("UIRenderer::DrawFront");
     KFX_GPU_ZONE("UIPass::Front");
     KFX_GL_SCOPE(front_grp, "UIPass/Front");
     if (m_ui_quads.empty() && m_ui_lines.empty() && !m_minimap_pending && m_fbo_quads.empty()
@@ -567,7 +567,7 @@ void GLUIRenderer::BeginPiPSprites()
     m_pip_capture_active  = true;
 }
 
-void GLUIRenderer::FlushPiPSprites(int pip_w, int pip_h)
+void GLUIRenderer::DrawPiPSprites(int pip_w, int pip_h)
 {
     if (!m_pip_capture_active)
         return;
@@ -663,10 +663,10 @@ void GLUIRenderer::FlushPiPSprites(int pip_w, int pip_h)
     }
 }
 
-void GLUIRenderer::FlushCursorSprites()
+void GLUIRenderer::DrawCursorSprites()
 {
-    // Flush atlas-quad sprites submitted since the last FlushFront().
-    // Called by GLCursorLayer::Flush() for the OS pointer sprite.
+    // Draw atlas-quad sprites submitted since the last DrawFront().
+    // Called by GLCursorLayer::Draw() for the OS pointer sprite.
     if (m_ui_quads.empty()) return;
     if (MyScreenWidth > 0 && MyScreenHeight > 0) {
         m_screen_width  = MyScreenWidth;
@@ -682,16 +682,16 @@ void GLUIRenderer::FlushCursorSprites()
     glUseProgram(0);
 }
 
-void GLUIRenderer::Flush()
+void GLUIRenderer::Draw()
 {
-    KFX_ZONE("UIRenderer::Flush");
-    // Emit per-frame stats before flushing (capture sizes before clear).
+    KFX_ZONE("UIRenderer::Draw");
+    // Emit per-frame stats before drawing (capture sizes before clear).
     KFX_PLOT("UI/Quads",      (int)m_ui_quads.size());
     KFX_PLOT("UI/RemapQuads", (int)m_remap_quads.size());
     KFX_PLOT("UI/Lines",      (int)m_ui_lines.size());
-    // Full flush: back layer then front layer.
-    FlushBack();
-    FlushFront();
+    // Full draw: back layer then front layer.
+    DrawBack();
+    DrawFront();
 }
 
 void GLUIRenderer::SubmitFBOQuad(int x, int y, int w, int h, GLuint tex_id)

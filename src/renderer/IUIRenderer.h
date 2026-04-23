@@ -149,7 +149,7 @@ public:
     virtual void SubmitMinimap(int screen_x, int screen_y, int size);
 
     // -------------------------------------------------------------------------
-    // Layer / flush control (GPU-only concept; CPU default = no-op or passthrough)
+    // Layer / draw control (GPU-only concept; CPU default = no-op or passthrough)
     // -------------------------------------------------------------------------
 
     /** Set the active render layer (0=back, 1=front).  CPU default: no-op. */
@@ -172,16 +172,16 @@ public:
     /** End the top-overlay batch. */
     virtual void ClearTopOverlay() { }
 
-    /** Flush layer-0 (back) elements before the CPU staging-buffer blit.
+    /** Draw layer-0 (back) elements before the CPU staging-buffer blit.
      *  CPU default: no-op. */
-    virtual void FlushBack() { }
+    virtual void DrawBack() { }
 
-    /** Flush layer-1 (front) elements after the CPU staging-buffer blit.
-     *  CPU default: calls Flush(). */
-    virtual void FlushFront() { Flush(); }
+    /** Draw layer-1 (front) elements after the CPU staging-buffer blit.
+     *  CPU default: calls Draw(). */
+    virtual void DrawFront() { Draw(); }
 
-    /** Flush all queued elements.  CPU default: no-op. */
-    virtual void Flush();
+    /** Draw all queued elements.  CPU default: no-op. */
+    virtual void Draw();
 
     /** Discard all queued elements without rendering.  CPU default: no-op. */
     virtual void Clear();

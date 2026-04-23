@@ -17,21 +17,21 @@
  *
  *     ICursorLayer owns that contract.  RendererManager creates the
  *     appropriate concrete implementation at RendererInit() time and calls
- *     CursorLayer_Flush() from EndFrame() after every other pass.
+ *     CursorLayer_Draw() from EndFrame() after every other pass.
  *
  *     Software mode (SWCursorLayer):
- *       SubmitPointerSprite  — deferred; drawn to WScreen in Flush() immediately
+ *       SubmitPointerSprite  — deferred; drawn to WScreen in Draw() immediately
  *                              before the SDL blit.  No backup/restore needed
  *                              since WScreen is rebuilt from scratch each frame.
  *       SubmitKeeperHandSprite — calls process_keeper_sprite() immediately
  *                                (same as IUIRenderer::SubmitKeeperSprite did).
- *       Flush()              — draws the pointer sprite to WScreen if one was
+ *       Draw()               — draws the pointer sprite to WScreen if one was
  *                              submitted this frame; no-ops for the hand.
  *
  *     OpenGL mode (GLCursorLayer):
  *       SubmitPointerSprite  — queued into m_pending_pointer (atlas quad path).
  *       SubmitKeeperHandSprite — queued into m_pending_keeper.
- *       Flush()              — drains m_pending_pointer via atlas sprite shader,
+ *       Draw()               — drains m_pending_pointer via atlas sprite shader,
  *                              then drains m_pending_keeper via the keeper-sprite
  *                              shader (BeginHandSpriteRendering / process_keeper_sprite
  *                              loop / EndHandSpriteRendering).
@@ -64,10 +64,10 @@ public:
                                         unsigned char sprgroup,
                                         int32_t scale) = 0;
 
-    /** Flush all queued cursor sprites.
+    /** Draw all queued cursor sprites to the framebuffer.
      *  Called from RendererOpenGL::EndFrame() and RendererSoftware::EndFrame()
      *  as the absolute last draw step before the buffer swap. */
-    virtual void Flush() = 0;
+    virtual void Draw() = 0;
 
     /** Clear queued state.  Called at the start of each frame (BeginFrame). */
     virtual void Clear() = 0;
