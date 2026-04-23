@@ -37,6 +37,7 @@
 #include "front_input.h"
 #include "game_legacy.h"
 #include "kjm_input.h"
+#include "renderer/RendererManager.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -158,7 +159,7 @@ void draw_resurrect_creature(struct GuiButton *gbtn)
         int x = gbtn->scr_pos_x - scale_ui_value_lofi(1);
         int y = gbtn->scr_pos_y - (19 * tx_units_per_px / 16);
 
-        if (LbGraphicsScreenHeight() < 400)
+        if (RendererScreenHeight() < 400)
         {
             y = gbtn->scr_pos_y - (19 * tx_units_per_px / 32);
         }
@@ -247,7 +248,7 @@ void draw_transfer_creature(struct GuiButton *gbtn)
         const struct TbSprite* spr = get_panel_sprite(spr_idx);
         int x = gbtn->scr_pos_x - scale_ui_value_lofi(1);
         int y = gbtn->scr_pos_y - (19 * tx_units_per_px / 16);
-        if (LbGraphicsScreenHeight() < 400)
+        if (RendererScreenHeight() < 400)
         {
             y = gbtn->scr_pos_y - (19 * tx_units_per_px / 32);
         }

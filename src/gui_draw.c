@@ -128,13 +128,13 @@ void draw_slab64k_background(long pos_x, long pos_y, long width, long height)
         scr_y = 0;
         scr_h = i;
     }
-    i = lbDisplay.PhysicalScreenWidth * pixel_size;
+    i = RendererPhysicalWidth() * pixel_size;
     if (scr_x + scr_w > i)
         scr_w = i - scr_x;
     i = MyScreenHeight;
     if (scr_y + scr_h > i)
         scr_h = i - scr_y;
-    TbPixel* out = &lbDisplay.WScreen[scr_x + lbDisplay.GraphicsScreenWidth * scr_y];
+    TbPixel* out = &RendererGetWScreen()[scr_x + RendererScreenWidth() * scr_y];
     for (i=0; scr_h > i; i++)
     {
         TbPixel* inp = &gui_slab[GUI_SLAB_DIMENSION * (i % GUI_SLAB_DIMENSION)];
@@ -153,7 +153,7 @@ void draw_slab64k_background(long pos_x, long pos_y, long width, long height)
         {
             for (int j = 0; j < scr_w; j++) out[j] = inp[j] ? inp[j] : 1;
         }
-        out += lbDisplay.GraphicsScreenWidth;
+        out += RendererScreenWidth();
     }
 }
 
@@ -489,7 +489,7 @@ void draw_button_string(struct GuiButton *gbtn, int base_width, const char *text
         }
     }
     LbTextDrawResized(w, h, tx_units_per_px, dtext);
-    LbTextSetJustifyWindow(0, 0, LbGraphicsScreenWidth());
+    LbTextSetJustifyWindow(0, 0, RendererScreenWidth());
     LbTextSetClipWindow(0/pixel_size, 0/pixel_size, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
     LbTextSetWindow(0/pixel_size, 0/pixel_size, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
     lbDisplay.DrawFlags = flgmem;
@@ -593,8 +593,8 @@ TbBool draw_text_box(const char *text)
     }
     long box_width = (108 * spritesx + 18) * units_per_pixel / 16;
     long box_height = 92 * units_per_pixel / 16;
-    long startx = (lbDisplay.PhysicalScreenWidth - box_width) / 2;
-    long starty = (lbDisplay.PhysicalScreenHeight - box_height) / 2;
+    long startx = (RendererPhysicalWidth() - box_width) / 2;
+    long starty = (RendererPhysicalHeight() - box_height) / 2;
     draw_message_box_at(startx, starty, box_width, box_height, spritesx, spritesy);
     // Draw the text inside box
     lbDisplay.DrawFlags = Lb_TEXT_HALIGN_CENTER;

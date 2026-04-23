@@ -131,6 +131,31 @@ void RendererStoreViewport(TbGraphicsWindow *grwnd);
  *  Replaces LbScreenLoadGraphicsWindow(). */
 void RendererLoadViewport(TbGraphicsWindow *grwnd);
 
+/******************************************************************************/
+/* Display property accessors (replaces direct lbDisplay.Field reads)         */
+/******************************************************************************/
+
+/** Visible display width in pixels (window or fullscreen).
+ *  Replaces lbDisplay.PhysicalScreenWidth reads. */
+TbScreenCoord RendererPhysicalWidth(void);
+
+/** Visible display height in pixels (window or fullscreen).
+ *  Replaces lbDisplay.PhysicalScreenHeight reads. */
+TbScreenCoord RendererPhysicalHeight(void);
+
+/** Graphics buffer scanline width (pitch) in pixels.
+ *  Use for pixel address arithmetic (ptr + y * stride + x).
+ *  Replaces lbDisplay.GraphicsScreenWidth reads. */
+TbScreenCoord RendererScreenWidth(void);
+
+/** Graphics buffer height in pixels.
+ *  Replaces lbDisplay.GraphicsScreenHeight reads. */
+TbScreenCoord RendererScreenHeight(void);
+
+/** Pointer to the locked CPU framebuffer, or NULL if not locked.
+ *  Replaces lbDisplay.WScreen reads. */
+unsigned char* RendererGetWScreen(void);
+
 /** Standard clear colour matching DK palette index 0 (pure black).
  *  Use for all glClearColor calls so they stay consistent with RendererClearScreen(0). */
 #define KFX_GL_CLEAR_COLOR  0.0f, 0.0f, 0.0f, 1.0f

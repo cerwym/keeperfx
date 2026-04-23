@@ -409,7 +409,7 @@ void prepare_map_fade_buffers(unsigned char *fade_src, unsigned char *fade_dest,
     int fadebuf_pos = 0;
     for (i = 0; i < height; i++)
     {
-        unsigned char* src = lbDisplay.WScreen + lbDisplay.GraphicsScreenWidth * i;
+        unsigned char* src = RendererGetWScreen() + lbDisplay.GraphicsScreenWidth * i;
         unsigned char* dst = &fade_src[fadebuf_pos];
         fadebuf_pos += scanline;
         memcpy(dst, src, MyScreenWidth/pixel_size);
@@ -421,7 +421,7 @@ void prepare_map_fade_buffers(unsigned char *fade_src, unsigned char *fade_dest,
     fadebuf_pos = 0;
     for (i = 0; i < height; i++)
     {
-        unsigned char* src = lbDisplay.WScreen + lbDisplay.GraphicsScreenWidth * i;
+        unsigned char* src = RendererGetWScreen() + lbDisplay.GraphicsScreenWidth * i;
         unsigned char* dst = &fade_dest[fadebuf_pos];
         fadebuf_pos += scanline;
         memcpy(dst, src, MyScreenWidth/pixel_size);
@@ -439,7 +439,7 @@ long map_fade_in(long a)
         prepare_map_fade_buffers(map_fade_src, map_fade_dest, 320, MyScreenHeight/pixel_size);
         generate_map_fade_ghost_table("data/mapfadeg.dat", engine_palette, map_fade_ghost_table);
     }
-    map_fade(lbDisplay.WScreen, map_fade_dest, map_fade_src, pixmap.fade_tables, map_fade_ghost_table,
+    map_fade(RendererGetWScreen(), map_fade_dest, map_fade_src, pixmap.fade_tables, map_fade_ghost_table,
       a, 320, 200, lbDisplay.GraphicsScreenWidth);
     long nxamount =  a + 4;
     if (nxamount > 32)
@@ -458,7 +458,7 @@ long map_fade_out(long a)
         prepare_map_fade_buffers(map_fade_src, map_fade_dest, 320, MyScreenHeight/pixel_size);
         generate_map_fade_ghost_table("data/mapfadeg.dat", engine_palette, map_fade_ghost_table);
     }
-    map_fade(lbDisplay.WScreen, map_fade_dest, map_fade_src, pixmap.fade_tables, map_fade_ghost_table,
+    map_fade(RendererGetWScreen(), map_fade_dest, map_fade_src, pixmap.fade_tables, map_fade_ghost_table,
       a, 320, 200, lbDisplay.GraphicsScreenWidth);
     long nxamount =  a - 4;
     if (a < 0)

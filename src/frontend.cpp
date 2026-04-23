@@ -1237,10 +1237,10 @@ TbBool fronttestfont_draw(void)
   long x;
   long y;
   SYNCDBG(9,"Starting");
-  for (y=0; y < lbDisplay.GraphicsScreenHeight; y++)
-    for (x=0; x < lbDisplay.GraphicsScreenWidth; x++)
+  for (y=0; y < RendererScreenHeight(); y++)
+    for (x=0; x < RendererScreenWidth(); x++)
     {
-        lbDisplay.WScreen[y*lbDisplay.GraphicsScreenWidth+x] = 0;
+        RendererGetWScreen()[y*RendererScreenWidth()+x] = 0;
     }
   LbTextSetWindow(0/pixel_size, 0/pixel_size, MyScreenHeight/pixel_size, MyScreenWidth/pixel_size);
   // Drawing
@@ -2242,8 +2242,8 @@ long compute_menu_position_x(long desired_pos,int menu_width, int units_per_px)
       break;
   default: // Desired position have direct coordinates
       pos = ((desired_pos*(long)units_per_pixel)>>4)*((long)pixel_size);
-      if (pos+scaled_width > lbDisplay.PhysicalScreenWidth*((long)pixel_size))
-        pos = lbDisplay.PhysicalScreenWidth*((long)pixel_size)-scaled_width;
+      if (pos+scaled_width > RendererPhysicalWidth()*((long)pixel_size))
+        pos = RendererPhysicalWidth()*((long)pixel_size)-scaled_width;
 /* Helps not to touch left panel - disabling, as needs additional conditions
       if (pos < status_panel_width)
         pos = status_panel_width;
@@ -2292,8 +2292,8 @@ long compute_menu_position_y(long desired_pos,int menu_height, int units_per_px)
         break;
     default: // Desired position have direct coordinates
         pos = ((desired_pos*((long)units_per_pixel))>>4)*((long)pixel_size);
-        if (pos+scaled_height > lbDisplay.PhysicalScreenHeight*((long)pixel_size))
-          pos = lbDisplay.PhysicalScreenHeight*((long)pixel_size)-scaled_height;
+        if (pos+scaled_height > RendererPhysicalHeight()*((long)pixel_size))
+          pos = RendererPhysicalHeight()*((long)pixel_size)-scaled_height;
         break;
     }
     // Clipping position Y
@@ -2344,10 +2344,10 @@ MenuNumber create_menu(struct GuiMenu *gmnu)
     int units_per_px;
     units_per_px = min((int)units_per_pixel,units_per_pixel_min*16/10);
     // Decrease scale factor if for some reason resulting size would exceed screen (wierd aspec ratio support)
-    if (gmnu->width * units_per_px > LbScreenWidth() * 16)
-        units_per_px = LbScreenWidth() * 16 / gmnu->width;
-    if (gmnu->height * units_per_px > LbScreenHeight() * 16)
-        units_per_px = LbScreenHeight() * 16 / gmnu->height;
+    if (gmnu->width * units_per_px > RendererPhysicalWidth() * 16)
+        units_per_px = RendererPhysicalWidth() * 16 / gmnu->width;
+    if (gmnu->height * units_per_px > RendererPhysicalHeight() * 16)
+        units_per_px = RendererPhysicalHeight() * 16 / gmnu->height;
     // Setting position X
     amnu->pos_x = compute_menu_position_x(gmnu->pos_x,gmnu->width,units_per_px);
     // Setting position Y
@@ -2925,9 +2925,9 @@ FrontendMenuState frontend_setup_state(FrontendMenuState nstate)
           break;
       case FeSt_CREDITS:
           set_pointer_graphic_none();
-          credits_offset = lbDisplay.PhysicalScreenHeight;
+          credits_offset = RendererPhysicalHeight();
           credits_end = 0;
-          LbTextSetWindow(0, 0, lbDisplay.PhysicalScreenWidth, lbDisplay.PhysicalScreenHeight);
+          LbTextSetWindow(0, 0, RendererPhysicalWidth(), RendererPhysicalHeight());
           lbDisplay.DrawFlags = Lb_TEXT_HALIGN_CENTER;
           play_music_track(7);
           break;

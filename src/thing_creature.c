@@ -413,7 +413,7 @@ void draw_swipe_graphic(void)
                 allwidth += endspr->SWidth;
                 endspr++;
             }
-            int units_per_px = (LbScreenWidth() * 59 / 64) * 16 / allwidth;
+            int units_per_px = (RendererPhysicalWidth() * 59 / 64) * 16 / allwidth;
             int scrpos_y = (MyScreenHeight * 16 / units_per_px - (startspr->SHeight + endspr->SHeight)) / 2;
             const struct TbSprite *spr;
             int scrpos_x;
@@ -4291,7 +4291,7 @@ void draw_creature_view(struct Thing *thing)
   unsigned int render_height = lens_get_render_target_height();
   
   // Store previous graphics settings
-  unsigned char* wscr_cp = lbDisplay.WScreen;
+  unsigned char* wscr_cp = RendererGetWScreen();
   TbGraphicsWindow grwnd;
   RendererStoreViewport(&grwnd);
   // Prepare new settings
@@ -4318,8 +4318,8 @@ void draw_creature_view(struct Thing *thing)
   // Apply lens effect to the viewport area only (not including sidebar)
   // Pass full srcbuf so displacement map lookups work correctly
   // Calculate 2D viewport offset for destination buffer
-  long dst_offset = view_y * lbDisplay.GraphicsScreenWidth + view_x;
-  draw_lens_effect(lbDisplay.WScreen + dst_offset, lbDisplay.GraphicsScreenWidth, 
+  long dst_offset = view_y * RendererScreenWidth() + view_x;
+  draw_lens_effect(RendererGetWScreen() + dst_offset, RendererScreenWidth(), 
       scrmem, render_width, view_width, view_height, view_x, game.applied_lens_type);
 }
 

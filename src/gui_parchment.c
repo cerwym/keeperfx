@@ -28,6 +28,7 @@
 #include "bflib_sprfnt.h"
 #include "bflib_dernc.h"
 #include "bflib_planar.h"
+#include "renderer/RendererManager.h"
 #include "custom_sprites.h"
 #include "frontend.h"
 #include "front_simple.h"
@@ -75,7 +76,7 @@ void load_parchment_file(void)
 {
     if ( !parchment_loaded )
     {
-      reload_parchment_file(lbDisplay.PhysicalScreenWidth >= 640);
+      reload_parchment_file(RendererPhysicalWidth() >= 640);
     }
 }
 
@@ -106,7 +107,7 @@ long get_parchment_background_area_rect(struct TbRect *bkgnd_area)
 {
     int img_width;
     int img_height;
-    if (LbScreenWidth() < 640)
+    if (RendererPhysicalWidth() < 640)
     {
         img_width = 320;
         img_height = 200;
@@ -115,8 +116,8 @@ long get_parchment_background_area_rect(struct TbRect *bkgnd_area)
         img_width = 640;
         img_height = 480;
     }
-    int rect_w = LbScreenWidth();
-    int rect_h = LbScreenHeight();
+    int rect_w = RendererPhysicalWidth();
+    int rect_h = RendererPhysicalHeight();
     // Parchment bitmap scaling
     int units_per_px = max(16 * rect_w / img_width, 16 * rect_h / img_height);
     int units_per_px_max = min(16 * 7 * rect_w / (6 * img_width), 16 * 4 * rect_h / (3 * img_height));
@@ -175,7 +176,7 @@ TbBool parchment_copy_background_at(const struct TbRect *bkgnd_area, int units_p
     int img_height;
     unsigned char *srcbuf;
     unsigned char shift;
-    if (LbScreenWidth() < 640)
+    if (RendererPhysicalWidth() < 640)
     {
         img_width = 320;
         img_height = 200;
@@ -373,7 +374,7 @@ void draw_overhead_map(const struct TbRect *map_area, long block_size, PlayerNum
     // the ghost table shading correctly darkens the parchment colour underneath.
     long line = 0;
     long stl_y = 1;
-    unsigned char* dstline = &lbDisplay.WScreen[map_area->left + lbDisplay.GraphicsScreenWidth * map_area->top];
+    unsigned char* dstline = &RendererGetWScreen()[map_area->left + RendererScreenWidth() * map_area->top];
     for (long cntr_h = game.map_tiles_y * block_size; cntr_h > 0; cntr_h--)
     {
         if ((line > 0) && ((line % block_size) == 0))
@@ -391,7 +392,7 @@ void draw_overhead_map(const struct TbRect *map_area, long block_size, PlayerNum
           }
           stl_x += STL_PER_SLB;
         }
-        dstline += lbDisplay.GraphicsScreenWidth;
+        dstline += RendererScreenWidth();
         line++;
     }
     lbDisplay.DrawFlags = 0;
@@ -851,7 +852,7 @@ void draw_zoom_box_terrain(long scrtop_x, long scrtop_y, int stl_x, int stl_y, P
 
     // Software path: direct pixel write via the SW rasteriser.
     lbDisplay.DrawFlags = 0;
-    setup_vecs(lbDisplay.WScreen, NULL, (unsigned int)lbDisplay.GraphicsScreenWidth, (unsigned int)(MyScreenWidth/pixel_size), (unsigned int)(MyScreenHeight/pixel_size));
+    setup_vecs(RendererGetWScreen(), NULL, (unsigned int)RendererScreenWidth(), (unsigned int)(MyScreenWidth/pixel_size), (unsigned int)(MyScreenHeight/pixel_size));
     int scr_y = scrtop_y;
     for (int map_dy = 0; map_dy < draw_tiles_y; map_dy++)
     {
@@ -938,7 +939,7 @@ void zoom_to_parchment_map(void)
       set_flag(game.operation_flags, GOF_ShowPanel);
     struct PlayerInfo* player = get_my_player();
     if (((game.system_flags & GSF_NetworkActive) != 0)
-        || (lbDisplay.PhysicalScreenWidth > 320))
+        || (RendererPhysicalWidth() > 320))
     {
       if (!toggle_status_menu(0))
         clear_flag(game.operation_flags, GOF_ShowPanel);
@@ -955,7 +956,7 @@ void zoom_from_parchment_map(void)
 {
     struct PlayerInfo* player = get_my_player();
     if (((game.system_flags & GSF_NetworkActive) != 0)
-        || (lbDisplay.PhysicalScreenWidth > 320))
+        || (RendererPhysicalWidth() > 320))
     {
         if ((game.operation_flags & GOF_ShowPanel) != 0)
           toggle_status_menu(1);

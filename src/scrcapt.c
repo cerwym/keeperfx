@@ -152,7 +152,7 @@ TbBool movie_record_frame(void)
             return false;
   }
   LbPaletteGet(cap_palette);
-  short result = anim_record_frame(lbDisplay.WScreen, cap_palette);
+  short result = anim_record_frame(RendererGetWScreen(), cap_palette);
   if (!lock_mem)
     RendererUnlockScreen();
   return result;

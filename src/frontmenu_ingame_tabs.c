@@ -1400,8 +1400,8 @@ void draw_centred_string64k(const char *text, short x, short y, short base_w, sh
         text_x = 0;
     }
     LbTextDrawResized(text_x, text_y, tx_units_per_px, text);
-    LbTextSetJustifyWindow(0, 0, LbGraphicsScreenWidth());
-    LbTextSetClipWindow(0, 0, LbGraphicsScreenWidth(), LbGraphicsScreenHeight());
+    LbTextSetJustifyWindow(0, 0, RendererScreenWidth());
+    LbTextSetClipWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
     LbTextSetWindow(0, 0, MyScreenWidth, MyScreenHeight);
     lbDisplay.DrawFlags = flg_mem;
 }
@@ -2590,8 +2590,8 @@ static void draw_status_minimap(struct PlayerInfo* player, int mm_units_per_px)
 
 static void draw_status_placefiller(struct GuiMenu* gmnu, int fs_units_per_px)
 {
-    unsigned char placefill_threshold = (LbScreenHeight() >= 400) ? 80 : 40;
-    if (LbScreenHeight() - gmnu->height >= placefill_threshold)
+    unsigned char placefill_threshold = (RendererPhysicalHeight() >= 400) ? 80 : 40;
+    if (RendererPhysicalHeight() - gmnu->height >= placefill_threshold)
         draw_placefiller(0, gmnu->pos_y + gmnu->height, fs_units_per_px);
 }
 

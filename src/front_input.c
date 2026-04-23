@@ -34,6 +34,7 @@
 #include "bflib_network_exchange.h"
 #include "bflib_inputctrl.h"
 #include "input/input_interface.h"
+#include "renderer/RendererManager.h"
 #include "bflib_sound.h"
 #include "bflib_sndlib.h"
 #include "kjm_input.h"
@@ -786,7 +787,7 @@ TbBool get_level_lost_inputs(void)
           turn_off_all_window_menus();
           set_flag_value(game.operation_flags, GOF_ShowPanel, (game.operation_flags & GOF_ShowGui) != 0);
           if (((game.system_flags & GSF_NetworkActive) != 0)
-            || (lbDisplay.PhysicalScreenWidth > 320))
+            || (RendererPhysicalWidth() > 320))
           {
                 if (toggle_status_menu(0))
                   set_flag(game.operation_flags, GOF_ShowPanel);

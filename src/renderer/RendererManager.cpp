@@ -814,6 +814,16 @@ void RendererLoadViewport(TbGraphicsWindow *grwnd)
 }
 
 /******************************************************************************/
+/* Display property accessors                                                 */
+/******************************************************************************/
+
+TbScreenCoord RendererPhysicalWidth(void)  { return lbDisplay.PhysicalScreenWidth;  }
+TbScreenCoord RendererPhysicalHeight(void) { return lbDisplay.PhysicalScreenHeight; }
+TbScreenCoord RendererScreenWidth(void)    { return lbDisplay.GraphicsScreenWidth;  }
+TbScreenCoord RendererScreenHeight(void)   { return lbDisplay.GraphicsScreenHeight; }
+unsigned char* RendererGetWScreen(void)    { return lbDisplay.WScreen; }
+
+/******************************************************************************/
 /* C-callable world-view renderer wrappers */
 /******************************************************************************/
 
@@ -1078,7 +1088,7 @@ TbBool RendererBlitRaw8(int dst_width, int dst_height, int dst_x, int dst_y,
     // Software renderer (or GPU path unavailable): write to the CPU framebuffer.
     return copy_raw8_image_buffer(
         lbDisplay.WScreen,
-        LbGraphicsScreenWidth(), LbGraphicsScreenHeight(),
+        RendererScreenWidth(), RendererScreenHeight(),
         dst_width, dst_height, dst_x, dst_y,
         src_buf, src_width, src_height);
 }

@@ -214,8 +214,8 @@ TbBool copy_raw8_image_to_screen_center(const unsigned char *buf, const int img_
         return false;
 
     // Get screen dimensions
-    int screen_width = LbScreenWidth();
-    int screen_height = LbScreenHeight();
+    int screen_width = RendererPhysicalWidth();
+    int screen_height = RendererPhysicalHeight();
 
     // Get the scaling ratios
     float width_ratio = (float)screen_width / (float)img_width;
@@ -316,9 +316,9 @@ TbBool init_bitmap_screen(struct ActiveBitmap *actv_bmp,int stype)
   struct RawBitmap *rbmp;
 
   // Decide best image to show based on the width of the screen
-  if (LbGraphicsScreenWidth() >= 1280)
+  if (RendererScreenWidth() >= 1280)
     rbmp = &bitmaps_1280[stype];
-  else if (LbGraphicsScreenWidth() >= 640)
+  else if (RendererScreenWidth() >= 640)
     rbmp = &bitmaps_640[stype];
   else
     rbmp = &bitmaps_320[stype];
