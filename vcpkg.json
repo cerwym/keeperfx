@@ -15,6 +15,7 @@
         "ffmpeg",
         "luajit",
         "zlib",
-        "glad"
+        "glad",
+        "curl"
     ]
 }

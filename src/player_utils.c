@@ -41,6 +41,7 @@
 #include "gui_soundmsgs.h"
 #include "gui_frontmenu.h"
 #include "config_settings.h"
+#include "config_keeperfx.h"
 #include "config_spritecolors.h"
 #include "config_terrain.h"
 #include "map_blocks.h"
@@ -125,7 +126,7 @@ void set_player_as_won_level(struct PlayerInfo *player)
   dungeon->lvstats.player_score = compute_player_final_score(player, dungeon->max_gameplay_score);
   dungeon->lvstats.allow_save_score = 1;
   if ((game.system_flags & GSF_NetworkActive) == 0)
-    player->display_objective_turn = game.play_gameturn + 300;
+    player->display_objective_turn = get_gameturn() + 300;
   if (my_player)
   {
     if (lord_of_the_land_in_prison_or_tortured())
@@ -198,7 +199,7 @@ void set_player_as_lost_level(struct PlayerInfo *player)
     }
     set_player_state(player, PSt_CtrlDungeon, 0);
     if ((game.system_flags & GSF_NetworkActive) == 0)
-        player->display_objective_turn = game.play_gameturn + 300;
+        player->display_objective_turn = get_gameturn() + 300;
     if ((game.system_flags & GSF_NetworkActive) != 0)
         reveal_whole_map(player);
     if ((dungeon->computer_enabled & 0x01) != 0)
@@ -1117,6 +1118,10 @@ void init_players_local_game(void)
         default: player->view_mode_restore = PVM_IsoWibbleView; break;
     }
     init_player(player, 0);
+    set_creature_tendencies(player, CrTend_Imprison, IMPRISON_BUTTON_DEFAULT);
+    set_creature_tendencies(player, CrTend_Flee, FLEE_BUTTON_DEFAULT);
+    game.creatures_tend_imprison = IMPRISON_BUTTON_DEFAULT;
+    game.creatures_tend_flee = FLEE_BUTTON_DEFAULT;
 }
 
 void process_player_states(void)

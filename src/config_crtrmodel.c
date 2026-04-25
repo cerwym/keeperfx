@@ -231,7 +231,6 @@ const struct NamedCommand creatmodel_jobs_commands[] = {
   };
 
 const struct NamedCommand creatmodel_sounds_commands[] = {
-  {"HURT",                 CrSnd_Hurt},
   {"HIT",                  CrSnd_Hit},
   {"HAPPY",                CrSnd_Happy},
   {"SAD",                  CrSnd_Sad},
@@ -264,7 +263,7 @@ TbBool parse_creaturemodel_attributes_blocks(long crtr_model,char *buf,long len,
   int k = find_conf_block(buf, &pos, len, block_name);
   if (k < 0)
   {
-      if ((flags & CnfLd_AcceptPartial) == 0)
+      if ((flags & CnfLd_IgnoreErrors) == 0)
           WARNMSG("Block [%s] not found in %s file.", block_name, config_textname);
       return false;
   }
@@ -977,7 +976,7 @@ TbBool parse_creaturemodel_attraction_blocks(long crtr_model,char *buf,long len,
   int k = find_conf_block(buf, &pos, len, block_name);
   if (k < 0)
   {
-      if ((flags & CnfLd_AcceptPartial) == 0)
+      if ((flags & CnfLd_IgnoreErrors) == 0)
           WARNMSG("Block [%s] not found in %s file.", block_name, config_textname);
       return false;
   }
@@ -1089,7 +1088,7 @@ TbBool parse_creaturemodel_annoyance_blocks(long crtr_model,char *buf,long len,c
     int k = find_conf_block(buf, &pos, len, block_name);
     if (k < 0)
     {
-        if ((flags & CnfLd_AcceptPartial) == 0)
+        if ((flags & CnfLd_IgnoreErrors) == 0)
             WARNMSG("Block [%s] not found in %s file.", block_name, config_textname);
         return false;
     }
@@ -1466,7 +1465,7 @@ TbBool parse_creaturemodel_senses_blocks(long crtr_model,char *buf,long len,cons
     int k = find_conf_block(buf, &pos, len, block_name);
     if (k < 0)
     {
-        if ((flags & CnfLd_AcceptPartial) == 0)
+        if ((flags & CnfLd_IgnoreErrors) == 0)
             WARNMSG("Block [%s] not found in %s file.", block_name, config_textname);
         return false;
     }
@@ -1577,7 +1576,7 @@ TbBool parse_creaturemodel_appearance_blocks(long crtr_model,char *buf,long len,
     int k = find_conf_block(buf, &pos, len, block_name);
     if (k < 0)
     {
-        if ((flags & CnfLd_AcceptPartial) == 0)
+        if ((flags & CnfLd_IgnoreErrors) == 0)
             WARNMSG("Block [%s] not found in %s file.", block_name, config_textname);
         return false;
     }
@@ -1781,7 +1780,7 @@ TbBool parse_creaturemodel_experience_blocks(long crtr_model,char *buf,long len,
     int k = find_conf_block(buf, &pos, len, block_name);
     if (k < 0)
     {
-        if ((flags & CnfLd_AcceptPartial) == 0)
+        if ((flags & CnfLd_IgnoreErrors) == 0)
             WARNMSG("Block [%s] not found in %s file.", block_name, config_textname);
         return false;
     }
@@ -1973,7 +1972,7 @@ TbBool parse_creaturemodel_jobs_blocks(long crtr_model,char *buf,long len,const 
     int k = find_conf_block(buf, &pos, len, block_name);
     if (k < 0)
     {
-        if ((flags & CnfLd_AcceptPartial) == 0)
+        if ((flags & CnfLd_IgnoreErrors) == 0)
             WARNMSG("Block [%s] not found in %s file.", block_name, config_textname);
         return false;
     }
@@ -2167,7 +2166,7 @@ TbBool parse_creaturemodel_sprites_blocks(long crtr_model,char *buf,long len,con
   int k = find_conf_block(buf, &pos, len, block_name);
   if (k < 0)
   {
-      if ((flags & CnfLd_AcceptPartial) == 0)
+      if ((flags & CnfLd_IgnoreErrors) == 0)
           WARNMSG("Block [%s] not found in %s file.", block_name, config_textname);
       return false;
   }
@@ -2237,7 +2236,7 @@ TbBool parse_creaturemodel_sounds_blocks(long crtr_model,char *buf,long len,cons
     int k = find_conf_block(buf, &pos, len, block_name);
     if (k < 0)
     {
-        if ((flags & CnfLd_AcceptPartial) == 0)
+        if ((flags & CnfLd_IgnoreErrors) == 0)
             WARNMSG("Block [%s] not found in %s file.", block_name, config_textname);
         return false;
     }
@@ -2252,25 +2251,6 @@ TbBool parse_creaturemodel_sounds_blocks(long crtr_model,char *buf,long len,cons
         char word_buf[COMMAND_WORD_LEN];
         switch (cmd_num)
         {
-        case CrSnd_Hurt:
-            if (get_conf_parameter_single(buf,&pos,len,word_buf,sizeof(word_buf)) > 0)
-            {
-                k = atoi(word_buf);
-                game.conf.crtr_conf.creature_sounds[crtr_model].hurt.index = k;
-                n++;
-            }
-            if (get_conf_parameter_single(buf,&pos,len,word_buf,sizeof(word_buf)) > 0)
-            {
-                k = atoi(word_buf);
-                game.conf.crtr_conf.creature_sounds[crtr_model].hurt.count = k;
-                n++;
-            }
-            if (n < 1)
-            {
-              CONFWRNLOG("Incorrect value of \"%s\" parameter in [%s] block of %s file.",
-                  COMMAND_TEXT(cmd_num), block_name, config_textname);
-            }
-            break;
         case CrSnd_Hit:
             if (get_conf_parameter_single(buf,&pos,len,word_buf,sizeof(word_buf)) > 0)
             {
@@ -2528,11 +2508,11 @@ static TbBool load_creaturemodel_config_file(long crtr_model, const char *fname,
 }
 
 /* @comment
- *     The loading items of load_creaturemodel_config and load_creaturemodel_config_for_mod_one need to be consistent.
+ *     The loading items of load_creaturemodel_config and load_creaturemodel_config_for_mod need to be consistent.
  */
-static TbBool load_creaturemodel_config_for_mod_one(ThingModel crmodel, unsigned short flags, const char *conf_fnstr, const struct ModConfigItem *mod_item)
+static TbBool load_creaturemodel_config_for_mod(ThingModel crmodel, unsigned short flags, const char *conf_fnstr, const struct ModConfigItem *mod_item)
 {
-    set_flag(flags, (CnfLd_AcceptPartial | CnfLd_IgnoreErrors));
+    set_flag(flags, CnfLd_IgnoreErrors);
 
     TbBool result = false;
     const struct ModExistState *mod_state = &mod_item->state;
@@ -2580,23 +2560,32 @@ static TbBool load_creaturemodel_config_for_mod_list(ThingModel crmodel, unsigne
         if (mod_item->state.mod_dir == 0)
             continue;
 
-        result |= load_creaturemodel_config_for_mod_one(crmodel, flags, conf_fnstr, mod_item);
+        result |= load_creaturemodel_config_for_mod(crmodel, flags, conf_fnstr, mod_item);
     }
 
     return result;
 }
 
-/* @comment
- *     The loading items of load_creaturemodel_config and load_creaturemodel_config_for_mod_one need to be consistent.
+/* @function description
+ *     Load model configuration for a creature.
+ *     Splitting ThingModel into conf_crmodel and crmodel, So specific/different configuration can be loaded for crmodel.
+ * @comment
+ *     The loading items of load_creaturemodel_config and load_creaturemodel_config_for_mod need to be consistent.
  */
-TbBool load_creaturemodel_config(ThingModel crmodel, unsigned short flags)
+TbBool load_creaturemodel_config(ThingModel conf_crmodel, ThingModel crmodel, unsigned short flags)
 {
+    if ((flags & CnfLd_AcceptPartial) == 0)
+    {
+        init_creature_model_stats(crmodel);
+    }
+    set_flag(flags, CnfLd_AcceptPartial);
+
     char conf_fnstr[COMMAND_WORD_LEN];
-    snprintf(conf_fnstr, COMMAND_WORD_LEN, "%s", get_conf_parameter_text(creature_desc,crmodel));
+    snprintf(conf_fnstr, COMMAND_WORD_LEN, "%s", get_conf_parameter_text(creature_desc, conf_crmodel));
     strtolower(conf_fnstr);
     if (strlen(conf_fnstr) == 0)
     {
-        WARNMSG("Cannot get config file name for creature %d.",crmodel);
+        WARNMSG("Cannot get config file name[%d] for creature[%d].", conf_crmodel, crmodel);
         return false;
     }
 
@@ -2604,7 +2593,7 @@ TbBool load_creaturemodel_config(ThingModel crmodel, unsigned short flags)
     TbBool result = (fname != NULL && load_creaturemodel_config_file(crmodel, fname, flags));
     if (result)
     {
-        set_flag(flags, (CnfLd_AcceptPartial | CnfLd_IgnoreErrors));
+        set_flag(flags, CnfLd_IgnoreErrors);
     }
 
     if (mods_conf.after_base_cnt > 0)
@@ -2612,7 +2601,7 @@ TbBool load_creaturemodel_config(ThingModel crmodel, unsigned short flags)
         result |= load_creaturemodel_config_for_mod_list(crmodel, flags, conf_fnstr, mods_conf.after_base_item, mods_conf.after_base_cnt);
         if (result)
         {
-            set_flag(flags, (CnfLd_AcceptPartial | CnfLd_IgnoreErrors));
+            set_flag(flags, CnfLd_IgnoreErrors);
         }
     }
 
@@ -2622,7 +2611,7 @@ TbBool load_creaturemodel_config(ThingModel crmodel, unsigned short flags)
         result |= load_creaturemodel_config_file(crmodel, fname, flags);
         if (result)
         {
-            set_flag(flags, (CnfLd_AcceptPartial | CnfLd_IgnoreErrors));
+            set_flag(flags, CnfLd_IgnoreErrors);
         }
     }
 
@@ -2631,7 +2620,7 @@ TbBool load_creaturemodel_config(ThingModel crmodel, unsigned short flags)
         result |= load_creaturemodel_config_for_mod_list(crmodel, flags, conf_fnstr, mods_conf.after_campaign_item, mods_conf.after_campaign_cnt);
         if (result)
         {
-            set_flag(flags, (CnfLd_AcceptPartial | CnfLd_IgnoreErrors));
+            set_flag(flags, CnfLd_IgnoreErrors);
         }
     }
 
@@ -2641,53 +2630,43 @@ TbBool load_creaturemodel_config(ThingModel crmodel, unsigned short flags)
         result |= load_creaturemodel_config_file(crmodel, fname, flags);
         if (result)
         {
-            set_flag(flags, (CnfLd_AcceptPartial | CnfLd_IgnoreErrors));
+            set_flag(flags, CnfLd_IgnoreErrors);
         }
     }
 
     if (mods_conf.after_map_cnt > 0)
     {
         result |= load_creaturemodel_config_for_mod_list(crmodel, flags, conf_fnstr, mods_conf.after_map_item, mods_conf.after_map_cnt);
-        // last one does not need to set (CnfLd_AcceptPartial | CnfLd_IgnoreErrors)
+        // last one does not need to set CnfLd_IgnoreErrors
     }
 
     if (!result)
     {
-        ERRORLOG("Unable to load a complete '%s' creature model config file.", creature_code_name(crmodel));
+        ERRORLOG("Unable to load a complete model config file[%s] for creature[%s].", creature_code_name(conf_crmodel), creature_code_name(crmodel));
     }
     return result;
+}
+
+TbBool load_default_creaturemodel_config(ThingModel crmodel, unsigned short flags)
+{
+    return load_creaturemodel_config(crmodel, crmodel, flags);
 }
 
 TbBool swap_creaturemodel_config(ThingModel nwcrmodel, ThingModel crmodel, unsigned short flags)
 {
-    char conf_fnstr[COMMAND_WORD_LEN];
-    snprintf(conf_fnstr, COMMAND_WORD_LEN, "%s", get_conf_parameter_text(creature_desc, nwcrmodel));
-    strtolower(conf_fnstr);
-    if (strlen(conf_fnstr) == 0)
-    {
-        WARNMSG("Cannot get config file name for creature %d.", crmodel);
-        return false;
-    }
-    char* fname = get_game_file_path_fmt(FGrp_CrtrData, "%s.cfg", conf_fnstr);
-    TbBool result = (fname != NULL && load_creaturemodel_config_file(crmodel, fname, flags));
-    fname = get_game_file_path_fmt(FGrp_CmpgCrtrs, "%s.cfg", conf_fnstr);
-    if (fname && strlen(fname) > 0)
-    {
-        load_creaturemodel_config_file(crmodel, fname, flags | CnfLd_AcceptPartial | CnfLd_IgnoreErrors);
-    }
-    fname = get_game_file_path_fmt(FGrp_CmpgLvls, "map%05lu.%s.cfg", get_selected_level_number(), conf_fnstr);
-    if (fname && strlen(fname) > 0)
-    {
-        load_creaturemodel_config_file(crmodel, fname, flags|CnfLd_AcceptPartial|CnfLd_IgnoreErrors);
-    }
-    //Freeing and exiting
-    return result;
+    return load_creaturemodel_config(nwcrmodel, crmodel, flags);
 }
 
 static void do_creature_swap(ThingModel ncrt_id, ThingModel crtr_id)
 {
-    swap_creaturemodel_config(ncrt_id, crtr_id, 0);
-    SCRPTLOG("Swapped creature %s out for creature %s", creature_code_name(crtr_id), creature_code_name(ncrt_id));
+    if (swap_creaturemodel_config(ncrt_id, crtr_id, 0))
+    {
+        SCRPTLOG("Swapped creature %s out for creature %s", creature_code_name(crtr_id), creature_code_name(ncrt_id));
+    }
+    else
+    {
+        ERRORLOG("Failed to swap creature %s out for creature %s", creature_code_name(crtr_id), creature_code_name(ncrt_id));
+    }
 }
 
 TbBool swap_creature(ThingModel ncrt_id, ThingModel crtr_id)
@@ -2710,6 +2689,7 @@ TbBool swap_creature(ThingModel ncrt_id, ThingModel crtr_id)
     for (PlayerNumber plyr_idx = 0; plyr_idx < PLAYERS_COUNT; plyr_idx++)
     {
         do_to_players_all_creatures_of_model(plyr_idx, crtr_id, update_relative_creature_health);
+        do_to_players_all_creatures_of_model(plyr_idx, crtr_id, creature_increase_available_instances);
         update_speed_of_player_creatures_of_model(plyr_idx, crtr_id);
         if (oldlair != newlair)
         {
