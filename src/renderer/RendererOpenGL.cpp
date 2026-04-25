@@ -13,6 +13,7 @@
 #include "pre_inc.h"
 #include "renderer/RendererOpenGL.h"
 #include "renderer/RendererManager.h"
+#include "renderer/VecMath.h"
 #include "renderer/opengl/GLTileAtlas.h"
 #include "renderer/opengl/GLSpriteAtlas.h"
 #include "renderer/opengl/GLWorldViewRenderer.h"
@@ -168,15 +169,12 @@ bool RendererOpenGL::Init()
     m_uTintFactor = glGetUniformLocation(m_shader, "u_tint_factor");
 
     // ── World-geometry GPU resources ─────────────────────────────────────────
-    if (!init_fade_table_texture())
-    {
-        WARNLOG("RendererOpenGL: fade table texture init failed — world GPU renderer disabled");
-        // Non-fatal: framebuffer blit still works
-    }
+    // Fade table texture is initialised later via RendererNotifyGameTablesReady()
+    // (called after setup_stuff()) because render_fade_tables is not yet loaded.
 
     if (!init_tile_atlas())
     {
-        WARNLOG("RendererOpenGL: tile atlas init failed — world GPU renderer disabled");
+        SYNCDBG(7, "RendererOpenGL: tile atlas deferred — block_mem not yet loaded");
     }
 
     // ── Raw-image GPU blit (frontend background images) ────────────────────────
@@ -468,6 +466,14 @@ bool RendererOpenGL::Init()
 
 void RendererOpenGL::Shutdown()
 {
+    // Clear cached rawblit data to prevent dangling pointers across screen mode changes.
+    // The cached command may contain a pointer to a frontend image buffer that becomes
+    // invalid when the renderer is shut down/reinitialized during screen mode transitions.
+    m_rawblit_cached = false;
+    m_rawblit_pending = false;
+    m_rawblit_cached_cmd = {};
+    m_rawblit_cmd = {};
+
     delete m_tile_atlas;
     m_tile_atlas = nullptr;
 
@@ -519,9 +525,7 @@ bool RendererOpenGL::BeginFrame()
     if (m_frame_begun) return true;
     m_frame_begun = true;
 
-    // Lazy-retry resources that depend on game data loaded after Init().
-    if (!m_texFade && render_fade_tables)
-        init_fade_table_texture();
+    // Lazy-retry resources that depend on level data loaded after Init().
     if (m_tile_atlas && !m_tile_atlas->IsInitialized())
         init_tile_atlas();
 
@@ -619,6 +623,15 @@ bool RendererOpenGL::BeginFrame()
  *  ============================================================ */
 void RendererOpenGL::EndFrame()
 {
+    // ── Flicker diagnostic: detect double-present (EndFrame without BeginFrame) ──
+    {
+        static int s_ef_count = 0;
+        ++s_ef_count;
+        if (!m_frame_begun) {
+            SYNCLOG("FLICKER-DIAG: EndFrame WITHOUT BeginFrame (frame %d) — UI queues are stale/empty", s_ef_count);
+        }
+    }
+
     // ── Flicker diagnostic: GL error audit ──────────────────────────────────
     // Check for accumulated GL errors from previous frame's deferred operations.
     // A GL error set by any call silently causes subsequent operations to fail
@@ -658,12 +671,6 @@ void RendererOpenGL::EndFrame()
     if (m_world_renderer)
     {
         m_world_renderer->GPURenderNow();
-        // Clear the rawblit cache unless a blocking palette-fade loop has
-        // explicitly requested preservation (RendererPreserveFadeCache(1)).
-        // Without this guard the cache is destroyed on the first EndFrame
-        // inside ProperFadePalette, making GPU palette fading invisible.
-        if (!RendererIsFadeCachePreserved())
-            m_rawblit_cached = false;
     }
     // GL error check after world pass
     {
@@ -684,8 +691,9 @@ void RendererOpenGL::EndFrame()
     // During blocking palette-fade loops (ProperFadePalette / fade_in / fade_out),
     // the game calls RendererPresentFrame repeatedly without issuing any new draw commands.
     // Re-issue the last frontend rawblit with the freshly-uploaded (darkened) palette
-    // so the fade is visible in GPU mode.  Only kicks in when nothing new was queued.
-    if (!m_rawblit_pending && m_rawblit_cached)
+    // so the fade is visible in GPU mode.  Only kicks in when nothing new was queued
+    // AND the fade-cache preserve flag is active (set by ProperFadePalette).
+    if (!m_rawblit_pending && m_rawblit_cached && RendererIsFadeCachePreserved())
         m_rawblit_pending = true, m_rawblit_cmd = m_rawblit_cached_cmd;
 
     if (m_rawblit_pending)
@@ -723,22 +731,21 @@ void RendererOpenGL::EndFrame()
         // Screen-space: y increases downward; NDC: y increases upward.
         const float sw = (float)m_screenW;
         const float sh = (float)m_screenH;
-        const float x0 = (float)cmd.dst_x             / sw * 2.0f - 1.0f;
-        const float x1 = (float)(cmd.dst_x + cmd.dst_w) / sw * 2.0f - 1.0f;
-        const float y0 = 1.0f - (float)cmd.dst_y             / sh * 2.0f;  // top NDC
-        const float y1 = 1.0f - (float)(cmd.dst_y + cmd.dst_h) / sh * 2.0f; // bottom NDC
+        Vec2f ndc0 = ScreenToNDC((float)cmd.dst_x,              (float)cmd.dst_y,              sw, sh);
+        Vec2f ndc1 = ScreenToNDC((float)(cmd.dst_x + cmd.dst_w), (float)(cmd.dst_y + cmd.dst_h), sw, sh);
 
         // Two triangles; UV (0,0) = top-left, (1,1) = bottom-right.
         const float verts[6][4] = {
-            { x0, y1,  0.f, 1.f },  // bottom-left
-            { x1, y1,  1.f, 1.f },  // bottom-right
-            { x1, y0,  1.f, 0.f },  // top-right
-            { x0, y1,  0.f, 1.f },  // bottom-left
-            { x1, y0,  1.f, 0.f },  // top-right
-            { x0, y0,  0.f, 0.f },  // top-left
+            { ndc0.x, ndc1.y,  0.f, 1.f },  // bottom-left
+            { ndc1.x, ndc1.y,  1.f, 1.f },  // bottom-right
+            { ndc1.x, ndc0.y,  1.f, 0.f },  // top-right
+            { ndc0.x, ndc1.y,  0.f, 1.f },  // bottom-left
+            { ndc1.x, ndc0.y,  1.f, 0.f },  // top-right
+            { ndc0.x, ndc0.y,  0.f, 0.f },  // top-left
         };
         glBindVertexArray(m_rawblit_vao);
         glBindBuffer(GL_ARRAY_BUFFER, m_rawblit_vbo);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(verts), nullptr, GL_DYNAMIC_DRAW);
         glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(verts), verts);
 
         glDisable(GL_BLEND);
@@ -752,6 +759,13 @@ void RendererOpenGL::EndFrame()
         glActiveTexture(GL_TEXTURE0);
 
         m_rawblit_pending = false;
+    }
+    else if (!RendererIsFadeCachePreserved())
+    {
+        // No rawblit submitted this frame and no palette-fade in progress.
+        // Clear the stale cache so old menu backgrounds don't persist after
+        // transitioning from frontend to in-game.
+        m_rawblit_cached = false;
     }
 
     // Overhead map tile colour GPU blit — drawn after the parchment background
@@ -805,6 +819,7 @@ void RendererOpenGL::EndFrame()
         };
         glBindVertexArray(m_rawblit_vao);
         glBindBuffer(GL_ARRAY_BUFFER, m_rawblit_vbo);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(verts), nullptr, GL_DYNAMIC_DRAW);
         glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(verts), verts);
 
         // Use the overhead-map shader (discards index 0 = unrevealed tiles) so
@@ -850,19 +865,18 @@ void RendererOpenGL::EndFrame()
             const float sh = (float)m_screenH;
             for (const ZoomBoxBgCmd& bg : m_zoom_box_bg_cmds)
             {
-                const float x0 = (float)bg.x           / sw * 2.0f - 1.0f;
-                const float x1 = (float)(bg.x + bg.w)  / sw * 2.0f - 1.0f;
-                const float y0 = 1.0f - (float)bg.y           / sh * 2.0f;
-                const float y1 = 1.0f - (float)(bg.y + bg.h)  / sh * 2.0f;
+                Vec2f ndc0 = ScreenToNDC((float)bg.x,          (float)bg.y,          sw, sh);
+                Vec2f ndc1 = ScreenToNDC((float)(bg.x + bg.w),  (float)(bg.y + bg.h), sw, sh);
                 // Two triangles; UV ignored by tint shader (location 1 unused).
                 const float verts[6][4] = {
-                    { x0, y1,  0.f, 0.f },
-                    { x1, y1,  0.f, 0.f },
-                    { x1, y0,  0.f, 0.f },
-                    { x0, y1,  0.f, 0.f },
-                    { x1, y0,  0.f, 0.f },
-                    { x0, y0,  0.f, 0.f },
+                    { ndc0.x, ndc1.y,  0.f, 0.f },
+                    { ndc1.x, ndc1.y,  0.f, 0.f },
+                    { ndc1.x, ndc0.y,  0.f, 0.f },
+                    { ndc0.x, ndc1.y,  0.f, 0.f },
+                    { ndc1.x, ndc0.y,  0.f, 0.f },
+                    { ndc0.x, ndc0.y,  0.f, 0.f },
                 };
+                glBufferData(GL_ARRAY_BUFFER, sizeof(verts), nullptr, GL_DYNAMIC_DRAW);
                 glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(verts), verts);
                 glDrawArrays(GL_TRIANGLES, 0, 6);
             }
@@ -914,18 +928,17 @@ void RendererOpenGL::EndFrame()
 
             for (const ZoomTileCmd& c : m_zoom_tile_cmds)
             {
-                const float x0 = c.dst_x               / sw * 2.0f - 1.0f;
-                const float x1 = (c.dst_x + c.dst_w)   / sw * 2.0f - 1.0f;
-                const float y0 = 1.0f - c.dst_y               / sh * 2.0f;
-                const float y1 = 1.0f - (c.dst_y + c.dst_h)   / sh * 2.0f;
+                Vec2f ndc0 = ScreenToNDC(c.dst_x,             c.dst_y,             sw, sh);
+                Vec2f ndc1 = ScreenToNDC(c.dst_x + c.dst_w,   c.dst_y + c.dst_h,   sw, sh);
                 const float verts[6][4] = {
-                    { x0, y1,  c.u0, c.v1 },
-                    { x1, y1,  c.u1, c.v1 },
-                    { x1, y0,  c.u1, c.v0 },
-                    { x0, y1,  c.u0, c.v1 },
-                    { x1, y0,  c.u1, c.v0 },
-                    { x0, y0,  c.u0, c.v0 },
+                    { ndc0.x, ndc1.y,  c.u0, c.v1 },
+                    { ndc1.x, ndc1.y,  c.u1, c.v1 },
+                    { ndc1.x, ndc0.y,  c.u1, c.v0 },
+                    { ndc0.x, ndc1.y,  c.u0, c.v1 },
+                    { ndc1.x, ndc0.y,  c.u1, c.v0 },
+                    { ndc0.x, ndc0.y,  c.u0, c.v0 },
                 };
+                glBufferData(GL_ARRAY_BUFFER, sizeof(verts), nullptr, GL_DYNAMIC_DRAW);
                 glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(verts), verts);
                 glDrawArrays(GL_TRIANGLES, 0, 6);
             }
@@ -1055,20 +1068,19 @@ void RendererOpenGL::EndFrame()
         // Build NDC rect for the pre-computed letterboxed/scaled destination.
         const float sw = (float)m_screenW;
         const float sh = (float)m_screenH;
-        const float x0 = (float)cmd.dst_x               / sw * 2.0f - 1.0f;
-        const float x1 = (float)(cmd.dst_x + cmd.dst_w) / sw * 2.0f - 1.0f;
-        const float y0 = 1.0f - (float)cmd.dst_y               / sh * 2.0f;
-        const float y1 = 1.0f - (float)(cmd.dst_y + cmd.dst_h) / sh * 2.0f;
+        Vec2f ndc0 = ScreenToNDC((float)cmd.dst_x,              (float)cmd.dst_y,              sw, sh);
+        Vec2f ndc1 = ScreenToNDC((float)(cmd.dst_x + cmd.dst_w), (float)(cmd.dst_y + cmd.dst_h), sw, sh);
         const float verts[6][4] = {
-            { x0, y1,  0.f, 1.f },
-            { x1, y1,  1.f, 1.f },
-            { x1, y0,  1.f, 0.f },
-            { x0, y1,  0.f, 1.f },
-            { x1, y0,  1.f, 0.f },
-            { x0, y0,  0.f, 0.f },
+            { ndc0.x, ndc1.y,  0.f, 1.f },
+            { ndc1.x, ndc1.y,  1.f, 1.f },
+            { ndc1.x, ndc0.y,  1.f, 0.f },
+            { ndc0.x, ndc1.y,  0.f, 1.f },
+            { ndc1.x, ndc0.y,  1.f, 0.f },
+            { ndc0.x, ndc0.y,  0.f, 0.f },
         };
         glBindVertexArray(m_fmv_vao);
         glBindBuffer(GL_ARRAY_BUFFER, m_fmv_vbo);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(verts), nullptr, GL_DYNAMIC_DRAW);
         glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(verts), verts);
         glDisable(GL_BLEND);
         glUseProgram(m_rawblit_shader);
@@ -1128,6 +1140,7 @@ void RendererOpenGL::EndFrame()
         // exclusive within a frame (only one land-view draw path fires per frame).
         glBindVertexArray(m_rawblit_vao);
         glBindBuffer(GL_ARRAY_BUFFER, m_rawblit_vbo);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(fs_quad), nullptr, GL_DYNAMIC_DRAW);
         glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(fs_quad), fs_quad);
 
         glUseProgram(m_zoom_shader);
@@ -1591,7 +1604,7 @@ bool RendererOpenGL::init_fade_table_texture()
 {
     if (!render_fade_tables)
     {
-        WARNLOG("RendererOpenGL::init_fade_table_texture — render_fade_tables not ready");
+        ERRORLOG("init_fade_table_texture called but render_fade_tables is NULL");
         return false;
     }
 

@@ -22,6 +22,7 @@
 #include <cstring>
 #include <climits>
 #include "kfx/profiling/KfxProfiling.h"
+#include "renderer/VecMath.h"
 #include "post_inc.h"
 
 /******************************************************************************/
@@ -836,8 +837,9 @@ int GLTextRenderer::GenerateCharQuad(unsigned long chr, float x, float y, float 
 
 void GLTextRenderer::ScreenToNDC(float screen_x, float screen_y, float* ndc_x, float* ndc_y) const
 {
-    *ndc_x = (screen_x / (float)m_screen_width) * 2.0f - 1.0f;
-    *ndc_y = 1.0f - (screen_y / (float)m_screen_height) * 2.0f;
+    Vec2f ndc = ::ScreenToNDC(screen_x, screen_y, (float)m_screen_width, (float)m_screen_height);
+    *ndc_x = ndc.x;
+    *ndc_y = ndc.y;
 }
 
 /******************************************************************************/

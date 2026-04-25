@@ -38,6 +38,10 @@ public:
      *  Returns 0 if not initialised or out of range. */
     virtual unsigned int GetAtlasTexture(int variation) const = 0;
 
+    /** Return a GL_TEXTURE_2D_ARRAY handle covering all variations as layers.
+     *  Returns 0 when the platform uses individual textures instead. */
+    virtual unsigned int GetAtlasTextureArray() const { return 0; }
+
     bool IsInitialized() const { return m_initialized; }
 
 protected:

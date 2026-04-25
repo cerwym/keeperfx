@@ -3773,6 +3773,8 @@ static void create_shadows(struct Thing *thing, struct EngineCoord *ecor, struct
     rotpers(&ecor4, &camera_matrix);
 
     int min_cor_z = min(min(ecor1.z,ecor2.z),min(ecor3.z,ecor4.z));
+    if (min_cor_z < BUCKETS_STEP)
+        return;
     struct BucketKindCreatureShadow *kspr = (struct BucketKindCreatureShadow *)get_bucket_item(min_cor_z, QK_CreatureShadow, sizeof(struct BucketKindCreatureShadow));
     if (kspr == NULL)
         return;
@@ -3826,6 +3828,8 @@ static void add_draw_status_box(struct Thing *thing, struct EngineCoord *ecor)
     int z_val = coord.z;
     if (!lens_mode)
         z_val = BUCKETS_STEP; // should get into bucket 1
+    if (z_val < BUCKETS_STEP)
+        return;
 
     struct BucketKindCreatureStatus* poly = (struct BucketKindCreatureStatus*)get_bucket_item(z_val, QK_CreatureStatus, sizeof(struct BucketKindCreatureStatus));
     if (poly == NULL)
@@ -6801,9 +6805,10 @@ void draw_nonspatial_sprites_gpu(void)
 
     for (bucket_num = BUCKETS_COUNT-1; bucket_num > 0; bucket_num--)
     {
-        // NDC z for this bucket — matches the formula used by the world tile/sprite pass
-        // so depth-test comparisons against the tile z-buffer are valid.
-        float ndc_z = 2.0f * (float)bucket_num / (float)(BUCKETS_COUNT - 1) - 1.0f;
+        // NDC z for this bucket, biased half a bucket closer to the camera so
+        // status sprites and floating text pass the depth test against same-bucket
+        // ground polygons (avoids z-fighting).
+        float ndc_z = 2.0f * ((float)bucket_num - 0.5f) / (float)(BUCKETS_COUNT - 1) - 1.0f;
 
         // z_depth (0..1 range) is kept for the slab-selector UIRenderer API which
         // requires it; the actual depth testing uses ndc_z above.
@@ -7034,6 +7039,7 @@ void draw_view(struct Camera *cam, unsigned char a2)
     }
 
     WorldViewRenderer_DrawIsometricView();
+
     /* NSP overlays (health bars, room flags, gold text) only belong in the
      * isometric/creature gameplay view, not in the overhead parchment map.
      * The parchment camera uses PVM_ParchmentView; all other modes that reach
@@ -8956,7 +8962,7 @@ static void do_map_who_for_thing(struct Thing *thing)
         ecor.z = (map_y_pos - render_pos_z);
         ecor.y = (render_pos_y - map_z_pos);
         rotpers(&ecor, &camera_matrix);
-        if (getpoly < poly_pool_end)
+        if (getpoly < poly_pool_end && ecor.z >= 64)
         {
             if (game.play_gameturn - thing->roomflag2.last_turn_drawn == 1)
             {

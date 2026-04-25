@@ -46,7 +46,7 @@ enum RendererType {
  *
  * A renderer backend owns the display context and is responsible for:
  *   - Initialising the display surface / GPU context
- *   - Providing a CPU-writable framebuffer (for the software rasteriser)
+ *   - Providing a CPU-writable framebuffer (for the software rasteriser - only as a backup, you can void this.)
  *   - Presenting the completed frame to the display
  *
  * The software rasteriser always writes into the buffer returned by

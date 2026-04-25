@@ -17,6 +17,7 @@
 #include "renderer/ITileAtlas.h"
 #include "renderer/RendererManager.h"  // for RendererGetActive/RendererGetActiveType
 #include "renderer/RendererOpenGL.h"   // for RendererOpenGL class
+#include "renderer/VecMath.h"
 
 #include "engine_buckets.h"   // QKinds enum, BasicQ, BucketKind* structs, buckets[]
 #include "engine_textures.h"  // TEXTURE_BLOCKS_COUNT
@@ -176,6 +177,10 @@ bool GLWorldViewRenderer::init_gl_resources()
     glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, sizeof(WorldVertex),
                           (void*)(8 * sizeof(float)));
     glEnableVertexAttribArray(4);
+    // layout(location=5) float a_layer — texture array layer (atlas variation), byte offset 36
+    glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, sizeof(WorldVertex),
+                          (void*)(9 * sizeof(float)));
+    glEnableVertexAttribArray(5);
 
     glBindVertexArray(0);
 
@@ -191,7 +196,7 @@ bool GLWorldViewRenderer::init_gl_resources()
     // Cache uniform locations and bind samplers to fixed texture units
     glUseProgram(m_shader);
     m_loc_tile_atlas = glGetUniformLocation(m_shader, "u_tile_atlas");
-    glUniform1i(m_loc_tile_atlas, 0);   // GL_TEXTURE0 — R8 palette-index atlas
+    glUniform1i(m_loc_tile_atlas, 0);   // GL_TEXTURE0 — R8 palette-index atlas array
     m_loc_palette = glGetUniformLocation(m_shader, "u_palette");
     glUniform1i(m_loc_palette, 1);      // GL_TEXTURE1 — 1D RGBA8 palette
     // Shade / lighting uniforms — cache locations and push defaults
@@ -885,6 +890,7 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
         { vx0, vy1, ul,  v1   },   // BL
     };
     glBindBuffer(GL_ARRAY_BUFFER, m_kspr_vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(sv), nullptr, GL_DYNAMIC_DRAW);
     glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(sv), sv);
 
     float alpha = 1.0f;
@@ -1065,8 +1071,10 @@ void GLWorldViewRenderer::AddWorldText(float world_x, float world_y, float world
     if (!text || !m_initialized)
         return;
 
-    // Calculate NDC depth from bucket number (same as sprite/tile depth calculation)
-    float z_ndc = 2.0f * (float)bucket_num / (float)(BUCKETS_COUNT - 1) - 1.0f;
+    // Calculate NDC depth from bucket number, biased half a bucket closer to
+    // the camera so world text always passes the depth test against same-bucket
+    // ground polygons (avoids z-fighting).
+    float z_ndc = 2.0f * ((float)bucket_num - 0.5f) / (float)(BUCKETS_COUNT - 1) - 1.0f;
 
     WorldTextCmd cmd;
     cmd.world_x = world_x;
@@ -1094,8 +1102,10 @@ void GLWorldViewRenderer::setup_world_sprite_processing(int32_t bucket_num)
 {
     if (!m_initialized) return;
 
-    // Set up depth for this bucket
-    const float sprite_z = 2.0f * (float)bucket_num / (float)(BUCKETS_COUNT - 1) - 1.0f;
+    // Set up depth for this bucket, biased half a bucket closer to the camera
+    // so sprites always pass the depth test against same-bucket ground polygons
+    // (avoids z-fighting between coplanar sprites and tiles).
+    const float sprite_z = 2.0f * ((float)bucket_num - 0.5f) / (float)(BUCKETS_COUNT - 1) - 1.0f;
     OpenGLSpriteBackend::SetCurrentBucketZ(sprite_z);
 
     // Store the depth for keeper sprite rendering
@@ -1114,7 +1124,6 @@ void GLWorldViewRenderer::BeginWorldPass(unsigned char* framebuf, int pitch,
     m_vp_y            = vp_y;
     m_framebuf        = framebuf;
     m_pitch           = pitch;
-    m_current_variation = 0;
     m_current_bucket    = 0;
     m_world_pass_active  = true;
     m_kspr_atlas_hits    = 0;
@@ -1167,14 +1176,6 @@ bool GLWorldViewRenderer::append_triangle(int tile_id,
     const int variation  = tile_id / TEXTURE_BLOCKS_COUNT;
     const int tile_local = tile_id % TEXTURE_BLOCKS_COUNT;
 
-    // Flush the current batch whenever the atlas variation changes so each
-    // draw call uses a single consistent texture.
-    if (variation != m_current_variation)
-    {
-        gpu_flush();
-        m_current_variation = variation;
-    }
-
     if (m_vert_count + 3 > k_max_verts)
     {
         gpu_flush();
@@ -1189,6 +1190,7 @@ bool GLWorldViewRenderer::append_triangle(int tile_id,
     // Derive NDC depth from the painter's-algorithm bucket index:
     //   high bi (far away) → z near +1.0; low bi (close) → z near -1.0.
     const float z_ndc = 2.0f * (float)m_current_bucket / (float)(BUCKETS_COUNT - 1) - 1.0f;
+    const float layer = (float)variation;
 
     const struct PolyPoint* pts[3] = { p0, p1, p2 };
     const int32_t cam_z[3] = { cam_z0, cam_z1, cam_z2 };
@@ -1211,6 +1213,7 @@ bool GLWorldViewRenderer::append_triangle(int tile_id,
         // Camera-space Z for perspective-correct interpolation.
         // 0 or negative means unknown — default to 1.0 (affine, no correction).
         wv->camera_z = (cam_z[i] > 0) ? (float)cam_z[i] : 1.0f;
+        wv->atlas_layer = layer;
     }
     m_vert_count += 3;
     return true;
@@ -1228,12 +1231,7 @@ bool GLWorldViewRenderer::append_triangle_compact(
     // The atlas is repacked 64 tiles wide (2048 px), so we must remap via
     // GetTileUV just as append_triangle does for full PolyPoint polygons.
     // Compact triangles always reference tiles with variation 0 (tile_id < TEXTURE_BLOCKS_COUNT);
-    // flush the current batch if a different variation is active.
-    if (m_current_variation != 0)
-    {
-        gpu_flush();
-        m_current_variation = 0;
-    }
+    // atlas_layer is set to 0.0f in the COMPACT_UV_TO_WORLDVERTEX macro.
 
     if (m_vert_count + 3 > k_max_verts)
     {
@@ -1287,7 +1285,6 @@ void GLWorldViewRenderer::gpu_flush()
     cmd.type       = DrawCmd::CMD_TILES;
     cmd.vert_start = m_cmd_vert_start;
     cmd.vert_count = m_vert_count - m_cmd_vert_start;
-    cmd.variation  = m_current_variation;
     m_draw_cmds.push_back(cmd);
     m_cmd_vert_start = m_vert_count;
 }
@@ -1373,7 +1370,7 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
     glDepthFunc(GL_LEQUAL);
     glDepthMask(GL_TRUE);
 
-    int  bound_variation   = -1;
+    bool atlas_bound       = false;  // tile atlas array bound to GL_TEXTURE0
     bool flatpoly_uploaded = false;  // flat-poly VBO uploaded on first CMD_FLAT_POLYS
 
     // Push shade/lighting settings uniforms once per flush.
@@ -1411,26 +1408,26 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
         if (cmd.type == DrawCmd::CMD_TILES)
         {
             KFX_GL_PUSH("WorldPass/Tiles");
-            if (cmd.variation != bound_variation)
+            if (!atlas_bound)
             {
                 GLuint atlas_tex = (m_atlas && m_atlas->IsInitialized())
-                                   ? m_atlas->GetAtlasTexture(cmd.variation)
+                                   ? m_atlas->GetAtlasTextureArray()
                                    : 0;
                 glActiveTexture(GL_TEXTURE0);
-                glBindTexture(GL_TEXTURE_2D, atlas_tex);
+                glBindTexture(GL_TEXTURE_2D_ARRAY, atlas_tex);
                 // When no valid atlas texture is bound the shader would silently
                 // output black tiles (palette[0]).  Set the diagnostic flag so the
                 // fragment shader renders a magenta/black checkerboard instead,
-                // making the missing variation immediately visible.
+                // making the missing atlas immediately visible.
                 glUniform1f(m_loc_missing_tile, (atlas_tex == 0) ? 1.0f : 0.0f);
-                bound_variation = cmd.variation;
+                atlas_bound = true;
                 // Apply tile filter when the setting has changed.
                 int wanted_filter = g_renderer_settings.tile_filter;
                 if (wanted_filter != m_tile_filter_applied)
                 {
                     GLenum gl_filter = (wanted_filter == 1) ? GL_LINEAR : GL_NEAREST;
-                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, gl_filter);
-                    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, gl_filter);
+                    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, gl_filter);
+                    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, gl_filter);
                     m_tile_filter_applied = wanted_filter;
                 }
             }
@@ -1464,7 +1461,7 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
                 // Restore tile shader state for subsequent CMD_TILES.
                 glUseProgram(m_shader);
                 glBindVertexArray(m_vao);
-                bound_variation = -1;
+                atlas_bound = false;
             }
             KFX_GL_POP();
         }
@@ -1516,6 +1513,7 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
             sv[t][3] = raw_v;
         }
         glBindBuffer(GL_ARRAY_BUFFER, m_shadow_vbo);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(sv), nullptr, GL_DYNAMIC_DRAW);
         glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(sv), sv);
 
         glBindVertexArray(m_shadow_vao);
@@ -1541,7 +1539,7 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
     // Restore tile shader/VAO state for the sprite pass.
     glUseProgram(m_shader);
     glBindVertexArray(m_vao);
-    bound_variation = -1;
+    atlas_bound = false;
 
     // ── Pass 3: Sprites and world text ───────────────────────────────────────
     // Sprites depth-test against the tile z-buffer written in pass 1 (wall
@@ -1569,7 +1567,7 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
 
             glUseProgram(m_shader);
             glBindVertexArray(m_vao);
-            bound_variation = -1;
+            atlas_bound = false;
             KFX_GL_POP();
         }
         else if (cmd.type == DrawCmd::CMD_WORLDTEXT)
@@ -1596,7 +1594,7 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
 
                 glUseProgram(m_shader);
                 glBindVertexArray(m_vao);
-                bound_variation = -1;
+                atlas_bound = false;
             }
             KFX_GL_POP();
         }

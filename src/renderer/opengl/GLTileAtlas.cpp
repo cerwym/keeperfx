@@ -27,7 +27,7 @@ bool GLTileAtlas::Init()
 
     if (block_mem == nullptr || block_ptrs[0] == nullptr)
     {
-        ERRORLOG("GLTileAtlas::Init — block_mem not ready");
+        SYNCDBG(7, "GLTileAtlas::Init — block_mem not ready (deferred until setup_stuff)");
         return false;
     }
 
@@ -43,28 +43,28 @@ bool GLTileAtlas::Init()
         }
     }
 
-    glGenTextures(k_max_variations, m_textures);
+    // Single GL_TEXTURE_2D_ARRAY: width × height × variations, GL_R8.
+    glGenTextures(1, &m_texture_array);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_texture_array);
+    KFX_GL_LABEL(GL_TEXTURE, m_texture_array, "TileAtlas/Array");
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S,     GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T,     GL_CLAMP_TO_EDGE);
+
+    // Allocate storage for all layers at once (immutable-ish via glTexImage3D).
+    glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_R8,
+                 k_atlas_w, k_atlas_h, TEXTURE_VARIATIONS_COUNT,
+                 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
 
     for (int v = 0; v < TEXTURE_VARIATIONS_COUNT; v++)
-    {
-        glBindTexture(GL_TEXTURE_2D, m_textures[v]);
-        KFX_GL_LABEL_FMT(GL_TEXTURE, m_textures[v], "TileAtlas/Var%02d", v);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,     GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,     GL_CLAMP_TO_EDGE);
-
-        // Allocate R8 storage (zeroed) then populate via BuildVariation
-        memset(m_r8_scratch, 0, (size_t)k_atlas_w * k_atlas_h);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, k_atlas_w, k_atlas_h,
-                     0, GL_RED, GL_UNSIGNED_BYTE, m_r8_scratch);
-
         BuildVariation(v);
-    }
+
+    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
 
     m_initialized = true;
-    SYNCLOG("GLTileAtlas: loaded %d variations (%d×%d R8 palette-index atlas)",
-            TEXTURE_VARIATIONS_COUNT, k_atlas_w, k_atlas_h);
+    SYNCLOG("GLTileAtlas: loaded %d variations (%d×%d×%d R8 texture array)",
+            TEXTURE_VARIATIONS_COUNT, k_atlas_w, k_atlas_h, TEXTURE_VARIATIONS_COUNT);
     return true;
 }
 
@@ -77,8 +77,8 @@ void GLTileAtlas::Free()
     }
     if (m_initialized)
     {
-        glDeleteTextures(k_max_variations, m_textures);
-        memset(m_textures, 0, sizeof(m_textures));
+        glDeleteTextures(1, &m_texture_array);
+        m_texture_array = 0;
         m_initialized = false;
     }
 }
@@ -93,9 +93,17 @@ void GLTileAtlas::UpdateAnimatedTiles()
 
 unsigned int GLTileAtlas::GetAtlasTexture(int variation) const
 {
+    // Legacy per-variation query — returns the shared array texture.
+    // The consumer should prefer GetAtlasTextureArray() and pass variation
+    // as a vertex attribute / uniform instead.
     if (!m_initialized || variation < 0 || variation >= k_max_variations)
         return 0;
-    return (unsigned int)m_textures[variation];
+    return (unsigned int)m_texture_array;
+}
+
+unsigned int GLTileAtlas::GetAtlasTextureArray() const
+{
+    return m_initialized ? (unsigned int)m_texture_array : 0;
 }
 
 /******************************************************************************/
@@ -164,18 +172,20 @@ void GLTileAtlas::BuildAnimatedStrip(int variation)
 
 void GLTileAtlas::UploadFull(int variation)
 {
-    glBindTexture(GL_TEXTURE_2D, m_textures[variation]);
-    glTexSubImage2D(GL_TEXTURE_2D, 0,
-                    0, 0, k_atlas_w, k_atlas_h,
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_texture_array);
+    glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0,
+                    0, 0, variation,
+                    k_atlas_w, k_atlas_h, 1,
                     GL_RED, GL_UNSIGNED_BYTE,
                     m_r8_scratch);
 }
 
 void GLTileAtlas::UploadAnimatedStrip(int variation, int y_offset, int h_pixels)
 {
-    glBindTexture(GL_TEXTURE_2D, m_textures[variation]);
-    glTexSubImage2D(GL_TEXTURE_2D, 0,
-                    0, y_offset, k_atlas_w, h_pixels,
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_texture_array);
+    glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0,
+                    0, y_offset, variation,
+                    k_atlas_w, h_pixels, 1,
                     GL_RED, GL_UNSIGNED_BYTE,
                     m_r8_scratch);
 }

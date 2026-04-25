@@ -279,9 +279,11 @@ layout(location = 1) in vec2  a_uv;
 layout(location = 2) in float a_shade;
 layout(location = 3) in vec2  a_stl;       // subtile coords for lightmap (mode 1)
 layout(location = 4) in float a_camera_z;  // camera-space Z for perspective correction
+layout(location = 5) in float a_layer;     // texture array layer (atlas variation)
 out vec2  v_uv;
 out float v_shade;
 out vec2  v_stl;
+flat out float v_layer;
 void main()
 {
     // Perspective-correct interpolation trick: multiply clip-space position by
@@ -294,6 +296,7 @@ void main()
     v_uv        = a_uv;
     v_shade     = a_shade;
     v_stl       = a_stl;
+    v_layer     = a_layer;
 }
 )glsl";
 
@@ -302,7 +305,8 @@ constexpr const char* WORLD_FRAGMENT_SHADER = R"glsl(
 in vec2  v_uv;
 in float v_shade;
 in vec2  v_stl;                         // subtile coords [0..511], mode 1 only
-uniform sampler2D  u_tile_atlas;        // R8 palette-index atlas (unit 0)
+flat in float v_layer;                  // texture array layer (atlas variation)
+uniform sampler2DArray u_tile_atlas;    // R8 palette-index atlas array (unit 0)
 uniform sampler2D  u_palette;           // RGBA8 256×1 palette (unit 1)
 uniform usampler2D u_lightmap;          // R16UI subtile_lightness map (unit 2), mode 1
 uniform float      u_fullbright;        // 0=normal shading, 1=bypass shade
@@ -332,18 +336,19 @@ void main()
     // the resulting RGBA colours — palette-correct bilinear filtering.
     vec4 col;
     if (u_tile_filter == 1) {
-        vec2 tex_size = vec2(textureSize(u_tile_atlas, 0));
+        vec2 tex_size = vec2(textureSize(u_tile_atlas, 0).xy);
         vec2 px   = v_uv * tex_size - 0.5;
         vec2 f    = fract(px);
         vec2 base = (floor(px) + 0.5) / tex_size;
         vec2 st   = 1.0 / tex_size;
-        vec4 c00 = texture(u_palette, vec2(texture(u_tile_atlas, base).r, 0.5));
-        vec4 c10 = texture(u_palette, vec2(texture(u_tile_atlas, base + vec2(st.x, 0.0)).r, 0.5));
-        vec4 c01 = texture(u_palette, vec2(texture(u_tile_atlas, base + vec2(0.0, st.y)).r, 0.5));
-        vec4 c11 = texture(u_palette, vec2(texture(u_tile_atlas, base + st).r, 0.5));
+        float layer = v_layer;
+        vec4 c00 = texture(u_palette, vec2(texture(u_tile_atlas, vec3(base, layer)).r, 0.5));
+        vec4 c10 = texture(u_palette, vec2(texture(u_tile_atlas, vec3(base + vec2(st.x, 0.0), layer)).r, 0.5));
+        vec4 c01 = texture(u_palette, vec2(texture(u_tile_atlas, vec3(base + vec2(0.0, st.y), layer)).r, 0.5));
+        vec4 c11 = texture(u_palette, vec2(texture(u_tile_atlas, vec3(base + st, layer)).r, 0.5));
         col = mix(mix(c00, c10, f.x), mix(c01, c11, f.x), f.y);
     } else {
-        col = texture(u_palette, vec2(texture(u_tile_atlas, v_uv).r, 0.5));
+        col = texture(u_palette, vec2(texture(u_tile_atlas, vec3(v_uv, v_layer)).r, 0.5));
     }
     float shade;
     if (u_lighting_mode == 0) {

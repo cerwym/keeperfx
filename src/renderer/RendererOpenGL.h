@@ -113,8 +113,14 @@ public:
 private:
     bool compile_shaders();
     void upload_palette_texture();
-    bool init_fade_table_texture();
     bool init_tile_atlas();
+
+public:
+    /** Initialise the fade-table GPU texture from render_fade_tables.
+     *  Called by RendererNotifyGameTablesReady() after setup_stuff(). */
+    bool init_fade_table_texture();
+
+private:
 
     // Screen dimensions — set in Init() once, used throughout EndFrame() for viewport sizing.
     int      m_screenW        = 0;

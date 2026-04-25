@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include "renderer/VecMath.h"
 #include "kfx/profiling/KfxProfiling.h"
 #include "post_inc.h"
 
@@ -198,6 +199,8 @@ void GLUIRenderer::SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px
     q.u1 = uv.u1;  q.v1 = uv.v1;
     q.r = 1.0f;  q.g = 1.0f;  q.b = 1.0f;  q.a = UIAlphaFromDrawFlags();
     q.z = 0.5f;
+    q.layer = static_cast<uint8_t>(m_current_layer);
+    q.remap_row = remap_row;
     m_remap_quads.push_back(q);
 }
 
@@ -340,14 +343,19 @@ void GLUIRenderer::DrawBack()
     // beneath the CPU staging-buffer blit.  No hand sprites, minimap, or lines here.
     if (m_ui_quads.empty() && m_remap_quads.empty()) return;
 
-    { // Diagnostic: count back-layer elements
+    { // Diagnostic: detect anomalous back-layer drops
         int back_quads = 0;
         for (auto& q : m_ui_quads) if (q.layer == 0) back_quads++;
         int back_remap = 0;
         for (auto& r : m_remap_quads) if (r.layer == 0) back_remap++;
-        static int s_diag_frame = 0;
-        if ((s_diag_frame++ % 300) == 0)
-            SYNCLOG("FlushBack: %d back quads, %d back remap quads", back_quads, back_remap);
+        static int s_prev_back = 0;
+        static int s_back_frame = 0;
+        ++s_back_frame;
+        bool anomaly = (s_prev_back >= 4 && back_quads < s_prev_back / 2);
+        if (anomaly || (s_back_frame % 300) == 0)
+            SYNCLOG("FLICKER-DIAG-BACK[%d]: back q=%d(prev %d) remap=%d",
+                    s_back_frame, back_quads, s_prev_back, back_remap);
+        s_prev_back = back_quads;
     }
 
     if (MyScreenWidth > 0 && MyScreenHeight > 0) {
@@ -404,6 +412,7 @@ static void FlushFBOQuads_impl(const std::vector<FBOQuad>& quads, GLuint prog, G
             {q.x1, q.y1, 1.f, 0.f, 1, 1, 1, 1, 0.f, 0.f}, {q.x0, q.y0, 0.f, 1.f, 1, 1, 1, 1, 0.f, 0.f},
             {q.x1, q.y1, 1.f, 0.f, 1, 1, 1, 1, 0.f, 0.f}, {q.x0, q.y1, 0.f, 0.f, 1, 1, 1, 1, 0.f, 0.f},
         };
+        glBufferData(GL_ARRAY_BUFFER, sizeof(verts), nullptr, GL_DYNAMIC_DRAW);
         glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(verts), verts);
         glDrawArrays(GL_TRIANGLES, 0, 6);
     }
@@ -429,15 +438,28 @@ void GLUIRenderer::DrawFront()
         return;
     }
 
-    { // Diagnostic: count front-layer elements
+    { // Diagnostic: detect anomalous frame-to-frame quad count changes
         int front_quads = 0;
         for (auto& q : m_ui_quads) if (q.layer == 1) front_quads++;
+        int front_remap = 0;
+        for (auto& r : m_remap_quads) if (r.layer == 1) front_remap++;
         int front_lines = 0;
         for (auto& l : m_ui_lines) if (l.layer == 1) front_lines++;
-        static int s_diag_frame = 0;
-        if ((s_diag_frame++ % 300) == 0)
-            SYNCLOG("FlushFront: %d front quads, %d front lines, minimap=%d",
-                    front_quads, front_lines, (int)m_minimap_pending);
+        static int s_prev_quads  = 0;
+        static int s_prev_remap  = 0;
+        static int s_prev_lines  = 0;
+        static int s_frame_num   = 0;
+        ++s_frame_num;
+        // Log when quad count drops by ≥50% or to zero (from ≥4).
+        bool anomaly = (s_prev_quads >= 4 && front_quads < s_prev_quads / 2)
+                    || (s_prev_remap >= 2 && front_remap == 0);
+        if (anomaly || (s_frame_num % 300) == 0)
+            SYNCLOG("FLICKER-DIAG[%d]: front q=%d(prev %d) remap=%d(prev %d) lines=%d(prev %d) minimap=%d",
+                    s_frame_num, front_quads, s_prev_quads, front_remap, s_prev_remap,
+                    front_lines, s_prev_lines, (int)m_minimap_pending);
+        s_prev_quads = front_quads;
+        s_prev_remap = front_remap;
+        s_prev_lines = front_lines;
     }
 
     if (MyScreenWidth > 0 && MyScreenHeight > 0) {
@@ -450,23 +472,17 @@ void GLUIRenderer::DrawFront()
     // below would be clipped to the tiny pip-sized scissor region.
     glViewport(0, 0, (int)MyScreenWidth, (int)MyScreenHeight);
 
-    // ── FLICKER-DIAG: snapshot GL state entering FlushFront ──
+    // ── FLICKER-DIAG: check for stale scissor or wrong FBO ──
     {
-        GLint vp[4];
-        glGetIntegerv(GL_VIEWPORT, vp);
-        GLboolean depth_test  = glIsEnabled(GL_DEPTH_TEST);
-        GLboolean scissor     = glIsEnabled(GL_SCISSOR_TEST);
-        GLboolean blend       = glIsEnabled(GL_BLEND);
-        GLint     draw_fbo    = 0;
+        GLboolean scissor = glIsEnabled(GL_SCISSOR_TEST);
+        GLint draw_fbo = 0;
         glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &draw_fbo);
-        static int s_state_log = 0;
-        // Log every frame for the first 200, then every 300th.
-        if (s_state_log < 200 || (s_state_log % 300) == 0)
-            SYNCLOG("FLICKER-DIAG: FlushFront state: vp=(%d,%d,%d,%d) depth=%d scissor=%d blend=%d fbo=%d quads=%d lines=%d",
-                    vp[0], vp[1], vp[2], vp[3],
-                    (int)depth_test, (int)scissor, (int)blend, draw_fbo,
-                    (int)m_ui_quads.size(), (int)m_ui_lines.size());
-        s_state_log++;
+        if (scissor || draw_fbo != 0) {
+            SYNCLOG("FLICKER-DIAG: BAD GL STATE entering DrawFront: scissor=%d fbo=%d",
+                    (int)scissor, draw_fbo);
+            if (scissor) glDisable(GL_SCISSOR_TEST);
+            if (draw_fbo != 0) glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        }
     }
 
     glEnable(GL_BLEND);
@@ -514,6 +530,7 @@ void GLUIRenderer::DrawFront()
         };
         glBindVertexArray(m_vao);
         glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(verts), nullptr, GL_DYNAMIC_DRAW);
         glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(verts), verts);
         glDrawArrays(GL_TRIANGLES, 0, 6);
         glBindVertexArray(0);
@@ -539,11 +556,13 @@ void GLUIRenderer::DrawFront()
         {
             glEnable(GL_DEPTH_TEST);
             glDepthFunc(GL_LEQUAL);
-            glDepthMask(GL_FALSE);  // read depth only — don't overwrite world geometry depth
+            glDepthMask(GL_TRUE);   // depth writes ON — shaders discard transparent
+                                    // fragments, so only opaque pixels write depth.
+                                    // The GPU handles occlusion natively; no painter's
+                                    // algorithm or mode-ordered passes needed.
             FlushQuads(2);
             FlushRemapQuads(2);
             FlushLines(2);
-            glDepthMask(GL_TRUE);
             glDisable(GL_DEPTH_TEST);
         }
     }
@@ -619,6 +638,7 @@ void GLUIRenderer::DrawPiPSprites(int pip_w, int pip_h)
             {
                 glEnable(GL_DEPTH_TEST);
                 glDepthFunc(GL_LEQUAL);
+                glDepthMask(GL_TRUE);
                 if (has2q) FlushQuads(2);
                 if (has2r) FlushRemapQuads(2);
                 if (has2l) FlushLines(2);
@@ -928,6 +948,7 @@ void GLUIRenderer::FlushQuads(int layer)
             glActiveTexture(GL_TEXTURE1);
             glBindTexture(m_palette_texture_target, m_palette_texture);
         }
+        glBufferData(GL_ARRAY_BUFFER, sizeof(GLUIVertex) * m_vertices.size(), nullptr, GL_DYNAMIC_DRAW);
         glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(GLUIVertex) * m_vertices.size(), m_vertices.data());
         glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_vertices.size());
     }
@@ -939,6 +960,7 @@ void GLUIRenderer::FlushQuads(int layer)
     if (!m_vertices.empty()) {
         glUseProgram(m_prog_solid);
         glUniform2f(m_loc_screen_solid, (float)m_screen_width, (float)m_screen_height);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(GLUIVertex) * m_vertices.size(), nullptr, GL_DYNAMIC_DRAW);
         glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(GLUIVertex) * m_vertices.size(), m_vertices.data());
         glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_vertices.size());
     }
@@ -958,6 +980,7 @@ void GLUIRenderer::FlushQuads(int layer)
             glActiveTexture(GL_TEXTURE1);
             glBindTexture(m_palette_texture_target, m_palette_texture);
         }
+        glBufferData(GL_ARRAY_BUFFER, sizeof(GLUIVertex) * m_vertices.size(), nullptr, GL_DYNAMIC_DRAW);
         glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(GLUIVertex) * m_vertices.size(), m_vertices.data());
         glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_vertices.size());
     }
@@ -973,6 +996,7 @@ void GLUIRenderer::FlushQuads(int layer)
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, m_sprite_atlas->GetTexture());
         }
+        glBufferData(GL_ARRAY_BUFFER, sizeof(GLUIVertex) * m_vertices.size(), nullptr, GL_DYNAMIC_DRAW);
         glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(GLUIVertex) * m_vertices.size(), m_vertices.data());
         glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_vertices.size());
     }
@@ -989,6 +1013,7 @@ void GLUIRenderer::FlushQuads(int layer)
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, m_font_atlas->GetTextureID());
         }
+        glBufferData(GL_ARRAY_BUFFER, sizeof(GLUIVertex) * m_vertices.size(), nullptr, GL_DYNAMIC_DRAW);
         glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(GLUIVertex) * m_vertices.size(), m_vertices.data());
         glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_vertices.size());
     }
@@ -1014,6 +1039,7 @@ void GLUIRenderer::FlushLines(int layer)
 
         glBindVertexArray(m_vao);
         glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(GLUIVertex) * m_vertices.size(), nullptr, GL_DYNAMIC_DRAW);
         glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(GLUIVertex) * m_vertices.size(), m_vertices.data());
         glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_vertices.size());
         glBindVertexArray(0);
@@ -1066,6 +1092,7 @@ void GLUIRenderer::FlushRemapQuads(int layer)
             for (int i = 0; i < 6; ++i) m_vertices.push_back(v[i]);
             it = jt + 1;
         }
+        glBufferData(GL_ARRAY_BUFFER, sizeof(GLUIVertex) * m_vertices.size(), nullptr, GL_DYNAMIC_DRAW);
         glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(GLUIVertex) * m_vertices.size(), m_vertices.data());
         glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_vertices.size());
     }
@@ -1098,30 +1125,27 @@ void GLUIRenderer::ExpandQuadToVertices(const UIQuad& quad)
 void GLUIRenderer::ExpandLineToVertices(const UILine& line)
 {
     // Convert line to thick rectangle
-    float dx = line.x2 - line.x1;
-    float dy = line.y2 - line.y1;
-    float len = std::sqrt(dx*dx + dy*dy);
+    Vec2f dir(line.x2 - line.x1, line.y2 - line.y1);
+    float len = dir.length();
 
     if (len < 0.001f) return;
-    
-    // Normalize and create perpendicular
-    dx /= len;
-    dy /= len;
-    float perp_x = -dy * line.thickness * 0.5f;
-    float perp_y = dx * line.thickness * 0.5f;
-    
+
+    Vec2f perp = (dir / len).perp() * (line.thickness * 0.5f);
+    Vec2f p1(line.x1, line.y1);
+    Vec2f p2(line.x2, line.y2);
+
     // Create quad vertices
     GLUIVertex v[6];
-    
+
     // Triangle 1
-    v[0] = {line.x1 + perp_x, line.y1 + perp_y, 0.0f, 0.0f, line.r, line.g, line.b, line.a, line.z, 2.0f};
-    v[1] = {line.x1 - perp_x, line.y1 - perp_y, 0.0f, 0.0f, line.r, line.g, line.b, line.a, line.z, 2.0f};
-    v[2] = {line.x2 + perp_x, line.y2 + perp_y, 0.0f, 0.0f, line.r, line.g, line.b, line.a, line.z, 2.0f};
-    
+    v[0] = {p1.x + perp.x, p1.y + perp.y, 0.0f, 0.0f, line.r, line.g, line.b, line.a, line.z, 2.0f};
+    v[1] = {p1.x - perp.x, p1.y - perp.y, 0.0f, 0.0f, line.r, line.g, line.b, line.a, line.z, 2.0f};
+    v[2] = {p2.x + perp.x, p2.y + perp.y, 0.0f, 0.0f, line.r, line.g, line.b, line.a, line.z, 2.0f};
+
     // Triangle 2
-    v[3] = {line.x2 + perp_x, line.y2 + perp_y, 0.0f, 0.0f, line.r, line.g, line.b, line.a, line.z, 2.0f};
-    v[4] = {line.x1 - perp_x, line.y1 - perp_y, 0.0f, 0.0f, line.r, line.g, line.b, line.a, line.z, 2.0f};
-    v[5] = {line.x2 - perp_x, line.y2 - perp_y, 0.0f, 0.0f, line.r, line.g, line.b, line.a, line.z, 2.0f};
+    v[3] = {p2.x + perp.x, p2.y + perp.y, 0.0f, 0.0f, line.r, line.g, line.b, line.a, line.z, 2.0f};
+    v[4] = {p1.x - perp.x, p1.y - perp.y, 0.0f, 0.0f, line.r, line.g, line.b, line.a, line.z, 2.0f};
+    v[5] = {p2.x - perp.x, p2.y - perp.y, 0.0f, 0.0f, line.r, line.g, line.b, line.a, line.z, 2.0f};
     
     // Add vertices to buffer
     for (int i = 0; i < 6; ++i) {

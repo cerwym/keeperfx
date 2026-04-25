@@ -170,6 +170,23 @@ void RendererNotifyLandviewFlagLoaded()
     register_sheet_software(map_flag);
 }
 
+void RendererNotifyGameTablesReady()
+{
+#ifdef RENDERER_OPENGL_ENABLED
+    if (s_activeType == RENDERER_OPENGL)
+    {
+        RendererOpenGL* ogl = dynamic_cast<RendererOpenGL*>(s_activeRenderer);
+        if (ogl)
+        {
+            ogl->init_fade_table_texture();
+            GLUIRenderer* glui = dynamic_cast<GLUIRenderer*>(RendererGetUIRenderer());
+            if (glui)
+                glui->SetFadeTexture(ogl->GetFadeTex());
+        }
+    }
+#endif
+}
+
 /** Explicitly composite m_stagingBuf (lbDisplay.WScreen) on the GL frame. */
 TbBool RendererSubmitStagingOverlay()
 {
@@ -421,7 +438,8 @@ static IUIRenderer* create_ui_renderer(RendererType type)
             glui->SetSpriteAtlas(ogl->GetSpriteAtlas());
             glui->SetFontAtlas(ogl->GetFontAtlas());
             glui->SetPaletteTexture(ogl->GetPaletteTex(), GL_TEXTURE_2D);
-            glui->SetFadeTexture(ogl->GetFadeTex());
+            // Fade texture set later by RendererNotifyGameTablesReady() after
+            // render_fade_tables is loaded in setup_stuff().
             glui->SetScreenDimensions(lbDisplay.PhysicalScreenWidth, lbDisplay.PhysicalScreenHeight);
             s_spriteAtlas = ogl->GetSpriteAtlas();
             if (s_spriteAtlas) {
@@ -715,6 +733,11 @@ void RendererUnlockScreen(void)
 void RendererPresentFrame(void)
 {
     PlatformManager_FrameTick();
+    // Ensure BeginFrame() has run — many call sites (fade loops, screen-mode
+    // transitions, draw_clear_screen) do ClearScreen+PresentFrame without a
+    // preceding LockScreen/BeginFrame.  BeginFrame() is idempotent, so this
+    // is a no-op on the normal path where LockScreen was already called.
+    RendererBeginFrame();
     TbResult ret = LbMouseOnBeginSwap();
     if (ret == Lb_SUCCESS) {
 #if defined(VITA_PERF_LOG)

@@ -240,6 +240,11 @@ void RendererNotifyFrontendSpritesLoaded(void);
  *  campaign-map ensign / pin sprites without the staging-buffer fallback. */
 void RendererNotifyLandviewFlagLoaded(void);
 
+/** Call after setup_stuff() to initialise GPU resources that depend on game
+ *  lookup tables (render_fade_tables, etc.) which aren't available yet when
+ *  RendererInit() runs.  Must be called exactly once during startup. */
+void RendererNotifyGameTablesReady(void);
+
 /******************************************************************************/
 /* C-callable world-view renderer wrappers (safe to call from C files)        */
 /******************************************************************************/
@@ -635,6 +640,7 @@ int  RendererIsFadeCachePreserved(void);
 /******************************************************************************/
 #ifdef __cplusplus
 }
+#include "renderer/VecMath.h"
 /* C++ only: direct access to the active IRenderer* */
 IRenderer* RendererGetActive();
 /* C++ only: direct access to the active IWorldViewRenderer* */

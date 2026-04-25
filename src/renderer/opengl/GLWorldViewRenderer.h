@@ -146,7 +146,6 @@ private:
         // CMD_TILES fields
         int vert_start  = 0;
         int vert_count  = 0;
-        int variation   = 0;
         // CMD_SPRITES field
         int bucket_num  = 0;
         // CMD_SHADOWS field (index into m_shadow_cmds)
@@ -301,7 +300,6 @@ private:
     WorldVertex* m_verts      = nullptr;
     int          m_vert_count = 0;
     int          m_cmd_vert_start = 0;  // start index of current accumulating tile batch
-    int          m_current_variation = 0; // atlas variation currently staging
 
     // Deferred draw list — built during DrawIsometricView(), executed in GPURenderNow()
     std::vector<DrawCmd>      m_draw_cmds;

@@ -1075,6 +1075,7 @@ short setup_game(void)
       SetSoundMasterVolume(settings.sound_volume);
       setup_mesh_randomizers();
       setup_stuff();
+      RendererNotifyGameTablesReady();
       init_lookups();
       VITA_TICK("init_keeper + setup");
   }

@@ -14,6 +14,8 @@
  *       location 2: a_shade (s)             — lighting         [0, 1]
  *       location 3: a_stl   (stl_x, stl_y) — subtile-space map coords [0..511],
  *                                             for per-fragment lightmap sampling (mode 1)
+ *       location 4: a_camera_z (camera_z)   — camera-space depth for perspective correction
+ *       location 5: a_layer (atlas_layer)   — texture array layer (variation index)
  *
  *     Field conventions (from bflib_render.h / engine_render.c):
  *       X, Y  — integer screen pixel coordinate (NOT 16:16; value is the pixel directly)
@@ -39,6 +41,7 @@ struct WorldVertex {
     float stl_x;     /**< Map subtile X [0..511]; for lightmap sampling in modern mode */
     float stl_y;     /**< Map subtile Y [0..511]; for lightmap sampling in modern mode */
     float camera_z;  /**< Camera-space Z for perspective-correct interpolation; 1.0 = no correction */
+    float atlas_layer; /**< Texture array layer index (tile atlas variation); 0.0 = default */
 };
 
 /******************************************************************************/
@@ -103,6 +106,7 @@ struct WorldVertex {
         (wv)->stl_x = 0.0f; \
         (wv)->stl_y = 0.0f; \
         (wv)->camera_z = 1.0f; \
+        (wv)->atlas_layer = 0.0f; \
     } while (0)
 
 /**
@@ -129,6 +133,7 @@ struct WorldVertex {
         (wv)->stl_x = 0.0f; \
         (wv)->stl_y = 0.0f; \
         (wv)->camera_z = 1.0f; \
+        (wv)->atlas_layer = 0.0f; \
     } while (0)
 
 /******************************************************************************/
