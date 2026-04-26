@@ -204,8 +204,18 @@ void setup_engine_window(long x, long y, long width, long height)
     {
       if (x > MyScreenWidth)
         x = MyScreenWidth;
-      if (x < status_panel_width)
-        x = status_panel_width;
+      // GPU renderers draw the world fullscreen and paint the sidebar on top,
+      // so the engine window is NOT clamped to status_panel_width.
+      if (!RendererWantsFullscreenViewport())
+      {
+        if (x < status_panel_width)
+          x = status_panel_width;
+      }
+      else
+      {
+        if (x < 0)
+          x = 0;
+      }
     } else
     {
       if (x > MyScreenWidth)

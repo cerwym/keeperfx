@@ -20,6 +20,8 @@
 #include "engine_render.h"    // vert_offset, hori_offset, x_init_off, y_init_off, draw_view
 #include "gui_parchment.h"    // load_parchment_file, redraw_minimal_overhead_view
 #include "player_data.h"      // get_my_player, view_mode_restore
+#include "game_legacy.h"      // game.process_turn_time
+#include "config_keeperfx.h"   // is_feature_on, Ft_DeltaTime
 #include "local_camera.h"     // get_local_camera
 
 #include <vector>
@@ -280,7 +282,7 @@ bool GLMapFadePass::CaptureAndUploadFrames()
 void GLMapFadePass::MarkDone()
 {
     m_active = false;
-    m_step   = 0;
+    m_step   = 0.f;
 }
 
 /******************************************************************************/
@@ -308,16 +310,22 @@ int32_t GLMapFadePass::StepFadeIn(int32_t step)
         m_active = true;
     }
 
-    // Derive step from instance_remain_turns, matching the SW formula:
-    //   (8 - remain) * 4   →  4 at remain=7 … 28 at remain=1
-    // This runs the blend at game-tick rate (~20 fps), not draw-frame rate,
-    // so the visual duration matches the SW path regardless of display FPS.
-    int32_t derived = (int32_t)(8 - get_my_player()->instance_remain_turns) * 4;
-    if (derived < 0) derived = 0;
-    if (derived > 32) derived = 32;
+    // Derive step from instance_remain_turns and interpolate between game
+    // ticks using process_turn_time so the fade runs at display refresh rate
+    // instead of the 20 fps game-tick rate.
+    //   Base formula: (8 - remain) * 4   →  4 at remain=7 … 28 at remain=1
+    //   Interpolated: (8 - remain + frac) * 4  where frac ∈ [0,1)
+    float remain = (float)get_my_player()->instance_remain_turns;
+    float frac = (is_feature_on(Ft_DeltaTime) && remain > 0.f)
+               ? (float)game.process_turn_time : 0.f;
+    if (frac < 0.f) frac = 0.f;
+    if (frac > 1.f) frac = 1.f;
+    float derived = (8.f - remain + frac) * 4.f;
+    if (derived < 0.f) derived = 0.f;
+    if (derived > 32.f) derived = 32.f;
     m_step = derived;
 
-    return derived;
+    return (int32_t)derived;
 }
 
 int32_t GLMapFadePass::StepFadeOut(int32_t step)
@@ -343,14 +351,21 @@ int32_t GLMapFadePass::StepFadeOut(int32_t step)
         m_active = true;
     }
 
-    // Derive step from instance_remain_turns, matching the SW formula:
-    //   remain * 4   →  28 at remain=7 … 4 at remain=1
-    int32_t derived = (int32_t)get_my_player()->instance_remain_turns * 4;
-    if (derived < 0) derived = 0;
-    if (derived > 32) derived = 32;
+    // Derive step from instance_remain_turns and interpolate between game
+    // ticks for smooth fade at display refresh rate.
+    //   Base formula: remain * 4   →  28 at remain=7 … 4 at remain=1
+    //   Interpolated: (remain - frac) * 4  where frac ∈ [0,1)
+    float remain = (float)get_my_player()->instance_remain_turns;
+    float frac = (is_feature_on(Ft_DeltaTime) && remain > 0.f)
+               ? (float)game.process_turn_time : 0.f;
+    if (frac < 0.f) frac = 0.f;
+    if (frac > 1.f) frac = 1.f;
+    float derived = (remain - frac) * 4.f;
+    if (derived < 0.f) derived = 0.f;
+    if (derived > 32.f) derived = 32.f;
     m_step = derived;
 
-    return derived;
+    return (int32_t)derived;
 }
 
 /******************************************************************************/
@@ -377,7 +392,7 @@ void GLMapFadePass::RenderGPUComposePass()
                 // Fade-out ends at step=0 (100% world), fade-in at step=32 (100% parchment).
                 // We can tell which by looking at m_step: if it was decreasing
                 // toward 0 it was a fade-out; if increasing toward 32, fade-in.
-                m_step = (m_step <= 16) ? 0 : 32;
+                m_step = (m_step <= 16.f) ? 0.f : 32.f;
                 m_deactivate_after_render = true;
             }
             else
@@ -396,7 +411,7 @@ void GLMapFadePass::RenderGPUComposePass()
     glDisable(GL_BLEND);
 
     glUseProgram(m_prog);
-    glUniform1f(m_loc_step, (float)m_step);
+    glUniform1f(m_loc_step, m_step);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_tex[0]);  // parchment

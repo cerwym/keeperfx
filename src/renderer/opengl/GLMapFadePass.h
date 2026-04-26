@@ -86,7 +86,7 @@ private:
     bool m_initialized = false;
     bool m_active      = false; ///< true while a transition is in progress
     bool m_deactivate_after_render = false; ///< deactivate after next compose pass
-    long m_step        = 0;     ///< step recorded for RenderGPUComposePass()
+    float m_step       = 0.f;   ///< step recorded for RenderGPUComposePass() (interpolated)
     int  m_tex_w       = 0;
     int  m_tex_h       = 0;
 };

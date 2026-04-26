@@ -290,7 +290,6 @@ void ProperForcedFadePalette(unsigned char *pal, long fade_steps, enum TbPalette
 long PaletteFadePlayer(struct PlayerInfo *player)
 {
     long i;
-    unsigned char palette[PALETTE_SIZE];
     // Find the fade step
     if ((player->palette_fade_step_pain != 0) && (player->palette_fade_step_possession != 0))
     {
@@ -314,24 +313,6 @@ long PaletteFadePlayer(struct PlayerInfo *player)
   g_palette_possession_tint = (float)i / 120.0f;
   RendererSetScreenTint(1.0f, 0.0f, 0.0f, g_palette_possession_tint);
   long step = 120 - i;
-  // Create the new palette
-  for (i=0; i < PALETTE_COLORS; i++)
-  {
-      unsigned char* src = &player->main_palette[3 * i];
-      unsigned char* dst = &palette[3 * i];
-      unsigned long pix = ((step * (((long)src[0]) - 63)) / 120) + 63;
-      if (pix > 63)
-          pix = 63;
-      dst[0] = pix;
-      pix = (step * ((long)src[1])) / 120;
-      if (pix > 63)
-          pix = 63;
-      dst[1] = pix;
-      pix = (step * ((long)src[2])) / 120;
-      if (pix > 63)
-          pix = 63;
-      dst[2] = pix;
-  }
   // Update the fade step
   if (player->palette_fade_step_pain > 0)
     player->palette_fade_step_pain--;
@@ -347,9 +328,33 @@ long PaletteFadePlayer(struct PlayerInfo *player)
     if (player->palette_fade_step_possession > 0)
       player->palette_fade_step_possession--;
   }
-  // Set the palette to screen
-  RendererWaitVbi();
-  RendererPaletteSet(palette);
+  // GPU renderers use the screen tint overlay for possession/pain effects;
+  // skip the per-pixel SW palette manipulation to avoid double-tinting.
+  if (RendererHasGPURenderPath())
+    return step;
+  // SW path: compute per-channel palette fade and set to screen.
+  {
+    unsigned char palette[PALETTE_SIZE];
+    for (i=0; i < PALETTE_COLORS; i++)
+    {
+        unsigned char* src = &player->main_palette[3 * i];
+        unsigned char* dst = &palette[3 * i];
+        unsigned long pix = ((step * (((long)src[0]) - 63)) / 120) + 63;
+        if (pix > 63)
+            pix = 63;
+        dst[0] = pix;
+        pix = (step * ((long)src[1])) / 120;
+        if (pix > 63)
+            pix = 63;
+        dst[1] = pix;
+        pix = (step * ((long)src[2])) / 120;
+        if (pix > 63)
+            pix = 63;
+        dst[2] = pix;
+    }
+    RendererWaitVbi();
+    RendererPaletteSet(palette);
+  }
   return step;
 }
 

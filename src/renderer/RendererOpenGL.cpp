@@ -1177,7 +1177,9 @@ void RendererOpenGL::EndFrame()
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         glUseProgram(m_shader);
-        glUniform1f(m_uTintFactor, g_palette_possession_tint);
+        // Possession/pain red tint is handled by the screen-tint overlay quad
+        // (g_screen_tint set from PaletteFadePlayer). No per-staging tint needed.
+        glUniform1f(m_uTintFactor, 0.0f);
         glBindVertexArray(m_vao);
         glDrawArrays(GL_TRIANGLES, 0, 6);
         glBindVertexArray(0);

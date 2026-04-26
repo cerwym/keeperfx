@@ -1762,7 +1762,7 @@ void centre_engine_window(void)
     long window_center_x;
     long window_center_y;
     struct PlayerInfo *player=get_my_player();
-    if ((game.operation_flags & GOF_ShowGui) != 0)
+    if ((game.operation_flags & GOF_ShowGui) != 0 && !RendererWantsFullscreenViewport())
       window_center_x = (MyScreenWidth-player->engine_window_width-status_panel_width) / 2 + status_panel_width;
     else
       window_center_x = (MyScreenWidth-player->engine_window_width) / 2;
