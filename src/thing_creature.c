@@ -4262,7 +4262,7 @@ void draw_creature_view(struct Thing *thing)
   // The GPU renders the first-person view through engine() → FlushIsometricView
   // just like the isometric view.  The lens distortion and swipe overlay are
   // purely cosmetic CPU post-effects that will be replaced by GPU shaders later.
-  if (RendererGetActiveType() == RENDERER_OPENGL)
+  if (RendererHasGPURenderPath())
   {
       engine(player, render_cam);
       return;
@@ -4291,7 +4291,7 @@ void draw_creature_view(struct Thing *thing)
   lbDisplay.WScreen = scrmem;
   lbDisplay.GraphicsScreenHeight = render_height;
   lbDisplay.GraphicsScreenWidth = render_width;
-  RendererSetViewport(0, 0, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
+  RendererSetViewport(0, 0, RendererScreenWidth(), RendererScreenHeight());
   // Draw on our buffer
   setup_engine_window(0, 0, MyScreenWidth, MyScreenHeight);
   engine(player, render_cam);

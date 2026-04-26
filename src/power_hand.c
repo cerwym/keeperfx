@@ -58,6 +58,7 @@
 #include "gui_draw.h"
 #include "engine_render.h"
 #include "renderer/RendererManager.h"
+#include "renderer/RenderPass_C.h"
 #include "engine_arrays.h"
 #include "sounds.h"
 #include "game_legacy.h"
@@ -1216,7 +1217,20 @@ void draw_mini_things_in_hand(long x, long y)
                     if (thing->owner != my_player_number)
                     {
                         ownshift_y = (irow == 0) ? 1 : 56;
-                        LbDrawCircle(scrpos_x + scale_ui_value(16), scrpos_y + scale_ui_value(ownshift_y), ps_units_per_px / 16, player_path_colours[flash_color]);
+                        long circ_x = scrpos_x + scale_ui_value(16);
+                        long circ_y = scrpos_y + scale_ui_value(ownshift_y);
+                        long circ_r = ps_units_per_px / 16;
+                        TbPixel circ_c = player_path_colours[flash_color];
+                        if (g_render_pass_active)
+                        {
+                            // GPU: approximate filled circle as a box (radius is 1-2px)
+                            int32_t d = circ_r * 2 + 1;
+                            UIRenderer_SubmitSolidBox((int32_t)(circ_x - circ_r), (int32_t)(circ_y - circ_r), d, d, circ_c);
+                        }
+                        else
+                        {
+                            LbDrawCircle(circ_x, circ_y, circ_r, circ_c);
+                        }
                     }
                 }
                 else
@@ -1230,29 +1244,46 @@ void draw_mini_things_in_hand(long x, long y)
                         ScreenCoord coord_y = scrpos_y + scale_ui_value(ownshift_y);
                         ScreenCoord draw_y;
                         ScreenCoord draw_x;
-                        for (int p = 0; p < (n*n); p++)
+                        if (g_render_pass_active)
                         {
-                            draw_y = coord_y + draw_square[p].delta_y;
-                            if (draw_y >= 0)
+                            // GPU: emit 1×1 solid boxes for each pixel (same pattern as gui_parchment.c)
+                            for (int p = 0; p < (n*n); p++)
                             {
+                                draw_y = coord_y + draw_square[p].delta_y;
                                 draw_x = scrpos_x + ((expshift_x * 3)) + draw_square[p].delta_x;
-                                // Draw the pixel if it's within the bounds of the window
-                                if ((draw_x >= 0) && (draw_x < relative_window_a) && (draw_y < relative_window_b))
-                                {
-                                    LbDrawPixel(draw_x, draw_y, player_flash_colours[flash_color]);
-                                }
+                                UIRenderer_SubmitSolidBox((int32_t)draw_x, (int32_t)draw_y, 1, 1, player_flash_colours[flash_color]);
+                            }
+                            for (int p = (n * n); p < (n * n)+(4 * n + 4); p++)
+                            {
+                                draw_y = coord_y + draw_square[p].delta_y;
+                                draw_x = scrpos_x + ((expshift_x * 3)) + draw_square[p].delta_x;
+                                UIRenderer_SubmitSolidBox((int32_t)draw_x, (int32_t)draw_y, 1, 1, player_path_colours[flash_color]);
                             }
                         }
-                        for (int p = (n * n); p < (n * n)+(4 * n + 4); p++)
+                        else
                         {
-                            draw_y = coord_y + draw_square[p].delta_y;
-                            if (draw_y >= 0)
+                            for (int p = 0; p < (n*n); p++)
                             {
-                                draw_x = scrpos_x + ((expshift_x * 3)) + draw_square[p].delta_x;
-                                // Draw the pixel if it's within the bounds of the window
-                                if ((draw_x >= 0) && (draw_x < relative_window_a) && (draw_y < relative_window_b))
+                                draw_y = coord_y + draw_square[p].delta_y;
+                                if (draw_y >= 0)
                                 {
-                                    LbDrawPixel(draw_x, draw_y, player_path_colours[flash_color]);
+                                    draw_x = scrpos_x + ((expshift_x * 3)) + draw_square[p].delta_x;
+                                    if ((draw_x >= 0) && (draw_x < relative_window_a) && (draw_y < relative_window_b))
+                                    {
+                                        LbDrawPixel(draw_x, draw_y, player_flash_colours[flash_color]);
+                                    }
+                                }
+                            }
+                            for (int p = (n * n); p < (n * n)+(4 * n + 4); p++)
+                            {
+                                draw_y = coord_y + draw_square[p].delta_y;
+                                if (draw_y >= 0)
+                                {
+                                    draw_x = scrpos_x + ((expshift_x * 3)) + draw_square[p].delta_x;
+                                    if ((draw_x >= 0) && (draw_x < relative_window_a) && (draw_y < relative_window_b))
+                                    {
+                                        LbDrawPixel(draw_x, draw_y, player_path_colours[flash_color]);
+                                    }
                                 }
                             }
                         }

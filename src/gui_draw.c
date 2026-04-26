@@ -490,8 +490,8 @@ void draw_button_string(struct GuiButton *gbtn, int base_width, const char *text
     }
     LbTextDrawResized(w, h, tx_units_per_px, dtext);
     LbTextSetJustifyWindow(0, 0, RendererScreenWidth());
-    LbTextSetClipWindow(0/pixel_size, 0/pixel_size, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
-    LbTextSetWindow(0/pixel_size, 0/pixel_size, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
+    LbTextSetClipWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
+    LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
     lbDisplay.DrawFlags = flgmem;
 }
 

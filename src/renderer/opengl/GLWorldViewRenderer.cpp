@@ -24,6 +24,7 @@
 #include "renderer/TileAtlasPacker.h" // GetTileUV
 #include "engine_render.h"    // draw_3d_sprites_for_bucket(), draw_nonspatial_sprites_no_shadows()
 #include "bflib_render.h"      // PolyPoint, render_fade_tables
+#include "bflib_vidraw.h"      // vec_window_width, vec_window_height
 #include "bflib_video.h"       // MyScreenWidth, MyScreenHeight
 #include "bflib_basics.h"      // ERRORLOG / SYNCLOG / WARNLOG
 #include "renderer/RenderPass_C.h" // RenderPass_DrawNow()
@@ -1150,19 +1151,31 @@ void GLWorldViewRenderer::BeginWorldPass(unsigned char* framebuf, int pitch,
             WARNLOG("GLWorldViewRenderer: tile atlas not yet ready on BeginWorldPass");
     }
 
-    if (framebuf && m_initialized)
+    if (m_initialized)
     {
-        for (int row = 0; row < h; row++)
-            memset(framebuf + (int32_t)row * pitch, 0, (size_t)w);
+        // GPU path: set the vec globals that bucket-list filling code reads
+        // (setup_rotate_stuff, fill_in_points_*, etc.) without invoking the
+        // full software fallback which would also zero WScreen and set
+        // vec_screen / poly_screen for the CPU rasteriser — both unnecessary.
+        if (w > 0)  vec_window_width  = (long)w;
+        if (h > 0)  vec_window_height = (long)h;
+    }
+    else
+    {
+        // Software fallback: zero the staging buffer and configure all vec
+        // globals (vec_screen, poly_screen, vec_window_*, etc.).
+        if (framebuf)
+        {
+            for (int row = 0; row < h; row++)
+                memset(framebuf + (int32_t)row * pitch, 0, (size_t)w);
+        }
+        if (m_sw_fallback)
+            m_sw_fallback->BeginWorldPass(framebuf, pitch, w, h, 0, 0);
     }
 
     // Set screen size for text renderer
     if (m_text_renderer)
         m_text_renderer->SetScreenSize(w, h);
-
-    // Software fallback always receives the pass too (it sets vec globals)
-    if (m_sw_fallback)
-        m_sw_fallback->BeginWorldPass(framebuf, pitch, w, h, 0, 0);
 }
 
 /******************************************************************************/

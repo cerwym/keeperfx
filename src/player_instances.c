@@ -779,6 +779,9 @@ long pinstfm_fade_to_map(struct PlayerInfo *player, int32_t *n)
 
 long pinstfe_fade_to_map(struct PlayerInfo *player, int32_t *n)
 {
+  player->cameras[CamIV_Parchment].rotation_angle_x = 0;
+  player->cameras[CamIV_FrontView].rotation_angle_x = 0;
+  player->cameras[CamIV_Isometric].rotation_angle_x = 0;
   set_player_mode(player, PVT_MapScreen);
   if (is_my_player(player))
     settings.tooltips_on = player->tooltips_restore; // restore tooltips setting after the fade is completed

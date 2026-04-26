@@ -544,7 +544,7 @@ void draw_tooltip_slab64k(char *tttext, long pos_x, long pos_y, long ttwidth, lo
             LbTextDrawResized(tx, ty, tx_units_per_px, tttext);
         }
     }
-    LbTextSetWindow(0/pixel_size, 0/pixel_size, MyScreenHeight/pixel_size, MyScreenWidth/pixel_size);
+    LbTextSetWindow(0, 0, RendererScreenHeight(), RendererScreenWidth());
     lbDisplay.DrawFlags = flg_mem;
 }
 
@@ -639,7 +639,7 @@ void draw_tooltip(void)
         draw_tooltip_at(tool_tip_box.pos_x,tool_tip_box.pos_y,tool_tip_box.text);
         UIRenderer_EndTopOverlay();
     }
-    LbTextSetWindow(0/pixel_size, 0/pixel_size, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
+    LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
 }
 
 /******************************************************************************/

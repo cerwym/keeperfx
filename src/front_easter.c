@@ -232,7 +232,7 @@ void draw_eastegg(void)
 
   if (game.eastegg01_cntr >= eastegg_feckoff_codes.length)
   {
-    LbTextSetWindow(0/pixel_size, 0/pixel_size, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
+    LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
     lbDisplay.DrawFlags &= ~Lb_TEXT_ONE_COLOR;
     LbTextSetFont(winfont);
     i = 0;
@@ -272,7 +272,7 @@ void draw_eastegg(void)
 
   if (game.eastegg02_cntr >= eastegg_jlw_codes.length)
   {
-    LbTextSetWindow(0/pixel_size, 0/pixel_size, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
+    LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
     lbDisplay.DrawFlags &= ~Lb_TEXT_ONE_COLOR;
     LbTextSetFont(winfont);
     i = 1;

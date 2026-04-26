@@ -1541,7 +1541,7 @@ extern "C" TbBool anim_record_frame(unsigned char *screenbuf, unsigned char *pal
 {
 	if ((animation.state_flags & 0x01)==0) {
 		return false;
-	} else if (!anim_format_matches(MyScreenWidth/pixel_size,MyScreenHeight/pixel_size,LbGraphicsScreenBPP())) {
+	} else if (!anim_format_matches(RendererScreenWidth(),RendererScreenHeight(),LbGraphicsScreenBPP())) {
 		return false;
 	}
 	return anim_make_next_frame(screenbuf, palette);
@@ -1561,7 +1561,7 @@ extern "C" short anim_record()
 		if (LbFileExists(finalname)) {
 			continue;
 		}
-		return anim_open(finalname, 0, 0, MyScreenWidth/pixel_size,MyScreenHeight/pixel_size,8, 1);
+		return anim_open(finalname, 0, 0, RendererScreenWidth(),RendererScreenHeight(),8, 1);
 	}
 	ERRORLOG("No free file name for recorded movie");
 	return 0;

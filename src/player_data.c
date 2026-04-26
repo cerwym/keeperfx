@@ -29,6 +29,7 @@
 #include "config_players.h"
 #include "game_legacy.h"
 #include "engine_redraw.h"
+#include "renderer/RendererManager.h"
 #include "frontend.h"
 #include "thing_objects.h"
 #include "power_hand.h"
@@ -457,7 +458,12 @@ void set_player_mode(struct PlayerInfo *player, unsigned short nview)
       if (is_my_player(player))
         toggle_status_menu((game.operation_flags & GOF_ShowPanel) != 0);
       if ((game.operation_flags & GOF_ShowGui) != 0)
-        setup_engine_window(status_panel_width, 0, MyScreenWidth, MyScreenHeight);
+      {
+        if (RendererWantsFullscreenViewport())
+          setup_engine_window(0, 0, MyScreenWidth, MyScreenHeight);
+        else
+          setup_engine_window(status_panel_width, 0, MyScreenWidth, MyScreenHeight);
+      }
       else
         setup_engine_window(0, 0, MyScreenWidth, MyScreenHeight);
       break;

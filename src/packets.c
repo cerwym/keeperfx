@@ -99,6 +99,7 @@
 #include "net_resync.h"
 #include "game_legacy.h"
 #include "engine_redraw.h"
+#include "renderer/RendererManager.h"
 #include "frontmenu_ingame_tabs.h"
 #include "vidfade.h"
 #include "spdigger_stack.h"
@@ -844,11 +845,8 @@ TbBool process_players_global_packet_action(PlayerNumber plyr_idx)
       return 0;
   case PckA_ZoomFromMap:
       set_player_cameras_position(player, subtile_coord_center(pckt->actn_par1), subtile_coord_center(pckt->actn_par2));
-      player->cameras[CamIV_Parchment].rotation_angle_x = 0;
-      player->cameras[CamIV_FrontView].rotation_angle_x = 0;
-      player->cameras[CamIV_Isometric].rotation_angle_x = 0;
       if (((game.system_flags & GSF_NetworkActive) != 0)
-          || (lbDisplay.PhysicalScreenWidth > 320))
+          || (!MapFadePass_SupportsNativeResolution() && lbDisplay.PhysicalScreenWidth > 320))
       {
         if (is_my_player_number(plyr_idx))
           toggle_status_menu((game.operation_flags & GOF_ShowPanel) != 0);

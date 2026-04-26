@@ -650,7 +650,7 @@ void gui_draw_box(struct GuiBox *gbox)
 {
     SYNCDBG(6,"Drawing box, first optn \"%s\"",gbox->optn_list->label);
     struct GuiBoxOption *goptn;
-    LbTextSetWindow(0, 0, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
+    LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
     long mouse_x = GetMouseX();
     long mouse_y = GetMouseY();
     struct GuiBoxOption* goptn_over = NULL;

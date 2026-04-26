@@ -697,9 +697,9 @@ void main()
     float samp_py = 1.0 - uv_py;
     float samp_wy = 1.0 - uv_wy;
 
-    // Fade factors matching fade_tbl rows: x0base=(32-a6)<<8, y0base=a6<<8.
-    float f_parch = wp  / 32.0;   // parchment: 1→0
-    float f_world = ww  / 32.0;   // 3D world:  0→1
+    // Fade factors matching fade_tbl rows: x0base=a6<<8 (parch), y0base=(32-a6)<<8 (world).
+    float f_parch = ww  / 32.0;   // parchment: 0→1 (a6/32)
+    float f_world = wp  / 32.0;   // 3D world:  1→0 ((32-a6)/32)
 
     vec3 c_parch = texture(u_parchment, vec2(uv_px, samp_py)).rgb * f_parch;
     vec3 c_world = texture(u_world,     vec2(uv_wx, samp_wy)).rgb * f_world;

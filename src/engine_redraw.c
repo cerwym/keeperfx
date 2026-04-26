@@ -79,9 +79,6 @@ extern "C" {
 }
 #endif
 /******************************************************************************/
-void redraw_isometric_view(void);
-void redraw_frontview(void);
-/******************************************************************************/
 int32_t xtab[640][2];
 int32_t ytab[480][2];
 
@@ -253,15 +250,6 @@ void store_engine_window(TbGraphicsWindow *ewnd,int divider)
     ewnd->ptr = NULL;
 }
 
-void load_engine_window(TbGraphicsWindow *ewnd)
-{
-    struct PlayerInfo* player = get_my_player();
-    player->engine_window_x = ewnd->x;
-    player->engine_window_y = ewnd->y;
-    player->engine_window_width = ewnd->width;
-    player->engine_window_height = ewnd->height;
-}
-
 // RENDER-SW-IMPL: software implementation of IMapFadePass — per-pixel wipe into lbDisplay.WScreen.
 // Hardcoded to 320×200; hardware path would use a UV-warp fragment shader at native resolution.
 // Called directly by SoftwareMapFadePass::StepFadeIn/StepFadeOut via map_fade_in/map_fade_out.
@@ -415,7 +403,7 @@ void prepare_map_fade_buffers(unsigned char *fade_src, unsigned char *fade_dest,
         unsigned char* src = RendererGetWScreen() + lbDisplay.GraphicsScreenWidth * i;
         unsigned char* dst = &fade_src[fadebuf_pos];
         fadebuf_pos += scanline;
-        memcpy(dst, src, MyScreenWidth/pixel_size);
+        memcpy(dst, src, RendererScreenWidth());
     }
     // create the parchment screen
     load_parchment_file();
@@ -427,7 +415,7 @@ void prepare_map_fade_buffers(unsigned char *fade_src, unsigned char *fade_dest,
         unsigned char* src = RendererGetWScreen() + lbDisplay.GraphicsScreenWidth * i;
         unsigned char* dst = &fade_dest[fadebuf_pos];
         fadebuf_pos += scanline;
-        memcpy(dst, src, MyScreenWidth/pixel_size);
+        memcpy(dst, src, RendererScreenWidth());
     }
 }
 
@@ -439,7 +427,7 @@ long map_fade_in(long palette_fade_step)
         map_fade_ghost_table = poly_pool;
         map_fade_src = poly_pool + PALETTE_COLORS*PALETTE_COLORS;
         map_fade_dest = map_fade_src + 320*200;
-        prepare_map_fade_buffers(map_fade_src, map_fade_dest, 320, MyScreenHeight/pixel_size);
+        prepare_map_fade_buffers(map_fade_src, map_fade_dest, 320, RendererScreenHeight());
         generate_map_fade_ghost_table("data/mapfadeg.dat", engine_palette, map_fade_ghost_table);
     }
     map_fade(RendererGetWScreen(), map_fade_dest, map_fade_src, pixmap.fade_tables, map_fade_ghost_table,
@@ -455,7 +443,7 @@ long map_fade_out(long palette_fade_step)
         map_fade_ghost_table = poly_pool;
         map_fade_src = poly_pool + PALETTE_COLORS*PALETTE_COLORS;
         map_fade_dest = map_fade_src + 320*200;
-        prepare_map_fade_buffers(map_fade_src, map_fade_dest, 320, MyScreenHeight/pixel_size);
+        prepare_map_fade_buffers(map_fade_src, map_fade_dest, 320, RendererScreenHeight());
         generate_map_fade_ghost_table("data/mapfadeg.dat", engine_palette, map_fade_ghost_table);
     }
     map_fade(RendererGetWScreen(), map_fade_dest, map_fade_src, pixmap.fade_tables, map_fade_ghost_table,
@@ -491,7 +479,7 @@ void set_engine_view(struct PlayerInfo *player, long val)
         lens_mode = 2;
         S3DSetLineOfSightFunction(dummy_sound_line_of_sight);
         S3DSetDeadzoneRadius(0);
-        LbMouseSetPosition((MyScreenWidth/pixel_size) >> 1,(MyScreenHeight/pixel_size) >> 1);
+        LbMouseSetPosition(RendererScreenWidth() >> 1, RendererScreenHeight() >> 1);
         break;
     case PVM_IsoWibbleView:
     case PVM_IsoStraightView:
@@ -1055,8 +1043,8 @@ void redraw_display(void)
           }
           LbTextSetWindow(text_x, pos_y, text_w, h);
           draw_slab64k(pos_x, pos_y, units_per_pixel, w, h);
-          LbTextDrawResized(0/pixel_size, 0/pixel_size, tx_units_per_px, text);
-          LbTextSetWindow(0/pixel_size, 0/pixel_size, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
+          LbTextDrawResized(0, 0, tx_units_per_px, text);
+          LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
     }
     if (game.armageddon_cast_turn != 0)
     {
@@ -1086,8 +1074,8 @@ void redraw_display(void)
         long pos_y = 16 * units_per_pixel / 16;
         LbTextSetWindow(pos_x, pos_y, w, h);
         draw_slab64k(pos_x, pos_y, units_per_pixel, w, h);
-        LbTextDrawResized(0/pixel_size, 0/pixel_size, tx_units_per_px, text);
-        LbTextSetWindow(0/pixel_size, 0/pixel_size, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
+        LbTextDrawResized(0, 0, tx_units_per_px, text);
+        LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
     }
     draw_eastegg();
   //show_onscreen_msg(8, "Physical(%d,%d) Graphics(%d,%d) Lens(%d,%d)", (int)lbDisplay.PhysicalScreenWidth, (int)lbDisplay.PhysicalScreenHeight, (int)lbDisplay.GraphicsScreenWidth, (int)lbDisplay.GraphicsScreenHeight, (int)eye_lens_width, (int)eye_lens_height);

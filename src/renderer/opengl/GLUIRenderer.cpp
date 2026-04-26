@@ -157,10 +157,11 @@ extern "C" unsigned char EngineSpriteDrawUsingAlpha;
 
 // Returns the alpha that should be applied to a submitted UI element based
 // on the current lbDisplay.DrawFlags transparency flags.
+// The ghost table (pixmap.ghost) computes (src*1/3 + dst*2/3) for both
+// TRANSPAR4 and TRANSPAR8 modes, so src alpha = 1/3 ≈ 0.333f.
 static inline float UIAlphaFromDrawFlags()
 {
-    if (lbDisplay.DrawFlags & Lb_SPRITE_TRANSPAR4) return 0.5f;
-    if (lbDisplay.DrawFlags & Lb_SPRITE_TRANSPAR8) return 0.25f;
+    if (lbDisplay.DrawFlags & (Lb_SPRITE_TRANSPAR4 | Lb_SPRITE_TRANSPAR8)) return 0.333f;
     return 1.0f;
 }
 

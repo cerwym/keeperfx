@@ -534,7 +534,7 @@ static long get_small_map_inputs(long x, long y, long zoom)
   }
   if (grabbed_small_map)
   {
-    LbMouseSetPosition((MyScreenWidth/pixel_size) >> 1, (MyScreenHeight/pixel_size) >> 1);
+    LbMouseSetPosition(RendererScreenWidth() >> 1, RendererScreenHeight() >> 1);
   }
   old_mx = curr_mx;
   old_my = curr_my;
@@ -854,7 +854,7 @@ static TbBool get_level_lost_inputs(void)
           turn_off_all_window_menus();
           set_flag_value(game.operation_flags, GOF_ShowPanel, (game.operation_flags & GOF_ShowGui) != 0);
           if (((game.system_flags & GSF_NetworkActive) != 0)
-            || (RendererPhysicalWidth() > 320))
+            || (!MapFadePass_SupportsNativeResolution() && RendererPhysicalWidth() > 320))
           {
                 if (toggle_status_menu(0))
                   set_flag(game.operation_flags, GOF_ShowPanel);

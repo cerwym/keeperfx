@@ -1484,6 +1484,161 @@ void RendererOpenGL::ensure_pip_fbo(std::size_t idx, int w, int h)
     slot.h = h;
 }
 
+/******************************************************************************/
+
+void RendererOpenGL::FlushSceneToFBO(int w, int h)
+{
+    // Caller must have bound the FBO, set viewport, and cleared already.
+    // This method consumes the pending render queues into the bound target.
+    // All game-side coordinates (rawblit dst, overhead map dst) are in logical
+    // screen space (m_screenW × m_screenH).  The FBO viewport matches the
+    // logical dimensions so NDC conversion uses the same coordinate system.
+
+    // ── Palette ──────────────────────────────────────────────────────────
+    upload_palette_texture();
+
+    // ── 3D world geometry ────────────────────────────────────────────────
+    if (m_world_renderer)
+        m_world_renderer->GPURenderToFBO(w, h);
+
+    // ── Raw blit (parchment background image) ────────────────────────────
+    if (m_rawblit_pending)
+    {
+        const RawBlitCmd& cmd = m_rawblit_cmd;
+        glDisable(GL_DEPTH_TEST);
+        glDepthMask(GL_FALSE);
+
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, m_rawblit_tex);
+        if (cmd.src_w != m_rawblit_tex_w || cmd.src_h != m_rawblit_tex_h)
+        {
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, cmd.src_w, cmd.src_h,
+                         0, GL_RED, GL_UNSIGNED_BYTE, cmd.src_buf);
+            m_rawblit_tex_w = cmd.src_w;
+            m_rawblit_tex_h = cmd.src_h;
+        }
+        else
+        {
+            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, cmd.src_w, cmd.src_h,
+                            GL_RED, GL_UNSIGNED_BYTE, cmd.src_buf);
+        }
+
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, m_texPalette);
+
+        // Coordinates are in logical screen space.
+        const float sw = (float)m_screenW;
+        const float sh = (float)m_screenH;
+        Vec2f ndc0 = ScreenToNDC((float)cmd.dst_x,               (float)cmd.dst_y,               sw, sh);
+        Vec2f ndc1 = ScreenToNDC((float)(cmd.dst_x + cmd.dst_w), (float)(cmd.dst_y + cmd.dst_h), sw, sh);
+
+        const float verts[6][4] = {
+            { ndc0.x, ndc1.y,  0.f, 1.f },
+            { ndc1.x, ndc1.y,  1.f, 1.f },
+            { ndc1.x, ndc0.y,  1.f, 0.f },
+            { ndc0.x, ndc1.y,  0.f, 1.f },
+            { ndc1.x, ndc0.y,  1.f, 0.f },
+            { ndc0.x, ndc0.y,  0.f, 0.f },
+        };
+        glBindVertexArray(m_rawblit_vao);
+        glBindBuffer(GL_ARRAY_BUFFER, m_rawblit_vbo);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(verts), nullptr, GL_DYNAMIC_DRAW);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(verts), verts);
+
+        glDisable(GL_BLEND);
+        glUseProgram(m_rawblit_shader);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+        glBindVertexArray(0);
+
+        glDepthMask(GL_TRUE);
+        glActiveTexture(GL_TEXTURE0);
+        m_rawblit_pending = false;
+    }
+
+    // ── Overhead map tile blits ──────────────────────────────────────────
+    for (const OverheadMapCmd& cmd : m_overhead_map_cmds)
+    {
+        glDisable(GL_DEPTH_TEST);
+        glDepthMask(GL_FALSE);
+
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, m_overhead_map_tex);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        if (cmd.tiles_x != m_overhead_map_tex_w || cmd.tiles_y != m_overhead_map_tex_h)
+        {
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, cmd.tiles_x, cmd.tiles_y,
+                         0, GL_RED, GL_UNSIGNED_BYTE, cmd.pixels.data());
+            m_overhead_map_tex_w = cmd.tiles_x;
+            m_overhead_map_tex_h = cmd.tiles_y;
+        }
+        else
+        {
+            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, cmd.tiles_x, cmd.tiles_y,
+                            GL_RED, GL_UNSIGNED_BYTE, cmd.pixels.data());
+        }
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, m_texPalette);
+
+        // Coordinates are in logical screen space.
+        const float sw = (float)m_screenW;
+        const float sh = (float)m_screenH;
+        const float x0 = (float)cmd.dst_x               / sw * 2.0f - 1.0f;
+        const float x1 = (float)(cmd.dst_x + cmd.dst_w) / sw * 2.0f - 1.0f;
+        const float y0 = 1.0f - (float)cmd.dst_y               / sh * 2.0f;
+        const float y1 = 1.0f - (float)(cmd.dst_y + cmd.dst_h) / sh * 2.0f;
+        const float verts[6][4] = {
+            { x0, y1,  0.f, 1.f },
+            { x1, y1,  1.f, 1.f },
+            { x1, y0,  1.f, 0.f },
+            { x0, y1,  0.f, 1.f },
+            { x1, y0,  1.f, 0.f },
+            { x0, y0,  0.f, 0.f },
+        };
+        glBindVertexArray(m_rawblit_vao);
+        glBindBuffer(GL_ARRAY_BUFFER, m_rawblit_vbo);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(verts), nullptr, GL_DYNAMIC_DRAW);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(verts), verts);
+
+        GLuint prog = m_overhead_map_shader ? m_overhead_map_shader : m_rawblit_shader;
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glUseProgram(prog);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+        glDisable(GL_BLEND);
+        glBindVertexArray(0);
+
+        glDepthMask(GL_TRUE);
+        glActiveTexture(GL_TEXTURE0);
+    }
+    m_overhead_map_cmds.clear();
+
+    // ── Transparent blit (CPU-drawn sprites composited over the scene) ───
+    if (m_transparent_blit_pending)
+    {
+        glDisable(GL_DEPTH_TEST);
+        glDepthMask(GL_FALSE);
+
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, m_texIndex);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, m_texPalette);
+
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glUseProgram(m_shader);
+        glUniform1f(m_uTintFactor, 0.0f);
+        glBindVertexArray(m_vao);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+        glBindVertexArray(0);
+        glDisable(GL_BLEND);
+        glDepthMask(GL_TRUE);
+        glActiveTexture(GL_TEXTURE0);
+        m_transparent_blit_pending = false;
+    }
+}
+
 const char* RendererOpenGL::GetName() const
 {
     return "OpenGL";

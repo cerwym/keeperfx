@@ -422,7 +422,7 @@ void draw_bonus_timer(void)
         y = 0;
     }
     LbTextDrawResized(0, y, tx_units_per_px, text);
-    LbTextSetWindow(0/pixel_size, 0/pixel_size, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
+    LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
 }
 
 /**
@@ -498,7 +498,7 @@ void draw_timer(void)
         y = 0;
     }
     LbTextDrawResized(0, y, tx_units_per_px, text);
-    LbTextSetWindow(0/pixel_size, 0/pixel_size, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
+    LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
 }
 
 void draw_gameturn_timer(void)
@@ -555,7 +555,7 @@ void draw_gameturn_timer(void)
         y = 0;
     }
     LbTextDrawResized(0, y, tx_units_per_px, text);
-    LbTextSetWindow(0/pixel_size, 0/pixel_size, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
+    LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
 }
 
 TbBool timer_enabled(void)
@@ -655,7 +655,7 @@ void draw_script_timer(PlayerNumber plyr_idx, unsigned char timer_id, unsigned l
         y = 0;
     }
     LbTextDrawResized(0, y, tx_units_per_px, text);
-    LbTextSetWindow(0/pixel_size, 0/pixel_size, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
+    LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
 }
 
 TbBool display_variable_enabled(void)
@@ -729,7 +729,7 @@ void draw_script_variable(PlayerNumber plyr_idx, unsigned char valtype, unsigned
         y = 0;
     }
     LbTextDrawResized(0, y, tx_units_per_px, text);
-    LbTextSetWindow(0/pixel_size, 0/pixel_size, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
+    LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
 }
 
 int consolelog_font_size = 11;

@@ -1175,7 +1175,7 @@ TbBool fronttestfont_draw(void)
     {
         RendererGetWScreen()[y*RendererScreenWidth()+x] = 0;
     }
-  LbTextSetWindow(0/pixel_size, 0/pixel_size, MyScreenHeight/pixel_size, MyScreenWidth/pixel_size);
+  LbTextSetWindow(0, 0, RendererScreenHeight(), RendererScreenWidth());
   // Drawing
   w = 32;
   h = 48;
@@ -1513,7 +1513,7 @@ void draw_scrolling_button_string(struct GuiButton *gbtn, const char *text)
   if (scrollwnd == NULL)
   {
       ERRORLOG("Cannot have a TEXT_SCROLLING box type without a pointer to a TextScrollWindow");
-      LbTextSetWindow(0/pixel_size, 0/pixel_size, MyScreenHeight/pixel_size, MyScreenWidth/pixel_size);
+      LbTextSetWindow(0, 0, RendererScreenHeight(), RendererScreenWidth());
       return;
   }
   area_height = gbtn->height;
@@ -1582,7 +1582,7 @@ void draw_scrolling_button_string(struct GuiButton *gbtn, const char *text)
   // Finally, draw the text
   LbTextDrawResized(0, scrollwnd->start_y, tx_units_per_px, text);
   // And restore default drawing options
-  LbTextSetWindow(0/pixel_size, 0/pixel_size, MyScreenHeight/pixel_size, MyScreenWidth/pixel_size);
+  LbTextSetWindow(0, 0, RendererScreenHeight(), RendererScreenWidth());
   lbDisplay.DrawFlags = flg_mem;
 }
 
@@ -2556,7 +2556,21 @@ void set_gui_visible(TbBool visible)
   }
   if (((game.view_mode_flags & GNFldD_StatusPanelDisplay) != 0) && ((game.operation_flags & GOF_ShowGui) != 0))
   {
-      setup_engine_window(status_panel_width, 0, MyScreenWidth, MyScreenHeight);
+      // GPU renderers draw the 3D world fullscreen and paint the sidebar on
+      // top, so the engine window always starts at x=0.  Only the software
+      // renderer needs the viewport offset to avoid rasterising under the
+      // sidebar.  Possession/first-person modes are excluded — the sidebar
+      // genuinely clips the 3D view there.
+      if (RendererWantsFullscreenViewport()
+          && player->view_type != PVT_CreatureContrl
+          && player->view_type != PVT_CreaturePasngr)
+      {
+          setup_engine_window(0, 0, MyScreenWidth, MyScreenHeight);
+      }
+      else
+      {
+          setup_engine_window(status_panel_width, 0, MyScreenWidth, MyScreenHeight);
+      }
   }
   else
   {
@@ -3379,7 +3393,7 @@ void draw_gui(void)
     unsigned int flg_mem;
     LbTextSetFont(winfont);
     flg_mem = lbDisplay.DrawFlags;
-    LbTextSetWindow(0/pixel_size, 0/pixel_size, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
+    LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
     update_fade_active_menus();
     draw_active_menus_buttons();
     if (game.flash_button_index != 0)

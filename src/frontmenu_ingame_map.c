@@ -1004,7 +1004,7 @@ void setup_background(long units_per_px)
         MapShapeEnd[i] = radius + LbSqrL(n);
     }
 
-    if (RendererGetActiveType() == RENDERER_OPENGL) {
+    if (RendererHasGPURenderPath()) {
         // GPU mode: WScreen is the CPU staging buffer — not a composited background.
         // MapBackground[] is already zeroed by KfxCalloc; bkcol=0 is the only entry
         // needed because s_minimap_pixels is pre-zeroed by AcquireMinimapBuffer.
@@ -1087,7 +1087,7 @@ void setup_panel_colors(void)
         PanelColours[n + PnC_purplePath]    = 255;
         PanelColours[n + PnC_Gems]      = 102 + (pixmap.ghost[bkcol] >> 6);
         PanelColours[n + PnC_RockFloor] = 145;
-        if (RendererGetActiveType() == RENDERER_OPENGL) {
+        if (RendererHasGPURenderPath()) {
             // GPU sprite shader discards palette index 0 (transparent); ensure all
             // visible terrain types map to a non-zero entry.
             // For rock: it should appear as black on the minimap. Palette index 0

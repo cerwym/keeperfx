@@ -665,6 +665,19 @@ RendererType RendererGetActiveType()
     return s_activeType;
 }
 
+TbBool RendererWantsFullscreenViewport()
+{
+    // GPU renderers draw the 3D world at full screen dimensions and paint
+    // the sidebar on top.  Software renderers need the engine window offset
+    // so they don't rasterise under the sidebar.
+    return (s_activeType == RENDERER_OPENGL || s_activeType == RENDERER_VITA) ? 1 : 0;
+}
+
+TbBool RendererHasGPURenderPath()
+{
+    return (s_activeType == RENDERER_OPENGL || s_activeType == RENDERER_VITA) ? 1 : 0;
+}
+
 /******************************************************************************/
 /* C-callable wrappers */
 /******************************************************************************/
@@ -986,6 +999,13 @@ int32_t MapFadePass_StepFadeOut(int32_t step)
     if (s_mapFadePass)
         return s_mapFadePass->StepFadeOut(step);
     return step;
+}
+
+TbBool MapFadePass_SupportsNativeResolution(void)
+{
+    if (s_mapFadePass)
+        return s_mapFadePass->SupportsNativeResolution() ? 1 : 0;
+    return 0;
 }
 
 /******************************************************************************/

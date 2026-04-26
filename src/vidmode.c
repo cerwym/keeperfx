@@ -764,8 +764,8 @@ TbBool update_screen_mode_data(long width, long height)
 
   LbMouseChangeMoveRatio(base_mouse_sensitivity*units_per_pixel/16, base_mouse_sensitivity*units_per_pixel/16);
   LbMouseSetPointerHotspot(0, 0);
-  RendererSetViewport(0, 0, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
-  LbTextSetWindow(0, 0, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
+  RendererSetViewport(0, 0, RendererScreenWidth(), RendererScreenHeight());
+  LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
   LbMouseSetup(NULL);
   return true;
 }

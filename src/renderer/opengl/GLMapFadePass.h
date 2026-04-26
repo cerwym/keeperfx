@@ -6,11 +6,10 @@
  * @par Purpose:
  *     Implements IMapFadePass for the desktop OpenGL path.
  *
- *     On the first call to StepFadeIn(0) / StepFadeOut(32) it invokes the
- *     existing prepare_map_fade_buffers() to render both the 3D-world view
- *     and the parchment overhead view into small CPU buffers, decodes each
- *     320×200 paletted image to RGBA using the current engine palette, and
- *     uploads them as two GL_RGBA8 textures.
+ *     On the first call to StepFadeIn(0) / StepFadeOut(32) it renders
+ *     both the 3D-world view and the parchment overhead view into
+ *     offscreen FBOs, producing two GL_RGBA8 textures at native
+ *     window resolution.
  *
  *     Every subsequent step call records the current step value; the wipe
  *     quad itself is not drawn here — instead HasGPUComposePass() returns
@@ -62,6 +61,8 @@ public:
     /** Returns true while a transition is active and frames were captured. */
     bool HasGPUComposePass() const override { return m_active; }
 
+    bool SupportsNativeResolution() const override { return m_initialized; }
+
     /** Renders the wipe quad using the step stored by the last Step* call.
      *  Called by RendererOpenGL::EndFrame() after the staging palette blit. */
     void RenderGPUComposePass() override;
@@ -73,7 +74,7 @@ private:
     void MarkDone();
 
     // GL resources
-    GLuint m_tex[2]      = {};  // [0]=parchment, [1]=3D world — GL_RGBA8 320×200
+    GLuint m_tex[2]      = {};  // [0]=parchment, [1]=3D world — GL_RGBA8 native res
     GLuint m_vao         = 0;
     GLuint m_vbo         = 0;
     GLuint m_prog        = 0;
@@ -84,6 +85,7 @@ private:
 
     bool m_initialized = false;
     bool m_active      = false; ///< true while a transition is in progress
+    bool m_deactivate_after_render = false; ///< deactivate after next compose pass
     long m_step        = 0;     ///< step recorded for RenderGPUComposePass()
     int  m_tex_w       = 0;
     int  m_tex_h       = 0;

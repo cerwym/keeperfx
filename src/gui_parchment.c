@@ -333,7 +333,7 @@ void draw_overhead_map(const struct TbRect *map_area, long block_size, PlayerNum
     // GPU path: build a per-tile colour buffer and let the renderer scale it to
     // the dest rect as an opaque GL_R8 texture.  background=0 is correct here
     // because in GL mode lbDisplay.WScreen has no parchment pixels underneath.
-    if (RendererGetActiveType() == RENDERER_OPENGL)
+    if (RendererHasGPURenderPath())
     {
         int tiles_x = game.map_tiles_x;
         int tiles_y = game.map_tiles_y;
@@ -818,7 +818,7 @@ void draw_zoom_box_terrain(long scrtop_x, long scrtop_y, int stl_x, int stl_y, P
     scrtop_x += 4*units_per_pixel/16;
     scrtop_y -= 4*units_per_pixel/16;
 
-    if (RendererGetActiveType() == RENDERER_OPENGL)
+    if (RendererHasGPURenderPath())
     {
         // GPU path: build a per-subtile texture-block index buffer and submit it
         // as textured tile quads via the zoom-tile shader (actual tile textures,
@@ -852,7 +852,7 @@ void draw_zoom_box_terrain(long scrtop_x, long scrtop_y, int stl_x, int stl_y, P
 
     // Software path: direct pixel write via the SW rasteriser.
     lbDisplay.DrawFlags = 0;
-    setup_vecs(RendererGetWScreen(), NULL, (unsigned int)RendererScreenWidth(), (unsigned int)(MyScreenWidth/pixel_size), (unsigned int)(MyScreenHeight/pixel_size));
+    setup_vecs(RendererGetWScreen(), NULL, (unsigned int)RendererScreenWidth(), (unsigned int)RendererScreenWidth(), (unsigned int)RendererScreenHeight());
     int scr_y = scrtop_y;
     for (int map_dy = 0; map_dy < draw_tiles_y; map_dy++)
     {
@@ -880,7 +880,7 @@ void draw_zoom_box_terrain(long scrtop_x, long scrtop_y, int stl_x, int stl_y, P
 
 void draw_zoom_box_things(long scrtop_x, long scrtop_y, int stl_x, int stl_y, PlayerNumber plyr_idx, long draw_tiles_x, long draw_tiles_y, int subtile_size)
 {
-    if (RendererGetActiveType() == RENDERER_OPENGL)
+    if (RendererHasGPURenderPath())
     {
         // GPU: UIRenderer_Submit* calls take absolute screen coordinates.
         // Use scrtop_x/scrtop_y as the tile-grid origin rather than a
@@ -939,7 +939,7 @@ void zoom_to_parchment_map(void)
       set_flag(game.operation_flags, GOF_ShowPanel);
     struct PlayerInfo* player = get_my_player();
     if (((game.system_flags & GSF_NetworkActive) != 0)
-        || (RendererPhysicalWidth() > 320))
+        || (!MapFadePass_SupportsNativeResolution() && RendererPhysicalWidth() > 320))
     {
       if (!toggle_status_menu(0))
         clear_flag(game.operation_flags, GOF_ShowPanel);
@@ -956,7 +956,7 @@ void zoom_from_parchment_map(void)
 {
     struct PlayerInfo* player = get_my_player();
     if (((game.system_flags & GSF_NetworkActive) != 0)
-        || (RendererPhysicalWidth() > 320))
+        || (!MapFadePass_SupportsNativeResolution() && RendererPhysicalWidth() > 320))
     {
         if ((game.operation_flags & GOF_ShowPanel) != 0)
           toggle_status_menu(1);

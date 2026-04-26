@@ -72,7 +72,7 @@ void ZoomBoxView::draw(const DrawContext&    ctx,
     const int scr_x = screen_rect.left;
     const int scr_y = screen_rect.top;
 
-    if (m_mode == ZBM_ISOMETRIC && RendererGetActiveType() == RENDERER_OPENGL)
+    if (m_mode == ZBM_ISOMETRIC && RendererHasGPURenderPath())
         drawIsometric(ctx, view, player, scr_x, scr_y,
                       stl_x, stl_y, draw_tiles_x, draw_tiles_y, subtile_size);
     else

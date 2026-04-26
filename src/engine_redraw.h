@@ -38,12 +38,14 @@ struct PlayerInfo;
 /******************************************************************************/
 void setup_engine_window(long x1, long y1, long x2, long y2);
 void store_engine_window(TbGraphicsWindow *ewnd,int divider);
-void load_engine_window(TbGraphicsWindow *ewnd);
 
 void set_engine_view(struct PlayerInfo *player, long val);
 
 void draw_overlay_compass(long a1, long a2);
 void draw_2d_elements(struct PlayerInfo* player);
+
+void redraw_isometric_view(void);
+void redraw_frontview(void);
 
 TbBool keeper_screen_redraw(void);
 void smooth_screen_area(unsigned char *a1, long a2, long a3, long a4, long a5, long a6);

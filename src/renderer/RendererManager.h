@@ -53,6 +53,18 @@ void RendererShutdown(void);
 /** Returns the RendererType enum value currently in use. */
 RendererType RendererGetActiveType(void);
 
+/** Returns true when the active renderer draws the 3D world at full screen
+ *  dimensions (viewport at 0,0) and paints the sidebar UI on top.
+ *  When false, the engine window must be offset by status_panel_width so the
+ *  software rasteriser avoids drawing under the sidebar.
+ *  GPU renderers return true; software renderers return false. */
+TbBool RendererWantsFullscreenViewport(void);
+
+/** Returns true when the active renderer has a GPU-accelerated draw path.
+ *  Use this instead of RendererGetActiveType() == RENDERER_OPENGL to avoid
+ *  hard-coding backend checks.  True for GL and Vita; false for software. */
+TbBool RendererHasGPURenderPath(void);
+
 /******************************************************************************/
 /* C-callable framebuffer / frame wrappers (safe to call from bflib_video.c) */
 /******************************************************************************/
@@ -299,6 +311,9 @@ int32_t MapFadePass_StepFadeIn(int32_t step);
 
 /** Render one fade-out step (3D view → parchment) and return next step value. */
 int32_t MapFadePass_StepFadeOut(int32_t step);
+
+/** Returns true when the active map-fade pass can run at any resolution. */
+TbBool MapFadePass_SupportsNativeResolution(void);
 
 /******************************************************************************/
 /* C-callable text renderer wrappers                                          */

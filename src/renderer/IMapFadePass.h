@@ -61,6 +61,10 @@ public:
      *  Renders the wipe quad using the pending step value set during the most
      *  recent StepFadeIn / StepFadeOut call.  No-op by default. */
     virtual void RenderGPUComposePass() {}
+
+    /** Returns true when this pass can run the transition at any resolution,
+     *  not just the original 320×200.  Software returns false; GPU returns true. */
+    virtual bool SupportsNativeResolution() const { return false; }
 };
 
 /******************************************************************************/

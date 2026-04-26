@@ -874,7 +874,7 @@ void compressed_window_draw(void)
 
     // In GL mode draw the huge sprite into a zero-initialized bounce buffer so
     // lbDisplay.WScreen is not written (WScreen is imminent to be nulled).
-    if (RendererGetActiveType() == RENDERER_OPENGL)
+    if (RendererHasGPURenderPath())
     {
         int w = RendererScreenWidth();
         int h = RendererPhysicalHeight();

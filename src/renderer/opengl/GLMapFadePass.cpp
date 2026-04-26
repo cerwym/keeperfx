@@ -11,9 +11,16 @@
 #ifdef RENDERER_OPENGL_ENABLED
 
 #include "renderer/opengl/GLShaders.h"
-#include "bflib_video.h"      // lbPalette, PALETTE_COLORS, MyScreenWidth/Height, pixel_size
-#include "engine_render.h"    // poly_pool, PALETTE_COLORS
-#include "engine_redraw.h"    // prepare_map_fade_buffers, map_fade_in, map_fade_out
+#include "renderer/RendererOpenGL.h"      // FlushSceneToFBO
+#include "renderer/RendererManager.h"     // RendererGetActive, WorldViewRenderer_BeginWorldPass
+#include "renderer/opengl/GLWorldViewRenderer.h" // BeginWorldPass
+#include "bflib_video.h"      // MyScreenWidth/Height, pixel_size, lbDisplay
+#include "bflib_vidraw.h"     // vec_window_width/height
+#include "engine_redraw.h"    // redraw_isometric_view, redraw_frontview, map_fade_in/out, setup/store_engine_window
+#include "engine_render.h"    // vert_offset, hori_offset, x_init_off, y_init_off, draw_view
+#include "gui_parchment.h"    // load_parchment_file, redraw_minimal_overhead_view
+#include "player_data.h"      // get_my_player, view_mode_restore
+#include "local_camera.h"     // get_local_camera
 
 #include <vector>
 #include <cstring>
@@ -145,58 +152,127 @@ void GLMapFadePass::Shutdown()
 
 bool GLMapFadePass::CaptureAndUploadFrames()
 {
-    if (!poly_pool)
+    RendererOpenGL* gl_rend = static_cast<RendererOpenGL*>(RendererGetActive());
+    if (!gl_rend)
     {
-        WARNLOG("GLMapFadePass::CaptureAndUploadFrames — poly_pool not initialised");
+        WARNLOG("GLMapFadePass::CaptureAndUploadFrames — no active renderer");
         return false;
     }
 
-    // ----- Capture both views into 320 × (MyScreenHeight/pixel_size) CPU buffers -----
-    // Layout in poly_pool matches map_fade_in / map_fade_out:
-    //   offset 0                         — ghost table (PALETTE_COLORS²)
-    //   offset PALETTE_COLORS²           — src  = 3D   world view
-    //   offset PALETTE_COLORS² + 320*200 — dest = parchment view
-    unsigned char* fade_src  = poly_pool + (PALETTE_COLORS * PALETTE_COLORS);
-    unsigned char* fade_dest = fade_src  + 320 * 200;
-
-    int tex_w = MyScreenWidth  / pixel_size;
-    int tex_h = MyScreenHeight / pixel_size;
-    if (tex_w < 1 || tex_h < 1)
+    struct PlayerInfo* player = get_my_player();
+    const int w = (int)MyScreenWidth;
+    const int h = (int)MyScreenHeight;
+    if (w < 1 || h < 1)
     {
-        WARNLOG("GLMapFadePass::CaptureAndUploadFrames — degenerate screen size %dx%d", tex_w, tex_h);
+        WARNLOG("GLMapFadePass::CaptureAndUploadFrames — degenerate screen size %dx%d", w, h);
         return false;
     }
 
-    prepare_map_fade_buffers(fade_src, fade_dest, 320, tex_h);
+    m_tex_w = w;
+    m_tex_h = h;
 
-    m_tex_w = tex_w;
-    m_tex_h = tex_h;
+    // ── Create temporary FBO + depth renderbuffer ────────────────────────
+    GLuint fbo = 0, depth_rb = 0;
+    glGenFramebuffers(1, &fbo);
+    glGenRenderbuffers(1, &depth_rb);
+    glBindRenderbuffer(GL_RENDERBUFFER, depth_rb);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, w, h);
+    glBindRenderbuffer(GL_RENDERBUFFER, 0);
 
-    // ----- Decode palette indices to RGBA8 and upload -----
-    std::vector<uint8_t> rgba(tex_w * tex_h * 4);
-
-    // [0] = parchment (fade_dest), [1] = 3D world (fade_src)
-    const unsigned char* cpu_bufs[2] = { fade_dest, fade_src };
-
-    for (int b = 0; b < 2; ++b)
+    // Resize both snapshot textures to the window resolution.
+    for (int i = 0; i < 2; ++i)
     {
-        const unsigned char* src = cpu_bufs[b];
-        for (int row = 0; row < tex_h; ++row)
-        {
-            for (int col = 0; col < tex_w; ++col)
-            {
-                uint8_t idx = src[row * 320 + col];
-                rgba[(row * tex_w + col) * 4 + 0] = (uint8_t)(lbPalette[idx * 3 + 0] << 2);
-                rgba[(row * tex_w + col) * 4 + 1] = (uint8_t)(lbPalette[idx * 3 + 1] << 2);
-                rgba[(row * tex_w + col) * 4 + 2] = (uint8_t)(lbPalette[idx * 3 + 2] << 2);
-                rgba[(row * tex_w + col) * 4 + 3] = 255;
-            }
-        }
-        glBindTexture(GL_TEXTURE_2D, m_tex[b]);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, tex_w, tex_h, 0,
-                     GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
+        glBindTexture(GL_TEXTURE_2D, m_tex[i]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0,
+                     GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
     }
     glBindTexture(GL_TEXTURE_2D, 0);
+
+    // ── Capture 3D world view → m_tex[1] ────────────────────────────────
+    // Follow the PiP pattern: save engine state, set up engine window for
+    // the FBO dimensions, call BeginWorldPass, render, flush to FBO, restore.
+    // The GL renderer uses a fullscreen viewport (0,0,w,h) — the sidebar
+    // paints on top — so the captured view always matches the live view.
+    {
+        // Save engine window and vec_window state.
+        const int32_t saved_vw = vec_window_width;
+        const int32_t saved_vh = vec_window_height;
+
+        vec_window_width  = w;
+        vec_window_height = h;
+
+        TbGraphicsWindow saved_ewnd;
+        store_engine_window(&saved_ewnd, 1);
+        setup_engine_window(0, 0, w, h);
+
+        // Tell the world renderer about the FBO target dimensions.
+        gl_rend->GetWorldRenderer()->BeginWorldPass(nullptr, 0, w, h, 0, 0);
+
+        // Save projection globals so main-view mouse→world unprojection is unaffected.
+        const Offset saved_vert[3] = { vert_offset[0], vert_offset[1], vert_offset[2] };
+        const Offset saved_hori[3] = { hori_offset[0], hori_offset[1], hori_offset[2] };
+        const int32_t saved_x_init  = x_init_off;
+        const int32_t saved_y_init  = y_init_off;
+
+        // Re-render the 3D view using the appropriate camera.
+        struct Camera* cam;
+        if (player->view_mode_restore == PVM_IsoWibbleView ||
+            player->view_mode_restore == PVM_IsoStraightView)
+            cam = get_local_camera(&player->cameras[CamIV_Isometric]);
+        else
+            cam = get_local_camera(&player->cameras[CamIV_FrontView]);
+        draw_view(cam, 0);
+
+        // Restore projection globals and engine window.
+        vert_offset[0] = saved_vert[0]; vert_offset[1] = saved_vert[1]; vert_offset[2] = saved_vert[2];
+        hori_offset[0] = saved_hori[0]; hori_offset[1] = saved_hori[1]; hori_offset[2] = saved_hori[2];
+        x_init_off = saved_x_init;
+        y_init_off = saved_y_init;
+
+        setup_engine_window(saved_ewnd.x, saved_ewnd.y,
+                            saved_ewnd.width, saved_ewnd.height);
+        vec_window_width  = saved_vw;
+        vec_window_height = saved_vh;
+
+        // Flush world geometry into the FBO.
+        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                               GL_TEXTURE_2D, m_tex[1], 0);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
+                                  GL_RENDERBUFFER, depth_rb);
+        glViewport(0, 0, w, h);
+        glClearColor(0, 0, 0, 1);
+        glDepthMask(GL_TRUE);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        gl_rend->FlushSceneToFBO(w, h);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
+
+    // ── Capture parchment overhead view → m_tex[0] ──────────────────────
+    {
+        // Queue parchment background + overhead map via the normal game path.
+        load_parchment_file();
+        redraw_minimal_overhead_view();
+
+        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                               GL_TEXTURE_2D, m_tex[0], 0);
+        glViewport(0, 0, w, h);
+        glClearColor(0, 0, 0, 1);
+        glDepthMask(GL_TRUE);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        gl_rend->FlushSceneToFBO(w, h);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
+
+    // ── Cleanup ──────────────────────────────────────────────────────────
+    glDeleteRenderbuffers(1, &depth_rb);
+    glDeleteFramebuffers(1, &fbo);
+    glViewport(0, 0, w, h);
 
     return true;
 }
@@ -213,60 +289,68 @@ int32_t GLMapFadePass::StepFadeIn(int32_t step)
 {
     if (!m_initialized && !Init())
     {
-        // GPU init failed; delegate to software path.
-        return map_fade_in(step);
+        WARNLOG("GLMapFadePass: GPU init failed, skipping fade");
+        int32_t next = step + 4;
+        return (next > 32) ? 32 : next;
     }
 
+    // Capture on the first call (step == 0).
     if (step == 0)
     {
+        m_deactivate_after_render = false;
         if (!CaptureAndUploadFrames())
         {
-            WARNLOG("GLMapFadePass: capture failed on fade-in, using software fallback");
+            WARNLOG("GLMapFadePass: capture failed on fade-in, skipping fade");
             m_active = false;
-            return map_fade_in(step);
+            int32_t next = step + 4;
+            return (next > 32) ? 32 : next;
         }
         m_active = true;
     }
-    else if (!m_active)
-    {
-        // Shouldn't happen in normal flow, but guard gracefully.
-        return map_fade_in(step);
-    }
 
-    m_step = step;
+    // Derive step from instance_remain_turns, matching the SW formula:
+    //   (8 - remain) * 4   →  4 at remain=7 … 28 at remain=1
+    // This runs the blend at game-tick rate (~20 fps), not draw-frame rate,
+    // so the visual duration matches the SW path regardless of display FPS.
+    int32_t derived = (int32_t)(8 - get_my_player()->instance_remain_turns) * 4;
+    if (derived < 0) derived = 0;
+    if (derived > 32) derived = 32;
+    m_step = derived;
 
-    int32_t next = step + 4;
-    if (next > 32) next = 32;
-    return next;
+    return derived;
 }
 
 int32_t GLMapFadePass::StepFadeOut(int32_t step)
 {
     if (!m_initialized && !Init())
     {
-        return map_fade_out(step);
+        WARNLOG("GLMapFadePass: GPU init failed, skipping fade");
+        int32_t next = step - 4;
+        return (next < 0) ? 0 : next;
     }
 
+    // Capture on the first call (step == 32).
     if (step == 32)
     {
+        m_deactivate_after_render = false;
         if (!CaptureAndUploadFrames())
         {
-            WARNLOG("GLMapFadePass: capture failed on fade-out, using software fallback");
+            WARNLOG("GLMapFadePass: capture failed on fade-out, skipping fade");
             m_active = false;
-            return map_fade_out(step);
+            int32_t next = step - 4;
+            return (next < 0) ? 0 : next;
         }
         m_active = true;
     }
-    else if (!m_active)
-    {
-        return map_fade_out(step);
-    }
 
-    m_step = step;
+    // Derive step from instance_remain_turns, matching the SW formula:
+    //   remain * 4   →  28 at remain=7 … 4 at remain=1
+    int32_t derived = (int32_t)get_my_player()->instance_remain_turns * 4;
+    if (derived < 0) derived = 0;
+    if (derived > 32) derived = 32;
+    m_step = derived;
 
-    int32_t next = step - 4;
-    if (next < 0) next = 0;
-    return next;
+    return derived;
 }
 
 /******************************************************************************/
@@ -276,6 +360,38 @@ void GLMapFadePass::RenderGPUComposePass()
     if (!m_active || !m_prog || !m_vao)
         return;
 
+    // Safety: if the game has already ended the transition (the end callback
+    // restored view_mode before we finished stepping), render one final frame
+    // at the terminal step value (step=0 for fade-out = 100% world, step=32
+    // for fade-in = 100% parchment) so the compose output seamlessly matches
+    // the live view.  Deactivate after this frame via m_deactivate_after_render.
+    {
+        struct PlayerInfo* player = get_my_player();
+        if (player->view_mode != PVM_ParchFadeIn &&
+            player->view_mode != PVM_ParchFadeOut)
+        {
+            if (!m_deactivate_after_render)
+            {
+                // First frame after instance ended: snap to terminal step
+                // and mark for deactivation after this render.
+                // Fade-out ends at step=0 (100% world), fade-in at step=32 (100% parchment).
+                // We can tell which by looking at m_step: if it was decreasing
+                // toward 0 it was a fade-out; if increasing toward 32, fade-in.
+                m_step = (m_step <= 16) ? 0 : 32;
+                m_deactivate_after_render = true;
+            }
+            else
+            {
+                // Already rendered the terminal frame last pass — deactivate now.
+                m_active = false;
+                m_deactivate_after_render = false;
+                return;
+            }
+        }
+    }
+
+    // The compose quad covers the entire screen.  The world viewport is
+    // already fullscreen in GL mode, so no explicit glViewport override needed.
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_BLEND);
 
@@ -293,6 +409,14 @@ void GLMapFadePass::RenderGPUComposePass()
 
     glUseProgram(0);
     glActiveTexture(GL_TEXTURE0);
+
+    // Deactivate after rendering the final step so the compose pass
+    // actually draws the last transition frame before going inactive.
+    if (m_deactivate_after_render)
+    {
+        m_active = false;
+        m_deactivate_after_render = false;
+    }
 }
 
 /******************************************************************************/

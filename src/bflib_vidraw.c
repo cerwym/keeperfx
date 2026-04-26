@@ -35,6 +35,7 @@
 #include "bflib_mouse.h"
 #include "bflib_render.h"
 #include "renderer/RenderPass_C.h"
+#include "renderer/RendererManager.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -89,6 +90,7 @@ long g_sprite_scale_src_h = 0;
  */
 void LbDrawHVLine(long xpos1, long ypos1, long xpos2, long ypos2, TbPixel colour)
 {
+  assert(RendererGetActiveType() != RENDERER_OPENGL && "LbDrawHVLine: CPU pixel write in GL mode");
   long width_max = lbDisplay.GraphicsWindowWidth - 1;
   long height_max = lbDisplay.GraphicsWindowHeight - 1;
   if ( xpos1 > xpos2 )
@@ -232,6 +234,7 @@ void LbDrawHVLine(long xpos1, long ypos1, long xpos2, long ypos2, TbPixel colour
  */
 void LbDrawBoxClip(long x, long y, unsigned long width, unsigned long height, TbPixel colour)
 {
+  assert(RendererGetActiveType() != RENDERER_OPENGL && "LbDrawBoxClip: CPU pixel write in GL mode");
   long ypos = y;
   //Checking and clipping coordinates
   if ( y >= lbDisplay.GraphicsWindowHeight )
@@ -327,6 +330,22 @@ void LbDrawBoxClip(long x, long y, unsigned long width, unsigned long height, Tb
  */
 TbResult LbDrawBox(long x, long y, unsigned long width, unsigned long height, TbPixel colour)
 {
+    if (g_render_pass_active)
+    {
+        if (lbDisplay.DrawFlags & Lb_SPRITE_OUTLINE)
+        {
+            UIRenderer_SubmitOutlineBox((int32_t)x, (int32_t)y, (int32_t)width, (int32_t)height, colour);
+        }
+        else if (lbDisplay.DrawFlags & (Lb_SPRITE_TRANSPAR4 | Lb_SPRITE_TRANSPAR8))
+        {
+            UIRenderer_SubmitSolidBoxAlpha((int32_t)x, (int32_t)y, (int32_t)width, (int32_t)height, colour, 0.333f);
+        }
+        else
+        {
+            UIRenderer_SubmitSolidBox((int32_t)x, (int32_t)y, (int32_t)width, (int32_t)height, colour);
+        }
+        return Lb_SUCCESS;
+    }
     if (lbDisplay.DrawFlags & Lb_SPRITE_OUTLINE)
     {
         if ((width < 1) || (height < 1))
@@ -1589,6 +1608,10 @@ TbResult LbSpriteDrawScaled(long xpos, long ypos, const struct TbSprite *sprite,
     SYNCDBG(19,"At (%ld,%ld) size (%ld,%ld)",xpos,ypos,dest_width,dest_height);
     if ((dest_width <= 0) || (dest_height <= 0))
       return 1;
+    if (g_render_pass_active && !lb_in_sprite_submit) {
+        UIRenderer_SubmitScaledSprite((int32_t)xpos, (int32_t)ypos, (int32_t)dest_width, (int32_t)dest_height, sprite);
+        return Lb_SUCCESS;
+    }
     if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLNSHADOW) != 0)
         lbSpriteReMapPtr = lbDisplay.FadeTable + ((lbDisplay.FadeStep & 0x3F) << 8);
     LbSpriteSetScalingData(xpos, ypos, sprite->SWidth, sprite->SHeight, dest_width, dest_height);
@@ -1842,11 +1865,13 @@ int LbTiledSpriteHeight(struct TiledSprite *bigspr)
 
 void LbDrawPixel(long x, long y, TbPixel colour)
 {
+    assert(RendererGetActiveType() != RENDERER_OPENGL && "LbDrawPixel: CPU pixel write in GL mode");
     lbDisplay.GraphicsWindowPtr[x + lbDisplay.GraphicsScreenWidth * y] = colour;
 }
 
 void LbDrawPixelClip(long x, long y, TbPixel colour)
 {
+    assert(RendererGetActiveType() != RENDERER_OPENGL && "LbDrawPixelClip: CPU pixel write in GL mode");
     if ( (x < 0) || (x >= lbDisplay.GraphicsWindowWidth) )
         return;
     if ( (y < 0) || (y >= lbDisplay.GraphicsWindowHeight) )
@@ -1872,6 +1897,7 @@ void LbDrawPixelClip(long x, long y, TbPixel colour)
 
 void LbDrawCircleFilled(long x, long y, long radius, TbPixel colour)
 {
+    assert(RendererGetActiveType() != RENDERER_OPENGL && "LbDrawCircleFilled: CPU pixel write in GL mode");
     long r;
     long i;
     long n;
@@ -1970,6 +1996,7 @@ static inline void LbDrawPixelClipSolid(long x, long y, TbPixel colour)
 
 void LbDrawCircleOutline(long x, long y, long radius, TbPixel colour)
 {
+    assert(RendererGetActiveType() != RENDERER_OPENGL && "LbDrawCircleOutline: CPU pixel write in GL mode");
     int na;
     int nb;
     int n;

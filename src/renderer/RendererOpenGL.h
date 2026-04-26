@@ -109,6 +109,7 @@ public:
     // Wired by RendererManager after GLWorldViewRenderer is created so that
     // EndFrame() can flush GPU geometry before the CPU blit overlay.
     void SetWorldRenderer(GLWorldViewRenderer* wr) { m_world_renderer = wr; }
+    GLWorldViewRenderer* GetWorldRenderer() const { return m_world_renderer; }
 
 private:
     bool compile_shaders();
@@ -287,6 +288,13 @@ private:
 
     /** (Re-)create (or resize) FBO slot at index @p idx to at least w×h. */
     void ensure_pip_fbo(std::size_t idx, int w, int h);
+
+public:
+    /** Flush all pending render commands (world geometry, raw blits, overhead
+     *  map tiles) to a caller-bound FBO.  The caller must bind the FBO, set
+     *  the viewport and clear it before calling.  Consumed commands will NOT
+     *  be re-drawn in EndFrame().  Used by GLMapFadePass to capture views. */
+    void FlushSceneToFBO(int w, int h);
 
 };
 
