@@ -15,8 +15,9 @@
 #include "renderer/opengl/GLFontAtlas.h"
 #include "renderer/RendererManager.h"
 #include "bflib_basics.h"
-#include "bflib_video.h"       // lbDisplay.DrawFlags
-#include "globals.h"
+#include "bflib_video.h"       // lbDisplay.DrawFlags, lbPalette, units_per_pixel_best
+#include "engine_render.h"     // colored_stripey_lines, hud_scale, line_box_size
+#include "globals.h"            // get_gameturn()
 
 #include <glad/glad.h>
 #include <cstring>
@@ -149,11 +150,59 @@ void GLUIRenderer::SetFadeTexture(GLuint tex)
 
 void GLUIRenderer::SubmitSlabSelector(int x1, int y1, int x2, int y2, unsigned char color, float z_depth)
 {
-    // Convert color index to RGB
-    float r = 1.0f, g = 1.0f, b = 1.0f, a = 1.0f;
-    // TODO: Proper palette color lookup for line color
-    
-    SubmitLine((float)x1, (float)y1, (float)x2, (float)y2, r, g, b, a, z_depth, 2.0f);
+    float dx = (float)(x2 - x1);
+    float dy = (float)(y2 - y1);
+    float line_length = std::sqrt(dx * dx + dy * dy);
+    if (line_length < 0.001f) return;
+
+    // Scale line thickness to match the software renderer
+    float custom_line_box_size = line_box_size / 100.0f;
+    float thickness = custom_line_box_size * units_per_pixel_best / 16.0f;
+    if (thickness < 1.0f) thickness = 1.0f;
+    // Thin slightly when zoomed out, matching the software lerp
+    thickness = thickness + (1.0f - thickness) * (1.0f - hud_scale);
+    if (thickness < 1.0f) thickness = 1.0f;
+
+    // Animated marching-stripe pattern along the line.
+    // The software renderer advances the palette index per pixel:
+    //   step = LbLerp(1.0, 4.0, 1.0-hud_scale) * 16.0 / units_per_pixel_best
+    // This creates a color band of width (1.0/step) pixels.
+    // The starting offset shifts each game turn for the animation.
+    float step = (1.0f + 3.0f * (1.0f - hud_scale)) * (16.0f / (float)units_per_pixel_best);
+    if (step < 0.001f) step = 1.0f;
+    float band_width = 1.0f / step; // pixels per color band
+    float phase = (float)(get_gameturn() & 0xf);
+
+    float ndx = dx / line_length;
+    float ndy = dy / line_length;
+
+    const struct stripey_line* sl = &colored_stripey_lines[color];
+
+    float t = 0.0f;
+    int segments = 0;
+    while (t < line_length && segments < 512) {
+        float anim_pos = phase + t * step;
+        anim_pos = std::fmod(anim_pos, 16.0f);
+        if (anim_pos < 0.0f) anim_pos += 16.0f;
+        int ci = std::max(0, std::min(15, (int)anim_pos));
+
+        float t_end = std::min(t + band_width, line_length);
+
+        unsigned char pal_idx = sl->stripey_line_color_array[ci];
+        float r = lbPalette[pal_idx * 3 + 0] / 63.0f;
+        float g = lbPalette[pal_idx * 3 + 1] / 63.0f;
+        float b = lbPalette[pal_idx * 3 + 2] / 63.0f;
+
+        float sx = (float)x1 + ndx * t;
+        float sy = (float)y1 + ndy * t;
+        float ex = (float)x1 + ndx * t_end;
+        float ey = (float)y1 + ndy * t_end;
+
+        SubmitLine(sx, sy, ex, ey, r, g, b, 1.0f, z_depth, thickness);
+
+        t = t_end;
+        segments++;
+    }
 }
 
 extern "C" unsigned char EngineSpriteDrawUsingAlpha;
