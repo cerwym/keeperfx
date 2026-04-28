@@ -953,90 +953,90 @@ void GLUIRenderer::FlushQuads(int layer)
     glBindVertexArray(m_vao);
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
 
-    // ---- Pass 1: tiled slab-background quads (mode 10, range 9.5 – 19.5) ----
-    // Must render FIRST (background) so sprite/font passes paint on top of it.
-    // Depth test is disabled for all UI passes (painter's algorithm).
-    m_vertices.clear();
-    for (auto it = m_ui_quads.begin(); it != mid; ++it)
-        if (it->mode >= 9.5f && it->mode < 19.5f) ExpandQuadToVertices(*it);
-    if (!m_vertices.empty() && m_slab_texture) {
-        glUseProgram(m_prog_sprite);
-        glUniform2f(m_loc_screen_sprite, (float)m_screen_width, (float)m_screen_height);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, m_slab_texture);
-        if (m_palette_texture) {
-            glActiveTexture(GL_TEXTURE1);
-            glBindTexture(m_palette_texture_target, m_palette_texture);
-        }
-        glBufferData(GL_ARRAY_BUFFER, sizeof(GLUIVertex) * m_vertices.size(), nullptr, GL_DYNAMIC_DRAW);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(GLUIVertex) * m_vertices.size(), m_vertices.data());
-        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_vertices.size());
-    }
+    // Classify a quad's render pass by its mode float.
+    // Each pass type uses a different shader and/or texture binding.
+    enum PassType { PASS_SLAB, PASS_SOLID, PASS_SPRITE, PASS_COLORED, PASS_FONT };
+    auto classify = [](float mode) -> PassType {
+        if (mode >= 19.5f) return PASS_COLORED;
+        if (mode >= 9.5f)  return PASS_SLAB;
+        if (mode >= 1.5f)  return PASS_SOLID;
+        if (mode >= 0.5f)  return PASS_FONT;
+        return PASS_SPRITE;
+    };
 
-    // ---- Pass 2: solid-colour quads (modes 1.5 – 9.5, excludes slab mode 10) ----
-    m_vertices.clear();
-    for (auto it = m_ui_quads.begin(); it != mid; ++it)
-        if (it->mode >= 1.5f && it->mode < 9.5f) ExpandQuadToVertices(*it);
-    if (!m_vertices.empty()) {
-        glUseProgram(m_prog_solid);
-        glUniform2f(m_loc_screen_solid, (float)m_screen_width, (float)m_screen_height);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(GLUIVertex) * m_vertices.size(), nullptr, GL_DYNAMIC_DRAW);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(GLUIVertex) * m_vertices.size(), m_vertices.data());
-        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_vertices.size());
-    }
+    // Bind state for a given pass type and flush accumulated vertices.
+    auto flush_batch = [&](PassType pass) {
+        if (m_vertices.empty()) return;
 
-    // ---- Pass 3: palette-indexed sprite quads (mode 0) ----
-    m_vertices.clear();
-    for (auto it = m_ui_quads.begin(); it != mid; ++it)
-        if (it->mode < 0.5f) ExpandQuadToVertices(*it);
-    if (!m_vertices.empty()) {
-        glUseProgram(m_prog_sprite);
-        glUniform2f(m_loc_screen_sprite, (float)m_screen_width, (float)m_screen_height);
-        if (m_sprite_atlas) {
+        switch (pass) {
+        case PASS_SLAB:
+            if (!m_slab_texture) { m_vertices.clear(); return; }
+            glUseProgram(m_prog_sprite);
+            glUniform2f(m_loc_screen_sprite, (float)m_screen_width, (float)m_screen_height);
             glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, m_sprite_atlas->GetTexture());
-        }
-        if (m_palette_texture) {
-            glActiveTexture(GL_TEXTURE1);
-            glBindTexture(m_palette_texture_target, m_palette_texture);
-        }
-        glBufferData(GL_ARRAY_BUFFER, sizeof(GLUIVertex) * m_vertices.size(), nullptr, GL_DYNAMIC_DRAW);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(GLUIVertex) * m_vertices.size(), m_vertices.data());
-        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_vertices.size());
-    }
+            glBindTexture(GL_TEXTURE_2D, m_slab_texture);
+            if (m_palette_texture) {
+                glActiveTexture(GL_TEXTURE1);
+                glBindTexture(m_palette_texture_target, m_palette_texture);
+            }
+            break;
 
-    // ---- Pass 4: atlas-as-mask flat-colour quads (mode 20, range >= 19.5) ----
-    m_vertices.clear();
-    for (auto it = m_ui_quads.begin(); it != mid; ++it)
-        if (it->mode >= 19.5f) ExpandQuadToVertices(*it);
-    if (!m_vertices.empty() && m_prog_sprite_colored) {
-        glUseProgram(m_prog_sprite_colored);
-        glUniform2f(m_loc_screen_sprite_colored, (float)m_screen_width, (float)m_screen_height);
-        if (m_sprite_atlas) {
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, m_sprite_atlas->GetTexture());
-        }
-        glBufferData(GL_ARRAY_BUFFER, sizeof(GLUIVertex) * m_vertices.size(), nullptr, GL_DYNAMIC_DRAW);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(GLUIVertex) * m_vertices.size(), m_vertices.data());
-        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_vertices.size());
-    }
+        case PASS_SOLID:
+            glUseProgram(m_prog_solid);
+            glUniform2f(m_loc_screen_solid, (float)m_screen_width, (float)m_screen_height);
+            break;
 
-    // ---- Pass 5: font glyph quads (mode 1) ----
-    // Rendered last so text is always on top of sprites and backgrounds.
-    m_vertices.clear();
-    for (auto it = m_ui_quads.begin(); it != mid; ++it)
-        if (it->mode >= 0.5f && it->mode < 1.5f) ExpandQuadToVertices(*it);
-    if (!m_vertices.empty()) {
-        glUseProgram(m_prog_font);
-        glUniform2f(m_loc_screen_font, (float)m_screen_width, (float)m_screen_height);
-        if (m_font_atlas) {
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, m_font_atlas->GetTextureID());
+        case PASS_SPRITE:
+            glUseProgram(m_prog_sprite);
+            glUniform2f(m_loc_screen_sprite, (float)m_screen_width, (float)m_screen_height);
+            if (m_sprite_atlas) {
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, m_sprite_atlas->GetTexture());
+            }
+            if (m_palette_texture) {
+                glActiveTexture(GL_TEXTURE1);
+                glBindTexture(m_palette_texture_target, m_palette_texture);
+            }
+            break;
+
+        case PASS_COLORED:
+            if (!m_prog_sprite_colored) { m_vertices.clear(); return; }
+            glUseProgram(m_prog_sprite_colored);
+            glUniform2f(m_loc_screen_sprite_colored, (float)m_screen_width, (float)m_screen_height);
+            if (m_sprite_atlas) {
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, m_sprite_atlas->GetTexture());
+            }
+            break;
+
+        case PASS_FONT:
+            glUseProgram(m_prog_font);
+            glUniform2f(m_loc_screen_font, (float)m_screen_width, (float)m_screen_height);
+            if (m_font_atlas) {
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, m_font_atlas->GetTextureID());
+            }
+            break;
         }
+
         glBufferData(GL_ARRAY_BUFFER, sizeof(GLUIVertex) * m_vertices.size(), nullptr, GL_DYNAMIC_DRAW);
         glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(GLUIVertex) * m_vertices.size(), m_vertices.data());
         glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_vertices.size());
+        m_vertices.clear();
+    };
+
+    // Walk quads in submission order, batching consecutive same-pass quads.
+    PassType current_pass = classify(m_ui_quads.begin()->mode);
+    m_vertices.clear();
+    for (auto it = m_ui_quads.begin(); it != mid; ++it) {
+        PassType pass = classify(it->mode);
+        if (pass != current_pass) {
+            flush_batch(current_pass);
+            current_pass = pass;
+        }
+        ExpandQuadToVertices(*it);
     }
+    flush_batch(current_pass);
 
     glBindVertexArray(0);
     m_ui_quads.erase(m_ui_quads.begin(), mid);  // Remove flushed layer-N quads                                                                                                                                                                                                            
