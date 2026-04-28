@@ -5,8 +5,7 @@
  *     Lightweight 2D/3D float vector types for the GPU renderer.
  */
 /******************************************************************************/
-#ifndef VEC_MATH_H
-#define VEC_MATH_H
+#pragma once
 
 #include <cmath>
 
@@ -59,5 +58,3 @@ inline Vec2f ScreenToNDC(float px, float py, float screen_w, float screen_h)
     return Vec2f(px / screen_w * 2.0f - 1.0f,
                  1.0f - py / screen_h * 2.0f);
 }
-
-#endif // VEC_MATH_H

@@ -295,6 +295,9 @@ bool RendererOpenGL::Init()
                     glUseProgram(m_zoom_tile_shader);
                     glUniform1i(glGetUniformLocation(m_zoom_tile_shader, "u_index"),   0);
                     glUniform1i(glGetUniformLocation(m_zoom_tile_shader, "u_palette"), 1);
+                    m_uZoomClipRect   = glGetUniformLocation(m_zoom_tile_shader, "u_clip_rect");
+                    m_uZoomClipRadius = glGetUniformLocation(m_zoom_tile_shader, "u_clip_radius");
+                    m_uZoomClipScrH   = glGetUniformLocation(m_zoom_tile_shader, "u_clip_screen_h");
                     KFX_GL_LABEL(GL_PROGRAM, m_zoom_tile_shader, "ZoomTile/Program");
                 }
                 else
@@ -859,12 +862,21 @@ void RendererOpenGL::EndFrame()
             static const float k_black[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
             glUseProgram(m_tintProg);
             glUniform4fv(m_uTintColor, 1, k_black);
+            glUniform1f(m_uTintClipScrH, (float)m_screenH);
             glBindVertexArray(m_rawblit_vao);
             glBindBuffer(GL_ARRAY_BUFFER, m_rawblit_vbo);
             const float sw = (float)m_screenW;
             const float sh = (float)m_screenH;
             for (const ZoomBoxBgCmd& bg : m_zoom_box_bg_cmds)
             {
+                // Use the clip radius captured at queue time.
+                glUniform1f(m_uTintClipRadius, bg.clip_radius);
+                if (bg.clip_radius >= 0.0f)
+                {
+                    float cr[4] = { (float)bg.x, (float)bg.y,
+                                    (float)(bg.x + bg.w), (float)(bg.y + bg.h) };
+                    glUniform4fv(m_uTintClipRect, 1, cr);
+                }
                 Vec2f ndc0 = ScreenToNDC((float)bg.x,          (float)bg.y,          sw, sh);
                 Vec2f ndc1 = ScreenToNDC((float)(bg.x + bg.w),  (float)(bg.y + bg.h), sw, sh);
                 // Two triangles; UV ignored by tint shader (location 1 unused).
@@ -920,6 +932,11 @@ void RendererOpenGL::EndFrame()
             glBindTexture(GL_TEXTURE_2D, m_texPalette);
 
             glUseProgram(m_zoom_tile_shader);
+            // Use cached clip radius/rect from SubmitZoomBoxTiles().
+            glUniform1f(m_uZoomClipRadius, m_zoom_clip_radius);
+            glUniform1f(m_uZoomClipScrH, (float)m_screenH);
+            if (m_zoom_clip_radius >= 0.0f)
+                glUniform4fv(m_uZoomClipRect, 1, m_zoom_clip_rect);
             glBindVertexArray(m_rawblit_vao);
             glBindBuffer(GL_ARRAY_BUFFER, m_rawblit_vbo);
 
@@ -1025,7 +1042,7 @@ void RendererOpenGL::EndFrame()
                 glEnable(GL_SCISSOR_TEST);
 
             if (ui)
-                ui->SubmitFBOQuad(pcmd.x, pcmd.y, pw, ph, fbo.color_tex);
+                ui->SubmitFBOQuad(pcmd.x, pcmd.y, pw, ph, fbo.color_tex, pcmd.clip_radius);
         }
 
         m_pip_queue.clear();
@@ -1177,9 +1194,7 @@ void RendererOpenGL::EndFrame()
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         glUseProgram(m_shader);
-        // Possession/pain red tint is handled by the screen-tint overlay quad
-        // (g_screen_tint set from PaletteFadePlayer). No per-staging tint needed.
-        glUniform1f(m_uTintFactor, 0.0f);
+        glUniform1f(m_uTintFactor, g_palette_possession_tint);
         glBindVertexArray(m_vao);
         glDrawArrays(GL_TRIANGLES, 0, 6);
         glBindVertexArray(0);
@@ -1233,6 +1248,7 @@ void RendererOpenGL::EndFrame()
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         glUseProgram(m_tintProg);
         glUniform4fv(m_uTintColor, 1, g_screen_tint);
+        glUniform1f(m_uTintClipRadius, -1.0f);  // no clip for fullscreen tint
         glBindVertexArray(m_vao);
         glDrawArrays(GL_TRIANGLES, 0, 6);
         glBindVertexArray(0);
@@ -1398,7 +1414,15 @@ void RendererOpenGL::SubmitZoomBoxTiles(const uint16_t* tile_block_ids, int tile
     bg.y = dst_y;
     bg.w = tiles_x * tile_w;
     bg.h = tiles_y * tile_h;
+    bg.clip_radius = RendererGetZoomBoxClipRadius();
     m_zoom_box_bg_cmds.push_back(bg);
+
+    // Cache the clip rect and radius for the tile draw pass (bg_cmds are consumed first).
+    m_zoom_clip_radius = bg.clip_radius;
+    m_zoom_clip_rect[0] = (float)dst_x;
+    m_zoom_clip_rect[1] = (float)dst_y;
+    m_zoom_clip_rect[2] = (float)(dst_x + bg.w);
+    m_zoom_clip_rect[3] = (float)(dst_y + bg.h);
 
     m_zoom_tile_cmds.reserve(m_zoom_tile_cmds.size() + (size_t)tiles_x * tiles_y);
     for (int ty = 0; ty < tiles_y; ty++)
@@ -1427,6 +1451,7 @@ void RendererOpenGL::SubmitPiPRender(struct Camera* cam, int x, int y, int w, in
     PiPCmd cmd;
     cmd.cam_copy = *cam;
     cmd.x = x; cmd.y = y; cmd.w = w; cmd.h = h;
+    cmd.clip_radius = RendererGetZoomBoxClipRadius();
     m_pip_queue.push_back(cmd);
 }
 
@@ -1728,6 +1753,9 @@ bool RendererOpenGL::compile_shaders()
                 glDeleteShader(tv);
                 glDeleteShader(tf);
                 m_uTintColor = glGetUniformLocation(m_tintProg, "u_tint_color");
+                m_uTintClipRect   = glGetUniformLocation(m_tintProg, "u_clip_rect");
+                m_uTintClipRadius = glGetUniformLocation(m_tintProg, "u_clip_radius");
+                m_uTintClipScrH   = glGetUniformLocation(m_tintProg, "u_clip_screen_h");
             }
             else
             {

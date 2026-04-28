@@ -5,8 +5,7 @@
  *     OpenGL font atlas for hardware-accelerated text rendering.
  */
 /******************************************************************************/
-#ifndef GLFONT_ATLAS_H
-#define GLFONT_ATLAS_H
+#pragma once
 
 #include "bflib_basics.h"
 
@@ -107,4 +106,3 @@ private:
 #endif // __cplusplus
 
 #endif // RENDERER_OPENGL_ENABLED
-#endif // GLFONT_ATLAS_H

@@ -20,8 +20,7 @@
  *     In Free():  call FreePacker() after releasing GPU textures.
  */
 /******************************************************************************/
-#ifndef TILE_ATLAS_PACKER_H
-#define TILE_ATLAS_PACKER_H
+#pragma once
 
 #include <stdint.h>
 
@@ -95,4 +94,3 @@ private:
 };
 
 /******************************************************************************/
-#endif // TILE_ATLAS_PACKER_H

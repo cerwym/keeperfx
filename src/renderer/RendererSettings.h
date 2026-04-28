@@ -18,8 +18,7 @@
  *     These DO NOT live in GameSettings (which is a #pragma pack(1) binary blob).
  */
 /******************************************************************************/
-#ifndef RENDERER_SETTINGS_H
-#define RENDERER_SETTINGS_H
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -217,5 +216,3 @@ void RendererSettings_Reset(void);
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
-
-#endif /* RENDERER_SETTINGS_H */

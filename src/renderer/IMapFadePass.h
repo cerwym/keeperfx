@@ -26,8 +26,7 @@
  *       native resolution using MAP_FADE_FRAG_SHADER (UV-warp + additive RGB blend).
  */
 /******************************************************************************/
-#ifndef IMAP_FADE_PASS_H
-#define IMAP_FADE_PASS_H
+#pragma once
 
 #include <stdint.h>
 
@@ -68,4 +67,3 @@ public:
 };
 
 /******************************************************************************/
-#endif // IMAP_FADE_PASS_H

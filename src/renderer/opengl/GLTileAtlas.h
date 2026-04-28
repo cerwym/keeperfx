@@ -15,8 +15,7 @@
  *     Called by GLWorldViewRenderer and RendererOpenGL.
  */
 /******************************************************************************/
-#ifndef GL_TILE_ATLAS_H
-#define GL_TILE_ATLAS_H
+#pragma once
 
 #ifdef RENDERER_OPENGL_ENABLED
 
@@ -54,4 +53,3 @@ private:
 };
 
 #endif // RENDERER_OPENGL_ENABLED
-#endif // GL_TILE_ATLAS_H

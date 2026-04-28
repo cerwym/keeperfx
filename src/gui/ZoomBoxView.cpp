@@ -69,8 +69,20 @@ void ZoomBoxView::draw(const DrawContext&    ctx,
                        int                   draw_tiles_y,
                        int                   subtile_size)
 {
-    const int scr_x = screen_rect.left;
-    const int scr_y = screen_rect.top;
+    // Tuneable offsets: shift the content (tiles / FBO) independently of the
+    // ornate corner-frame sprites.  Positive = right / down.
+    const int content_offset_x = 14;
+    const int content_offset_y = -14;
+
+    const int scr_x = screen_rect.left + content_offset_x;
+    const int scr_y = screen_rect.top  + content_offset_y;
+
+    // Corner radius for the rounded-rect content mask (base-resolution pixels).
+    // Approximates the ornate frame's inner contour so content doesn't poke
+    // out beyond the decorative corners.  Tune visually.
+    const int base_clip_radius = 14;
+    const float clip_radius = (float)((base_clip_radius * ctx.units_per_pixel + 8) / 16);
+    RendererSetZoomBoxClipRadius(clip_radius);
 
     if (m_mode == ZBM_ISOMETRIC && RendererHasGPURenderPath())
         drawIsometric(ctx, view, player, scr_x, scr_y,
@@ -79,7 +91,10 @@ void ZoomBoxView::draw(const DrawContext&    ctx,
         drawOverhead(ctx, player, scr_x, scr_y,
                      stl_x, stl_y, draw_tiles_x, draw_tiles_y, subtile_size);
 
-    drawCornerFrames(scr_x, scr_y, draw_tiles_x, draw_tiles_y,
+    RendererSetZoomBoxClipRadius(-1.0f);
+
+    // Corner frames use the original unshifted position.
+    drawCornerFrames(screen_rect.left, screen_rect.top, draw_tiles_x, draw_tiles_y,
                      subtile_size, ctx.units_per_pixel);
 
     // Restore the full-screen graphics window (legacy C draw paths may clip it).

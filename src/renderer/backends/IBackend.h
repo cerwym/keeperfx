@@ -1,5 +1,4 @@
-#ifndef IBACKEND_H
-#define IBACKEND_H
+#pragma once
 
 #include "bflib_basics.h"
 #include "bflib_sprite.h"
@@ -73,5 +72,3 @@ public:
     // CPU default: returns "CPU".
     virtual const char* GetName() const;
 };
-
-#endif // IBACKEND_H

@@ -27,8 +27,7 @@
  *     after the regular EndFrame pipeline.
  */
 /******************************************************************************/
-#ifndef GL_MAP_FADE_PASS_H
-#define GL_MAP_FADE_PASS_H
+#pragma once
 
 #ifdef RENDERER_OPENGL_ENABLED
 
@@ -93,4 +92,3 @@ private:
 
 /******************************************************************************/
 #endif // RENDERER_OPENGL_ENABLED
-#endif // GL_MAP_FADE_PASS_H

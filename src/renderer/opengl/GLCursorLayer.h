@@ -5,8 +5,7 @@
  *     OpenGL implementation of ICursorLayer.
  */
 /******************************************************************************/
-#ifndef GL_CURSOR_LAYER_H
-#define GL_CURSOR_LAYER_H
+#pragma once
 
 #ifdef RENDERER_OPENGL_ENABLED
 
@@ -79,4 +78,3 @@ private:
 };
 
 #endif // RENDERER_OPENGL_ENABLED
-#endif // GL_CURSOR_LAYER_H

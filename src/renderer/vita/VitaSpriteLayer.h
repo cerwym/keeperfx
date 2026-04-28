@@ -17,8 +17,7 @@
  *     transforms them to Vita native (960×544) internally.
  */
 /******************************************************************************/
-#ifndef VITA_SPRITE_LAYER_H
-#define VITA_SPRITE_LAYER_H
+#pragma once
 
 #ifdef PLATFORM_VITA
 
@@ -164,4 +163,3 @@ private:
 };
 
 #endif // PLATFORM_VITA
-#endif // VITA_SPRITE_LAYER_H

@@ -5,8 +5,7 @@
  *     OpenGL font atlas for DBC (Asian double-byte) fonts.
  */
 /******************************************************************************/
-#ifndef GLDBC_FONT_ATLAS_H
-#define GLDBC_FONT_ATLAS_H
+#pragma once
 
 #include "bflib_basics.h"
 
@@ -78,4 +77,3 @@ private:
 #endif // __cplusplus
 
 #endif // RENDERER_OPENGL_ENABLED
-#endif // GLDBC_FONT_ATLAS_H

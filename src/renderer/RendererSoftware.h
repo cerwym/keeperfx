@@ -5,8 +5,7 @@
  *     Software passthrough renderer backend.
  */
 /******************************************************************************/
-#ifndef RENDERER_SOFTWARE_H
-#define RENDERER_SOFTWARE_H
+#pragma once
 
 #include "IRenderer.h"
 
@@ -48,4 +47,3 @@ public:
 };
 
 /******************************************************************************/
-#endif // RENDERER_SOFTWARE_H

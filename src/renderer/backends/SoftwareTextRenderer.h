@@ -5,8 +5,7 @@
  *     CPU software implementation of ITextRenderer.
  */
 /******************************************************************************/
-#ifndef SOFTWARE_TEXT_RENDERER_H
-#define SOFTWARE_TEXT_RENDERER_H
+#pragma once
 
 #include "renderer/ITextRenderer.h"
 #include "renderer/TextLayoutContext.h"
@@ -93,4 +92,3 @@ private:
 };
 
 /******************************************************************************/
-#endif // SOFTWARE_TEXT_RENDERER_H

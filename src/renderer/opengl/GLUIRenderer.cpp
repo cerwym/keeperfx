@@ -13,6 +13,7 @@
 #include "renderer/opengl/GLShaders.h"
 #include "renderer/opengl/GLSpriteAtlas.h"
 #include "renderer/opengl/GLFontAtlas.h"
+#include "renderer/RendererManager.h"
 #include "bflib_basics.h"
 #include "bflib_video.h"       // lbDisplay.DrawFlags
 #include "globals.h"
@@ -40,6 +41,9 @@ GLUIRenderer::GLUIRenderer()
     , m_loc_screen_remap(-1)
     , m_loc_remap_row(-1)
     , m_loc_screen_fbo(-1)
+    , m_loc_fbo_clip_rect(-1)
+    , m_loc_fbo_clip_radius(-1)
+    , m_loc_fbo_clip_scrh(-1)
     , m_vao(0)
     , m_vbo(0)
     , m_uniform_mvp(0)
@@ -380,7 +384,8 @@ void GLUIRenderer::DrawBack()
 // Draw all queued FBO/PiP composite quads.  Called at the start of FlushFront()
 // so that decorative frame sprites (layer 1) render on top.
 static void FlushFBOQuads_impl(const std::vector<FBOQuad>& quads, GLuint prog, GLint loc_screen, GLuint vao, GLuint vbo,
-                               int screen_w, int screen_h) {
+                               int screen_w, int screen_h,
+                               GLint loc_clip_rect, GLint loc_clip_radius, GLint loc_clip_scrh) {
     if (quads.empty() || !prog)
         return;
 
@@ -402,6 +407,15 @@ static void FlushFBOQuads_impl(const std::vector<FBOQuad>& quads, GLuint prog, G
 
     for (const FBOQuad& q : quads) {
         glBindTexture(GL_TEXTURE_2D, q.tex_id);
+
+        // Set rounded-rect clip uniforms per quad.
+        glUniform1f(loc_clip_radius, q.clip_radius);
+        glUniform1f(loc_clip_scrh, (float)screen_h);
+        if (q.clip_radius >= 0.0f)
+        {
+            float cr[4] = { q.x0, q.y0, q.x1, q.y1 };
+            glUniform4fv(loc_clip_rect, 1, cr);
+        }
 
         // Build two-triangle quad: screen-pixel coords, V flipped.
         // GL FBOs store Y=0 at the bottom, so the world-render puts game-screen
@@ -493,7 +507,8 @@ void GLUIRenderer::DrawFront()
 
     // FBO/PiP composite quads drawn first so frame-corner sprites sit on top.
     FlushFBOQuads_impl(m_fbo_quads, m_prog_fbo, m_loc_screen_fbo,
-                       m_vao, m_vbo, m_screen_width, m_screen_height);
+                       m_vao, m_vbo, m_screen_width, m_screen_height,
+                       m_loc_fbo_clip_rect, m_loc_fbo_clip_radius, m_loc_fbo_clip_scrh);
     m_fbo_quads.clear();
     // Re-enable blend for atlas sprites.
     glEnable(GL_BLEND);
@@ -715,7 +730,7 @@ void GLUIRenderer::Draw()
     DrawFront();
 }
 
-void GLUIRenderer::SubmitFBOQuad(int x, int y, int w, int h, GLuint tex_id)
+void GLUIRenderer::SubmitFBOQuad(int x, int y, int w, int h, GLuint tex_id, float clip_radius)
 {
     FBOQuad q;
     q.x0     = (float)x;
@@ -723,6 +738,7 @@ void GLUIRenderer::SubmitFBOQuad(int x, int y, int w, int h, GLuint tex_id)
     q.x1     = (float)(x + w);
     q.y1     = (float)(y + h);
     q.tex_id = tex_id;
+    q.clip_radius = clip_radius;
     m_fbo_quads.push_back(q);
 }
 
@@ -867,6 +883,9 @@ bool GLUIRenderer::CreateShaders()
             glDeleteShader(frag);
             if (!m_prog_fbo) ok = false;
             else m_loc_screen_fbo = glGetUniformLocation(m_prog_fbo, "u_screen_size");
+            m_loc_fbo_clip_rect   = glGetUniformLocation(m_prog_fbo, "u_clip_rect");
+            m_loc_fbo_clip_radius = glGetUniformLocation(m_prog_fbo, "u_clip_radius");
+            m_loc_fbo_clip_scrh   = glGetUniformLocation(m_prog_fbo, "u_clip_screen_h");
         }
     }
 

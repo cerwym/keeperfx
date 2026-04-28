@@ -14,8 +14,7 @@
  *       - Animated tiles: IDs 544–999 re-uploaded each tick
  */
 /******************************************************************************/
-#ifndef VITA_TILE_ATLAS_H
-#define VITA_TILE_ATLAS_H
+#pragma once
 
 #ifdef PLATFORM_VITA
 
@@ -47,5 +46,4 @@ private:
 };
 
 #endif // PLATFORM_VITA
-#endif // VITA_TILE_ATLAS_H
 

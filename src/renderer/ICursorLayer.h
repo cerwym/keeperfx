@@ -37,8 +37,7 @@
  *                              loop / EndHandSpriteRendering).
  */
 /******************************************************************************/
-#ifndef ICURSOR_LAYER_H
-#define ICURSOR_LAYER_H
+#pragma once
 
 #include <cstdint>
 
@@ -76,4 +75,3 @@ public:
 };
 
 #endif // __cplusplus
-#endif // ICURSOR_LAYER_H

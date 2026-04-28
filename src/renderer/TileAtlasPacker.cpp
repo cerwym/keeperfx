@@ -74,6 +74,7 @@ void TileAtlasPacker::GetTileUV(int tile_id,
 
 void TileAtlasPacker::DecodeTile(const uint8_t* src_indexed, int tile_id)
 {
+    if (!src_indexed) return;
     const int col = tile_col(tile_id);
     const int row = tile_row(tile_id);
     uint8_t* dst_row0 = m_rgba_scratch

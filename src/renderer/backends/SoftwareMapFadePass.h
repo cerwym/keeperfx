@@ -5,8 +5,7 @@
  *     CPU software implementation of IMapFadePass.
  */
 /******************************************************************************/
-#ifndef SOFTWARE_MAP_FADE_PASS_H
-#define SOFTWARE_MAP_FADE_PASS_H
+#pragma once
 
 #include "renderer/IMapFadePass.h"
 
@@ -31,4 +30,3 @@ public:
 };
 
 /******************************************************************************/
-#endif // SOFTWARE_MAP_FADE_PASS_H

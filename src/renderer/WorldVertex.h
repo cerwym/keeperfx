@@ -23,8 +23,7 @@
  *       S     — shade_intensity << 8; (S >> 16) gives shade level 0..63
  */
 /******************************************************************************/
-#ifndef WORLD_VERTEX_H
-#define WORLD_VERTEX_H
+#pragma once
 
 #include <stddef.h>  /* offsetof */
 
@@ -137,5 +136,3 @@ struct WorldVertex {
     } while (0)
 
 /******************************************************************************/
-
-#endif // WORLD_VERTEX_H

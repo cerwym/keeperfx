@@ -5,8 +5,7 @@
  *     Shared renderer utility functions.
  */
 /******************************************************************************/
-#ifndef RENDERER_HELPER_H
-#define RENDERER_HELPER_H
+#pragma once
 
 #include <cstdint>
 
@@ -22,4 +21,3 @@ bool RendererHelper_SaveIndexedImage(const uint8_t* pixels, int w, int h, int pi
 #endif
 
 /******************************************************************************/
-#endif // RENDERER_HELPER_H

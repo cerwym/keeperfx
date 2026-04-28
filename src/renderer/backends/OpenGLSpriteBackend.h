@@ -12,8 +12,7 @@
  *     → RGBA).  Sprites not in the atlas fall back to the CPU blitter.
  */
 /******************************************************************************/
-#ifndef OPENGL_SPRITE_BACKEND_H
-#define OPENGL_SPRITE_BACKEND_H
+#pragma once
 
 #ifdef RENDERER_OPENGL_ENABLED
 
@@ -114,4 +113,3 @@ private:
 };
 
 #endif // RENDERER_OPENGL_ENABLED
-#endif // OPENGL_SPRITE_BACKEND_H

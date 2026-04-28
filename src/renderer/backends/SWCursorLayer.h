@@ -5,8 +5,7 @@
  *     Software (CPU) implementation of ICursorLayer.
  */
 /******************************************************************************/
-#ifndef SW_CURSOR_LAYER_H
-#define SW_CURSOR_LAYER_H
+#pragma once
 
 #include "renderer/ICursorLayer.h"
 
@@ -36,5 +35,3 @@ private:
     int32_t         m_pointer_x   = 0;
     int32_t         m_pointer_y   = 0;
 };
-
-#endif // SW_CURSOR_LAYER_H

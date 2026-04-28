@@ -12,8 +12,7 @@
  *     so this interface is never instantiated on non-Vita platforms.
  */
 /******************************************************************************/
-#ifndef IPOST_PROCESS_PASS_H
-#define IPOST_PROCESS_PASS_H
+#pragma once
 
 /**
  * A single GPU post-processing pass.
@@ -55,5 +54,3 @@ public:
     /** Release all GPU resources. Safe to call on a not-yet-initialised pass. */
     virtual void Free() = 0;
 };
-
-#endif // IPOST_PROCESS_PASS_H

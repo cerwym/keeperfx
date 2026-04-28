@@ -14,8 +14,7 @@
  *     - SDL2 is NOT referenced here; it is an implementation detail of specific backends.
  */
 /******************************************************************************/
-#ifndef IRENDERER_H
-#define IRENDERER_H
+#pragma once
 
 #include <cstdint>
 
@@ -285,4 +284,3 @@ public:
 };
 
 /******************************************************************************/
-#endif // IRENDERER_H

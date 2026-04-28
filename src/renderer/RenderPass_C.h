@@ -1,5 +1,4 @@
-#ifndef RENDER_PASS_C_H
-#define RENDER_PASS_C_H
+#pragma once
 
 #include "bflib_basics.h"
 #include "bflib_sprite.h"
@@ -89,5 +88,3 @@ void RenderPass_OnPaletteSet(const unsigned char* palette);
 #ifdef __cplusplus
 }
 #endif
-
-#endif // RENDER_PASS_C_H

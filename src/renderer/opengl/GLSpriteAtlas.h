@@ -13,8 +13,7 @@
  *     sprite churn); the atlas is only rebuilt on full renderer reinit.
  */
 /******************************************************************************/
-#ifndef GL_SPRITE_ATLAS_H
-#define GL_SPRITE_ATLAS_H
+#pragma once
 
 #ifdef RENDERER_OPENGL_ENABLED
 
@@ -85,4 +84,3 @@ private:
 };
 
 #endif // RENDERER_OPENGL_ENABLED
-#endif // GL_SPRITE_ATLAS_H

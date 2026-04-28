@@ -9,8 +9,7 @@
  *     Used in RendererVita::EndFrame() to decode lbDrawSurface to screen.
  */
 /******************************************************************************/
-#ifndef VITA_BLIT_SHADER_H
-#define VITA_BLIT_SHADER_H
+#pragma once
 
 #ifdef PLATFORM_VITA
 
@@ -53,4 +52,3 @@ private:
 };
 
 #endif // PLATFORM_VITA
-#endif // VITA_BLIT_SHADER_H

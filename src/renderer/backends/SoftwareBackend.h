@@ -8,8 +8,7 @@
  *     exists only to supply a distinct GetName() so log output is readable.
  */
 /******************************************************************************/
-#ifndef SOFTWARE_BACKEND_H
-#define SOFTWARE_BACKEND_H
+#pragma once
 
 #include "IBackend.h"
 
@@ -18,5 +17,3 @@ class SoftwareBackend final : public IBackend {
 public:
     const char* GetName() const override { return "SOFTWARE"; }
 };
-
-#endif // SOFTWARE_BACKEND_H

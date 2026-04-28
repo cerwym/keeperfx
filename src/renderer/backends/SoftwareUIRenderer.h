@@ -8,8 +8,7 @@
  *     exists only to supply a distinct GetName() so log output is readable.
  */
 /******************************************************************************/
-#ifndef SOFTWARE_UI_RENDERER_H
-#define SOFTWARE_UI_RENDERER_H
+#pragma once
 
 #include "renderer/IUIRenderer.h"
 
@@ -18,5 +17,3 @@ class SoftwareUIRenderer final : public IUIRenderer {
 public:
     const char* GetName() const override { return "SOFTWARE_UI"; }
 };
-
-#endif // SOFTWARE_UI_RENDERER_H

@@ -1,5 +1,4 @@
-#ifndef VITA_GPU_BACKEND_H
-#define VITA_GPU_BACKEND_H
+#pragma once
 
 #include "IBackend.h"
 
@@ -56,5 +55,3 @@ private:
     class VitaSpriteLayer* m_sprite_layer;
     bool m_initialized;
 };
-
-#endif // VITA_GPU_BACKEND_H

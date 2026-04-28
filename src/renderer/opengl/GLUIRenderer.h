@@ -9,8 +9,7 @@
  *     Eliminates CPU staging buffer conflicts that cause UI flickering.
  */
 /******************************************************************************/
-#ifndef GLUI_RENDERER_H
-#define GLUI_RENDERER_H
+#pragma once
 
 #include "renderer/IUIRenderer.h"
 #include <vector>
@@ -70,6 +69,7 @@ struct UIRemapQuad {
 struct FBOQuad {
     float x0, y0, x1, y1;   // Screen rectangle (pixels)
     GLuint tex_id;           // RGBA8 FBO colour texture
+    float clip_radius;       // Rounded-rect corner radius; < 0 = no clip
 };
 
 /**
@@ -102,7 +102,7 @@ public:
      *  Rendered during DrawFront() before atlas-sprite layer-1 quads so that
      *  decorative frame sprites appear on top of the isometric content.  Not
      *  part of IUIRenderer — called directly from RendererOpenGL::EndFrame(). */
-    void SubmitFBOQuad(int x, int y, int w, int h, GLuint tex_id);
+    void SubmitFBOQuad(int x, int y, int w, int h, GLuint tex_id, float clip_radius = -1.0f);
     virtual void SetLayer(int layer) override;
     virtual void SetWorldDepth(float ndc_z) override;
     virtual void ClearWorldDepth() override;
@@ -185,6 +185,9 @@ private:
     GLint  m_loc_screen_remap;
     GLint  m_loc_remap_row;
     GLint  m_loc_screen_fbo;
+    GLint  m_loc_fbo_clip_rect;
+    GLint  m_loc_fbo_clip_radius;
+    GLint  m_loc_fbo_clip_scrh;
 
     GLuint m_vao;
     GLuint m_vbo;
@@ -260,4 +263,3 @@ private:
 /******************************************************************************/
 
 #endif // RENDERER_OPENGL_ENABLED
-#endif // GLUI_RENDERER_H

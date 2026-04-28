@@ -1,5 +1,4 @@
-#ifndef RENDER_PASS_H
-#define RENDER_PASS_H
+#pragma once
 
 #include "bflib_basics.h"
 #include "bflib_sprite.h"
@@ -88,5 +87,3 @@ private:
     IBackend* m_backend;
     static RenderPassSystem* s_instance;
 };
-
-#endif // RENDER_PASS_H

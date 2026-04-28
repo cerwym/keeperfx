@@ -5,8 +5,7 @@
  *     OpenGL hardware-accelerated text renderer.
  */
 /******************************************************************************/
-#ifndef GLTEXT_RENDERER_H
-#define GLTEXT_RENDERER_H
+#pragma once
 
 #include "renderer/ITextRenderer.h"
 #include <string>
@@ -187,4 +186,3 @@ private:
 /******************************************************************************/
 
 #endif // RENDERER_OPENGL_ENABLED
-#endif // GLTEXT_RENDERER_H

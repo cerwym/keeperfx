@@ -9,8 +9,7 @@
  *     Matches the visual output of CMistFade::Render() in the CPU path.
  */
 /******************************************************************************/
-#ifndef VITA_MIST_PASS_H
-#define VITA_MIST_PASS_H
+#pragma once
 
 #ifdef PLATFORM_VITA
 
@@ -65,4 +64,3 @@ private:
 };
 
 #endif // PLATFORM_VITA
-#endif // VITA_MIST_PASS_H

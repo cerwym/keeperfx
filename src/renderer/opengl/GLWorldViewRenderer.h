@@ -18,8 +18,7 @@
  *     are ported.
  */
 /******************************************************************************/
-#ifndef GL_WORLD_VIEW_RENDERER_H
-#define GL_WORLD_VIEW_RENDERER_H
+#pragma once
 
 #ifdef RENDERER_OPENGL_ENABLED
 
@@ -323,4 +322,3 @@ private:
 /******************************************************************************/
 
 #endif // RENDERER_OPENGL_ENABLED
-#endif // GL_WORLD_VIEW_RENDERER_H

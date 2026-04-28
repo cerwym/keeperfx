@@ -27,8 +27,7 @@
  *       DrawFrontView      → submit front-view bucket list as GPU draw calls
  */
 /******************************************************************************/
-#ifndef IWORLD_VIEW_RENDERER_H
-#define IWORLD_VIEW_RENDERER_H
+#pragma once
 
 #include <cstdint>
 
@@ -96,4 +95,3 @@ public:
 };
 
 /******************************************************************************/
-#endif // IWORLD_VIEW_RENDERER_H

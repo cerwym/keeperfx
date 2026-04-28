@@ -233,8 +233,23 @@ void main() { gl_Position = vec4(a_pos, 0.0, 1.0); }
 constexpr const char* SCREEN_TINT_FRAGMENT_SHADER = R"glsl(
 #version 330 core
 out vec4 fragColor;
-uniform vec4 u_tint_color;
-void main() { fragColor = u_tint_color; }
+uniform vec4  u_tint_color;
+uniform vec4  u_clip_rect;     // (x0, y0_gl, x1, y1_gl) in GL pixels; ignored when u_clip_radius < 0
+uniform float u_clip_radius;   // corner radius in pixels; < 0 = no clip
+uniform float u_clip_screen_h; // screen height for Y flip
+void main()
+{
+    if (u_clip_radius >= 0.0)
+    {
+        vec2 p = vec2(gl_FragCoord.x, u_clip_screen_h - gl_FragCoord.y);
+        vec2 center  = (u_clip_rect.xy + u_clip_rect.zw) * 0.5;
+        vec2 halfSz  = (u_clip_rect.zw - u_clip_rect.xy) * 0.5;
+        vec2 d = abs(p - center) - halfSz + u_clip_radius;
+        float dist = length(max(d, 0.0)) - u_clip_radius;
+        if (dist > 0.0) discard;
+    }
+    fragColor = u_tint_color;
+}
 )glsl";
 
 // Shadow shaders
@@ -455,8 +470,20 @@ in  vec2 v_uv;
 out vec4 fragColor;
 uniform sampler2D u_index;    // R8  — tile atlas (32×32 texels per tile)
 uniform sampler2D u_palette;  // RGBA8 — 256×1 game palette
+uniform vec4  u_clip_rect;     // (x0, y0, x1, y1) in game screen pixels
+uniform float u_clip_radius;   // corner radius; < 0 = no clip
+uniform float u_clip_screen_h; // screen height for Y flip
 void main()
 {
+    if (u_clip_radius >= 0.0)
+    {
+        vec2 p = vec2(gl_FragCoord.x, u_clip_screen_h - gl_FragCoord.y);
+        vec2 center  = (u_clip_rect.xy + u_clip_rect.zw) * 0.5;
+        vec2 halfSz  = (u_clip_rect.zw - u_clip_rect.xy) * 0.5;
+        vec2 d = abs(p - center) - halfSz + u_clip_radius;
+        float dist = length(max(d, 0.0)) - u_clip_radius;
+        if (dist > 0.0) discard;
+    }
     float idx = texture(u_index, v_uv).r;
     // Index 0 within tile data is a transparent/padding pixel — discard so the
     // parchment background or unrevealed fill shows through tile edges/borders.
@@ -624,9 +651,21 @@ constexpr const char* UI_FBO_FRAGMENT_SHADER = R"glsl(
 #version 330 core
 in vec2 v_uv;
 uniform sampler2D u_fbo_tex;   // unit 0: RGBA8 FBO colour texture
+uniform vec4  u_clip_rect;     // (x0, y0, x1, y1) in game screen pixels
+uniform float u_clip_radius;   // corner radius; < 0 = no clip
+uniform float u_clip_screen_h; // screen height for Y flip
 out vec4 fragColor;
 void main()
 {
+    if (u_clip_radius >= 0.0)
+    {
+        vec2 p = vec2(gl_FragCoord.x, u_clip_screen_h - gl_FragCoord.y);
+        vec2 center  = (u_clip_rect.xy + u_clip_rect.zw) * 0.5;
+        vec2 halfSz  = (u_clip_rect.zw - u_clip_rect.xy) * 0.5;
+        vec2 d = abs(p - center) - halfSz + u_clip_radius;
+        float dist = length(max(d, 0.0)) - u_clip_radius;
+        if (dist > 0.0) discard;
+    }
     fragColor = texture(u_fbo_tex, v_uv);
 }
 )glsl";

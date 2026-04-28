@@ -5,8 +5,7 @@
  *     Shared types for the text layout engine and ITextRenderer implementations.
  */
 /******************************************************************************/
-#ifndef TEXT_LAYOUT_CONTEXT_H
-#define TEXT_LAYOUT_CONTEXT_H
+#pragma once
 
 #include <stdint.h>
 
@@ -49,4 +48,3 @@ struct TextLayoutContext {
 };
 
 /******************************************************************************/
-#endif // TEXT_LAYOUT_CONTEXT_H

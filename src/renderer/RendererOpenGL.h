@@ -5,8 +5,7 @@
  *     OpenGL framebuffer blit renderer backend + world shader resources.
  */
 /******************************************************************************/
-#ifndef RENDERER_OPENGL_H
-#define RENDERER_OPENGL_H
+#pragma once
 
 #include "IRenderer.h"
 #include <vector>
@@ -145,8 +144,12 @@ private:
     unsigned int m_tintProg     = 0;  // fullscreen screen-tint overlay shader
     unsigned int m_texIndex     = 0; // GL_R8 screenW×screenH: transparent overlay texture
     unsigned int m_texPalette   = 0; // RGBA8 256×1 GL_TEXTURE_2D palette
+    uint8_t      m_last_palette[768] = {}; // snapshot for dirty-flag upload
     int          m_uTintFactor  = -1; // uniform location for u_tint_factor
     int          m_uTintColor   = -1; // uniform location for u_tint_color
+    int          m_uTintClipRect  = -1; // uniform location for u_clip_rect  (tint shader)
+    int          m_uTintClipRadius= -1; // uniform location for u_clip_radius (tint shader)
+    int          m_uTintClipScrH  = -1; // uniform location for u_clip_screen_h (tint shader)
 
     // Whether a transparent overlay was submitted this frame via SubmitTransparentBlit().
     // Source data is already uploaded to m_texIndex by SubmitTransparentBlit().
@@ -212,6 +215,9 @@ private:
     };
     std::vector<ZoomTileCmd> m_zoom_tile_cmds;
     unsigned int      m_zoom_tile_shader = 0;  // palette_blit_vert + zoom_tile_frag
+    int               m_uZoomClipRect    = -1; // u_clip_rect   (zoom tile shader)
+    int               m_uZoomClipRadius  = -1; // u_clip_radius (zoom tile shader)
+    int               m_uZoomClipScrH    = -1; // u_clip_screen_h (zoom tile shader)
     // Reuses m_rawblit_vao / m_rawblit_vbo (same quad vertex layout).
 
     // Bounding rect of each zoom box submission — drawn as a solid black fill
@@ -219,8 +225,13 @@ private:
     // whatever is underneath (parchment, overhead map).
     struct ZoomBoxBgCmd {
         int x, y, w, h;
+        float clip_radius;
     };
     std::vector<ZoomBoxBgCmd> m_zoom_box_bg_cmds;
+    // Cached clip rect/radius from the last SubmitZoomBoxTiles — used for tile draw
+    // (bg_cmds are cleared before tiles are drawn).
+    float m_zoom_clip_rect[4] = {0,0,0,0};
+    float m_zoom_clip_radius = -1.0f;
 
     // ── FMV video frame GPU blit (Phase C) ────────────────────────────────
     // Queued by SubmitVideoFrame(); drawn at EndFrame() using the same shader
@@ -275,6 +286,7 @@ private:
     struct PiPCmd {
         Camera  cam_copy;
         int     x = 0, y = 0, w = 0, h = 0;
+        float   clip_radius = -1.0f;
     };
     struct PiPFBO {
         unsigned int fbo       = 0;
@@ -299,4 +311,3 @@ public:
 };
 
 /******************************************************************************/
-#endif // RENDERER_OPENGL_H

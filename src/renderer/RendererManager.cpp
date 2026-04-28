@@ -238,6 +238,18 @@ void RendererSetZoomBoxMode(ZoomBoxMode mode)
     s_zoom_box_mode = mode;
 }
 
+static float s_zoom_box_clip_radius = -1.0f;
+
+void RendererSetZoomBoxClipRadius(float radius)
+{
+    s_zoom_box_clip_radius = radius;
+}
+
+float RendererGetZoomBoxClipRadius(void)
+{
+    return s_zoom_box_clip_radius;
+}
+
 void RendererSchedulePiPRender(struct Camera* cam, int x, int y, int w, int h)
 {
 #ifdef RENDERER_OPENGL_ENABLED
@@ -288,6 +300,11 @@ static SpriteHandle resolve_sprite_handle(const TbSprite* spr)
 #endif
     auto it = s_sprite_to_handle.find(spr);
     return (it != s_sprite_to_handle.end()) ? it->second : kInvalidSpriteHandle;
+}
+
+SpriteHandle RendererResolveSprite(const TbSprite* spr)
+{
+    return resolve_sprite_handle(spr);
 }
 
 /** Register all valid sprites in a sheet into the software-mode handle table.
@@ -667,9 +684,6 @@ RendererType RendererGetActiveType()
 
 TbBool RendererWantsFullscreenViewport()
 {
-    // GPU renderers draw the 3D world at full screen dimensions and paint
-    // the sidebar on top.  Software renderers need the engine window offset
-    // so they don't rasterise under the sidebar.
     return (s_activeType == RENDERER_OPENGL || s_activeType == RENDERER_VITA) ? 1 : 0;
 }
 
@@ -1009,136 +1023,6 @@ TbBool MapFadePass_SupportsNativeResolution(void)
 }
 
 /******************************************************************************/
-/* C-callable text renderer wrappers */
-/******************************************************************************/
-
-void TextRenderer_SetFont(const struct TbSpriteSheet* font)
-{
-    if (s_textRenderer)
-        s_textRenderer->SetFont(font);
-}
-
-const struct TbSpriteSheet* TextRenderer_GetFont(void)
-{
-    if (s_textRenderer)
-        return s_textRenderer->GetFont();
-    return NULL;
-}
-
-void TextRenderer_SetWindow(int32_t x, int32_t y, int32_t w, int32_t h)
-{
-    if (s_textRenderer)
-        s_textRenderer->SetWindow(x, y, w, h);
-}
-
-void TextRenderer_SetJustifyWindow(int32_t x, int32_t y, int32_t w)
-{
-    if (s_textRenderer)
-        s_textRenderer->SetJustifyWindow(x, y, w);
-}
-
-void TextRenderer_SetClipWindow(int32_t x, int32_t y, int32_t w, int32_t h)
-{
-    if (s_textRenderer)
-        s_textRenderer->SetClipWindow(x, y, w, h);
-}
-
-void TextRenderer_GetJustifyWindow(int32_t* x, int32_t* y, int32_t* w)
-{
-    if (s_textRenderer)
-        s_textRenderer->GetJustifyWindow(x, y, w);
-}
-
-void TextRenderer_GetClipWindow(int32_t* x, int32_t* y, int32_t* w, int32_t* h)
-{
-    if (s_textRenderer)
-        s_textRenderer->GetClipWindow(x, y, w, h);
-}
-
-TbBool TextRenderer_DrawTextResized(int32_t posx, int32_t posy, int32_t units_per_px, const char* text)
-{
-    if (s_textRenderer)
-        return s_textRenderer->DrawTextResized(posx, posy, units_per_px, text);
-    return false;
-}
-
-TbBool TextRenderer_DrawTextAt(int32_t screen_x, int32_t screen_y, int32_t units_per_px, const char* text)
-{
-    if (s_textRenderer)
-        return s_textRenderer->DrawTextAt(screen_x, screen_y, units_per_px, text);
-    return false;
-}
-
-void TextRenderer_Draw(void)
-{
-    if (s_textRenderer)
-        s_textRenderer->Draw();
-}
-
-int32_t TextRenderer_LineHeight(void)
-{
-    if (s_textRenderer)
-        return s_textRenderer->LineHeight();
-    return 0;
-}
-
-int32_t TextRenderer_CharWidth(uint32_t chr)
-{
-    if (s_textRenderer)
-        return s_textRenderer->CharWidth(chr);
-    return 0;
-}
-
-int32_t TextRenderer_CharWidthScaled(uint32_t chr, int32_t units_per_px)
-{
-    if (s_textRenderer)
-        return s_textRenderer->CharWidthScaled(chr, units_per_px);
-    return 0;
-}
-
-int32_t TextRenderer_StringWidth(const char* text)
-{
-    if (s_textRenderer)
-        return s_textRenderer->StringWidth(text);
-    return 0;
-}
-
-int32_t TextRenderer_StringWidthScaled(const char* text, int32_t units_per_px)
-{
-    if (s_textRenderer)
-        return s_textRenderer->StringWidthScaled(text, units_per_px);
-    return 0;
-}
-
-int32_t TextRenderer_WordWidth(const char* str)
-{
-    if (s_textRenderer)
-        return s_textRenderer->WordWidth(str);
-    return 0;
-}
-
-int32_t TextRenderer_WordWidthScaled(const char* str, int32_t units_per_px)
-{
-    if (s_textRenderer)
-        return s_textRenderer->WordWidthScaled(str, units_per_px);
-    return 0;
-}
-
-int32_t TextRenderer_TextHeight(const char* text)
-{
-    if (s_textRenderer)
-        return s_textRenderer->TextHeight(text);
-    return 0;
-}
-
-int32_t TextRenderer_StringHeight(int32_t units_per_px, const char* text)
-{
-    if (s_textRenderer)
-        return s_textRenderer->StringHeight(units_per_px, text);
-    return 0;
-}
-
-/******************************************************************************/
 /* C-callable raw framebuffer blit                                            */
 /******************************************************************************/
 
@@ -1191,38 +1075,9 @@ TbBool RendererSubmitLandviewZoom(const unsigned char* src_buf, int src_w, int s
 }
 
 /******************************************************************************/
-/* C-callable UI renderer wrappers                                            */
+/* C-callable UI renderer wrappers (stubs only — canonical wrappers live in   */
+/* RendererBridge_UI.cpp)                                                     */
 /******************************************************************************/
-
-void UIRenderer_SubmitSlabSelector(int x1, int y1, int x2, int y2, unsigned char color, float z_depth)
-{
-    if (s_uiRenderer)
-        s_uiRenderer->SubmitSlabSelector(x1, y1, x2, y2, color, z_depth);
-}
-
-void UIRenderer_BeginWorldDepth(float ndc_z)
-{
-    if (s_uiRenderer)
-        s_uiRenderer->SetWorldDepth(ndc_z);
-}
-
-void UIRenderer_EndWorldDepth(void)
-{
-    if (s_uiRenderer)
-        s_uiRenderer->ClearWorldDepth();
-}
-
-void UIRenderer_BeginTopOverlay(void)
-{
-    if (s_uiRenderer)
-        s_uiRenderer->SetTopOverlay();
-}
-
-void UIRenderer_EndTopOverlay(void)
-{
-    if (s_uiRenderer)
-        s_uiRenderer->ClearTopOverlay();
-}
 
 void UIRenderer_DrawHandSprites(void)
 {
@@ -1235,193 +1090,6 @@ void UIRenderer_SubmitKeeperSprite(short x, short y, unsigned short kspr_base,
 {
     // Legacy stub — calls route to CursorLayer_SubmitKeeperHandSprite now.
     CursorLayer_SubmitKeeperHandSprite(x, y, kspr_base, kspr_angle, sprgroup, scale);
-}
-
-void UIRenderer_SubmitPanelSprite(int32_t x, int32_t y, int units_per_px, int32_t spridx)
-{
-    if (!s_uiRenderer) return;
-    const struct TbSprite* spr = get_panel_sprite(get_player_colored_icon_idx(spridx, my_player_number));
-    SpriteHandle h = resolve_sprite_handle(spr);
-    s_uiRenderer->SubmitPanelSprite(x, y, units_per_px, h);
-}
-
-void UIRenderer_SubmitPanelSpriteRaw(int32_t x, int32_t y, int units_per_px, const struct TbSprite* spr)
-{
-    if (!s_uiRenderer) return;
-    SpriteHandle h = resolve_sprite_handle(spr);
-    s_uiRenderer->SubmitPanelSprite(x, y, units_per_px, h);
-}
-
-void UIRenderer_SubmitPanelSpriteRawColored(int32_t x, int32_t y, int units_per_px, const struct TbSprite* spr, unsigned char color_idx)
-{
-    if (!s_uiRenderer) return;
-    SpriteHandle h = resolve_sprite_handle(spr);
-    s_uiRenderer->SubmitPanelSpriteColored(x, y, units_per_px, h, (uint8_t)color_idx);
-}
-
-void UIRenderer_SubmitOutlineBox(int32_t x, int32_t y, int32_t w, int32_t h, unsigned char color_idx)
-{
-    // Decompose outline into four 1-pixel-thick border strips (top/bottom/left/right).
-    UIRenderer_SubmitSolidBox(x,       y,       w, 1, color_idx);  // top
-    UIRenderer_SubmitSolidBox(x,       y + h - 1, w, 1, color_idx);  // bottom
-    UIRenderer_SubmitSolidBox(x,       y,       1, h, color_idx);  // left
-    UIRenderer_SubmitSolidBox(x + w - 1, y,     1, h, color_idx);  // right
-}
-
-void UIRenderer_SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px, const struct TbSprite* spr, int remap_row)
-{
-    if (!s_uiRenderer) return;
-    SpriteHandle h = resolve_sprite_handle(spr);
-    s_uiRenderer->SubmitPanelSpriteRemap(x, y, units_per_px, h, remap_row);
-}
-
-void UIRenderer_SubmitPanelSpriteCentered(int32_t x, int32_t y, int units_per_px, int32_t spridx)
-{
-    if (!s_uiRenderer) return;
-    const struct TbSprite* spr = get_panel_sprite(get_player_colored_icon_idx(spridx, my_player_number));
-    if (!spr) return;
-    int32_t ox = ((int32_t)spr->SWidth  * units_per_px + 8) / 16 / 2;
-    int32_t oy = ((int32_t)spr->SHeight * units_per_px + 8) / 16 / 2;
-    SpriteHandle h = resolve_sprite_handle(spr);
-    s_uiRenderer->SubmitPanelSprite(x - ox, y - oy, units_per_px, h);
-}
-
-void UIRenderer_SubmitButtonSprite(int32_t x, int32_t y, int units_per_px, short spridx)
-{
-    if (!s_uiRenderer) return;
-    const struct TbSprite* spr = get_button_sprite_for_player(spridx, my_player_number);
-    SpriteHandle h = resolve_sprite_handle(spr);
-    s_uiRenderer->SubmitPanelSprite(x, y, units_per_px, h);
-}
-
-void UIRenderer_SubmitButtonSpriteFlipped(int32_t x, int32_t y, int units_per_px, short spridx)
-{
-    if (!s_uiRenderer) return;
-    const struct TbSprite* spr = get_button_sprite_for_player(spridx, my_player_number);
-    SpriteHandle h = resolve_sprite_handle(spr);
-    s_uiRenderer->SubmitPanelSprite(x, y, units_per_px, h, true);
-}
-
-void UIRenderer_SubmitDigitSprites(int32_t center_x, int32_t y, int32_t w, int32_t h, int64_t value)
-{
-    if (!s_uiRenderer || value <= 0) return;
-
-    // Count digits
-    int ndigits = 0;
-    for (int64_t v = value; v > 0; v /= 10)
-        ndigits++;
-
-    // Draw right-to-left, centered on center_x
-    int32_t pos_x = center_x + w * (ndigits - 1) / 2;
-    for (int64_t v = value; v > 0; v /= 10)
-    {
-        const struct TbSprite* spr = get_button_sprite((short)((v % 10) + GBS_fontchars_number_dig0));
-        SpriteHandle hspr = resolve_sprite_handle(spr);
-        s_uiRenderer->SubmitScaledSprite(pos_x, y, w, h, hspr);
-        pos_x -= w;
-    }
-}
-
-void UIRenderer_SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h, const struct TbSprite *spr)
-{
-    if (s_uiRenderer) {
-        SpriteHandle hspr = resolve_sprite_handle(spr);
-        s_uiRenderer->SubmitScaledSprite(x, y, w, h, hspr);
-    }
-}
-
-void UIRenderer_SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, unsigned char color_idx)
-{
-    if (s_uiRenderer)
-        s_uiRenderer->SubmitSolidBox(x, y, w, h, color_idx);
-}
-
-void UIRenderer_SubmitSolidBoxAlpha(int32_t x, int32_t y, int32_t w, int32_t h, unsigned char color_idx, float alpha)
-{
-    if (s_uiRenderer)
-        s_uiRenderer->SubmitSolidBoxAlpha(x, y, w, h, color_idx, alpha);
-}
-
-void UIRenderer_SetSlabTexture(void)
-{
-    if (s_uiRenderer && gui_slab)
-        s_uiRenderer->UpdateSlabTexture(gui_slab, GUI_SLAB_DIMENSION);
-}
-
-TbBool UIRenderer_SubmitSlabBackground(int x, int y, int w, int h)
-{
-    if (!s_uiRenderer) return 0;
-    return s_uiRenderer->SubmitSlabBackground(x, y, w, h) ? 1 : 0;
-}
-
-unsigned char* UIRenderer_AcquireMinimapBuffer(int size)
-{
-    if (s_uiRenderer)
-        return s_uiRenderer->AcquireMinimapBuffer(size);
-    return nullptr;
-}
-
-void UIRenderer_SubmitMinimap(int screen_x, int screen_y, int size)
-{
-    if (s_uiRenderer)
-        s_uiRenderer->SubmitMinimap(screen_x, screen_y, size);
-}
-
-void UIRenderer_SubmitTiledSprite(int32_t x, int32_t y, int units_per_px, const struct TiledSprite* bigspr)
-{
-    if (!s_uiRenderer || !bigspr) return;
-    int32_t cur_y = y;
-    for (int sy = 0; sy < bigspr->y_num; sy++)
-    {
-        int32_t cur_x = x;
-        int32_t delta_y = 0;
-        unsigned short spr_idx = bigspr->spr_idx[sy][0];
-        for (int sx = 0; sx < bigspr->x_num; sx++)
-        {
-            const struct TbSprite* spr = get_panel_sprite(spr_idx);
-            if (!spr) { spr_idx++; continue; }
-            int32_t delta_x = (int32_t)spr->SWidth * units_per_px / 16;
-            delta_y      = (int32_t)spr->SHeight * units_per_px / 16;
-            if (spr_idx)
-            {
-                SpriteHandle h = resolve_sprite_handle(spr);
-                s_uiRenderer->SubmitScaledSprite(cur_x, cur_y, delta_x, delta_y, h);
-            }
-            spr_idx++;
-            cur_x += delta_x;
-        }
-        cur_y += delta_y;
-    }
-}
-
-void UIRenderer_SetLayer(int layer)
-{
-    if (s_uiRenderer)
-        s_uiRenderer->SetLayer(layer);
-}
-
-void UIRenderer_DrawBack(void)
-{
-    if (s_uiRenderer)
-        s_uiRenderer->DrawBack();
-}
-
-void UIRenderer_DrawFront(void)
-{
-    if (s_uiRenderer)
-        s_uiRenderer->DrawFront();
-}
-
-void UIRenderer_Draw(void)
-{
-    if (s_uiRenderer)
-        s_uiRenderer->Draw();
-}
-
-void UIRenderer_Clear(void)
-{
-    if (s_uiRenderer)
-        s_uiRenderer->Clear();
 }
 
 void RendererApplySettings(const RendererSettings* s)

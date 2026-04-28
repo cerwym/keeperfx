@@ -9,8 +9,7 @@
  *     are taken directly from the original algorithm constants.
  */
 /******************************************************************************/
-#ifndef VITA_FLYEYE_PASS_H
-#define VITA_FLYEYE_PASS_H
+#pragma once
 
 #ifdef PLATFORM_VITA
 
@@ -35,4 +34,3 @@ private:
 };
 
 #endif // PLATFORM_VITA
-#endif // VITA_FLYEYE_PASS_H

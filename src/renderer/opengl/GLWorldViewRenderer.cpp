@@ -35,6 +35,7 @@
 #include "player_data.h"       // get_player_color_idx(), player_room_colours[]
 
 #include <glad/glad.h>
+#include <cassert>
 #include <cstdlib>
 #include <cstring>
 #include "kfx/profiling/KfxProfiling.h"
@@ -63,11 +64,14 @@ static GLuint compile_shader_src(GLenum type, const char* src, const char* debug
 
 /******************************************************************************/
 
-/** Scratch buffer used by render_keepersprite_gpu() to hold decoded palette indices.
- *  Stride is always 256 so glTexSubImage2D can use GL_UNPACK_ROW_LENGTH. */
-static uint8_t s_kspr_decode_buf[256 * 256];
+/** Max dimension of a keeper-sprite decode buffer (stride for GL_UNPACK_ROW_LENGTH). */
+static constexpr int k_kspr_decode_dim = 256;
 
-/** Decode keeper-sprite RLE into a stride-256 palette-index buffer.
+/** Scratch buffer used by render_keepersprite_gpu() to hold decoded palette indices.
+ *  Stride is always k_kspr_decode_dim so glTexSubImage2D can use GL_UNPACK_ROW_LENGTH. */
+static uint8_t s_kspr_decode_buf[k_kspr_decode_dim * k_kspr_decode_dim];
+
+/** Decode keeper-sprite RLE into a stride-k_kspr_decode_dim palette-index buffer.
  *  Format is identical to TbSprite.Data: negative cmd = transparent skip,
  *  positive cmd = run of palette bytes, 0 = end of row. */
 static void decode_keeper_rle(uint8_t* dst, const uint8_t* data, int w, int h)
@@ -75,13 +79,13 @@ static void decode_keeper_rle(uint8_t* dst, const uint8_t* data, int w, int h)
     if (!data || w <= 0 || h <= 0) return;
 
     for (int y = 0; y < h; ++y)
-        memset(dst + y * 256, 0, w);
+        memset(dst + y * k_kspr_decode_dim, 0, w);
 
     // Upper-bound on bytes we'll consume: generous worst-case for valid RLE.
     const signed char* sp     = reinterpret_cast<const signed char*>(data);
     const signed char* sp_end = sp + (ptrdiff_t)w * h * 3 + h;
     for (int y = 0; y < h; ++y) {
-        uint8_t* row = dst + y * 256;
+        uint8_t* row = dst + y * k_kspr_decode_dim;
         int x = 0;
         while (true) {
             if (sp >= sp_end) {
@@ -414,7 +418,7 @@ bool GLWorldViewRenderer::init_shadow_shader()
     glGenTextures(1, &m_shadow_silhouette_tex);
     KFX_GL_LABEL(GL_TEXTURE, m_shadow_silhouette_tex, "WVR/ShadowSilhouetteTex");
     glBindTexture(GL_TEXTURE_2D, m_shadow_silhouette_tex);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, 256, 256, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, k_kspr_decode_dim, k_kspr_decode_dim, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -598,7 +602,7 @@ bool GLWorldViewRenderer::init_keeper_sprite_shader()
         glGenTextures(1, &m_kspr_sprite_array);
         glBindTexture(GL_TEXTURE_2D_ARRAY, m_kspr_sprite_array);
         glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_R8,
-                     256, 256, k_kspr_atlas_layers,
+                     k_kspr_decode_dim, k_kspr_decode_dim, k_kspr_atlas_layers,
                      0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
         GLenum err = glGetError();
         if (err != GL_NO_ERROR) {
@@ -826,7 +830,7 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
                     m_kspr_shader, m_kspr_sprite_tex, m_palette_tex);
         return 0;
     }
-    if (src_w <= 0 || src_h <= 0 || src_w > 256 || src_h > 256)      return 1;
+    if (src_w <= 0 || src_h <= 0 || src_w > k_kspr_decode_dim || src_h > k_kspr_decode_dim)      return 1;
     if (dst_w <= 0 || dst_h <= 0)                                      return 1;
 
     // Upload palette on first sprite of this frame
@@ -857,16 +861,16 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
         {
             KFX_ZONE_COLOR("WVR::KSprAtlas::Decode+Upload", KFX_COLOR_RENDER_CPU);
             // Decode into scratch buf; decode only actual sprite rows to avoid
-            // reading past the end of the RLE data. Remainder of 256-row buffer
+            // reading past the end of the RLE data. Remainder of the decode buffer
             // stays zero-initialized (memset in decode_keeper_rle clears it).
             decode_keeper_rle(s_kspr_decode_buf, data, src_w, src_h);
             atlas_layer = m_kspr_atlas_used++;
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D_ARRAY, m_kspr_sprite_array);
-            glPixelStorei(GL_UNPACK_ROW_LENGTH, 256);
+            glPixelStorei(GL_UNPACK_ROW_LENGTH, k_kspr_decode_dim);
             glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0,
                             0, 0, atlas_layer,
-                            src_w, 256, 1,
+                            src_w, k_kspr_decode_dim, 1,
                             GL_RED, GL_UNSIGNED_BYTE, s_kspr_decode_buf);
             glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
             m_kspr_atlas_map[data] = {atlas_layer, src_w};
@@ -874,8 +878,8 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
         }
     }
 
-    float u1 = (float)src_w / 256.0f;
-    float v1 = (float)src_h / 256.0f;
+    float u1 = (float)src_w / (float)k_kspr_decode_dim;
+    float v1 = (float)src_h / (float)k_kspr_decode_dim;
     float ul = 0.0f, ur = u1;
     if (draw_flags & Lb_SPRITE_FLIP_HORIZ) { ul = u1; ur = 0.0f; }
 
@@ -953,14 +957,14 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
             if (use_remap)
             {
                 for (int oy = 0; oy < src_h; ++oy) {
-                    uint8_t* orow = s_kspr_decode_buf + oy * 256;
+                    uint8_t* orow = s_kspr_decode_buf + oy * k_kspr_decode_dim;
                     for (int ox = 0; ox < src_w; ++ox)
                         if (orow[ox] != 0) orow[ox] = remap[orow[ox]];
                 }
             }
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, m_kspr_sprite_tex);
-            glPixelStorei(GL_UNPACK_ROW_LENGTH, 256);
+            glPixelStorei(GL_UNPACK_ROW_LENGTH, k_kspr_decode_dim);
             glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, src_w, src_h,
                             GL_RED, GL_UNSIGNED_BYTE, s_kspr_decode_buf);
             glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
@@ -1007,23 +1011,23 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
                                    && m_kspr_outline_shader;
     if (!outline_uploaded)
     {
-        // Decode RLE into the stride-256 scratch buffer
+        // Decode RLE into the scratch buffer (stride = k_kspr_decode_dim)
         decode_keeper_rle(s_kspr_decode_buf, data, src_w, src_h);
 
         // Apply colour remap (white/red highlight, shade fade, tint).
         if (use_remap)
         {
             for (int y = 0; y < src_h; ++y) {
-                uint8_t* row = s_kspr_decode_buf + y * 256;
+                uint8_t* row = s_kspr_decode_buf + y * k_kspr_decode_dim;
                 for (int x = 0; x < src_w; ++x)
                     if (row[x] != 0) row[x] = remap[row[x]];
             }
         }
 
-        // Upload decoded sprite (stride=256 in CPU buffer, upload src_w×src_h region)
+        // Upload decoded sprite to scratch texture (stride = k_kspr_decode_dim)
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, m_kspr_sprite_tex);
-        glPixelStorei(GL_UNPACK_ROW_LENGTH, 256);
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, k_kspr_decode_dim);
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, src_w, src_h,
                         GL_RED, GL_UNSIGNED_BYTE, s_kspr_decode_buf);
         glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
@@ -1411,6 +1415,12 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
     glPixelStorei(GL_UNPACK_ALIGNMENT, 4);  // restore default
     glActiveTexture(GL_TEXTURE0);  // restore default active texture unit
 
+    // Bind palette once for the entire pass — it never changes mid-frame.
+    // (Keeper-sprite and shadow passes in pass 2/3 may rebind unit 1, but
+    // that's after all pass 1 tile draws are complete.)
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, m_palette_tex);
+
     // ── Pass 1: Opaque geometry (tiles, flat-colour polys) ──────────────────
     // All opaque commands run first so the depth buffer is fully populated
     // before any blended pass reads it.  Shadows are explicitly excluded here —
@@ -1444,11 +1454,6 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
                     m_tile_filter_applied = wanted_filter;
                 }
             }
-            // Always rebind the palette at unit 1 — keeper-sprite and other
-            // passes bind their own textures to unit 1, which can leave a stale
-            // binding for subsequent tile draws.
-            glActiveTexture(GL_TEXTURE1);
-            glBindTexture(GL_TEXTURE_2D, m_palette_tex);
             glDrawArrays(GL_TRIANGLES, cmd.vert_start, cmd.vert_count);
             KFX_GL_POP();
         }
@@ -1492,6 +1497,7 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
         if (cmd.type != DrawCmd::CMD_SHADOWS) continue;
 
         KFX_GL_PUSH("WorldPass/Shadows");
+        assert(cmd.shadow_idx >= 0 && (size_t)cmd.shadow_idx < m_shadow_cmds.size());
         const ShadowCmd& sc = m_shadow_cmds[cmd.shadow_idx];
         if (!sc.sprite_data) { KFX_GL_POP(); continue; }
 
@@ -1586,6 +1592,7 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
         else if (cmd.type == DrawCmd::CMD_WORLDTEXT)
         {
             KFX_GL_PUSH("WorldPass/WorldText");
+            assert(cmd.worldtext_idx >= 0 && (size_t)cmd.worldtext_idx < m_worldtext_cmds.size());
             const WorldTextCmd& wt = m_worldtext_cmds[cmd.worldtext_idx];
 
             if (m_text_renderer && wt.text)

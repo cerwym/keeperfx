@@ -16,8 +16,7 @@
  *     so RendererSoftware can instantiate a named type.
  */
 /******************************************************************************/
-#ifndef IUI_RENDERER_H
-#define IUI_RENDERER_H
+#pragma once
 
 #include "renderer/SpriteHandle.h"
 #include <unordered_map>
@@ -196,4 +195,3 @@ protected:
 /******************************************************************************/
 
 #endif // __cplusplus
-#endif // IUI_RENDERER_H

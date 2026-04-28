@@ -12,8 +12,7 @@
  *     multiple translation units without linker conflicts.
  */
 /******************************************************************************/
-#ifndef VITA_PASS_COMMON_H
-#define VITA_PASS_COMMON_H
+#pragma once
 
 #ifdef PLATFORM_VITA
 
@@ -140,4 +139,3 @@ static inline void vita_draw_fullscreen_quad()
 }
 
 #endif // PLATFORM_VITA
-#endif // VITA_PASS_COMMON_H

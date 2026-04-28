@@ -5,8 +5,7 @@
  *     CPU software implementation of IWorldViewRenderer.
  */
 /******************************************************************************/
-#ifndef SOFTWARE_WORLD_VIEW_RENDERER_H
-#define SOFTWARE_WORLD_VIEW_RENDERER_H
+#pragma once
 
 #include "renderer/IWorldViewRenderer.h"
 
@@ -34,4 +33,3 @@ public:
 };
 
 /******************************************************************************/
-#endif // SOFTWARE_WORLD_VIEW_RENDERER_H

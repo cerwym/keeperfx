@@ -11,8 +11,7 @@
  *       Radial      — radial barrel / pincushion warp.
  */
 /******************************************************************************/
-#ifndef VITA_DISPLACE_PASS_H
-#define VITA_DISPLACE_PASS_H
+#pragma once
 
 #ifdef PLATFORM_VITA
 
@@ -52,4 +51,3 @@ private:
 };
 
 #endif // PLATFORM_VITA
-#endif // VITA_DISPLACE_PASS_H

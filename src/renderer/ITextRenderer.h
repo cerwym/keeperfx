@@ -19,8 +19,7 @@
  *         window setup required — single line, direct placement.
  */
 /******************************************************************************/
-#ifndef ITEXT_RENDERER_H
-#define ITEXT_RENDERER_H
+#pragma once
 
 #include "bflib_basics.h"
 #include "renderer/TextLayoutContext.h"
@@ -159,4 +158,3 @@ protected:
 
 /******************************************************************************/
 #endif // __cplusplus
-#endif // ITEXT_RENDERER_H

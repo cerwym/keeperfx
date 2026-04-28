@@ -10,8 +10,7 @@
  *     shader → 960×544 screen.  Zero CPU per-pixel cost.
  */
 /******************************************************************************/
-#ifndef RENDERER_VITA_H
-#define RENDERER_VITA_H
+#pragma once
 
 #ifdef PLATFORM_VITA
 
@@ -66,4 +65,3 @@ private:
 };
 
 #endif // PLATFORM_VITA
-#endif // RENDERER_VITA_H

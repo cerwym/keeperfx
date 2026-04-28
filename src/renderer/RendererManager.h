@@ -12,8 +12,7 @@
  *     C code (e.g. bflib_video.c) uses the thin C-callable wrappers below.
  */
 /******************************************************************************/
-#ifndef RENDERER_MANAGER_H
-#define RENDERER_MANAGER_H
+#pragma once
 
 #include "bflib_video.h"          /* TbPixel */
 #include "renderer/RendererSettings.h" /* RendererSettings, g_renderer_settings */
@@ -477,6 +476,13 @@ ZoomBoxMode RendererGetZoomBoxMode(void);
  *  back to ZBM_OVERHEAD behaviour at draw time. */
 void RendererSetZoomBoxMode(ZoomBoxMode mode);
 
+/** Set the rounded-rect clip radius (screen pixels) for zoom-box content.
+ *  Negative value disables clipping. */
+void RendererSetZoomBoxClipRadius(float radius);
+
+/** Get the current zoom-box clip radius.  Negative = no clipping. */
+float RendererGetZoomBoxClipRadius(void);
+
 /** Schedule a picture-in-picture isometric render for the zoom box.
  *  Call from draw_zoom_box() when the mode is ZBM_ISOMETRIC.
  *  @param cam  Pointer to the camera whose view should be rendered.  The struct
@@ -667,4 +673,3 @@ ITextRenderer* RendererGetTextRenderer();
 /* C++ only: direct access to the active IUIRenderer* */
 IUIRenderer* RendererGetUIRenderer();
 #endif
-#endif // RENDERER_MANAGER_H

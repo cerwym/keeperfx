@@ -8,8 +8,7 @@
  *     Only compiled when PLATFORM_3DS is defined.
  */
 /******************************************************************************/
-#ifndef RENDERER_3DS_H
-#define RENDERER_3DS_H
+#pragma once
 
 #ifdef PLATFORM_3DS
 
@@ -54,4 +53,3 @@ private:
 };
 
 #endif // PLATFORM_3DS
-#endif // RENDERER_3DS_H
