@@ -279,6 +279,13 @@ bool GLUIRenderer::SubmitSlabBackground(int x, int y, int w, int h)
     // Always submit on layer 0 (back, rendered before the staging-buffer blit)
     int saved_layer = m_current_layer;
     m_current_layer = 0;
+    // Opaque black backing quad — blocks world geometry from bleeding through
+    // any transparent pixels in the slab tile texture.  Submitted first so
+    // the tiled slab renders on top via painter's order.
+    SubmitQuad((float)x, (float)y, (float)w, (float)h,
+               0.0f, 0.0f, 1.0f, 1.0f,
+               0.0f, 0.0f, 0.0f, 1.0f, 0.48f, 3.0f);
+    // Tiled slab texture on top
     SubmitQuad((float)x, (float)y, (float)w, (float)h,
                0.0f, 0.0f, u1, v1,
                1.0f, 1.0f, 1.0f, 1.0f, 0.49f, 10.0f);
