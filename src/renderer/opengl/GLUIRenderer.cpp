@@ -66,7 +66,6 @@ GLUIRenderer::GLUIRenderer()
 {
     m_ui_quads.reserve(512);
     m_ui_lines.reserve(256);
-    m_remap_quads.reserve(32);
     m_vertices.reserve(3072);
     m_fbo_quads.reserve(4);
 }
@@ -197,16 +196,18 @@ void GLUIRenderer::SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px
     if (!m_sprite_atlas->GetUV(spr, uv)) return;
     float w = (float)((uv.pixel_w * units_per_px + 8) / 16);
     float h = (float)((uv.pixel_h * units_per_px + 8) / 16);
-    UIRemapQuad q;
+    UIQuad q;
     q.x0 = (float)x;  q.y0 = (float)y;
     q.x1 = (float)x + w;  q.y1 = (float)y + h;
     q.u0 = uv.u0;  q.v0 = uv.v0;
     q.u1 = uv.u1;  q.v1 = uv.v1;
     q.r = 1.0f;  q.g = 1.0f;  q.b = 1.0f;  q.a = UIAlphaFromDrawFlags();
     q.z = 0.5f;
+    q.mode = 30.0f;
+    q.texture_id = 0;
     q.layer = static_cast<uint8_t>(m_current_layer);
     q.remap_row = remap_row;
-    m_remap_quads.push_back(q);
+    m_ui_quads.push_back(q);
 }
 
 void GLUIRenderer::SubmitPanelSpriteColored(int32_t x, int32_t y, int units_per_px,
@@ -346,20 +347,18 @@ void GLUIRenderer::DrawBack()
     KFX_GL_SCOPE(back_grp, "UIPass/Back");
     // Render only layer-0 (back) quads — the sidebar background panels that must land
     // beneath the CPU staging-buffer blit.  No hand sprites, minimap, or lines here.
-    if (m_ui_quads.empty() && m_remap_quads.empty()) return;
+    if (m_ui_quads.empty()) return;
 
     { // Diagnostic: detect anomalous back-layer drops
         int back_quads = 0;
         for (auto& q : m_ui_quads) if (q.layer == 0) back_quads++;
-        int back_remap = 0;
-        for (auto& r : m_remap_quads) if (r.layer == 0) back_remap++;
         static int s_prev_back = 0;
         static int s_back_frame = 0;
         ++s_back_frame;
         bool anomaly = (s_prev_back >= 4 && back_quads < s_prev_back / 2);
         if (anomaly || (s_back_frame % 300) == 0)
-            SYNCLOG("FLICKER-DIAG-BACK[%d]: back q=%d(prev %d) remap=%d",
-                    s_back_frame, back_quads, s_prev_back, back_remap);
+            SYNCLOG("FLICKER-DIAG-BACK[%d]: back q=%d(prev %d)",
+                    s_back_frame, back_quads, s_prev_back);
         s_prev_back = back_quads;
     }
 
@@ -374,7 +373,6 @@ void GLUIRenderer::DrawBack()
     glDepthMask(GL_FALSE);
 
     FlushQuads(0);
-    FlushRemapQuads(0);
 
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
@@ -444,8 +442,7 @@ void GLUIRenderer::DrawFront()
     KFX_ZONE("UIRenderer::DrawFront");
     KFX_GPU_ZONE("UIPass::Front");
     KFX_GL_SCOPE(front_grp, "UIPass/Front");
-    if (m_ui_quads.empty() && m_ui_lines.empty() && !m_minimap_pending && m_fbo_quads.empty()
-        && m_remap_quads.empty())
+    if (m_ui_quads.empty() && m_ui_lines.empty() && !m_minimap_pending && m_fbo_quads.empty())
     {
         static int s_empty_count = 0;
         if (++s_empty_count <= 100)
@@ -456,24 +453,19 @@ void GLUIRenderer::DrawFront()
     { // Diagnostic: detect anomalous frame-to-frame quad count changes
         int front_quads = 0;
         for (auto& q : m_ui_quads) if (q.layer == 1) front_quads++;
-        int front_remap = 0;
-        for (auto& r : m_remap_quads) if (r.layer == 1) front_remap++;
         int front_lines = 0;
         for (auto& l : m_ui_lines) if (l.layer == 1) front_lines++;
         static int s_prev_quads  = 0;
-        static int s_prev_remap  = 0;
         static int s_prev_lines  = 0;
         static int s_frame_num   = 0;
         ++s_frame_num;
         // Log when quad count drops by ≥50% or to zero (from ≥4).
-        bool anomaly = (s_prev_quads >= 4 && front_quads < s_prev_quads / 2)
-                    || (s_prev_remap >= 2 && front_remap == 0);
+        bool anomaly = (s_prev_quads >= 4 && front_quads < s_prev_quads / 2);
         if (anomaly || (s_frame_num % 300) == 0)
-            SYNCLOG("FLICKER-DIAG[%d]: front q=%d(prev %d) remap=%d(prev %d) lines=%d(prev %d) minimap=%d",
-                    s_frame_num, front_quads, s_prev_quads, front_remap, s_prev_remap,
+            SYNCLOG("FLICKER-DIAG[%d]: front q=%d(prev %d) lines=%d(prev %d) minimap=%d",
+                    s_frame_num, front_quads, s_prev_quads,
                     front_lines, s_prev_lines, (int)m_minimap_pending);
         s_prev_quads = front_quads;
-        s_prev_remap = front_remap;
         s_prev_lines = front_lines;
     }
 
@@ -516,9 +508,6 @@ void GLUIRenderer::DrawFront()
 
     // Flush all remaining (layer-1 / front) quads.
     FlushQuads(1);
-
-    // Flush player-colour remap quads (front layer).
-    FlushRemapQuads(1);
 
     // Minimap: palette-indexed R8 texture — front layer.
     if (m_minimap_pending && m_minimap_texture)
@@ -566,9 +555,7 @@ void GLUIRenderer::DrawFront()
         for (const auto& q : m_ui_quads) if (q.layer == 2) { has_layer2_quads = true; break; }
         bool has_layer2_lines = false;
         for (const auto& l : m_ui_lines) if (l.layer == 2) { has_layer2_lines = true; break; }
-        bool has_layer2_remap = false;
-        for (const auto& r : m_remap_quads) if (r.layer == 2) { has_layer2_remap = true; break; }
-        if (has_layer2_quads || has_layer2_lines || has_layer2_remap)
+        if (has_layer2_quads || has_layer2_lines)
         {
             glEnable(GL_DEPTH_TEST);
             glDepthFunc(GL_LEQUAL);
@@ -577,7 +564,6 @@ void GLUIRenderer::DrawFront()
                                     // The GPU handles occlusion natively; no painter's
                                     // algorithm or mode-ordered passes needed.
             FlushQuads(2);
-            FlushRemapQuads(2);
             FlushLines(2);
             glDisable(GL_DEPTH_TEST);
         }
@@ -586,7 +572,6 @@ void GLUIRenderer::DrawFront()
     // Layer 3: top-overlay — cursor-driven affordances (slab selector) drawn dead-last,
     // depth test OFF, so they are never obscured by any world or UI element.
     FlushQuads(3);
-    FlushRemapQuads(3);
     FlushLines(3);
 
     glDepthMask(GL_TRUE);
@@ -597,7 +582,6 @@ void GLUIRenderer::DrawFront()
 void GLUIRenderer::BeginPiPSprites()
 {
     m_pip_quad_watermark  = (int)m_ui_quads.size();
-    m_pip_remap_watermark = (int)m_remap_quads.size();
     m_pip_line_watermark  = (int)m_ui_lines.size();
     m_pip_capture_active  = true;
 }
@@ -609,10 +593,9 @@ void GLUIRenderer::DrawPiPSprites(int pip_w, int pip_h)
     m_pip_capture_active = false;
 
     const int nq = (int)m_ui_quads.size()   - m_pip_quad_watermark;
-    const int nr = (int)m_remap_quads.size() - m_pip_remap_watermark;
     const int nl = (int)m_ui_lines.size()   - m_pip_line_watermark;
 
-    if (nq > 0 || nr > 0 || nl > 0)
+    if (nq > 0 || nl > 0)
     {
         // FBO is already bound by caller.  Use pip dimensions for NDC conversion.
         glViewport(0, 0, pip_w, pip_h);
@@ -627,51 +610,44 @@ void GLUIRenderer::DrawPiPSprites(int pip_w, int pip_h)
         glDepthMask(GL_FALSE);
 
         // Temporarily move pip-tail entries to the front of each vector so that
-        // FlushQuads/FlushRemapQuads/FlushLines (which operate on the whole vector
+        // FlushQuads/FlushLines (which operate on the whole vector
         // filtered by layer) only see pip-sourced entries.
         // We swap them into temporary vectors, flush, then restore the originals.
         std::vector<UIQuad>      pip_quads(m_ui_quads.begin()   + m_pip_quad_watermark,  m_ui_quads.end());
-        std::vector<UIRemapQuad> pip_remap(m_remap_quads.begin() + m_pip_remap_watermark, m_remap_quads.end());
         std::vector<UILine>      pip_lines(m_ui_lines.begin()   + m_pip_line_watermark,  m_ui_lines.end());
 
         // Erase pip tail from the main queues now — corner sprites at [0..watermark) remain.
         m_ui_quads.erase(  m_ui_quads.begin()   + m_pip_quad_watermark,  m_ui_quads.end());
-        m_remap_quads.erase(m_remap_quads.begin() + m_pip_remap_watermark, m_remap_quads.end());
         m_ui_lines.erase(  m_ui_lines.begin()   + m_pip_line_watermark,  m_ui_lines.end());
 
         // Swap pip entries in as the active queues for the flush calls.
         m_ui_quads.swap(pip_quads);
-        m_remap_quads.swap(pip_remap);
         m_ui_lines.swap(pip_lines);
 
         // Layer-2: creature status / gold text — depth-tested against FBO geometry.
         {
-            bool has2q = false, has2r = false, has2l = false;
+            bool has2q = false, has2l = false;
             for (const auto& q : m_ui_quads)    if (q.layer == 2) { has2q = true; break; }
-            for (const auto& r : m_remap_quads) if (r.layer == 2) { has2r = true; break; }
             for (const auto& l : m_ui_lines)    if (l.layer == 2) { has2l = true; break; }
-            if (has2q || has2r || has2l)
+            if (has2q || has2l)
             {
                 glEnable(GL_DEPTH_TEST);
                 glDepthFunc(GL_LEQUAL);
                 glDepthMask(GL_TRUE);
                 if (has2q) FlushQuads(2);
-                if (has2r) FlushRemapQuads(2);
                 if (has2l) FlushLines(2);
                 glDisable(GL_DEPTH_TEST);
             }
         }
         // Layer-1: room flags — always on top inside the zoom box.
         {
-            bool has1q = false, has1r = false, has1l = false;
+            bool has1q = false, has1l = false;
             for (const auto& q : m_ui_quads)    if (q.layer == 1) { has1q = true; break; }
-            for (const auto& r : m_remap_quads) if (r.layer == 1) { has1r = true; break; }
             for (const auto& l : m_ui_lines)    if (l.layer == 1) { has1l = true; break; }
-            if (has1q || has1r || has1l)
+            if (has1q || has1l)
             {
                 glDisable(GL_DEPTH_TEST);
                 if (has1q) FlushQuads(1);
-                if (has1r) FlushRemapQuads(1);
                 if (has1l) FlushLines(1);
             }
         }
@@ -684,12 +660,10 @@ void GLUIRenderer::DrawPiPSprites(int pip_w, int pip_h)
 
         // Discard any remaining pip entries (layer-3 top-overlay etc.).
         m_ui_quads.clear();
-        m_remap_quads.clear();
         m_ui_lines.clear();
 
         // Restore the saved corner-frame entries as the active queues.
         m_ui_quads.swap(pip_quads);
-        m_remap_quads.swap(pip_remap);
         m_ui_lines.swap(pip_lines);
     }
     else
@@ -723,7 +697,6 @@ void GLUIRenderer::Draw()
     KFX_ZONE("UIRenderer::Draw");
     // Emit per-frame stats before drawing (capture sizes before clear).
     KFX_PLOT("UI/Quads",      (int)m_ui_quads.size());
-    KFX_PLOT("UI/RemapQuads", (int)m_remap_quads.size());
     KFX_PLOT("UI/Lines",      (int)m_ui_lines.size());
     // Full draw: back layer then front layer.
     DrawBack();
@@ -749,7 +722,6 @@ void GLUIRenderer::Clear()
     m_ui_quads.clear();
     m_ui_lines.clear();
     m_fbo_quads.clear();
-    m_remap_quads.clear();
     m_vertices.clear();
     m_minimap_pending = false;
     m_current_layer = 1;  // Reset to front layer (default) each frame
@@ -955,14 +927,18 @@ void GLUIRenderer::FlushQuads(int layer)
 
     // Classify a quad's render pass by its mode float.
     // Each pass type uses a different shader and/or texture binding.
-    enum PassType { PASS_SLAB, PASS_SOLID, PASS_SPRITE, PASS_COLORED, PASS_FONT };
+    enum PassType { PASS_SLAB, PASS_SOLID, PASS_SPRITE, PASS_COLORED, PASS_FONT, PASS_REMAP };
     auto classify = [](float mode) -> PassType {
+        if (mode >= 29.5f) return PASS_REMAP;
         if (mode >= 19.5f) return PASS_COLORED;
         if (mode >= 9.5f)  return PASS_SLAB;
         if (mode >= 1.5f)  return PASS_SOLID;
         if (mode >= 0.5f)  return PASS_FONT;
         return PASS_SPRITE;
     };
+
+    // Track remap_row for the current batch (only relevant for PASS_REMAP).
+    int current_remap_row = -1;
 
     // Bind state for a given pass type and flush accumulated vertices.
     auto flush_batch = [&](PassType pass) {
@@ -1017,6 +993,21 @@ void GLUIRenderer::FlushQuads(int layer)
                 glBindTexture(GL_TEXTURE_2D, m_font_atlas->GetTextureID());
             }
             break;
+
+        case PASS_REMAP:
+            if (!m_prog_remap || !m_sprite_atlas || !m_palette_texture || !m_fade_texture) {
+                m_vertices.clear(); return;
+            }
+            glUseProgram(m_prog_remap);
+            glUniform2f(m_loc_screen_remap, (float)m_screen_width, (float)m_screen_height);
+            glUniform1f(m_loc_remap_row, (float)current_remap_row);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, m_sprite_atlas->GetTexture());
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(m_palette_texture_target, m_palette_texture);
+            glActiveTexture(GL_TEXTURE2);
+            glBindTexture(GL_TEXTURE_2D, m_fade_texture);
+            break;
         }
 
         glBufferData(GL_ARRAY_BUFFER, sizeof(GLUIVertex) * m_vertices.size(), nullptr, GL_DYNAMIC_DRAW);
@@ -1026,13 +1017,17 @@ void GLUIRenderer::FlushQuads(int layer)
     };
 
     // Walk quads in submission order, batching consecutive same-pass quads.
+    // Remap quads also break on remap_row changes (uniform must be updated).
     PassType current_pass = classify(m_ui_quads.begin()->mode);
+    current_remap_row = m_ui_quads.begin()->remap_row;
     m_vertices.clear();
     for (auto it = m_ui_quads.begin(); it != mid; ++it) {
         PassType pass = classify(it->mode);
-        if (pass != current_pass) {
+        bool remap_row_changed = (pass == PASS_REMAP && it->remap_row != current_remap_row);
+        if (pass != current_pass || remap_row_changed) {
             flush_batch(current_pass);
             current_pass = pass;
+            current_remap_row = it->remap_row;
         }
         ExpandQuadToVertices(*it);
     }
@@ -1065,60 +1060,6 @@ void GLUIRenderer::FlushLines(int layer)
         glBindVertexArray(0);
     }
     m_ui_lines.erase(m_ui_lines.begin(), mid);
-}
-
-void GLUIRenderer::FlushRemapQuads(int layer)
-{
-    // Partition matching layer to the front, preserving submission order.
-    auto mid = std::stable_partition(m_remap_quads.begin(), m_remap_quads.end(),
-        [layer](const UIRemapQuad& q) { return (int)q.layer == layer; });
-    if (mid == m_remap_quads.begin()) return;
-    if (!m_prog_remap || !m_sprite_atlas || !m_palette_texture || !m_fade_texture) {
-        m_remap_quads.erase(m_remap_quads.begin(), mid);
-        return;
-    }
-
-    // Sort the matching range by remap_row so we can batch by row.
-    std::stable_sort(m_remap_quads.begin(), mid,
-        [](const UIRemapQuad& a, const UIRemapQuad& b) { return a.remap_row < b.remap_row; });
-
-    glBindVertexArray(m_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    glUseProgram(m_prog_remap);
-    glUniform2f(m_loc_screen_remap, (float)m_screen_width, (float)m_screen_height);
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_sprite_atlas->GetTexture());
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(m_palette_texture_target, m_palette_texture);
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, m_fade_texture);
-
-    // Emit one draw call per unique remap_row.
-    auto it = m_remap_quads.begin();
-    while (it != mid) {
-        int row = it->remap_row;
-        glUniform1f(m_loc_remap_row, (float)row);
-
-        m_vertices.clear();
-        for (auto jt = it; jt != mid && jt->remap_row == row; ++jt) {
-            GLUIVertex v[6];
-            v[0] = {jt->x0, jt->y0, jt->u0, jt->v0, jt->r, jt->g, jt->b, jt->a, jt->z, 0.0f};
-            v[1] = {jt->x0, jt->y1, jt->u0, jt->v1, jt->r, jt->g, jt->b, jt->a, jt->z, 0.0f};
-            v[2] = {jt->x1, jt->y0, jt->u1, jt->v0, jt->r, jt->g, jt->b, jt->a, jt->z, 0.0f};
-            v[3] = {jt->x1, jt->y0, jt->u1, jt->v0, jt->r, jt->g, jt->b, jt->a, jt->z, 0.0f};
-            v[4] = {jt->x0, jt->y1, jt->u0, jt->v1, jt->r, jt->g, jt->b, jt->a, jt->z, 0.0f};
-            v[5] = {jt->x1, jt->y1, jt->u1, jt->v1, jt->r, jt->g, jt->b, jt->a, jt->z, 0.0f};
-            for (int i = 0; i < 6; ++i) m_vertices.push_back(v[i]);
-            it = jt + 1;
-        }
-        glBufferData(GL_ARRAY_BUFFER, sizeof(GLUIVertex) * m_vertices.size(), nullptr, GL_DYNAMIC_DRAW);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(GLUIVertex) * m_vertices.size(), m_vertices.data());
-        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_vertices.size());
-    }
-
-    glBindVertexArray(0);
-    m_remap_quads.erase(m_remap_quads.begin(), mid);
 }
 
 void GLUIRenderer::ExpandQuadToVertices(const UIQuad& quad)
@@ -1192,6 +1133,7 @@ void GLUIRenderer::SubmitQuad(float x, float y, float w, float h, float u0, floa
     quad.z = m_world_depth_active ? m_world_z : z;
     quad.mode = mode;
     quad.texture_id = texture_id;
+    quad.remap_row = -1;
     if (m_top_overlay_active)
         quad.layer = 3;
     else if (m_world_depth_active)

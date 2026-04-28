@@ -39,9 +39,10 @@ struct UIQuad {
     float u0, v0, u1, v1;  // Texture coordinates  
     float r, g, b, a;      // Color/tint
     float z;               // Z-depth
-    float mode;            // Render mode
+    float mode;            // Render mode (0=sprite, 1=font, 3=solid, 10=slab, 20=colored, 30=remap)
     uint32_t texture_id;   // Sprite sheet texture ID
     uint8_t layer;         // 0=back (before staging blit), 1=front (after staging blit)
+    int remap_row;         // Fade-table row for remap quads (mode 30); -1 = unused
 };
 
 /** Line segment for slab selectors. */
@@ -51,16 +52,6 @@ struct UILine {
     float z;               // Z-depth
     float thickness;       // Line thickness
     uint8_t layer;         // 0=back, 1=front
-};
-
-/** Batched UI element with a player-colour remap applied via the fade table. */
-struct UIRemapQuad {
-    float x0, y0, x1, y1;  // Screen rectangle
-    float u0, v0, u1, v1;  // Atlas UV coordinates
-    float r, g, b, a;      // Color tint
-    float z;               // Z-depth
-    uint8_t layer;         // 0=back, 1=front
-    int   remap_row;       // Row in fade table (0–255)
 };
 
 /** Picture-in-picture FBO composite quad.  Uses the FBO colour texture directly
@@ -215,16 +206,12 @@ private:
     GLuint m_slab_texture = 0;
     int    m_slab_dim     = 0;
 
-    // Batched player-colour remap quads (flushed alongside front-layer quads)
-    std::vector<UIRemapQuad> m_remap_quads;
-
     // PiP sprite watermarks: queue sizes recorded at BeginPiPSprites() time.
     // Quads/lines at indices [0..watermark) were submitted before the PiP draw_view
     // (i.e. corner-frame sprites) and must survive into FlushFront() untouched.
     // Quads at [watermark..end) were submitted during draw_view(pip_cam) (NSP sprites,
     // room flags) and are rendered into the FBO by FlushPiPSprites(), then erased.
     int  m_pip_quad_watermark  = 0;
-    int  m_pip_remap_watermark = 0;
     int  m_pip_line_watermark  = 0;
     bool m_pip_capture_active  = false;
 
@@ -250,7 +237,6 @@ private:
     bool CreateShaders();
     void CreateVertexArrays();
     void FlushQuads(int layer);       // Render and remove only quads matching layer
-    void FlushRemapQuads(int layer);  // Render and remove remap quads for this layer
     void FlushLines(int layer);       // Render and remove only lines matching layer
     void ExpandQuadToVertices(const UIQuad& quad);
     void ExpandLineToVertices(const UILine& line);
