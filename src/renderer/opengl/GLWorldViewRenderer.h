@@ -30,7 +30,6 @@
 #include "bflib_render.h"   // PolyPoint (needed by ShadowCmd)
 
 class ITileAtlas;
-class SoftwareWorldViewRenderer;
 class GLTextRenderer;
 
 /******************************************************************************/
@@ -340,10 +339,6 @@ private:
     std::vector<ShadowCmd>    m_shadow_cmds;
     std::vector<WorldTextCmd> m_worldtext_cmds;
     std::vector<FlatPolyVertex> m_flatpoly_verts;  // flat-colour polygon vertices, GPU-only
-
-    // Software fallback for unported QKinds
-    SoftwareWorldViewRenderer* m_sw_fallback = nullptr;
-    bool m_sw_pass_active = false;
 
     // GPU text renderer for world-space floating text
     GLTextRenderer* m_text_renderer = nullptr;

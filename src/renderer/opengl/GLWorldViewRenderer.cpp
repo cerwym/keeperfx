@@ -121,7 +121,6 @@ GLWorldViewRenderer::GLWorldViewRenderer(ITileAtlas* atlas,
     , m_fade_tex(fade_tex)
     , m_palette_tex(palette_tex)
 {
-    m_sw_fallback = new SoftwareWorldViewRenderer();
     m_text_renderer = new GLTextRenderer();
     m_text_renderer->SetPaletteTexture(palette_tex);
     init_gl_resources();
@@ -130,7 +129,6 @@ GLWorldViewRenderer::GLWorldViewRenderer(ITileAtlas* atlas,
 GLWorldViewRenderer::~GLWorldViewRenderer()
 {
     free_gl_resources();
-    delete m_sw_fallback;
     delete m_text_renderer;
 }
 
@@ -1181,15 +1179,8 @@ void GLWorldViewRenderer::BeginWorldPass(unsigned char* framebuf, int pitch,
     }
     else
     {
-        // Software fallback: zero the staging buffer and configure all vec
-        // globals (vec_screen, poly_screen, vec_window_*, etc.).
-        if (framebuf)
-        {
-            for (int row = 0; row < h; row++)
-                memset(framebuf + (int32_t)row * pitch, 0, (size_t)w);
-        }
-        if (m_sw_fallback)
-            m_sw_fallback->BeginWorldPass(framebuf, pitch, w, h, 0, 0);
+        assert("GLWorldViewRendererer::BeginWorldPass - Fall back to SW world, this shouldn't be allowed anymore, "
+               "check init flow.");
     }
 
     // Set screen size for text renderer
@@ -1702,8 +1693,7 @@ void GLWorldViewRenderer::DrawIsometricView()
 {
     KFX_ZONE("WVR::DrawIsometricView");
     if (!m_initialized) {
-        // Fall back to software if GL resources not ready
-        if (m_sw_fallback) m_sw_fallback->DrawIsometricView();
+        SYNCLOG("WVR::DrawIsometricView not initialized, tried to fallback to SW.");
         return;
     }
 
@@ -1931,10 +1921,6 @@ void GLWorldViewRenderer::DrawFrontView(struct Camera* cam)
     // which causes a visible flicker frame.  Skip it entirely.
     if (m_initialized)
         return;
-
-    // GPU not ready — fall back to software.
-    if (m_sw_fallback)
-        m_sw_fallback->DrawFrontView(cam);
 }
 
 /******************************************************************************/
