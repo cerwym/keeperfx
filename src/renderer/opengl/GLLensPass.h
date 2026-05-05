@@ -10,20 +10,21 @@
 #pragma once
 
 #include "renderer/IPostProcessPass.h"
+#include "renderer/opengl/IGLShaderCompilable.h"
 
 /******************************************************************************/
 
 /** Base helper for all GL lens passes — owns a shader program and a
  *  fullscreen quad VAO that are shared across Apply() calls. */
-class GLLensPassBase : public IPostProcessPass {
+class GLLensPassBase : public IPostProcessPass, public IGLShaderCompilable {
 public:
     virtual ~GLLensPassBase();
     void Free() override;
 
 protected:
-    // Compile the pass shader from the given fragment source.
-    // Vertex shader is always palette_blit_vert.glsl (pos+uv fullscreen quad).
-    bool CompilePass(const char* frag_shader_name);
+    // Compile the pass shader from the given fragment GLSL source string.
+    // Vertex shader is always PALETTE_BLIT_VERTEX_SHADER (pos+uv fullscreen quad).
+    bool CompilePass(const char* frag_src);
 
     // Bind the fullscreen quad, set the source texture on unit 0, bind the
     // destination FBO, draw, and unbind.  Derived classes should set their
@@ -41,7 +42,9 @@ protected:
 class GLDisplacementPass : public GLLensPassBase {
 public:
     bool Init() override;
+    bool CompileShaders() override;
     void Apply(unsigned int src_tex, unsigned int dst_fbo, int w, int h) override;
+    const char* RendererName() const override { return "GLDisplacementPass"; }
 
     void SetMagnitude(float mag) { m_magnitude = mag; }
     void SetPeriod(float per)    { m_period = per; }
@@ -60,7 +63,9 @@ private:
 class GLMistPass : public GLLensPassBase {
 public:
     bool Init() override;
+    bool CompileShaders() override;
     void Apply(unsigned int src_tex, unsigned int dst_fbo, int w, int h) override;
+    const char* RendererName() const override { return "GLMistPass"; }
 
     void SetColor(float r, float g, float b, float density) {
         m_color[0] = r; m_color[1] = g; m_color[2] = b; m_color[3] = density;
@@ -78,7 +83,9 @@ private:
 class GLFlyeyePass : public GLLensPassBase {
 public:
     bool Init() override;
+    bool CompileShaders() override;
     void Apply(unsigned int src_tex, unsigned int dst_fbo, int w, int h) override;
+    const char* RendererName() const override { return "GLFlyeyePass"; }
 
     void SetHexSize(float size) { m_hex_size = size; }
 
@@ -90,27 +97,13 @@ private:
 
 /******************************************************************************/
 
-class GLPalettePass : public GLLensPassBase {
-public:
-    bool Init() override;
-    void Apply(unsigned int src_tex, unsigned int dst_fbo, int w, int h) override;
-
-    void SetColorShift(float r, float g, float b) {
-        m_shift[0] = r; m_shift[1] = g; m_shift[2] = b;
-    }
-
-private:
-    int   m_loc_color_shift = -1;
-    float m_shift[3]        = {1.0f, 1.0f, 1.0f};
-};
-
-/******************************************************************************/
-
 class GLOverlayPass : public GLLensPassBase {
 public:
     bool Init() override;
+    bool CompileShaders() override;
     void Apply(unsigned int src_tex, unsigned int dst_fbo, int w, int h) override;
     void Free() override;
+    const char* RendererName() const override { return "GLOverlayPass"; }
 
     void SetOverlayAlpha(float a) { m_alpha = a; }
     bool UploadOverlay(const unsigned char* rgba, int w, int h);

@@ -135,14 +135,19 @@ void GLLensPassBase::DrawPass()
 // GLDisplacementPass
 /******************************************************************************/
 
-bool GLDisplacementPass::Init()
+bool GLDisplacementPass::CompileShaders()
 {
-    if (!CompilePass("lens_displacement_frag.glsl"))
+    if (!CompilePass(LENS_DISPLACEMENT_FRAGMENT_SHADER))
         return false;
     m_loc_time      = glGetUniformLocation(m_prog, "u_time");
     m_loc_magnitude = glGetUniformLocation(m_prog, "u_magnitude");
     m_loc_period    = glGetUniformLocation(m_prog, "u_period");
     return true;
+}
+
+bool GLDisplacementPass::Init()
+{
+    return CompileShaders();
 }
 
 void GLDisplacementPass::Apply(unsigned int src_tex, unsigned int dst_fbo, int w, int h)
@@ -159,13 +164,18 @@ void GLDisplacementPass::Apply(unsigned int src_tex, unsigned int dst_fbo, int w
 // GLMistPass
 /******************************************************************************/
 
-bool GLMistPass::Init()
+bool GLMistPass::CompileShaders()
 {
-    if (!CompilePass("lens_mist_frag.glsl"))
+    if (!CompilePass(LENS_MIST_FRAGMENT_SHADER))
         return false;
     m_loc_time       = glGetUniformLocation(m_prog, "u_time");
     m_loc_mist_color = glGetUniformLocation(m_prog, "u_mist_color");
     return true;
+}
+
+bool GLMistPass::Init()
+{
+    return CompileShaders();
 }
 
 void GLMistPass::Apply(unsigned int src_tex, unsigned int dst_fbo, int w, int h)
@@ -181,13 +191,18 @@ void GLMistPass::Apply(unsigned int src_tex, unsigned int dst_fbo, int w, int h)
 // GLFlyeyePass
 /******************************************************************************/
 
-bool GLFlyeyePass::Init()
+bool GLFlyeyePass::CompileShaders()
 {
-    if (!CompilePass("lens_flyeye_frag.glsl"))
+    if (!CompilePass(LENS_FLYEYE_FRAGMENT_SHADER))
         return false;
     m_loc_hex_size   = glGetUniformLocation(m_prog, "u_hex_size");
     m_loc_resolution = glGetUniformLocation(m_prog, "u_resolution");
     return true;
+}
+
+bool GLFlyeyePass::Init()
+{
+    return CompileShaders();
 }
 
 void GLFlyeyePass::Apply(unsigned int src_tex, unsigned int dst_fbo, int w, int h)
@@ -199,31 +214,12 @@ void GLFlyeyePass::Apply(unsigned int src_tex, unsigned int dst_fbo, int w, int 
 }
 
 /******************************************************************************/
-// GLPalettePass
-/******************************************************************************/
-
-bool GLPalettePass::Init()
-{
-    if (!CompilePass("lens_palette_frag.glsl"))
-        return false;
-    m_loc_color_shift = glGetUniformLocation(m_prog, "u_color_shift");
-    return true;
-}
-
-void GLPalettePass::Apply(unsigned int src_tex, unsigned int dst_fbo, int w, int h)
-{
-    BindPass(src_tex, dst_fbo, w, h);
-    if (m_loc_color_shift >= 0) glUniform3fv(m_loc_color_shift, 1, m_shift);
-    DrawPass();
-}
-
-/******************************************************************************/
 // GLOverlayPass
 /******************************************************************************/
 
-bool GLOverlayPass::Init()
+bool GLOverlayPass::CompileShaders()
 {
-    if (!CompilePass("lens_overlay_frag.glsl"))
+    if (!CompilePass(LENS_OVERLAY_FRAGMENT_SHADER))
         return false;
     m_loc_overlay_alpha = glGetUniformLocation(m_prog, "u_overlay_alpha");
     // Bind overlay sampler to unit 1
@@ -234,6 +230,11 @@ bool GLOverlayPass::Init()
         glUniform1i(loc, 1);
     }
     return true;
+}
+
+bool GLOverlayPass::Init()
+{
+    return CompileShaders();
 }
 
 void GLOverlayPass::Apply(unsigned int src_tex, unsigned int dst_fbo, int w, int h)
