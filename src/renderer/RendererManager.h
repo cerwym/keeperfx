@@ -38,6 +38,11 @@ typedef int RendererType;
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/** Standard clear colour matching DK palette index 0 (pure black).
+ *  Use for all glClearColor calls so they stay consistent with RendererClearScreen(0). */
+#define KFX_GL_CLEAR_COLOR 0.0f, 0.0f, 0.0f, 1.0f
+
 /******************************************************************************/
 
 /** Initialise the renderer subsystem with the requested backend type. */
@@ -226,10 +231,6 @@ TbScreenMode RendererActiveMode(void);
 /** Wait for vertical blanking interval (currently a no-op).
  *  Replaces LbScreenWaitVbi(). */
 TbResult RendererWaitVbi(void);
-
-/** Standard clear colour matching DK palette index 0 (pure black).
- *  Use for all glClearColor calls so they stay consistent with RendererClearScreen(0). */
-#define KFX_GL_CLEAR_COLOR  0.0f, 0.0f, 0.0f, 1.0f
 
 /** Call immediately after load_texture_map_file() to discard the cached GPU tile
  *  atlas so it is rebuilt on the next frame with fresh block_mem data.  Safe to
