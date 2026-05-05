@@ -8,6 +8,7 @@
 #pragma once
 
 #include "renderer/ITextRenderer.h"
+#include "renderer/opengl/IGLShaderCompilable.h"
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -23,7 +24,7 @@ class GLDbcFontAtlas;
  * OpenGL implementation of ITextRenderer.
  * Renders text using GPU-accelerated sprite fonts with batch processing.
  */
-class GLTextRenderer : public ITextRenderer {
+class GLTextRenderer : public ITextRenderer, public IGLShaderCompilable {
 public:
     GLTextRenderer();
     virtual ~GLTextRenderer();
@@ -57,6 +58,7 @@ public:
     int32_t StringHeight(int32_t units_per_px, const char* text) override;
 
     const char* GetName() const override { return "OPENGL"; }
+    const char* RendererName() const override { return "GLTextRenderer"; }
 
     /** Initialize with OpenGL context.
      *  @return true if successful */
@@ -73,6 +75,11 @@ public:
      *  @param width Screen width in pixels
      *  @param height Screen height in pixels */
     void SetScreenSize(int width, int height);
+
+    /** Compile and link text rendering shaders, and cache uniform locations.
+     *  Called by the bootstrapper in RendererManager::RendererInit().
+     *  @return true if successful */
+    bool CompileShaders() override;
 
 private:
     struct DeferredDraw {
@@ -138,10 +145,6 @@ private:
     static void gl_draw_segment(const char* sbuf, const char* ebuf,
                                 int32_t x, int32_t y, int32_t space_len,
                                 int32_t units_per_px, void* userdata);
-
-    /** Compile and link text rendering shaders.
-     *  @return true if successful */
-    bool CompileShaders();
 
     /** Upload accumulated vertex batch to GPU using the current scissor state,
      *  then clear the batch.  No-op if the batch is empty. */

@@ -65,14 +65,6 @@ bool GLTextRenderer::Init()
 {
     // Atlases are created lazily in Draw() per unique font pointer.
 
-    // Compile shaders
-    if (!CompileShaders())
-    {
-        ERRORLOG("GLTextRenderer: failed to compile shaders");
-        Shutdown();
-        return false;
-    }
-
     // Create vertex array and buffer for text quads
     glGenVertexArrays(1, &m_vao);
     glGenBuffers(1, &m_vbo);
@@ -94,24 +86,8 @@ bool GLTextRenderer::Init()
     glBindVertexArray(0);
 
     // Palette texture is injected via SetPaletteTexture() after Init().
-    // No local palette creation needed.
-
-    // Get uniform locations
-    glUseProgram(m_shader_program);
-    m_loc_viewport = glGetUniformLocation(m_shader_program, "u_viewport");
-    m_loc_font_atlas = glGetUniformLocation(m_shader_program, "u_font_atlas");
-    m_loc_palette = glGetUniformLocation(m_shader_program, "u_palette");
-    m_loc_text_color = glGetUniformLocation(m_shader_program, "u_text_color");
-
-    SYNCLOG("GLTextRenderer: Uniform locations - viewport=%d atlas=%d palette=%d color=%d", 
-            m_loc_viewport, m_loc_font_atlas, m_loc_palette, m_loc_text_color);
-
-    // Only set sampler uniforms if locations are valid
-    if (m_loc_font_atlas >= 0)
-        glUniform1i(m_loc_font_atlas, 0);  // GL_TEXTURE0
-    if (m_loc_palette >= 0)
-        glUniform1i(m_loc_palette, 1);     // GL_TEXTURE1
-    glUseProgram(0);
+    // Shader compilation and uniform setup is deferred to CompileShaders(),
+    // called by the bootstrapper in RendererManager::RendererInit().
 
     m_vertex_batch.reserve(32768);
     SYNCLOG("GLTextRenderer: initialized");
@@ -191,6 +167,22 @@ bool GLTextRenderer::CompileShaders()
 
     glDeleteShader(vert);
     glDeleteShader(frag);
+
+    // Cache uniform locations and set sampler bindings once.
+    glUseProgram(m_shader_program);
+    m_loc_viewport   = glGetUniformLocation(m_shader_program, "u_viewport");
+    m_loc_font_atlas = glGetUniformLocation(m_shader_program, "u_font_atlas");
+    m_loc_palette    = glGetUniformLocation(m_shader_program, "u_palette");
+    m_loc_text_color = glGetUniformLocation(m_shader_program, "u_text_color");
+
+    SYNCLOG("GLTextRenderer: Uniform locations - viewport=%d atlas=%d palette=%d color=%d",
+            m_loc_viewport, m_loc_font_atlas, m_loc_palette, m_loc_text_color);
+
+    if (m_loc_font_atlas >= 0)
+        glUniform1i(m_loc_font_atlas, 0);  // GL_TEXTURE0
+    if (m_loc_palette >= 0)
+        glUniform1i(m_loc_palette, 1);     // GL_TEXTURE1
+    glUseProgram(0);
     return true;
 }
 
@@ -306,8 +298,6 @@ TbBool GLTextRenderer::DrawTextResized(int32_t posx, int32_t posy, int32_t units
 
 TbBool GLTextRenderer::DrawTextAt(int32_t screen_x, int32_t screen_y, int32_t units_per_px, const char* text)
 {
-    // Phase 1 stub: queue identically to DrawTextResized.
-    // Phase 4+ will implement single-line direct draw.
     return DrawTextResized(screen_x, screen_y, units_per_px, text);
 }
 
