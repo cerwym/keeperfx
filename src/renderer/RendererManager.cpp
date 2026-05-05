@@ -25,6 +25,7 @@
 #  include "renderer/opengl/GLTextRenderer.h"
 #  include "renderer/opengl/GLUIRenderer.h"
 #  include "renderer/opengl/GLCursorLayer.h"
+#  include "renderer/opengl/IGLShaderCompilable.h"
 #endif
 #ifdef PLATFORM_VITA
 #  include "renderer/RendererVita.h"
@@ -564,6 +565,33 @@ int RendererInit(RendererType type)
 
     s_cursorLayer = create_cursor_layer(type);
     SYNCLOG("CursorLayer initialised: %s", s_cursorLayer->GetName());
+
+#ifdef RENDERER_OPENGL_ENABLED
+    // Compile all GLSL programs in a single bootstrapper pass so that:
+    //   (a) error handling is uniform across all sub-renderers, and
+    //   (b) adding a new sub-renderer only requires implementing IGLShaderCompilable.
+    // Lens-pass subclasses are managed by LensManager and compile their own
+    // shaders via Init() when each effect activates — they are not listed here.
+    if (type == RENDERER_OPENGL)
+    {
+        IGLShaderCompilable* compilables[] = {
+            dynamic_cast<IGLShaderCompilable*>(s_worldViewRenderer),
+            dynamic_cast<IGLShaderCompilable*>(s_mapFadePass),
+            dynamic_cast<IGLShaderCompilable*>(s_textRenderer),
+            dynamic_cast<IGLShaderCompilable*>(s_uiRenderer),
+        };
+        for (IGLShaderCompilable* c : compilables)
+        {
+            if (!c) continue;
+            if (!c->CompileShaders())
+            {
+                ERRORLOG("RendererInit: %s::CompileShaders() failed", c->RendererName());
+                RendererShutdown();
+                return false;
+            }
+        }
+    }
+#endif
 
     // Wire sprite intercept backend: Vita uses GPU batch; OpenGL uses software
     // (software backend exercises the full intercept path for testing on desktop).
