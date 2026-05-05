@@ -62,7 +62,8 @@ static GLuint compile_shader(GLenum type, const char* src)
 
 GLMapFadePass::GLMapFadePass()
 {
-    Init();
+    // GL resources are initialised by CompileShaders(),
+    // called by the bootstrapper in RendererManager::RendererInit().
 }
 
 GLMapFadePass::~GLMapFadePass()
@@ -70,7 +71,7 @@ GLMapFadePass::~GLMapFadePass()
     Shutdown();
 }
 
-bool GLMapFadePass::Init()
+bool GLMapFadePass::CompileShaders()
 {
     if (m_initialized)
         return true;
@@ -269,7 +270,7 @@ void GLMapFadePass::MarkDone()
 
 int32_t GLMapFadePass::StepFadeIn(int32_t step)
 {
-    if (!m_initialized && !Init())
+    if (!m_initialized)
     {
         WARNLOG("GLMapFadePass: GPU init failed, skipping fade");
         int32_t next = step + 4;
@@ -310,7 +311,7 @@ int32_t GLMapFadePass::StepFadeIn(int32_t step)
 
 int32_t GLMapFadePass::StepFadeOut(int32_t step)
 {
-    if (!m_initialized && !Init())
+    if (!m_initialized)
     {
         WARNLOG("GLMapFadePass: GPU init failed, skipping fade");
         int32_t next = step - 4;

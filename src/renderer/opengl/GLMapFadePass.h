@@ -33,10 +33,11 @@
 
 #include <glad/glad.h>
 #include "renderer/IMapFadePass.h"
+#include "renderer/opengl/IGLShaderCompilable.h"
 
 /******************************************************************************/
 
-class GLMapFadePass : public IMapFadePass {
+class GLMapFadePass : public IMapFadePass, public IGLShaderCompilable {
 public:
     GLMapFadePass();
     ~GLMapFadePass() override;
@@ -54,6 +55,14 @@ public:
     int32_t StepFadeOut(int32_t step) override;
 
     const char* GetName() const override { return "OPENGL"; }
+    const char* RendererName() const override { return "GLMapFadePass"; }
+
+    // ── IGLShaderCompilable ───────────────────────────────────────────────────
+
+    /** Compile the map-fade shader and initialise all GL resources.
+     *  Idempotent — returns true immediately if already initialised.
+     *  Called by the bootstrapper in RendererManager::RendererInit(). */
+    bool CompileShaders() override;
 
     // ── GPU compose hook ─────────────────────────────────────────────────────
 
@@ -72,7 +81,6 @@ public:
     void SetScreenSize(int w, int h) { m_screen_w = w; m_screen_h = h; }
 
 private:
-    bool Init();
     void Shutdown();
     bool CaptureAndUploadFrames();
     void MarkDone();
