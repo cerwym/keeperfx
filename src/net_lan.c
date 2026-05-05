@@ -3,7 +3,8 @@
 #include "bflib_basics.h"
 
 #include <enet6/enet.h>
-#include <SDL2/SDL.h>
+/* LbTimerClock forward-declared to avoid pulling bflib_datetm.h (includes C++ headers) */
+extern TbClockMSec (* LbTimerClock)(void);
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,7 +27,7 @@ struct LanSessionCache {
     int port;
     char name[SESSION_NAME_MAX_LEN];
     char lobby_id[SESSION_LOBBY_ID_MAX_LEN];
-    Uint32 last_seen_milliseconds;
+    TbClockMSec last_seen_milliseconds;
 };
 
 static struct LanSessionCache session_cache[LAN_SESSIONS_MAX];
@@ -38,7 +39,7 @@ static int joiner_socket_failed = 0;
 static char lan_hosted_name[SESSION_NAME_MAX_LEN] = {0};
 static char lan_hosted_lobby_id[SESSION_LOBBY_ID_MAX_LEN] = {0};
 static uint16_t lan_hosted_port = 0;
-static Uint32 last_broadcast_milliseconds = 0;
+static TbClockMSec last_broadcast_milliseconds = 0;
 
 static void socket_close(ENetSocket *socket)
 {
@@ -139,7 +140,7 @@ void lan_refresh_sessions(void)
             return;
         }
     }
-    Uint32 now = SDL_GetTicks();
+    TbClockMSec now = LbTimerClock();
     if (now - last_broadcast_milliseconds >= LAN_BROADCAST_INTERVAL_MS) {
         ENetAddress broadcast_address;
         enet_address_set_host_ip(&broadcast_address, "255.255.255.255");

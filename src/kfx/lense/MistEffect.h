@@ -23,6 +23,8 @@
 
 #ifdef PLATFORM_VITA
 #include "renderer/vita/VitaMistPass.h"
+#else
+#include "renderer/opengl/GLLensPass.h"
 #endif
 
 /******************************************************************************/
@@ -40,6 +42,10 @@ public:
     virtual IPostProcessPass* GetGPUPass() override {
         return m_gpu_pass.IsInitialized() ? &m_gpu_pass : nullptr;
     }
+#else
+    virtual IPostProcessPass* GetGPUPass() override {
+        return m_gl_pass_ready ? &m_gl_pass : nullptr;
+    }
 #endif
 
 private:
@@ -49,6 +55,9 @@ private:
 
 #ifdef PLATFORM_VITA
     VitaMistPass m_gpu_pass;
+#else
+    GLMistPass m_gl_pass;
+    bool m_gl_pass_ready = false;
 #endif
 };
 

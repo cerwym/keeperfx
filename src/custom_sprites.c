@@ -43,7 +43,7 @@
 // #define OUTER
 // #define INNER
 #if defined(OUTER) || defined(INNER)
-#include <SDL2/SDL.h>
+#include "bflib_datetm.h"
 #endif
 
 #ifndef PATH_MAX
@@ -1346,7 +1346,7 @@ collect_sprites(const char *path, unzFile zip, const char *blender_scene, struct
                     store_ksp_fc = context->ksp_first->FramesCount;
 #ifdef INNER
                 fprintf(stderr, "F:%s/%s\n", path, name);
-                fprintf(stderr, "A:%d\n", SDL_GetTicks());
+                fprintf(stderr, "A:%d\n", (int)LbTimerClock());
 #endif
                 if (!read_png_data(zip, path, context, name, is_fp, node, itm))
                 {
@@ -1362,7 +1362,7 @@ collect_sprites(const char *path, unzFile zip, const char *blender_scene, struct
                     return 1;
                 }
 #ifdef INNER
-                fprintf(stderr, "B:%d\n", SDL_GetTicks());
+                fprintf(stderr, "B:%d\n", (int)LbTimerClock());
 #endif
                 if (UNZ_OK != unzCloseCurrentFile(zip))
                 {

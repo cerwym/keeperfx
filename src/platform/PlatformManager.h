@@ -54,6 +54,8 @@ size_t      PlatformManager_GetPolyPoolSize(void);
 TbBool      PlatformManager_ForcesAllModesAvailable(void);
 /** Returns non-zero if the platform owns the display and bflib must not create an SDL window. */
 TbBool      PlatformManager_OwnsDisplay(void);
+/** Returns the refresh rate (Hz) of the display the game window is on, or 0 if unavailable. */
+int         PlatformManager_GetDisplayRefreshRate(void);
 
 #ifdef __cplusplus
 } // extern "C"

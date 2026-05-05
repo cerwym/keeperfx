@@ -48,12 +48,25 @@ public:
                         GLuint      palette_tex);
     ~GLWorldViewRenderer() override;
 
+    /** Update the fade table texture handle (set after game tables are loaded). */
+    void SetFadeTexture(GLuint tex) { m_fade_tex = tex; }
+
     // IWorldViewRenderer
     void BeginWorldPass(unsigned char* framebuf, int pitch, int w, int h,
                         int vp_x, int vp_y) override;
     void DrawIsometricView() override;
     void DrawFrontView(struct Camera* cam) override;
     const char* GetName() const override { return "GLWorldViewRenderer"; }
+    /** Notify of the full OS-window dimensions (not the world viewport).
+     *  Called by RendererOpenGL::BeginFrame() so that BeginHandSpriteRendering()
+     *  and gpu_execute_passes() do not need to read MyScreenWidth/Height directly. */
+    void SetFullScreenSize(int w, int h) { m_full_screen_w = w; m_full_screen_h = h; }
+
+    /** Supply the active 256-colour VGA palette (768 bytes: R,G,B × 256).
+     *  Called by RendererOpenGL::BeginFrame().  Eliminates the direct lbPalette read
+     *  so this renderer file no longer needs to include bflib_video.h for palette data. */
+    void SetPaletteSource(const uint8_t* palette) { m_palette_data = palette; }
+
     // Called by RendererOpenGL::EndFrame() to issue the accumulated draw list
     // after glClear() and before the CPU framebuffer blit overlay.
     void GPURenderNow();
@@ -124,6 +137,10 @@ private:
     bool append_triangle_compact(int sx0, int sy0, int u0, int v0, int shade0,
                                  int sx1, int sy1, int u1, int v1, int shade1,
                                  int sx2, int sy2, int u2, int v2, int shade2);
+
+    // Append a front-view textured quad (2 triangles = 6 vertices) from a BucketKindTexturedQuad.
+    // Converts the axis-aligned screen quad to WorldVertex format using the tile atlas.
+    bool append_frontview_quad(const struct BucketKindTexturedQuad* txquad);
 
     // Record the current tile batch as a deferred draw command; advances the
     // batch start pointer.  No GL calls are issued — everything is replayed
@@ -236,6 +253,11 @@ private:
     GLint  m_loc_shade_scale   = -1;  // u_shade_scale
     GLint  m_loc_shade_gamma   = -1;  // u_shade_gamma
     GLint  m_loc_lighting_mode = -1;  // u_lighting_mode (0=software-accurate, 1=modern)
+    GLint  m_loc_darkness_mode  = -1;  // u_darkness_mode (0=linear, 1=palette LUT, 2=fog)
+    GLint  m_loc_fade_table     = -1;  // sampler2D u_fade_table (unit 3)
+    GLint  m_loc_time           = -1;  // u_time (seconds, fog animation)
+    GLint  m_loc_fog_speed      = -1;  // u_fog_speed
+    GLint  m_loc_fog_density    = -1;  // u_fog_density
     GLint  m_loc_lightmap      = -1;  // usampler2D u_lightmap (unit 2)
     GLint  m_loc_tile_filter   = -1;  // u_tile_filter (0=nearest, 1=palette-correct bilinear)
     GLint  m_loc_missing_tile  = -1;  // u_missing_tile — diagnostic checkerboard when atlas absent
@@ -284,6 +306,14 @@ private:
     GLint  m_kspr_atlas_outline_loc_color        = -1;
     GLint  m_kspr_atlas_outline_loc_layer        = -1;
 
+    // Full OS-window dimensions — set by SetFullScreenSize(), used in
+    // BeginHandSpriteRendering() and gpu_execute_passes() for full-screen viewport.
+    int            m_full_screen_w = 0;
+    int            m_full_screen_h = 0;
+
+    // Active VGA palette (R,G,B × 256) — source pointer registered via SetPaletteSource by SetPaletteData(), eliminates lbPalette read.
+    const uint8_t* m_palette_data  = nullptr;
+
     // Per-frame state
     int            m_screen_w   = 0;
     int            m_screen_h   = 0;
@@ -293,6 +323,11 @@ private:
     int            m_pitch      = 0;       // staging buffer row stride (bytes)
     int            m_current_bucket = 0;   // bucket index being processed (used for depth z)
     float          m_current_sprite_z = 0.0f; // NDC depth for current bucket sprites
+
+    // Front-view state: when DrawFrontView() fills the draw list, sprites
+    // must use draw_frontview_3d_sprites_for_bucket() instead of draw_3d_sprites_for_bucket().
+    bool            m_frontview_active = false;
+    struct Camera*  m_frontview_cam    = nullptr;
 
     // CPU-side vertex staging buffer (dynamic VBO)
     static const int k_max_verts = 65536;   // ~21000 triangles per frame

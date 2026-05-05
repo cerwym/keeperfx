@@ -69,6 +69,20 @@ void UIRenderer_SubmitPanelSpriteRaw(int32_t x, int32_t y, int units_per_px, con
     ui->SubmitPanelSprite(x, y, units_per_px, h);
 }
 
+void UIRenderer_SubmitPanelSpriteWithBg(int32_t x, int32_t y, int units_per_px,
+                                        const struct TbSprite* spr, unsigned char bg_color_idx)
+{
+    IUIRenderer* ui = RendererGetUIRenderer();
+    if (!ui || !spr) return;
+    // Compute the sprite's on-screen dimensions.
+    int32_t w = ((int32_t)spr->SWidth  * units_per_px + 8) / 16;
+    int32_t h = ((int32_t)spr->SHeight * units_per_px + 8) / 16;
+    // Submit opaque background fill, then the sprite on top.
+    ui->SubmitSolidBox(x, y, w, h, bg_color_idx);
+    SpriteHandle sh = RendererResolveSprite(spr);
+    ui->SubmitPanelSprite(x, y, units_per_px, sh);
+}
+
 void UIRenderer_SubmitPanelSpriteRawColored(int32_t x, int32_t y, int units_per_px, const struct TbSprite* spr, unsigned char color_idx)
 {
     IUIRenderer* ui = RendererGetUIRenderer();
@@ -170,6 +184,7 @@ void UIRenderer_SubmitSolidBoxAlpha(int32_t x, int32_t y, int32_t w, int32_t h, 
 void UIRenderer_SetSlabTexture(void)
 {
     IUIRenderer* ui = RendererGetUIRenderer();
+    SYNCLOG("UIRenderer_SetSlabTexture: ui=%p gui_slab=%p", (void*)ui, (void*)gui_slab);
     if (ui && gui_slab)
         ui->UpdateSlabTexture(gui_slab, GUI_SLAB_DIMENSION);
 }
@@ -226,6 +241,12 @@ void UIRenderer_SetLayer(int layer)
 {
     IUIRenderer* ui = RendererGetUIRenderer();
     if (ui) ui->SetLayer(layer);
+}
+
+void UIRenderer_SetGameViewport(int x, int y, int w, int h)
+{
+    IUIRenderer* ui = RendererGetUIRenderer();
+    if (ui) ui->SetGameViewport(x, y, w, h);
 }
 
 void UIRenderer_DrawBack(void)

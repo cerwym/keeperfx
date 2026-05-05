@@ -34,6 +34,7 @@
 #endif
 
 #include "bflib_basics.h"
+#include "bflib_datetm.h"
 #include "globals.h"
 #include "bflib_video.h"
 #include "bflib_vidraw.h"      // LbSpriteDrawResized
@@ -181,7 +182,16 @@ void RendererNotifyGameTablesReady()
             ogl->init_fade_table_texture();
             GLUIRenderer* glui = dynamic_cast<GLUIRenderer*>(RendererGetUIRenderer());
             if (glui)
+            {
                 glui->SetFadeTexture(ogl->GetFadeTex());
+                glui->SetPaletteSource(lbPalette);  // palette is fully loaded by the time game tables are ready
+            }
+            GLWorldViewRenderer* glwr = dynamic_cast<GLWorldViewRenderer*>(s_worldViewRenderer);
+            if (glwr)
+            {
+                glwr->SetFadeTexture(ogl->GetFadeTex());
+                glwr->SetPaletteSource(lbPalette);  // palette is fully loaded by the time game tables are ready
+            }
         }
     }
 #endif
@@ -200,6 +210,14 @@ TbBool RendererSubmitTransparentBlit(const unsigned char* buf, int w, int h)
     IRenderer* rend = RendererGetActive();
     if (!rend) return false;
     return rend->SubmitTransparentBlit(buf, w, h) ? true : false;
+}
+
+void RendererDrawSwipeOverlay(struct TbSpriteSheet* sprites, int frame,
+                              int draw_lr, int engine_window_x)
+{
+    IRenderer* rend = RendererGetActive();
+    if (!rend) return;
+    rend->DrawSwipeOverlay(sprites, frame, draw_lr != 0, engine_window_x);
 }
 
 TbBool RendererSubmitOverheadMap(const unsigned char* tile_colors, int tiles_x, int tiles_y,
@@ -368,6 +386,7 @@ static IWorldViewRenderer* create_world_view_renderer(RendererType type)
                 ogl->GetTileAtlas(),
                 (GLuint)ogl->GetFadeTex(),
                 (GLuint)ogl->GetPaletteTex());
+            glwr->SetPaletteSource(lbPalette);  // address is always valid; contents may be zeroed until LbPaletteSet
             ogl->SetWorldRenderer(glwr);
             return glwr;
         }
@@ -383,7 +402,11 @@ static IMapFadePass* create_map_fade_pass(RendererType type)
 {
 #ifdef RENDERER_OPENGL_ENABLED
     if (type == RENDERER_OPENGL)
-        return new GLMapFadePass();
+    {
+        auto* glmf = new GLMapFadePass();
+        glmf->SetScreenSize(lbDisplay.PhysicalScreenWidth, lbDisplay.PhysicalScreenHeight);
+        return glmf;
+    }
 #endif
     (void)type;
     return new SoftwareMapFadePass();
@@ -455,6 +478,7 @@ static IUIRenderer* create_ui_renderer(RendererType type)
             glui->SetSpriteAtlas(ogl->GetSpriteAtlas());
             glui->SetFontAtlas(ogl->GetFontAtlas());
             glui->SetPaletteTexture(ogl->GetPaletteTex(), GL_TEXTURE_2D);
+            glui->SetPaletteSource(lbPalette);  // address is always valid; contents may be zeroed until LbPaletteSet
             // Fade texture set later by RendererNotifyGameTablesReady() after
             // render_fade_tables is loaded in setup_stuff().
             glui->SetScreenDimensions(lbDisplay.PhysicalScreenWidth, lbDisplay.PhysicalScreenHeight);
@@ -769,13 +793,13 @@ void RendererPresentFrame(void)
     if (ret == Lb_SUCCESS) {
 #if defined(VITA_PERF_LOG)
         {
-            static Uint32 _ef_accum = 0;
+            static TbClockMSec _ef_accum = 0;
             static int    _ef_cnt   = 0;
-            Uint32 _ef_t0 = SDL_GetTicks();
+            TbClockMSec _ef_t0 = LbTimerClock();
             RendererEndFrame();
-            _ef_accum += SDL_GetTicks() - _ef_t0;
+            _ef_accum += LbTimerClock() - _ef_t0;
             if (++_ef_cnt >= 60) {
-                JUSTLOG("[perf] EndFrame   avg %u ms/frame (60-frame window)", _ef_accum / 60u);
+                JUSTLOG("[perf] EndFrame   avg %d ms/frame (60-frame window)", (int)(_ef_accum / 60));
                 _ef_accum = 0; _ef_cnt = 0;
             }
         }
@@ -872,6 +896,17 @@ TbScreenCoord RendererPhysicalHeight(void) { return lbDisplay.PhysicalScreenHeig
 TbScreenCoord RendererScreenWidth(void)    { return lbDisplay.GraphicsScreenWidth;  }
 TbScreenCoord RendererScreenHeight(void)   { return lbDisplay.GraphicsScreenHeight; }
 unsigned char* RendererGetWScreen(void)    { return lbDisplay.WScreen; }
+
+void RendererSetWScreen(unsigned char* buf)
+{
+    lbDisplay.WScreen = buf;
+}
+
+void RendererSetScreenDimensions(int width, int height)
+{
+    lbDisplay.GraphicsScreenWidth  = width;
+    lbDisplay.GraphicsScreenHeight = height;
+}
 
 /******************************************************************************/
 /* Palette management (replaces LbPalette* functions)                         */

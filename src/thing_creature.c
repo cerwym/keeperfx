@@ -393,62 +393,13 @@ void draw_swipe_graphic(void)
         struct CreatureControl* cctrl = creature_control_get_from_thing(thing);
         if (instance_draws_possession_swipe(cctrl->instance_id))
         {
-            lbDisplay.DrawFlags = Lb_SPRITE_TRANSPAR4;
             long n = (int)cctrl->inst_turn * (5 << 8) / cctrl->inst_total_turns;
-            long allwidth = 0;
-            long i = max(((abs(n) >> 8) -1),0);
-            if (i >= SWIPE_SPRITE_FRAMES)
-                i = SWIPE_SPRITE_FRAMES-1;
-            const struct TbSprite* sprlist = get_sprite(swipe_sprites, SWIPE_SPRITES_X * SWIPE_SPRITES_Y * i);
-            if (sprlist == NULL)
-            {
-                ERRORLOG("Failed to draw swipe sprite for thing %d", (int)thing->index);
-                return;
-            }
-            const struct TbSprite* startspr = &sprlist[1];
-            const struct TbSprite* endspr = &sprlist[1];
-            for (n=0; n < SWIPE_SPRITES_X; n++)
-            {
-                allwidth += endspr->SWidth;
-                endspr++;
-            }
-            int units_per_px = (RendererPhysicalWidth() * 59 / 64) * 16 / allwidth;
-            int scrpos_y = (MyScreenHeight * 16 / units_per_px - (startspr->SHeight + endspr->SHeight)) / 2;
-            const struct TbSprite *spr;
-            int scrpos_x;
-            if (myplyr->swipe_sprite_drawLR)
-            {
-                int delta_y = sprlist[1].SHeight;
-                for (i=0; i < SWIPE_SPRITES_X*SWIPE_SPRITES_Y; i+=SWIPE_SPRITES_X)
-                {
-                    spr = &startspr[i];
-                    scrpos_x = ((MyScreenWidth + (2 * myplyr->engine_window_x)) * 16 / units_per_px - allwidth)/ 2;
-                    for (n=0; n < SWIPE_SPRITES_X; n++)
-                    {
-                        LbSpriteDrawResized(scrpos_x * units_per_px / 16, scrpos_y * units_per_px / 16, units_per_px, spr);
-                        scrpos_x += spr->SWidth;
-                        spr++;
-                    }
-                    scrpos_y += delta_y;
-                }
-            } else
-            {
-                lbDisplay.DrawFlags = Lb_SPRITE_TRANSPAR4 | Lb_SPRITE_FLIP_HORIZ;
-                for (i=0; i < SWIPE_SPRITES_X*SWIPE_SPRITES_Y; i+=SWIPE_SPRITES_X)
-                {
-                    spr = &sprlist[SWIPE_SPRITES_X+i];
-                    int delta_y = spr->SHeight;
-                    scrpos_x = (MyScreenWidth * 16 / units_per_px - allwidth) / 2;
-                    for (n=0; n < SWIPE_SPRITES_X; n++)
-                    {
-                        LbSpriteDrawResized(scrpos_x * units_per_px / 16, scrpos_y * units_per_px / 16, units_per_px, spr);
-                        scrpos_x += spr->SWidth;
-                        spr--;
-                    }
-                    scrpos_y += delta_y;
-                }
-            }
-            lbDisplay.DrawFlags = 0;
+            long frame = max(((abs(n) >> 8) - 1), 0);
+            if (frame >= SWIPE_SPRITE_FRAMES)
+                frame = SWIPE_SPRITE_FRAMES - 1;
+            RendererDrawSwipeOverlay(swipe_sprites, (int)frame,
+                                     myplyr->swipe_sprite_drawLR,
+                                     myplyr->engine_window_x);
             return;
         }
     }
@@ -4254,17 +4205,16 @@ void draw_creature_view(struct Thing *thing)
   struct PlayerInfo* player = get_my_player();
   struct Camera* render_cam = get_local_camera(&player->cameras[CamIV_FirstPerson]);
 
-  // When the GPU world renderer is active, skip the CPU lens-effect and swipe
-  // paths entirely.  Both write palette-index pixels into the staging buffer
-  // (lbDisplay.WScreen) which would then composite on top of the GPU-rendered
-  // world in EndFrame, causing double-drawing and flickering.
-  //
-  // The GPU renders the first-person view through engine() → FlushIsometricView
-  // just like the isometric view.  The lens distortion and swipe overlay are
-  // purely cosmetic CPU post-effects that will be replaced by GPU shaders later.
+  // GPU renderer path: world geometry is rendered by engine() → GPURenderNow()
+  // into either the default framebuffer or the lens scene FBO (depending on
+  // whether lens effects are active — managed by RendererOpenGL::EndFrame).
+  // Swipe overlay is submitted as a GPU texture via draw_swipe_graphic().
+  // CPU lens buffer redirect is skipped entirely — lens effects are applied
+  // as GPU post-process passes in EndFrame().
   if (RendererHasGPURenderPath())
   {
       engine(player, render_cam);
+      draw_swipe_graphic();
       return;
   }
 

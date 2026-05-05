@@ -106,6 +106,12 @@ private:
     
     int              m_screen_width;     // Screen width for NDC conversion
     int              m_screen_height;    // Screen height for NDC conversion
+
+    // Per-draw draw-state: set in Draw() before each TextLayout call, mutated
+    // in-place by FlushSegment control codes.  Replaces the lbDisplay.DrawFlags/
+    // DrawColour save/restore pattern — no global writes during rendering.
+    uint16_t         m_text_draw_flags  = 0;
+    uint8_t          m_text_draw_colour = 0;
     
     // Shader uniform locations
     int              m_loc_viewport;     // u_viewport uniform

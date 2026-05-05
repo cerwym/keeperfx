@@ -27,6 +27,8 @@ private:
     class IMapFadePass* m_mapFadePass = nullptr;
     class ITextRenderer* m_textRenderer = nullptr;
     class IUIRenderer* m_uiRenderer = nullptr;
+    int m_screenW = 0;
+    int m_screenH = 0;
 
 public:
     bool     Init() override;
@@ -36,6 +38,11 @@ public:
     void     ClearScreen(uint8_t colour_index) override;
     uint8_t* LockFramebuffer(int* out_pitch) override;
     void     UnlockFramebuffer() override;
+
+    // Swipe overlay — software renderer draws sprites directly to WScreen.
+    void     DrawSwipeOverlay(struct TbSpriteSheet* sprites, int frame,
+                              bool draw_lr, int engine_window_x) override;
+
     const char* GetName() const override;
     bool     SupportsRuntimeSwitch() const override;
 

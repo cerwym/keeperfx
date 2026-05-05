@@ -27,7 +27,8 @@
 #include "net_holepunch.h"
 #include "bflib_basics.h"
 
-#include <SDL2/SDL.h>
+/* LbTimerClock forward-declared to avoid pulling bflib_datetm.h (includes C++ headers) */
+extern TbClockMSec (* LbTimerClock)(void);
 #include <enet6/enet.h>
 #include <stdint.h>
 #include <string.h>
@@ -98,10 +99,10 @@ uint16_t holepunch_stun_query(ENetHost *host, char *output_ip, size_t output_ip_
         send_socket = fallback_socket;
     }
 
-    Uint32 timeout_deadline = SDL_GetTicks() + STUN_TIMEOUT_MS;
+    TbClockMSec timeout_deadline = LbTimerClock() + STUN_TIMEOUT_MS;
     uint16_t external_port_result = 0;
     for (;;) {
-        Uint32 now = SDL_GetTicks();
+        TbClockMSec now = LbTimerClock();
         if (now >= timeout_deadline)
             break;
         enet_uint32 socket_wait_flags = ENET_SOCKET_WAIT_RECEIVE;
@@ -173,7 +174,7 @@ static int send_and_burst(ENetSocket socket_handle, const ENetAddress *address, 
 void holepunch_punch_to(ENetHost *host, const ENetAddress *target)
 {
     static const uint8_t punch_payload[HOLE_PUNCH_PAYLOAD_SIZE] = {0};
-    static Uint32 last_failure_log_time = 0;
+    static TbClockMSec last_failure_log_time = 0;
     ENetBuffer send_buffer = {.data = (void *)punch_payload, .dataLength = sizeof(punch_payload)};
     if (send_and_burst(host->socket, target, &send_buffer))
         return;
@@ -183,8 +184,8 @@ void holepunch_punch_to(ENetHost *host, const ENetAddress *target)
         if (send_and_burst(host->socket, &mapped_target, &send_buffer))
             return;
     }
-    Uint32 current_time = SDL_GetTicks();
-    if (last_failure_log_time == 0 || SDL_TICKS_PASSED(current_time, last_failure_log_time + HOLE_PUNCH_LOG_INTERVAL_MS)) {
+    TbClockMSec current_time = LbTimerClock();
+    if (last_failure_log_time == 0 || current_time >= last_failure_log_time + HOLE_PUNCH_LOG_INTERVAL_MS) {
         last_failure_log_time = current_time;
         LbNetLog("Holepunch: send failed\n");
     }

@@ -26,6 +26,9 @@ public:
     void SetCursorVisible(bool visible) override;
     void WarpCursor(int x, int y) override;
 
+    // ----- Display info -----
+    int GetDisplayRefreshRate() const override;
+
     // PollInput is a no-op: SDL delivers mouse input via events.
 
 private:

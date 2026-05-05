@@ -203,7 +203,10 @@ extern "C" int platform_create_gl_context(void *sdl_window)
     // is needed.
     s_glContext = SDL_GL_CreateContext(window);
     if (!s_glContext)
+    {
+        LbWarnLog("platform_create_gl_context: SDL_GL_CreateContext failed: %s\n", SDL_GetError());
         return 0;
+    }
 
     SDL_GL_MakeCurrent(window, s_glContext);
 
@@ -263,4 +266,9 @@ extern "C" int platform_is_renderdoc_present(void)
 #else
     return 0;
 #endif
+}
+
+extern "C" void* platform_gl_get_proc_address(const char* proc)
+{
+    return SDL_GL_GetProcAddress(proc);
 }

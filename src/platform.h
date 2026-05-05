@@ -32,9 +32,17 @@ void PlatformManager_SetArgv(int argc, char** argv);
  *  Desktop: 16MB (original), Vita: 4MB (reduced for BSS). */
 size_t PlatformManager_GetPolyPoolSize(void);
 
+/** Returns the refresh rate (Hz) of the display the game window is on, or 0 if unavailable. */
+int PlatformManager_GetDisplayRefreshRate(void);
+
 /******************************************************************************/
 /* OpenGL context management (implemented per-platform for the GL backend)    */
 /******************************************************************************/
+
+/** Returns the address of an OpenGL function by name.
+ *  Wraps SDL_GL_GetProcAddress on SDL2 platforms.
+ *  Must only be called after a GL context has been created. */
+void* platform_gl_get_proc_address(const char* proc);
 
 /** Create an OpenGL context for the given SDL_Window.
  *  Sets the GL context as current on success.

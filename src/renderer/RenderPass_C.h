@@ -85,6 +85,19 @@ void RenderPass_OnSpriteSheetFreed(const struct TbSpriteSheet* sheet);
  */
 void RenderPass_OnPaletteSet(const unsigned char* palette);
 
+/**
+ * Temporarily suppress the GPU sprite submission path.
+ * While suspended, LbSpriteDrawScaled and friends rasterise to WScreen
+ * instead of submitting through the render pass backend.
+ * Must be paired with RenderPass_Resume().
+ */
+void RenderPass_Suspend(void);
+
+/**
+ * Re-enable the GPU sprite submission path after a RenderPass_Suspend().
+ */
+void RenderPass_Resume(void);
+
 #ifdef __cplusplus
 }
 #endif

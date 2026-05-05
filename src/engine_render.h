@@ -94,8 +94,11 @@ enum stripey_line_colors {
     STRIPEY_LINE_COLOR_COUNT // Must always be the last entry (add new colours above this line)
 };
 
+#define STRIPEY_COLORS  16  // number of palette entries per stripey line cycle
+#define LINE_BOX_SCALE  100 // line_box_size is stored as a percentage; divide by this to get multiplier
+
 struct stripey_line {
-    TbPixel stripey_line_color_array[16];
+    TbPixel stripey_line_color_array[STRIPEY_COLORS];
     unsigned int line_color;
 };
 
@@ -155,6 +158,42 @@ void frame_wibble_generate(void);
 void setup_rotate_stuff(long a1, long a2, long a3, long a4, long a5, long a6, long a7, long a8);
 
 void process_keeper_sprite(short x, short y, unsigned short a3, short kspr_angle, unsigned char a5, long a6);
+
+/** process_keeper_sprite wrapper that sets draw globals to specified values,
+ *  calls process_keeper_sprite, then restores them.
+ *  Allows renderer code to replay captured draw state without touching lbDisplay
+ *  or EngineSpriteDrawUsingAlpha directly.
+ *  @param draw_flags  lbDisplay.DrawFlags value to set during the call.
+ *  @param alpha       EngineSpriteDrawUsingAlpha value to set during the call. */
+void process_keeper_sprite_ex(short x, short y, unsigned short kspr_base,
+                               short kspr_angle, unsigned char sprgroup, long scale,
+                               unsigned int draw_flags, unsigned char alpha);
+
+/** Snapshot of engine projection and window globals saved before a temporary
+ *  re-render (e.g. GLMapFadePass FBO capture) and restored afterwards.
+ *  All fields must remain valid between save and restore. */
+struct EngineRenderState {
+    long    vec_w;       /* vec_window_width  */
+    long    vec_h;       /* vec_window_height */
+    Offset  vert[3];     /* vert_offset[0..2] */
+    Offset  hori[3];     /* hori_offset[0..2] */
+    long    x_init;      /* x_init_off        */
+    long    y_init;      /* y_init_off        */
+    /* Engine window rect (saved/restored via store/setup_engine_window). */
+    long    ewnd_x;
+    long    ewnd_y;
+    long    ewnd_w;
+    long    ewnd_h;
+};
+
+/** Save the engine projection/window state into @p s.
+ *  Does NOT call store_engine_window internally — the ewnd_* fields must be
+ *  filled by the caller via store_engine_window if needed, OR use
+ *  engine_save_render_state_full() which saves the engine window too. */
+void engine_save_render_state(struct EngineRenderState *s);
+
+/** Restore the engine projection/window state from @p s. */
+void engine_restore_render_state(const struct EngineRenderState *s);
 void draw_status_sprites(long a1, long a2, struct Thing *thing);
 void draw_map_volume_box(long cor1_x, long cor1_y, long cor2_x, long cor2_y, long floor_height_z, unsigned char color);
 
@@ -170,6 +209,10 @@ void display_fast_drawlist(struct Camera *cam);
 /** Draw only depth-positioned 3D entity sprites for one bucket.
  *  Called by GLWorldViewRenderer between gpu_flush() and RenderPass_DrawNow(). */
 void draw_3d_sprites_for_bucket(long bucket_num);
+
+/** Front-view equivalent of draw_3d_sprites_for_bucket().
+ *  Calls draw_fastview_mapwho() instead of draw_jonty_mapwho(). */
+void draw_frontview_3d_sprites_for_bucket(long bucket_num, struct Camera *cam);
 
 /** Draw all non-spatial sprites (shadows, selector, status, text, room flags)
  *  across all buckets into the CPU staging buffer. */

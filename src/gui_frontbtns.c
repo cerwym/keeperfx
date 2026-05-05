@@ -599,7 +599,8 @@ void gui_area_compsetting_button(struct GuiButton *gbtn)
     SYNCDBG(12,"Finished");
 }
 
-void gui_area_creatrmodel_button(struct GuiButton *gbtn)
+// Creature list panel icon — small creature head in the right-panel grid.
+void gui_area_creature_list_icon(struct GuiButton *gbtn)
 {
     SYNCDBG(10,"Starting");
     int spr_idx;

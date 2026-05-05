@@ -227,6 +227,14 @@ extern "C" TbBool PlatformManager_OwnsDisplay()
     return p ? p->OwnsDisplay() : false;
 }
 
+extern "C" int PlatformManager_GetDisplayRefreshRate()
+{
+    IPlatform* p = PlatformManager::Get();
+    if (!p) return 0;
+    IWindowSystem* ws = p->GetWindowSystem();
+    return ws ? ws->GetDisplayRefreshRate() : 0;
+}
+
 IAudioPlatform* PlatformManager_GetAudio()
 {
     IPlatform* p = PlatformManager::Get();

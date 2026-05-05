@@ -2244,6 +2244,50 @@ TbBool cmd_renderer_tile_filter(PlayerNumber plyr_idx, char* args)
     return true;
 }
 
+static const char* darkness_mode_name(int mode)
+{
+    switch (mode) {
+        case RENDERER_DARKNESS_LINEAR:  return "LINEAR";
+        case RENDERER_DARKNESS_PALETTE: return "PALETTE";
+        case RENDERER_DARKNESS_FOG:     return "FOG";
+        default:                        return "UNKNOWN";
+    }
+}
+
+TbBool cmd_renderer_darkness_mode(PlayerNumber plyr_idx, char* args)
+{
+    char* tok = strsep(&args, " ");
+    if (tok == NULL) {
+        targeted_message_add(MsgType_Player, plyr_idx, plyr_idx, GUI_MESSAGES_DELAY,
+            "renderer.darkness_mode = %s", darkness_mode_name(g_renderer_settings.darkness_mode));
+        return true;
+    }
+    int newmode;
+    if (strcasecmp(tok, "PALETTE") == 0 || strcmp(tok, "1") == 0)
+        newmode = RENDERER_DARKNESS_PALETTE;
+    else if (strcasecmp(tok, "FOG") == 0 || strcmp(tok, "2") == 0)
+        newmode = RENDERER_DARKNESS_FOG;
+    else
+        newmode = RENDERER_DARKNESS_LINEAR;
+    g_renderer_settings.darkness_mode = newmode;
+    RendererApplySettings(RendererGetSettings());
+    targeted_message_add(MsgType_Player, plyr_idx, plyr_idx, GUI_MESSAGES_DELAY,
+        "renderer.darkness_mode = %s", darkness_mode_name(newmode));
+    return true;
+}
+
+TbBool cmd_renderer_fog_speed(PlayerNumber plyr_idx, char* args)
+{
+    return cmd_renderer_float(plyr_idx, args,
+        &g_renderer_settings.fog_speed, "renderer.fog_speed", 0.0f, 10.0f);
+}
+
+TbBool cmd_renderer_fog_density(PlayerNumber plyr_idx, char* args)
+{
+    return cmd_renderer_float(plyr_idx, args,
+        &g_renderer_settings.fog_density, "renderer.fog_density", 0.0f, 1.0f);
+}
+
 TbBool cmd_renderer_zoom_box_mode(PlayerNumber plyr_idx, char* args)
 {
     char* tok = strsep(&args, " ");
@@ -2449,6 +2493,9 @@ static const struct ConsoleCommand console_commands[] = {
     { "renderer.shade_gamma",   cmd_renderer_shade_gamma },
     { "renderer.palette_mode",  cmd_renderer_palette_mode },
     { "renderer.tile_filter",    cmd_renderer_tile_filter },
+    { "renderer.darkness_mode",  cmd_renderer_darkness_mode },
+    { "renderer.fog_speed",      cmd_renderer_fog_speed },
+    { "renderer.fog_density",    cmd_renderer_fog_density },
     { "renderer.zoom_box_mode",  cmd_renderer_zoom_box_mode },
     { "creature.chicken", cmd_chicken_creature},
 };

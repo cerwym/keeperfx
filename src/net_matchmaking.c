@@ -19,6 +19,8 @@
 #include "pre_inc.h"
 #include "net_matchmaking.h"
 #include "bflib_basics.h"
+/* LbTimerClock forward-declared to avoid pulling bflib_datetm.h (includes C++ headers) */
+extern TbClockMSec (* LbTimerClock)(void);
 #include "net_lan.h"
 #include "ver_defs.h"
 
@@ -191,10 +193,10 @@ static int websocket_receive(char *response_buffer, size_t buffer_size, int time
         LbNetLog("Matchmaking: websocket_receive failed to get active socket\n");
         return -1;
     }
-    Uint32 timeout_deadline = SDL_GetTicks() + timeout_ms;
+    TbClockMSec timeout_deadline = LbTimerClock() + timeout_ms;
     while (1) {
         if (timeout_ms > 0) {
-            int time_remaining = (int)(timeout_deadline - SDL_GetTicks());
+            int time_remaining = (int)(timeout_deadline - LbTimerClock());
             if (time_remaining <= 0)
                 return 0;
             fd_set readable_sockets;
@@ -369,8 +371,8 @@ int matchmaking_connect(void)
 
 void matchmaking_disconnect(void)
 {
-    Uint32 wait_deadline = SDL_GetTicks() + CONNECT_TIMEOUT_MS * 3;
-    while (SDL_AtomicGet(&connect_thread_active) && SDL_GetTicks() < wait_deadline) {
+    TbClockMSec wait_deadline = LbTimerClock() + CONNECT_TIMEOUT_MS * 3;
+    while (SDL_AtomicGet(&connect_thread_active) && LbTimerClock() < wait_deadline) {
         SDL_Delay(10);
     }
     wait_for_public_ip_resolution();
@@ -491,9 +493,9 @@ int matchmaking_punch(const char *lobby_id, int udp_ipv4_port, int udp_ipv6_port
         return -1;
     }
     int bytes_received;
-    Uint32 timeout_deadline = SDL_GetTicks() + WEBSOCKET_RECEIVE_TIMEOUT_MS;
+    TbClockMSec timeout_deadline = LbTimerClock() + WEBSOCKET_RECEIVE_TIMEOUT_MS;
     while (1) {
-        int time_remaining = (int)(timeout_deadline - SDL_GetTicks());
+        int time_remaining = (int)(timeout_deadline - LbTimerClock());
         if (time_remaining <= 0) {
             LbNetLog("Matchmaking: punch failed - timeout\n");
             SDL_UnlockMutex(mutex);

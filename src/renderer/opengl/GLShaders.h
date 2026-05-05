@@ -324,14 +324,55 @@ flat in float v_layer;                  // texture array layer (atlas variation)
 uniform sampler2DArray u_tile_atlas;    // R8 palette-index atlas array (unit 0)
 uniform sampler2D  u_palette;           // RGBA8 256×1 palette (unit 1)
 uniform usampler2D u_lightmap;          // R16UI subtile_lightness map (unit 2), mode 1
+uniform sampler2D  u_fade_table;        // R8 256×256 fade/remap LUT (unit 3), palette mode
 uniform float      u_fullbright;        // 0=normal shading, 1=bypass shade
 uniform float      u_ambient;           // darkness floor added to shade [0,1]
 uniform float      u_shade_scale;       // brightness multiplier (1.0=original)
 uniform float      u_shade_gamma;       // shade curve exponent  (1.0=linear)
 uniform int        u_lighting_mode;     // 0=software-accurate, 1=modern (Phase 3+)
+uniform int        u_darkness_mode;     // 0=linear, 1=palette LUT, 2=animated fog
 uniform int        u_tile_filter;       // 0=nearest, 1=palette-correct bilinear
 uniform float      u_missing_tile;      // 1.0 = no valid atlas bound — show diagnostic
+uniform float      u_time;             // seconds since start (fog animation)
+uniform float      u_fog_speed;        // fog scroll speed multiplier
+uniform float      u_fog_density;      // fog opacity [0,1]
 out vec4 fragColor;
+
+// Simple 2D hash for procedural noise (fog mode)
+float hash21(vec2 p)
+{
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+}
+
+// Value noise with smooth interpolation
+float noise2d(vec2 p)
+{
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);  // smoothstep
+    float a = hash21(i);
+    float b = hash21(i + vec2(1.0, 0.0));
+    float c = hash21(i + vec2(0.0, 1.0));
+    float d = hash21(i + vec2(1.0, 1.0));
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+// Fractal Brownian Motion — 3 octaves
+float fbm(vec2 p)
+{
+    float v = 0.0;
+    float a = 0.5;
+    for (int i = 0; i < 3; i++)
+    {
+        v += a * noise2d(p);
+        p *= 2.0;
+        a *= 0.5;
+    }
+    return v;
+}
+
 void main()
 {
     // When the tile atlas slot is missing (atlas not yet loaded or variation out of
@@ -345,47 +386,94 @@ void main()
                      : vec4(0.0, 0.0, 0.0, 1.0);  // black
         return;
     }
-    // Sampling the R8 atlas with GL_LINEAR would interpolate palette *indices*,
-    // producing wrong colours.  For bilinear mode we instead manually sample the
-    // 4 neighbouring texels (GL_NEAREST), look each up in the palette, then lerp
-    // the resulting RGBA colours — palette-correct bilinear filtering.
-    vec4 col;
+
+    // --- Sample palette index from atlas (always needed) ---
+    float pal_idx;  // raw palette index [0,1] from R8 atlas
+    vec4  col;      // decoded RGBA colour
+
     if (u_tile_filter == 1) {
+        // Palette-correct bilinear: sample 4 neighbours, decode each, then lerp.
         vec2 tex_size = vec2(textureSize(u_tile_atlas, 0).xy);
         vec2 px   = v_uv * tex_size - 0.5;
         vec2 f    = fract(px);
         vec2 base = (floor(px) + 0.5) / tex_size;
         vec2 st   = 1.0 / tex_size;
         float layer = v_layer;
-        vec4 c00 = texture(u_palette, vec2(texture(u_tile_atlas, vec3(base, layer)).r, 0.5));
-        vec4 c10 = texture(u_palette, vec2(texture(u_tile_atlas, vec3(base + vec2(st.x, 0.0), layer)).r, 0.5));
-        vec4 c01 = texture(u_palette, vec2(texture(u_tile_atlas, vec3(base + vec2(0.0, st.y), layer)).r, 0.5));
-        vec4 c11 = texture(u_palette, vec2(texture(u_tile_atlas, vec3(base + st, layer)).r, 0.5));
+        float idx00 = texture(u_tile_atlas, vec3(base, layer)).r;
+        float idx10 = texture(u_tile_atlas, vec3(base + vec2(st.x, 0.0), layer)).r;
+        float idx01 = texture(u_tile_atlas, vec3(base + vec2(0.0, st.y), layer)).r;
+        float idx11 = texture(u_tile_atlas, vec3(base + st, layer)).r;
+        vec4 c00 = texture(u_palette, vec2(idx00, 0.5));
+        vec4 c10 = texture(u_palette, vec2(idx10, 0.5));
+        vec4 c01 = texture(u_palette, vec2(idx01, 0.5));
+        vec4 c11 = texture(u_palette, vec2(idx11, 0.5));
         col = mix(mix(c00, c10, f.x), mix(c01, c11, f.x), f.y);
+        pal_idx = idx00;  // centre texel for fade-table lookup
     } else {
-        col = texture(u_palette, vec2(texture(u_tile_atlas, vec3(v_uv, v_layer)).r, 0.5));
+        pal_idx = texture(u_tile_atlas, vec3(v_uv, v_layer)).r;
+        col = texture(u_palette, vec2(pal_idx, 0.5));
     }
-    float shade;
+
+    // --- Compute raw shade (fade table row) ---
+    // v_shade = (S>>16) / 32.0 where S = shade_intensity<<8.
+    // This directly maps to fade table rows: 0.0 = row 0 (black),
+    // 1.0 = row 32 (full brightness).  Used as-is for palette LUT modes.
+    float raw_shade;
     if (u_lighting_mode == 0) {
-        // Software-accurate: per-vertex Gouraud shade from the DK fade table.
-        // The fade table reaches 100% brightness at row 32; rows 33-62 are
-        // over-bright (clamped below).  v_shade = (S>>16) / 32.0.
-        shade = mix(v_shade, 1.0, u_fullbright);
-        shade = max(shade, u_ambient);
-        shade = pow(clamp(shade * u_shade_scale, 0.0, 1.0), u_shade_gamma);
+        raw_shade = mix(v_shade, 1.0, u_fullbright);
     } else {
-        // Modern lighting: per-fragment lightmap sample (Phase 3 placeholder).
-        // Samples the subtile_lightness map at normalised coords v_stl/511.
-        // lightness range 0..16128: 16128 / (32*256) = 8192, so dividing by
-        // 8192 gives ~1.97 for max brightness, clamped to 1.0 below.
         vec2 lm_uv  = v_stl / vec2(511.0, 511.0);
         uint lm_raw = texture(u_lightmap, lm_uv).r;
-        shade = float(lm_raw) / 8192.0;
-        shade = mix(shade, 1.0, u_fullbright);
-        shade = max(shade, u_ambient);
-        shade = pow(clamp(shade * u_shade_scale, 0.0, 1.0), u_shade_gamma);
+        raw_shade = float(lm_raw) / 8192.0;
+        raw_shade = mix(raw_shade, 1.0, u_fullbright);
     }
-    fragColor = vec4(col.rgb * shade, 1.0);
+
+    // --- Palette fade-table lookup (shared by PALETTE and FOG modes) ---
+    // Replicates the software renderer's pixmap.fade_tables[] exactly:
+    //   fade_tables[row * 256 + palette_index] → remapped palette index.
+    // Row 0 = fully dark, row 32 = full brightness (identity).
+    // The texture is 256 wide × 256 tall; first 64 rows are fade data.
+    float fade_row = raw_shade * 32.0;
+    float fade_v   = (clamp(fade_row, 0.0, 63.0) + 0.5) / 256.0;
+    float fade_u   = pal_idx;
+    float remapped = texture(u_fade_table, vec2(fade_u, fade_v)).r;
+    vec3 pal_color = texture(u_palette, vec2(remapped, 0.5)).rgb;
+
+    // --- Apply darkness mode ---
+    if (u_darkness_mode == 1)
+    {
+        // Palette LUT: exact software renderer output — no further processing.
+        fragColor = vec4(pal_color, 1.0);
+    }
+    else if (u_darkness_mode == 2)
+    {
+        // Animated fog: uses the palette LUT as the base colour (preserving
+        // the authentic green-tinted darkness), then overlays scrolling fog
+        // in dark areas for atmosphere.
+        float fog_mask = 1.0 - clamp(raw_shade, 0.0, 1.0);
+
+        if (fog_mask > 0.01)
+        {
+            vec2 fog_uv = gl_FragCoord.xy * 0.008
+                        + vec2(u_time * u_fog_speed * 0.4,
+                               u_time * u_fog_speed * 0.25);
+            float n = fbm(fog_uv);
+            vec3 fog_color = vec3(0.06, 0.10, 0.06);
+            float fog_alpha = smoothstep(0.25, 0.65, n) * fog_mask * u_fog_density;
+            fragColor = vec4(mix(pal_color, fog_color, fog_alpha), 1.0);
+        }
+        else
+        {
+            fragColor = vec4(pal_color, 1.0);
+        }
+    }
+    else
+    {
+        // LINEAR: classic linear RGB multiply with tuning knobs.
+        float shade = max(raw_shade, u_ambient);
+        shade = pow(clamp(shade * u_shade_scale, 0.0, 1.0), u_shade_gamma);
+        fragColor = vec4(col.rgb * shade, 1.0);
+    }
 }
 )glsl";
 
@@ -415,6 +503,109 @@ void main()
 }
 )glsl";
 
+// Passthrough blit shader — copies a texture to the screen (or another FBO).
+// Used to blit the final lens-processed scene to the default framebuffer.
+constexpr const char* PASSTHROUGH_FRAGMENT_SHADER = R"glsl(
+#version 330 core
+in  vec2 v_uv;
+out vec4 fragColor;
+uniform sampler2D u_texture;
+void main()
+{
+    fragColor = texture(u_texture, v_uv);
+}
+)glsl";
+
+// ── GPU Lens Effect Shaders ──────────────────────────────────────────────────
+
+// Displacement lens: distorts the scene using a sinusoidal displacement map.
+constexpr const char* LENS_DISPLACEMENT_FRAGMENT_SHADER = R"glsl(
+#version 330 core
+in  vec2 v_uv;
+out vec4 fragColor;
+uniform sampler2D u_texture;
+uniform float u_time;
+uniform float u_magnitude;
+uniform float u_period;
+void main()
+{
+    vec2 uv = v_uv;
+    float dx = sin(uv.y * u_period + u_time) * u_magnitude;
+    float dy = cos(uv.x * u_period + u_time * 0.7) * u_magnitude;
+    uv += vec2(dx, dy);
+    uv = clamp(uv, 0.0, 1.0);
+    fragColor = texture(u_texture, uv);
+}
+)glsl";
+
+// Mist lens: blends a fog colour over the scene based on a noise pattern.
+constexpr const char* LENS_MIST_FRAGMENT_SHADER = R"glsl(
+#version 330 core
+in  vec2 v_uv;
+out vec4 fragColor;
+uniform sampler2D u_texture;
+uniform float u_time;
+uniform vec4  u_mist_color;  // RGB + density
+void main()
+{
+    vec4 scene = texture(u_texture, v_uv);
+    // Simple animated noise-based fog
+    float n = fract(sin(dot(v_uv + u_time * 0.01, vec2(12.9898, 78.233))) * 43758.5453);
+    float fog = smoothstep(0.3, 0.7, n) * u_mist_color.a;
+    fragColor = mix(scene, vec4(u_mist_color.rgb, 1.0), fog * 0.4);
+}
+)glsl";
+
+// Flyeye lens: compound eye (hexagonal tiling) post-process effect.
+constexpr const char* LENS_FLYEYE_FRAGMENT_SHADER = R"glsl(
+#version 330 core
+in  vec2 v_uv;
+out vec4 fragColor;
+uniform sampler2D u_texture;
+uniform float u_hex_size;     // hexagon size in UV space
+uniform vec2  u_resolution;   // screen resolution
+void main()
+{
+    vec2 uv = v_uv;
+    // Hexagonal grid quantisation
+    float aspect = u_resolution.x / u_resolution.y;
+    vec2 hex_uv = uv * vec2(aspect, 1.0) / u_hex_size;
+    vec2 center = (floor(hex_uv) + 0.5) * u_hex_size / vec2(aspect, 1.0);
+    // Sample from hex cell center
+    fragColor = texture(u_texture, center);
+}
+)glsl";
+
+// Palette lens: colour shift via channel manipulation.
+constexpr const char* LENS_PALETTE_FRAGMENT_SHADER = R"glsl(
+#version 330 core
+in  vec2 v_uv;
+out vec4 fragColor;
+uniform sampler2D u_texture;
+uniform vec3 u_color_shift;   // per-channel multiplier
+void main()
+{
+    vec4 scene = texture(u_texture, v_uv);
+    fragColor = vec4(scene.rgb * u_color_shift, scene.a);
+}
+)glsl";
+
+// Overlay lens: composites an overlay texture with alpha blending.
+constexpr const char* LENS_OVERLAY_FRAGMENT_SHADER = R"glsl(
+#version 330 core
+in  vec2 v_uv;
+out vec4 fragColor;
+uniform sampler2D u_texture;     // scene
+uniform sampler2D u_overlay;     // overlay image
+uniform float u_overlay_alpha;   // blend factor
+void main()
+{
+    vec4 scene   = texture(u_texture, v_uv);
+    vec4 overlay = texture(u_overlay, v_uv);
+    fragColor = mix(scene, overlay, overlay.a * u_overlay_alpha);
+}
+)glsl";
+
 // Raw-image blit fragment shader.
 // Used by RendererOpenGL::BlitRaw8GPU() for frontend background images
 // (legal screen, loading screen, menu background, map background, etc.).
@@ -437,23 +628,82 @@ void main()
 )glsl";
 
 // Overhead map tile fragment shader.
-// Like RAWIMAGE_BLIT_FRAGMENT_SHADER but transparent (alpha=0) for palette
-// index 0, allowing the parchment background to show through for unrevealed
-// tiles.  Revealed solid tiles (rock, etc.) must supply a non-zero index so
-// they are rendered as opaque colour.  Blending must be enabled by the caller.
+// Input texture is RG8:
+//   R = palette index (direct) or ghost table texture row (ghost-shaded).
+//   G = operation type:
+//     0x00 = transparent (unrevealed — parchment shows through)
+//     0xFF = direct palette lookup on R
+//     0x01 = simple ghost:  palette[ ghost[R_row, parchment_col] ]
+//     0x02 = gems ghost:    palette[ 102 + (ghost[64, parchment_col] >> 6) ]
+//     0x03 = blink+gems:    palette[ ghost[R_row, parchment_col] + 2 ]
+// Ghost table rows in the fade texture are offset by +64 (rows 0-63 = fade).
+// Blending must be enabled by the caller.
 constexpr const char* OVERHEAD_MAP_FRAGMENT_SHADER = R"glsl(
 #version 330 core
 in  vec2 v_uv;
 out vec4 fragColor;
-uniform sampler2D u_index;    // R8  — 8-bit palette indices
-uniform sampler2D u_palette;  // RGBA8 — 256×1 palette
+uniform sampler2D u_index;      // RG8 — tile data (R=value, G=operation)
+uniform sampler2D u_palette;    // RGBA8 — 256×1 game palette
+uniform sampler2D u_fade;       // R8 256×256 — fade/ghost table
+uniform sampler2D u_parchment;  // R8 — parchment background (palette indices)
+uniform vec4  u_map_rect;       // (x0, y0, x1, y1) overhead map screen rect
+uniform vec2  u_screen_size;    // (width, height) for Y flip + parchment UV
+
 void main()
 {
-    float idx = texture(u_index, v_uv).r;
-    // Discard palette index 0: used as the "unrevealed" sentinel so the
-    // parchment background shows through those tiles.
-    if (idx < (0.5 / 255.0)) discard;
-    vec4 pal = texture(u_palette, vec2(idx, 0.5));
+    vec4 tile = texture(u_index, v_uv);
+    float r_raw = tile.r;   // R channel: palette index or ghost row
+    float g_raw = tile.g;   // G channel: operation type
+
+    // G ≈ 0 → transparent (unrevealed)
+    if (g_raw < (0.5 / 255.0)) discard;
+
+    int op = int(g_raw * 255.0 + 0.5);
+    int r_val = int(r_raw * 255.0 + 0.5);
+
+    float pal_idx;
+    if (op == 255)
+    {
+        // Direct palette lookup
+        pal_idx = r_raw;
+    }
+    else
+    {
+        // Ghost-table operation: sample parchment pixel at this fragment's
+        // screen position to get the background palette index.
+        // Parchment rawblit covers (0,0)–(screen_w,screen_h), so UV = frag / screen_size.
+        vec2 frag = vec2(gl_FragCoord.x, u_screen_size.y - gl_FragCoord.y);
+        vec2 parch_uv = frag / u_screen_size;
+        parch_uv = clamp(parch_uv, 0.0, 1.0);
+        float bg_idx = texture(u_parchment, parch_uv).r;
+        // bg_idx is in [0,1]; represents palette index 0-255.
+
+        if (op == 1)
+        {
+            // Simple ghost: ghost_table[row, bg_col] → palette index
+            float ghost_row = (float(r_val) + 0.5) / 256.0;
+            float ghost_col = bg_idx;  // already normalised
+            pal_idx = texture(u_fade, vec2(ghost_col, ghost_row)).r;
+        }
+        else if (op == 2)
+        {
+            // Gems: 102 + (ghost_table[64, bg_col] >> 6)
+            float ghost_row = (64.0 + 0.5) / 256.0;
+            float ghost_col = bg_idx;
+            float ghost_val = texture(u_fade, vec2(ghost_col, ghost_row)).r * 255.0;
+            pal_idx = (102.0 + floor(ghost_val / 64.0)) / 255.0;
+        }
+        else // op == 3
+        {
+            // Blink+gems: ghost_table[row, bg_col] + 2
+            float ghost_row = (float(r_val) + 0.5) / 256.0;
+            float ghost_col = bg_idx;
+            float ghost_val = texture(u_fade, vec2(ghost_col, ghost_row)).r * 255.0;
+            pal_idx = (ghost_val + 2.0) / 255.0;
+        }
+    }
+
+    vec4 pal = texture(u_palette, vec2(pal_idx, 0.5));
     fragColor = vec4(pal.rgb, 1.0);
 }
 )glsl";
@@ -468,7 +718,7 @@ constexpr const char* ZOOM_TILE_FRAGMENT_SHADER = R"glsl(
 #version 330 core
 in  vec2 v_uv;
 out vec4 fragColor;
-uniform sampler2D u_index;    // R8  — tile atlas (32×32 texels per tile)
+uniform sampler2DArray u_index;  // R8 tile atlas array (layer 0 = variation 0)
 uniform sampler2D u_palette;  // RGBA8 — 256×1 game palette
 uniform vec4  u_clip_rect;     // (x0, y0, x1, y1) in game screen pixels
 uniform float u_clip_radius;   // corner radius; < 0 = no clip
@@ -484,7 +734,7 @@ void main()
         float dist = length(max(d, 0.0)) - u_clip_radius;
         if (dist > 0.0) discard;
     }
-    float idx = texture(u_index, v_uv).r;
+    float idx = texture(u_index, vec3(v_uv, 0.0)).r;
     // Index 0 within tile data is a transparent/padding pixel — discard so the
     // parchment background or unrevealed fill shows through tile edges/borders.
     if (idx < (0.5 / 255.0)) discard;

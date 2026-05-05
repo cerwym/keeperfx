@@ -66,6 +66,11 @@ public:
      *  Called by RendererOpenGL::EndFrame() after the staging palette blit. */
     void RenderGPUComposePass() override;
 
+    /** Notify of current OS-window dimensions so CaptureAndUploadFrames()
+     *  does not need to read MyScreenWidth/Height directly.
+     *  Called by RendererOpenGL::BeginFrame(). */
+    void SetScreenSize(int w, int h) { m_screen_w = w; m_screen_h = h; }
+
 private:
     bool Init();
     void Shutdown();
@@ -88,6 +93,10 @@ private:
     float m_step       = 0.f;   ///< step recorded for RenderGPUComposePass() (interpolated)
     int  m_tex_w       = 0;
     int  m_tex_h       = 0;
+
+    // Full OS-window dimensions — set by SetScreenSize(), eliminates MyScreenWidth/Height reads.
+    int  m_screen_w    = 0;
+    int  m_screen_h    = 0;
 };
 
 /******************************************************************************/

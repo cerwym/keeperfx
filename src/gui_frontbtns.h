@@ -50,7 +50,7 @@ void gui_area_new_normal_button(struct GuiButton *gbtn);
 void gui_area_new_vertical_button(struct GuiButton *gbtn);
 void gui_area_new_null_button(struct GuiButton *gbtn);
 void gui_area_new_no_anim_button(struct GuiButton *gbtn);
-void gui_area_creatrmodel_button(struct GuiButton *gbtn);
+void gui_area_creature_list_icon(struct GuiButton *gbtn);
 void gui_area_compsetting_button(struct GuiButton *gbtn);
 void gui_area_no_anim_button(struct GuiButton *gbtn);
 void gui_area_normal_button(struct GuiButton *gbtn);

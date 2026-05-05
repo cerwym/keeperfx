@@ -1493,7 +1493,8 @@ void draw_name_box(long x, long y, int width, struct Thing *thing)
     }
 }
 
-void gui_creature_query_background1(struct GuiMenu *gmnu)
+// Large creature portrait displayed on query page 1.
+void gui_creature_portrait_large(struct GuiMenu *gmnu)
 {
     SYNCDBG(19,"Starting");
     int units_per_px = (gmnu->width * 16 + 140 / 2) / 140;
@@ -1509,7 +1510,7 @@ void gui_creature_query_background1(struct GuiMenu *gmnu)
         {
             const struct TbSprite* spr = get_button_sprite_for_player(spr_idx, ctrltng->owner);
             int bs_units_per_px = (gmnu->width * 35 / 100) * 16 / spr->SWidth;
-            UIRenderer_SubmitPanelSpriteRaw(portrt_x + 12 * units_per_px / 16, portrt_y + 12 * units_per_px / 16, bs_units_per_px, spr);
+            UIRenderer_SubmitPanelSpriteWithBg(portrt_x + 12 * units_per_px / 16, portrt_y + 12 * units_per_px / 16, bs_units_per_px, spr, 0);
         }
     }
     {
@@ -1519,7 +1520,8 @@ void gui_creature_query_background1(struct GuiMenu *gmnu)
     }
 }
 
-void gui_creature_query_background2(struct GuiMenu *gmnu)
+// Small creature icon on the state/stats query page.
+void gui_creature_query_icon(struct GuiMenu *gmnu)
 {
     SYNCDBG(19,"Starting");
     int units_per_px = (gmnu->width * 16 + 140 / 2) / 140;
@@ -1535,7 +1537,7 @@ void gui_creature_query_background2(struct GuiMenu *gmnu)
         {
             const struct TbSprite* spr = get_panel_sprite(spr_idx);
             int ps_units_per_px = (gmnu->width * 22 / 100) * 16 / spr->SWidth;
-            draw_gui_panel_sprite_left_player(nambox_x, nambox_y - 22*units_per_px/16, ps_units_per_px, spr_idx,ctrltng->owner);
+            draw_gui_panel_sprite_left_player(nambox_x, nambox_y - 22*units_per_px/16, ps_units_per_px, spr_idx, ctrltng->owner);
         }
     }
 }

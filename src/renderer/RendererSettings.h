@@ -68,6 +68,18 @@ extern "C" {
 #define RENDERER_ZBM_ISOMETRIC  1
 
 /* ---------------------------------------------------------------------------
+ * Darkness mode constants (darkness_mode field)
+ * ------------------------------------------------------------------------- */
+/** Linear RGB multiply — clean fade toward black.  Default. */
+#define RENDERER_DARKNESS_LINEAR     0
+/** Palette fade-table LUT — samples the original DK fade table on the GPU.
+ *  Reproduces the non-linear hue shifts of the software renderer. */
+#define RENDERER_DARKNESS_PALETTE    1
+/** Animated fog — dark areas receive a scrolling noise-based fog overlay
+ *  instead of a flat colour multiply.  Purely cosmetic enhancement. */
+#define RENDERER_DARKNESS_FOG        2
+
+/* ---------------------------------------------------------------------------
  * Lighting pipeline mode constants (lighting_mode field)
  * ------------------------------------------------------------------------- */
 /** Software-accurate lighting: per-vertex Gouraud shade from the DK fade table.
@@ -183,6 +195,21 @@ typedef struct RendererSettings {
      *  RENDERER_LIGHTING_MODERN (1) = GPU dynamic lighting: per-fragment lightmap
      *  sample + point light accumulation (requires modern renderer, Phase 3+). */
     int   lighting_mode;
+
+    /* --- Darkness mode --- */
+
+    /** How dark areas are shaded.
+     *  RENDERER_DARKNESS_LINEAR (0)  = linear RGB multiply (default).
+     *  RENDERER_DARKNESS_PALETTE (1) = palette fade-table LUT (software-accurate).
+     *  RENDERER_DARKNESS_FOG (2)     = animated fog effect on dark areas. */
+    int   darkness_mode;
+
+    /** Fog animation speed (darkness_mode == FOG only).  1.0 = default speed. */
+    float fog_speed;
+
+    /** Fog density / opacity (darkness_mode == FOG only).  Range [0,1].
+     *  0.0 = transparent; 1.0 = fully opaque fog.  Default: 0.4. */
+    float fog_density;
 
     /* --- Creature depth-fail outline --- */
 

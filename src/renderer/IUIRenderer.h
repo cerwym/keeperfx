@@ -162,6 +162,11 @@ public:
     /** End a world-depth-tested batch, returning to normal (depth-test OFF) rendering. */
     virtual void ClearWorldDepth() { }
 
+    /** Set the game viewport rect (screen pixels) for scissor-clipping layer-2
+     *  sprites.  Prevents world-depth sprites from bleeding onto the sidebar,
+     *  overhead map, or zoom box.  CPU default: no-op. */
+    virtual void SetGameViewport(int /*x*/, int /*y*/, int /*w*/, int /*h*/) { }
+
     /** Begin a top-overlay batch: subsequent submissions are drawn dead-last in the
      *  frame, on top of all other UI and world-depth elements (depth test OFF).
      *  Use for cursor-driven affordances (slab selector) that must never be

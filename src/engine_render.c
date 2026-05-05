@@ -5521,8 +5521,8 @@ static void draw_stripey_line(long x1,long y1,long x2,long y2,unsigned char line
     relative_window_b = RendererScreenHeight();
 
     // Set up parameters before starting the drawing loop
-    float custom_line_box_size = line_box_size / 100.0;
-    int line_thickness = max(1, (custom_line_box_size * units_per_pixel_best / 16.0) );
+    float custom_line_box_size = line_box_size / (float)LINE_BOX_SCALE;
+    int line_thickness = max(1, (custom_line_box_size * units_per_pixel_best / (float)UPP_BASE) );
 
     // Make the line slightly thinner when zoomed out
     line_thickness = LbLerp(line_thickness, 1, 1.0-hud_scale);
@@ -5541,9 +5541,9 @@ static void draw_stripey_line(long x1,long y1,long x2,long y2,unsigned char line
         //    Temporary Error message, this should never appear in the log, but if it does, then the line must have been clipped incorrectly
         //    WARNMSG("draw_stripey_line: Pixel rendered outside engine window. X: %d, Y: %d, window_width: %d, window_height %d, A1: %d, A2 %d, B1 %d, B2 %d, a_start: %d, a_end: %d, b_start: %d, rWA: %d", *x_coord, *y_coord, relative_window_width, relative_window_height, a1, a2, b1, b2, a_start, a_end, b_start, relative_window_a);
         //}
-        color_animation_position += LbLerp(1.0, 4.0, 1.0-hud_scale) * (16.0/units_per_pixel_best);
-        if (color_animation_position >= 16.0) {
-            color_animation_position -= 16.0;
+        color_animation_position += LbLerp(1.0, 4.0, 1.0-hud_scale) * ((float)STRIPEY_COLORS/units_per_pixel_best);
+        if (color_animation_position >= (float)STRIPEY_COLORS) {
+            color_animation_position -= (float)STRIPEY_COLORS;
         }
         color_index = max(0, (int)color_animation_position);
 
@@ -6689,6 +6689,33 @@ void draw_3d_sprites_for_bucket(long bucket_num)
                 if (cam->view_mode == PVM_IsoWibbleView || cam->view_mode == PVM_IsoStraightView)
                     draw_jonty_mapwho(item.jontySprite);
             }
+            break;
+        default:
+            break;
+        }
+    }
+}
+
+void draw_frontview_3d_sprites_for_bucket(long bucket_num, struct Camera *cam)
+{
+    union {
+        struct BasicQ *b;
+        struct BucketKindJontySprite *jontySprite;
+    } item;
+
+    render_fade_tables = pixmap.fade_tables;
+    render_ghost = pixmap.ghost;
+    render_alpha = (unsigned char *)&alpha_sprite_table;
+
+    for (item.b = buckets[bucket_num]; item.b != NULL; item.b = item.b->next)
+    {
+        switch (item.b->kind)
+        {
+        case QK_JontySprite:
+            draw_fastview_mapwho(cam, item.jontySprite);
+            break;
+        case QK_JontyISOSprite:
+            draw_fastview_mapwho(cam, item.jontySprite);
             break;
         default:
             break;
@@ -9223,6 +9250,7 @@ void draw_frontview_engine(struct Camera *cam)
     store_engine_window(&ewnd,pixel_size);
     RendererSetViewport(ewnd.x, ewnd.y, ewnd.width, ewnd.height);
     WorldViewRenderer_BeginWorldPass(lbDisplay.GraphicsWindowPtr, RendererScreenWidth(), ewnd.width, ewnd.height, ewnd.x, ewnd.y);
+    UIRenderer_SetGameViewport(ewnd.x, ewnd.y, ewnd.width, ewnd.height);
     clear_fast_bucket_list();
     store_engine_window(&ewnd,1);
     setup_engine_window(ewnd.x, ewnd.y, ewnd.width, ewnd.height);
@@ -9322,6 +9350,10 @@ void draw_frontview_engine(struct Camera *cam)
     }
 
     WorldViewRenderer_DrawFrontView(cam);
+
+    if (RendererGetActiveType() == RENDERER_OPENGL)
+        draw_nonspatial_sprites_gpu();
+
     RendererLoadViewport(&grwnd);
     cam->zoom = zoom_mem;//TODO [zoom] remove when all cam->zoom will be changed to camera_zoom
     SYNCDBG(9,"Finished");
@@ -9359,6 +9391,49 @@ int try_submit_keepersprite_to_render_system(long screen_x, long screen_y, long 
 {
     return WorldViewRenderer_SubmitKeeperSprite(screen_x, screen_y, screen_w, screen_h,
                                                sprite_data, src_w, src_h, draw_flags, remap);
+}
+
+/******************************************************************************/
+
+void process_keeper_sprite_ex(short x, short y, unsigned short kspr_base,
+                               short kspr_angle, unsigned char sprgroup, long scale,
+                               unsigned int draw_flags, unsigned char alpha)
+{
+    unsigned int  saved_flags = lbDisplay.DrawFlags;
+    unsigned char saved_alpha = EngineSpriteDrawUsingAlpha;
+    lbDisplay.DrawFlags        = draw_flags;
+    EngineSpriteDrawUsingAlpha = alpha;
+    process_keeper_sprite(x, y, kspr_base, kspr_angle, sprgroup, scale);
+    lbDisplay.DrawFlags        = saved_flags;
+    EngineSpriteDrawUsingAlpha = saved_alpha;
+}
+
+void engine_save_render_state(struct EngineRenderState *s)
+{
+    s->vec_w   = vec_window_width;
+    s->vec_h   = vec_window_height;
+    s->vert[0] = vert_offset[0]; s->vert[1] = vert_offset[1]; s->vert[2] = vert_offset[2];
+    s->hori[0] = hori_offset[0]; s->hori[1] = hori_offset[1]; s->hori[2] = hori_offset[2];
+    s->x_init  = x_init_off;
+    s->y_init  = y_init_off;
+    /* Engine window saved inline — avoid a heap allocation for TbGraphicsWindow. */
+    TbGraphicsWindow ewnd;
+    store_engine_window(&ewnd, 1);
+    s->ewnd_x = ewnd.x;
+    s->ewnd_y = ewnd.y;
+    s->ewnd_w = ewnd.width;
+    s->ewnd_h = ewnd.height;
+}
+
+void engine_restore_render_state(const struct EngineRenderState *s)
+{
+    vec_window_width  = s->vec_w;
+    vec_window_height = s->vec_h;
+    vert_offset[0] = s->vert[0]; vert_offset[1] = s->vert[1]; vert_offset[2] = s->vert[2];
+    hori_offset[0] = s->hori[0]; hori_offset[1] = s->hori[1]; hori_offset[2] = s->hori[2];
+    x_init_off = s->x_init;
+    y_init_off = s->y_init;
+    setup_engine_window(s->ewnd_x, s->ewnd_y, s->ewnd_w, s->ewnd_h);
 }
 
 /******************************************************************************/

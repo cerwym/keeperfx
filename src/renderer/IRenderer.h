@@ -23,6 +23,7 @@
 // Forward declarations
 class IWorldViewRenderer;
 class IMapFadePass;
+struct TbSpriteSheet;
 class ITextRenderer;
 class IUIRenderer;
 
@@ -190,6 +191,21 @@ public:
         (void)buf; (void)w; (void)h;
         return false;
     }
+
+    /** Draw the creature swipe overlay in possession mode.
+     *
+     *  Each backend renders the swipe sprite grid (3x2, 5 frames) in its own
+     *  way: the software renderer draws directly to WScreen; GPU backends
+     *  render to an internal scratch buffer and upload the result as a
+     *  palette-indexed texture for compositing in EndFrame().
+     *
+     *  @param sprites         The loaded swipe sprite sheet.
+     *  @param frame           Frame index (0 – SWIPE_SPRITE_FRAMES-1).
+     *  @param draw_lr         true = left-to-right, false = right-to-left (mirrored).
+     *  @param engine_window_x Engine viewport X offset (for centering in LR mode). */
+    virtual void DrawSwipeOverlay(struct TbSpriteSheet* sprites, int frame,
+                                  bool draw_lr, int engine_window_x)
+    { (void)sprites; (void)frame; (void)draw_lr; (void)engine_window_x; }
 
     /** GPU path for the overhead (parchment) map tile colours.
      *

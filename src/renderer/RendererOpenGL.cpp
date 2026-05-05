@@ -18,20 +18,28 @@
 #include "renderer/opengl/GLSpriteAtlas.h"
 #include "renderer/opengl/GLWorldViewRenderer.h"
 #include "renderer/opengl/GLUIRenderer.h"
+#include "renderer/opengl/GLTextRenderer.h"
+#include "renderer/opengl/GLMapFadePass.h"
+#include "renderer/opengl/GLShaders.h"
 #include "renderer/opengl/GLShaderLoader.h"
+#include "renderer/opengl/GLLensPass.h"
 #include "kfx/profiling/KfxProfiling.h"
+#include "kfx/lense/LensManager.h"
+#include "kfx/lense/LensEffect.h"
+#include "renderer/IPostProcessPass.h"
 
 #include "bflib_video.h"    // lbDisplay, lbPaletteColors, MyScreenWidth/Height
 #include "bflib_render.h"   // render_fade_tables
-#include "bflib_vidraw.h"   // vec_window_width/height (PiP projection override)
+#include "bflib_vidraw.h"   // vec_window_width/height (PiP projection override), LbSpriteDrawResized
+#include "bflib_sprite.h"   // TbSpriteSheet, get_sprite
 #include "platform.h"       // platform_create_gl_context / swap / destroy
 #include "renderer/RenderPass_C.h"
 #include "engine_textures.h" // update_animating_texture_maps()
 #include "engine_render.h"   // draw_view()
 #include "engine_redraw.h"   // setup_engine_window / store_engine_window (PiP viewport)
+#include "engine_lenses.h"   // lens_mode
 
 #include <glad/glad.h>
-#include <SDL2/SDL.h>
 #include <cstring>
 #include "post_inc.h"
 
@@ -85,12 +93,12 @@ bool RendererOpenGL::Init()
     // Create GL context (SDL2-based on desktop; see platform_gl_sdl2.cpp)
     if (!platform_create_gl_context(lbWindow))
     {
-        ERRORLOG("RendererOpenGL::Init: failed to create GL context: %s", SDL_GetError());
+        ERRORLOG("RendererOpenGL::Init: failed to create GL context");
         return false;
     }
 
     // Load GL function pointers via glad
-    if (!gladLoadGLLoader((GLADloadproc)SDL_GL_GetProcAddress))
+    if (!gladLoadGLLoader((GLADloadproc)platform_gl_get_proc_address))
     {
         ERRORLOG("RendererOpenGL::Init: glad failed to load GL function pointers");
         platform_destroy_gl_context();
@@ -247,8 +255,12 @@ bool RendererOpenGL::Init()
                 if (ok)
                 {
                     glUseProgram(m_overhead_map_shader);
-                    glUniform1i(glGetUniformLocation(m_overhead_map_shader, "u_index"),   0);
-                    glUniform1i(glGetUniformLocation(m_overhead_map_shader, "u_palette"), 1);
+                    glUniform1i(glGetUniformLocation(m_overhead_map_shader, "u_index"),     0);
+                    glUniform1i(glGetUniformLocation(m_overhead_map_shader, "u_palette"),   1);
+                    glUniform1i(glGetUniformLocation(m_overhead_map_shader, "u_fade"),      2);
+                    glUniform1i(glGetUniformLocation(m_overhead_map_shader, "u_parchment"), 3);
+                    m_omap_loc_map_rect    = glGetUniformLocation(m_overhead_map_shader, "u_map_rect");
+                    m_omap_loc_screen_size = glGetUniformLocation(m_overhead_map_shader, "u_screen_size");
                     KFX_GL_LABEL(GL_PROGRAM, m_overhead_map_shader, "OverheadMap/Program");
                 }
                 else
@@ -514,6 +526,23 @@ void RendererOpenGL::Shutdown()
     }
     m_pip_fbos.clear();
 
+    // Lens post-process FBOs
+    if (m_lens_scene_fbo)      { glDeleteFramebuffers(1, &m_lens_scene_fbo);       m_lens_scene_fbo = 0; }
+    if (m_lens_scene_tex)      { glDeleteTextures(1, &m_lens_scene_tex);           m_lens_scene_tex = 0; }
+    if (m_lens_scene_depth_rb) { glDeleteRenderbuffers(1, &m_lens_scene_depth_rb); m_lens_scene_depth_rb = 0; }
+    if (m_lens_pass_fbo_a)     { glDeleteFramebuffers(1, &m_lens_pass_fbo_a);      m_lens_pass_fbo_a = 0; }
+    if (m_lens_pass_tex_a)     { glDeleteTextures(1, &m_lens_pass_tex_a);          m_lens_pass_tex_a = 0; }
+    if (m_lens_pass_fbo_b)     { glDeleteFramebuffers(1, &m_lens_pass_fbo_b);      m_lens_pass_fbo_b = 0; }
+    if (m_lens_pass_tex_b)     { glDeleteTextures(1, &m_lens_pass_tex_b);          m_lens_pass_tex_b = 0; }
+    if (m_passthrough_shader)  { glDeleteProgram(m_passthrough_shader);             m_passthrough_shader = 0; }
+    m_lens_fbo_w = 0;
+    m_lens_fbo_h = 0;
+
+    // Swipe overlay shader + VAO/VBO
+    if (m_swipe_shader) { glDeleteProgram(m_swipe_shader); m_swipe_shader = 0; }
+    if (m_swipe_vao)    { glDeleteVertexArrays(1, &m_swipe_vao); m_swipe_vao = 0; }
+    if (m_swipe_vbo)    { glDeleteBuffers(1, &m_swipe_vbo); m_swipe_vbo = 0; }
+
     platform_destroy_gl_context();
 }
 
@@ -527,6 +556,36 @@ bool RendererOpenGL::BeginFrame()
     // Idempotent: multiple RendererLockScreen calls per frame must not clear the UI queue again.
     if (m_frame_begun) return true;
     m_frame_begun = true;
+
+    // Refresh cached screen dimensions — screen mode may have changed since Init().
+    if (MyScreenWidth > 0 && MyScreenHeight > 0)
+    {
+        m_screenW = (int)MyScreenWidth;
+        m_screenH = (int)MyScreenHeight;
+    }
+
+    // Push current screen size and palette to sub-renderers so they never need
+    // to read MyScreenWidth/MyScreenHeight or lbPalette directly.
+    {
+        GLWorldViewRenderer* glwr = dynamic_cast<GLWorldViewRenderer*>(m_world_renderer);
+        if (glwr)
+        {
+            glwr->SetFullScreenSize(m_screenW, m_screenH);
+            glwr->SetPaletteSource(lbPalette);
+        }
+        GLUIRenderer* glui = dynamic_cast<GLUIRenderer*>(m_uiRenderer);
+        if (glui)
+        {
+            glui->SetScreenDimensions(m_screenW, m_screenH);
+            glui->SetPaletteSource(lbPalette);
+        }
+        GLTextRenderer* glt = dynamic_cast<GLTextRenderer*>(m_textRenderer);
+        if (glt)
+            glt->SetScreenSize(m_screenW, m_screenH);
+        GLMapFadePass* glmf = dynamic_cast<GLMapFadePass*>(m_mapFadePass);
+        if (glmf)
+            glmf->SetScreenSize(m_screenW, m_screenH);
+    }
 
     // Lazy-retry resources that depend on level data loaded after Init().
     if (m_tile_atlas && !m_tile_atlas->IsInitialized())
@@ -626,12 +685,14 @@ bool RendererOpenGL::BeginFrame()
  *  ============================================================ */
 void RendererOpenGL::EndFrame()
 {
-    // ── Flicker diagnostic: detect double-present (EndFrame without BeginFrame) ──
+    // ── Flicker diagnostic: per-frame pipeline tracking ──
     {
         static int s_ef_count = 0;
         ++s_ef_count;
+
         if (!m_frame_begun) {
-            SYNCLOG("FLICKER-DIAG: EndFrame WITHOUT BeginFrame (frame %d) — UI queues are stale/empty", s_ef_count);
+            SYNCLOG("FLICKER-DIAG-ENDFRAME[%d]: WITHOUT BeginFrame — UI queues empty",
+                    s_ef_count);
         }
     }
 
@@ -669,12 +730,59 @@ void RendererOpenGL::EndFrame()
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     m_clearColourIndex = 0; // reset to black; caller must call ClearScreen() each frame if non-zero
 
+    // ── Lens FBO redirect ────────────────────────────────────────────────────
+    // When in possession mode (lens_mode == 2) and lens effects are active,
+    // redirect world rendering to the lens scene FBO so GPU post-process
+    // passes can operate on the result before it reaches the screen.
+    m_lens_active = false;
+    {
+        LensManager* lm = LensManager::GetInstance();
+        if (lens_mode == 2 && lm && lm->IsReady())
+        {
+            // Check if any effect actually provides a GPU pass
+            bool has_gpu_pass = false;
+            for (LensEffect* e : lm->GetEffects())
+            {
+                if (e->IsEnabled() && e->GetGPUPass())
+                {
+                    has_gpu_pass = true;
+                    break;
+                }
+            }
+            if (has_gpu_pass)
+            {
+                EnsureLensFBOs();
+                if (m_lens_scene_fbo)
+                {
+                    glBindFramebuffer(GL_FRAMEBUFFER, m_lens_scene_fbo);
+                    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+                    m_lens_active = true;
+                }
+            }
+        }
+    }
+
     // Render GPU world geometry + depth-correct sprites.
     // Runs BEFORE the staging buffer upload so both layers composite correctly.
+    // When m_lens_active, output goes to m_lens_scene_fbo instead of default FB.
     if (m_world_renderer)
     {
         m_world_renderer->GPURenderNow();
     }
+
+    // Draw swipe-overlay quads while the lens FBO is still bound,
+    // so they sit on top of world geometry and get lens-distorted.
+    FlushSwipeQuads();
+
+    // If lens FBO was active, apply GPU post-process passes and blit result
+    // back to the default framebuffer.
+    if (m_lens_active)
+    {
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        ApplyLensGPUPasses();
+        m_lens_active = false;
+    }
+
     // GL error check after world pass
     {
         GLenum err = glGetError();
@@ -783,28 +891,40 @@ void RendererOpenGL::EndFrame()
         glDisable(GL_DEPTH_TEST);
         glDepthMask(GL_FALSE);
 
+        // Unit 0: RG8 tile data (R=value, G=operation)
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, m_overhead_map_tex);
-        // Tile rows are tightly packed (1 byte each).  Map width is arbitrary
-        // and not guaranteed to be a multiple of 4, so override GL's default
-        // 4-byte row alignment to avoid row-start drift.
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
         if (cmd.tiles_x != m_overhead_map_tex_w || cmd.tiles_y != m_overhead_map_tex_h)
         {
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, cmd.tiles_x, cmd.tiles_y,
-                         0, GL_RED, GL_UNSIGNED_BYTE, cmd.pixels.data());
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RG8, cmd.tiles_x, cmd.tiles_y,
+                         0, GL_RG, GL_UNSIGNED_BYTE, cmd.pixels.data());
             m_overhead_map_tex_w = cmd.tiles_x;
             m_overhead_map_tex_h = cmd.tiles_y;
         }
         else
         {
             glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, cmd.tiles_x, cmd.tiles_y,
-                            GL_RED, GL_UNSIGNED_BYTE, cmd.pixels.data());
+                            GL_RG, GL_UNSIGNED_BYTE, cmd.pixels.data());
         }
         glPixelStorei(GL_UNPACK_ALIGNMENT, 4);  // restore default
 
+        // Unit 1: palette
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, m_texPalette);
+
+        // Unit 2: fade/ghost table
+        if (m_texFade) {
+            glActiveTexture(GL_TEXTURE2);
+            glBindTexture(GL_TEXTURE_2D, m_texFade);
+        }
+
+        // Unit 3: parchment background (reuse rawblit tex — contains the last
+        // uploaded parchment image which is still valid on the GPU)
+        if (m_rawblit_tex) {
+            glActiveTexture(GL_TEXTURE3);
+            glBindTexture(GL_TEXTURE_2D, m_rawblit_tex);
+        }
 
         const float sw = (float)m_screenW;
         const float sh = (float)m_screenH;
@@ -825,12 +945,21 @@ void RendererOpenGL::EndFrame()
         glBufferData(GL_ARRAY_BUFFER, sizeof(verts), nullptr, GL_DYNAMIC_DRAW);
         glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(verts), verts);
 
-        // Use the overhead-map shader (discards index 0 = unrevealed tiles) so
-        // the parchment background shows through unrevealed/undug areas.
         GLuint prog = m_overhead_map_shader ? m_overhead_map_shader : m_rawblit_shader;
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         glUseProgram(prog);
+
+        // Set per-draw uniforms for the ghost-table shader
+        if (m_overhead_map_shader && prog == m_overhead_map_shader) {
+            if (m_omap_loc_screen_size >= 0)
+                glUniform2f(m_omap_loc_screen_size, sw, sh);
+            if (m_omap_loc_map_rect >= 0)
+                glUniform4f(m_omap_loc_map_rect,
+                            (float)cmd.dst_x, (float)cmd.dst_y,
+                            (float)(cmd.dst_x + cmd.dst_w), (float)(cmd.dst_y + cmd.dst_h));
+        }
+
         glDrawArrays(GL_TRIANGLES, 0, 6);
         glDisable(GL_BLEND);
         glBindVertexArray(0);
@@ -1259,6 +1388,19 @@ void RendererOpenGL::EndFrame()
     // top of every other rendered layer including possession/death-flash tints.
     CursorLayer_Draw();
 
+    // ── Pre-swap GL error audit ──
+    {
+        GLenum err;
+        int errcount = 0;
+        while ((err = glGetError()) != GL_NO_ERROR) {
+            if (++errcount <= 5) {
+                static int s_preswap_frame = 0;
+                ++s_preswap_frame;
+                SYNCLOG("FLICKER-DIAG-PRESWAP[%d]: GL error 0x%X before swap", s_preswap_frame, err);
+            }
+        }
+    }
+
     RenderPass_EndFrame();
     platform_swap_gl_buffers(lbWindow);
 
@@ -1386,11 +1528,339 @@ bool RendererOpenGL::SubmitTransparentBlit(const uint8_t* buf, int w, int h)
     return true;
 }
 
+void RendererOpenGL::DrawSwipeOverlay(struct TbSpriteSheet* sprites, int frame,
+                                     bool draw_lr, int engine_window_x)
+{
+    if (!m_sprite_atlas)
+        return;
+
+    static const int SPRITES_X = 3;
+    static const int SPRITES_Y = 2;
+
+    const struct TbSprite* sprlist = get_sprite(sprites, SPRITES_X * SPRITES_Y * frame);
+    if (!sprlist)
+        return;
+
+    int scr_w = m_screenW;
+    int scr_h = m_screenH;
+
+    // Compute the sprite layout (positions + scale)
+    const struct TbSprite* startspr = &sprlist[1];
+    const struct TbSprite* endspr   = &sprlist[1];
+    long allwidth = 0;
+    for (int n = 0; n < SPRITES_X; n++)
+    {
+        allwidth += endspr->SWidth;
+        endspr++;
+    }
+    int units_per_px = (RendererPhysicalWidth() * 59 / 64) * 16 / allwidth;
+    int scrpos_y = (scr_h * 16 / units_per_px - (startspr->SHeight + endspr->SHeight)) / 2;
+    const float alpha = 0.333f; // Lb_SPRITE_TRANSPAR4
+
+    // Record sprite quads as raw vertex data for FlushSwipeQuads().
+    auto push_quad = [&](float px, float py, float pw, float ph,
+                         float u0, float v0, float u1, float v1)
+    {
+        // Two triangles: TL, TR, BR, TL, BR, BL
+        m_swipe_verts.push_back({px,      py,      u0, v0, 1,1,1, alpha});
+        m_swipe_verts.push_back({px + pw, py,      u1, v0, 1,1,1, alpha});
+        m_swipe_verts.push_back({px + pw, py + ph, u1, v1, 1,1,1, alpha});
+        m_swipe_verts.push_back({px,      py,      u0, v0, 1,1,1, alpha});
+        m_swipe_verts.push_back({px + pw, py + ph, u1, v1, 1,1,1, alpha});
+        m_swipe_verts.push_back({px,      py + ph, u0, v1, 1,1,1, alpha});
+    };
+
+    if (draw_lr)
+    {
+        int delta_y = sprlist[1].SHeight;
+        for (int i = 0; i < SPRITES_X * SPRITES_Y; i += SPRITES_X)
+        {
+            const struct TbSprite* spr = &startspr[i];
+            int scrpos_x = ((scr_w + (2 * engine_window_x)) * 16 / units_per_px - allwidth) / 2;
+            for (int n = 0; n < SPRITES_X; n++)
+            {
+                SpriteUV uv;
+                if (m_sprite_atlas->GetUV(spr, uv))
+                {
+                    float pw = (float)((uv.pixel_w * units_per_px + 8) / 16);
+                    float ph = (float)((uv.pixel_h * units_per_px + 8) / 16);
+                    float px = (float)(scrpos_x * units_per_px / 16);
+                    float py = (float)(scrpos_y * units_per_px / 16);
+                    push_quad(px, py, pw, ph, uv.u0, uv.v0, uv.u1, uv.v1);
+                }
+                scrpos_x += spr->SWidth;
+                spr++;
+            }
+            scrpos_y += delta_y;
+        }
+    }
+    else
+    {
+        for (int i = 0; i < SPRITES_X * SPRITES_Y; i += SPRITES_X)
+        {
+            const struct TbSprite* spr = &sprlist[SPRITES_X + i];
+            int delta_y = spr->SHeight;
+            int scrpos_x = (scr_w * 16 / units_per_px - allwidth) / 2;
+            for (int n = 0; n < SPRITES_X; n++)
+            {
+                SpriteUV uv;
+                if (m_sprite_atlas->GetUV(spr, uv))
+                {
+                    float pw = (float)((uv.pixel_w * units_per_px + 8) / 16);
+                    float ph = (float)((uv.pixel_h * units_per_px + 8) / 16);
+                    float px = (float)(scrpos_x * units_per_px / 16);
+                    float py = (float)(scrpos_y * units_per_px / 16);
+                    // flip_horiz: swap u0/u1
+                    push_quad(px, py, pw, ph, uv.u1, uv.v0, uv.u0, uv.v1);
+                }
+                scrpos_x += spr->SWidth;
+                spr--;
+            }
+            scrpos_y += delta_y;
+        }
+    }
+}
+
+void RendererOpenGL::FlushSwipeQuads()
+{
+    if (m_swipe_verts.empty() || !m_sprite_atlas)
+        return;
+
+    // Lazy-init shader + VAO/VBO on first use
+    if (!m_swipe_shader)
+    {
+        unsigned int vs = compile_shader(GL_VERTEX_SHADER,   UI_VERTEX_SHADER);
+        unsigned int fs = compile_shader(GL_FRAGMENT_SHADER, UI_SPRITE_FRAGMENT_SHADER);
+        if (!vs || !fs) { if (vs) glDeleteShader(vs); if (fs) glDeleteShader(fs); m_swipe_verts.clear(); return; }
+        m_swipe_shader = glCreateProgram();
+        glAttachShader(m_swipe_shader, vs);
+        glAttachShader(m_swipe_shader, fs);
+        glLinkProgram(m_swipe_shader);
+        glDeleteShader(vs);
+        glDeleteShader(fs);
+        int ok = 0;
+        glGetProgramiv(m_swipe_shader, GL_LINK_STATUS, &ok);
+        if (!ok) { glDeleteProgram(m_swipe_shader); m_swipe_shader = 0; m_swipe_verts.clear(); return; }
+        glUseProgram(m_swipe_shader);
+        glUniform1i(glGetUniformLocation(m_swipe_shader, "u_sprite_atlas"), 0);
+        glUniform1i(glGetUniformLocation(m_swipe_shader, "u_palette"),      1);
+
+        glGenVertexArrays(1, &m_swipe_vao);
+        glGenBuffers(1, &m_swipe_vbo);
+        glBindVertexArray(m_swipe_vao);
+        glBindBuffer(GL_ARRAY_BUFFER, m_swipe_vbo);
+        // SwipeVertex: x, y, u, v, r, g, b, a (8 floats = 32 bytes)
+        glEnableVertexAttribArray(0); // a_pos (vec2)
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(SwipeVertex), (void*)0);
+        glEnableVertexAttribArray(1); // a_uv (vec2)
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(SwipeVertex), (void*)(2 * sizeof(float)));
+        glEnableVertexAttribArray(2); // a_color (vec4)
+        glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(SwipeVertex), (void*)(4 * sizeof(float)));
+        // Attributes 3 (a_z) and 4 (a_mode) unused — set constant
+        glVertexAttrib1f(3, 0.5f);
+        glVertexAttrib1f(4, 0.0f);
+        glBindVertexArray(0);
+    }
+
+    glUseProgram(m_swipe_shader);
+    glUniform2f(glGetUniformLocation(m_swipe_shader, "u_screen_size"),
+                (float)m_screenW, (float)m_screenH);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_sprite_atlas->GetTexture());
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, m_texPalette);
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+
+    glBindVertexArray(m_swipe_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, m_swipe_vbo);
+    glBufferData(GL_ARRAY_BUFFER,
+                 (GLsizeiptr)(m_swipe_verts.size() * sizeof(SwipeVertex)),
+                 m_swipe_verts.data(), GL_STREAM_DRAW);
+    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_swipe_verts.size());
+
+    glBindVertexArray(0);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+    glActiveTexture(GL_TEXTURE0);
+    glUseProgram(0);
+
+    m_swipe_verts.clear();
+}
+
+/******************************************************************************/
+// Lens Post-Process Infrastructure
+/******************************************************************************/
+
+static unsigned int create_rgba_texture(int w, int h, const char* label)
+{
+    unsigned int tex;
+    glGenTextures(1, &tex);
+    glBindTexture(GL_TEXTURE_2D, tex);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    (void)label;
+    return tex;
+}
+
+static unsigned int create_fbo_with_texture(unsigned int color_tex, unsigned int depth_rb)
+{
+    unsigned int fbo;
+    glGenFramebuffers(1, &fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, color_tex, 0);
+    if (depth_rb)
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depth_rb);
+    GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    if (status != GL_FRAMEBUFFER_COMPLETE)
+    {
+        ERRORLOG("Lens FBO incomplete: status=0x%X", status);
+        glDeleteFramebuffers(1, &fbo);
+        return 0;
+    }
+    return fbo;
+}
+
+void RendererOpenGL::EnsureLensFBOs()
+{
+    if (m_lens_fbo_w == m_screenW && m_lens_fbo_h == m_screenH && m_lens_scene_fbo)
+        return;
+
+    // Free existing
+    if (m_lens_scene_fbo)      { glDeleteFramebuffers(1, &m_lens_scene_fbo);       m_lens_scene_fbo = 0; }
+    if (m_lens_scene_tex)      { glDeleteTextures(1, &m_lens_scene_tex);           m_lens_scene_tex = 0; }
+    if (m_lens_scene_depth_rb) { glDeleteRenderbuffers(1, &m_lens_scene_depth_rb); m_lens_scene_depth_rb = 0; }
+    if (m_lens_pass_fbo_a)     { glDeleteFramebuffers(1, &m_lens_pass_fbo_a);      m_lens_pass_fbo_a = 0; }
+    if (m_lens_pass_tex_a)     { glDeleteTextures(1, &m_lens_pass_tex_a);          m_lens_pass_tex_a = 0; }
+    if (m_lens_pass_fbo_b)     { glDeleteFramebuffers(1, &m_lens_pass_fbo_b);      m_lens_pass_fbo_b = 0; }
+    if (m_lens_pass_tex_b)     { glDeleteTextures(1, &m_lens_pass_tex_b);          m_lens_pass_tex_b = 0; }
+
+    int w = m_screenW;
+    int h = m_screenH;
+
+    // Scene FBO — world renders here instead of default framebuffer
+    m_lens_scene_tex = create_rgba_texture(w, h, "Lens/SceneTex");
+
+    glGenRenderbuffers(1, &m_lens_scene_depth_rb);
+    glBindRenderbuffer(GL_RENDERBUFFER, m_lens_scene_depth_rb);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, w, h);
+    glBindRenderbuffer(GL_RENDERBUFFER, 0);
+
+    m_lens_scene_fbo = create_fbo_with_texture(m_lens_scene_tex, m_lens_scene_depth_rb);
+
+    // Ping-pong FBOs (no depth needed — post-process only)
+    m_lens_pass_tex_a = create_rgba_texture(w, h, "Lens/PassTexA");
+    m_lens_pass_fbo_a = create_fbo_with_texture(m_lens_pass_tex_a, 0);
+
+    m_lens_pass_tex_b = create_rgba_texture(w, h, "Lens/PassTexB");
+    m_lens_pass_fbo_b = create_fbo_with_texture(m_lens_pass_tex_b, 0);
+
+    m_lens_fbo_w = w;
+    m_lens_fbo_h = h;
+
+    // Compile passthrough shader (blit final texture to screen)
+    if (!m_passthrough_shader)
+    {
+        std::string vert_src = get_embedded_shader_source("palette_blit_vert.glsl");
+        std::string frag_src = get_embedded_shader_source("passthrough_frag.glsl");
+        if (!vert_src.empty() && !frag_src.empty())
+        {
+            auto cs = [](GLenum type, const char* src) -> unsigned int {
+                unsigned int s = glCreateShader(type);
+                glShaderSource(s, 1, &src, nullptr);
+                glCompileShader(s);
+                int ok = 0;
+                glGetShaderiv(s, GL_COMPILE_STATUS, &ok);
+                if (!ok) { glDeleteShader(s); return 0; }
+                return s;
+            };
+            unsigned int vs = cs(GL_VERTEX_SHADER, vert_src.c_str());
+            unsigned int fs = cs(GL_FRAGMENT_SHADER, frag_src.c_str());
+            if (vs && fs)
+            {
+                m_passthrough_shader = glCreateProgram();
+                glAttachShader(m_passthrough_shader, vs);
+                glAttachShader(m_passthrough_shader, fs);
+                glLinkProgram(m_passthrough_shader);
+                glUseProgram(m_passthrough_shader);
+                glUniform1i(glGetUniformLocation(m_passthrough_shader, "u_texture"), 0);
+            }
+            if (vs) glDeleteShader(vs);
+            if (fs) glDeleteShader(fs);
+        }
+    }
+
+    SYNCDBG(7, "Lens FBOs created: %dx%d (scene=%u passA=%u passB=%u)",
+            w, h, m_lens_scene_fbo, m_lens_pass_fbo_a, m_lens_pass_fbo_b);
+}
+
+void RendererOpenGL::ApplyLensGPUPasses()
+{
+    LensManager* lm = LensManager::GetInstance();
+    if (!lm || !lm->IsReady())
+        return;
+
+    // Collect active GPU passes
+    std::vector<IPostProcessPass*> gpu_passes;
+    for (LensEffect* e : lm->GetEffects())
+    {
+        if (e->IsEnabled())
+        {
+            IPostProcessPass* p = e->GetGPUPass();
+            if (p) gpu_passes.push_back(p);
+        }
+    }
+
+    if (gpu_passes.empty())
+        return;
+
+    EnsureLensFBOs();
+    if (!m_lens_pass_fbo_a || !m_lens_pass_fbo_b)
+        return;
+
+    // Ping-pong: scene_tex → pass_a → pass_b → ...
+    unsigned int src_tex = m_lens_scene_tex;
+    bool flip = false;
+    for (IPostProcessPass* pass : gpu_passes)
+    {
+        unsigned int dst_fbo = flip ? m_lens_pass_fbo_b : m_lens_pass_fbo_a;
+        unsigned int dst_tex = flip ? m_lens_pass_tex_b : m_lens_pass_tex_a;
+        pass->Apply(src_tex, dst_fbo, m_screenW, m_screenH);
+        src_tex = dst_tex;
+        flip = !flip;
+    }
+
+    // Blit final result to default framebuffer
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(0, 0, m_screenW, m_screenH);
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_BLEND);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, src_tex);
+    glUseProgram(m_passthrough_shader);
+    glBindVertexArray(m_vao);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glBindVertexArray(0);
+
+    glDepthMask(GL_TRUE);
+}
+
 bool RendererOpenGL::SubmitOverheadMap(const uint8_t* tile_colors, int tiles_x, int tiles_y,
                                         int dst_x, int dst_y, int dst_w, int dst_h)
 {
     OverheadMapCmd cmd;
-    cmd.pixels.assign(tile_colors, tile_colors + (size_t)tiles_x * (size_t)tiles_y);
+    cmd.pixels.assign(tile_colors, tile_colors + (size_t)tiles_x * (size_t)tiles_y * 2);
     cmd.tiles_x = tiles_x;
     cmd.tiles_y = tiles_y;
     cmd.dst_x   = dst_x;
@@ -1588,27 +2058,36 @@ void RendererOpenGL::FlushSceneToFBO(int w, int h)
         glDisable(GL_DEPTH_TEST);
         glDepthMask(GL_FALSE);
 
+        // Unit 0: RG8 tile data
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, m_overhead_map_tex);
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
         if (cmd.tiles_x != m_overhead_map_tex_w || cmd.tiles_y != m_overhead_map_tex_h)
         {
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, cmd.tiles_x, cmd.tiles_y,
-                         0, GL_RED, GL_UNSIGNED_BYTE, cmd.pixels.data());
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RG8, cmd.tiles_x, cmd.tiles_y,
+                         0, GL_RG, GL_UNSIGNED_BYTE, cmd.pixels.data());
             m_overhead_map_tex_w = cmd.tiles_x;
             m_overhead_map_tex_h = cmd.tiles_y;
         }
         else
         {
             glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, cmd.tiles_x, cmd.tiles_y,
-                            GL_RED, GL_UNSIGNED_BYTE, cmd.pixels.data());
+                            GL_RG, GL_UNSIGNED_BYTE, cmd.pixels.data());
         }
         glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
 
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, m_texPalette);
 
-        // Coordinates are in logical screen space.
+        if (m_texFade) {
+            glActiveTexture(GL_TEXTURE2);
+            glBindTexture(GL_TEXTURE_2D, m_texFade);
+        }
+        if (m_rawblit_tex) {
+            glActiveTexture(GL_TEXTURE3);
+            glBindTexture(GL_TEXTURE_2D, m_rawblit_tex);
+        }
+
         const float sw = (float)m_screenW;
         const float sh = (float)m_screenH;
         const float x0 = (float)cmd.dst_x               / sw * 2.0f - 1.0f;
@@ -1632,6 +2111,16 @@ void RendererOpenGL::FlushSceneToFBO(int w, int h)
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         glUseProgram(prog);
+
+        if (m_overhead_map_shader && prog == m_overhead_map_shader) {
+            if (m_omap_loc_screen_size >= 0)
+                glUniform2f(m_omap_loc_screen_size, sw, sh);
+            if (m_omap_loc_map_rect >= 0)
+                glUniform4f(m_omap_loc_map_rect,
+                            (float)cmd.dst_x, (float)cmd.dst_y,
+                            (float)(cmd.dst_x + cmd.dst_w), (float)(cmd.dst_y + cmd.dst_h));
+        }
+
         glDrawArrays(GL_TRIANGLES, 0, 6);
         glDisable(GL_BLEND);
         glBindVertexArray(0);

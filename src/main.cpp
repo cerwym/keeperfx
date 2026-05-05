@@ -17,10 +17,6 @@
 #include "platform.h"
 #include "keeperfx.hpp"
 
-#ifdef VITA_PERF_LOG
-#include <SDL2/SDL.h>
-#endif
-
 #include "bflib_coroutine.h"
 #include "bflib_math.h"
 #include "bflib_keybrd.h"
@@ -841,10 +837,10 @@ short setup_game(void)
   struct CPU_INFO cpu_info; // CPU status variable
   short result;
 #if defined(VITA_PERF_LOG)
-  Uint32 _perf_start = SDL_GetTicks(), _perf_step = _perf_start;
+  TbClockMSec _perf_start = LbTimerClock(), _perf_step = _perf_start;
 #define VITA_TICK(label) do { \
-    Uint32 _now = SDL_GetTicks(); \
-    JUSTLOG("[perf] %-32s  step %4ums  total %4ums", (label), _now - _perf_step, _now - _perf_start); \
+    TbClockMSec _now = LbTimerClock(); \
+    JUSTLOG("[perf] %-32s  step %4dms  total %4dms", (label), (int)(_now - _perf_step), (int)(_now - _perf_start)); \
     _perf_step = _now; } while(0)
 #else
 #define VITA_TICK(label) ((void)0)
@@ -3084,6 +3080,7 @@ void engine(struct PlayerInfo *player, struct Camera *cam)
     view_width_over_2 = ewnd.width/2;
     RendererSetViewport(ewnd.x, ewnd.y, ewnd.width, ewnd.height);
     WorldViewRenderer_BeginWorldPass(lbDisplay.GraphicsWindowPtr, RendererScreenWidth(),ewnd.width, ewnd.height, ewnd.x, ewnd.y);
+    UIRenderer_SetGameViewport(ewnd.x, ewnd.y, ewnd.width, ewnd.height);
     camera_zoom = scale_camera_zoom_to_screen(cam->zoom);
     draw_view(cam, 0);
     lbDisplay.DrawFlags = flg_mem;
@@ -3225,15 +3222,9 @@ void redetect_screen_refresh_rate_for_draw()
         if (game_num_fps_draw_secondary > 0)
             game_num_fps_draw_current = game_num_fps_draw_secondary;
 
-        if (lbWindow != NULL) {
-            int display_index = SDL_GetWindowDisplayIndex(lbWindow);
-            if (display_index >= 0) {
-                SDL_DisplayMode mode;
-                if (SDL_GetCurrentDisplayMode(display_index, &mode) == 0 && mode.refresh_rate > 0) {
-                    game_num_fps_draw_current = mode.refresh_rate;
-                }
-            }
-        }
+        int display_hz = PlatformManager_GetDisplayRefreshRate();
+        if (display_hz > 0)
+            game_num_fps_draw_current = display_hz;
 
     } else if (game_num_fps_draw_main > 0) {
         game_num_fps_draw_current = game_num_fps_draw_main;
@@ -4244,7 +4235,7 @@ int LbBullfrogMain(unsigned short argc, char *argv[])
     // Determine correct log file based on command line flags
     const char* selected_log_file_name = determine_log_filename(argc, argv);
     LbErrorLogSetup(PlatformManager_GetDataPath(), selected_log_file_name, 5);
-    SDL_Log("KeeperFX: LbBullfrogMain started, log at %s/%s",
+    SYNCLOG("KeeperFX: LbBullfrogMain started, log at %s/%s",
         PlatformManager_GetDataPath(), selected_log_file_name);
 
     retval = process_command_line(argc,argv);
@@ -4255,11 +4246,11 @@ int LbBullfrogMain(unsigned short argc, char *argv[])
     }
 
     retval = true;
-    SDL_Log("KeeperFX: LbTimerInit...");
+    SYNCLOG("KeeperFX: LbTimerInit...");
     retval &= (LbTimerInit() != Lb_FAIL);
-    SDL_Log("KeeperFX: LbScreenInitialize... (retval so far=%d)", retval);
+    SYNCLOG("KeeperFX: LbScreenInitialize... (retval so far=%d)", retval);
     retval &= (RendererScreenInitialize() != Lb_FAIL);
-    SDL_Log("KeeperFX: screen init done retval=%d", retval);
+    SYNCLOG("KeeperFX: screen init done retval=%d", retval);
     RendererSetTitle(PROGRAM_NAME);
     RendererSetIcon(1);
     RendererSetDoubleBuffering(true);
@@ -4271,16 +4262,16 @@ int LbBullfrogMain(unsigned short argc, char *argv[])
 
     if (!retval)
     {
-        SDL_Log("KeeperFX: Basic engine initialization failed");
+        ERRORLOG("KeeperFX: Basic engine initialization failed");
         static const char *msg_text="Basic engine initialization failed.\n";
         error_dialog_fatal(__func__, 1, msg_text);
         LbErrorLogClose();
         return 0;
     }
 
-    SDL_Log("KeeperFX: setup_game...");
+    SYNCLOG("KeeperFX: setup_game...");
     retval = setup_game();
-    SDL_Log("KeeperFX: setup_game returned %d", retval);
+    SYNCLOG("KeeperFX: setup_game returned %d", retval);
     if (retval == 1)
     {
         steam_api_init();

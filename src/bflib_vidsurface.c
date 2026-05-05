@@ -24,6 +24,7 @@
 #include "bflib_basics.h"
 #include "globals.h"
 #include "bflib_planar.h"
+#include "bflib_video.h"
 #include <SDL2/SDL.h>
 #include "post_inc.h"
 
@@ -185,6 +186,101 @@ TbResult LbScreenSurfaceUnlock(struct SSurface *surf)
     SDL_UnlockSurface(surf->surf_data);
     surf->locks_count--;
     return Lb_SUCCESS;
+}
+
+/******************************************************************************/
+/* Screen-level helpers for RendererSoftware                                  */
+/******************************************************************************/
+
+TbResult LbScreenSetupRendererSurfaces(void)
+{
+    lbScreenSurface = SDL_GetWindowSurface(lbWindow);
+    if (!lbScreenSurface) {
+        ERRORLOG("LbScreenSetupRendererSurfaces: SDL_GetWindowSurface failed: %s", SDL_GetError());
+        return Lb_FAIL;
+    }
+
+    if (lbDrawSurface->format->BitsPerPixel != lbScreenSurface->format->BitsPerPixel)
+    {
+        lbScaleSurface = SDL_CreateRGBSurfaceWithFormat(0,
+            lbDrawSurface->w, lbDrawSurface->h,
+            lbScreenSurface->format->BitsPerPixel, lbScreenSurface->format->format);
+        if (!lbScaleSurface) {
+            WARNLOG("LbScreenSetupRendererSurfaces: can't create scale surface: %s — direct blit will be attempted", SDL_GetError());
+        }
+    }
+    return Lb_SUCCESS;
+}
+
+void LbScreenReleaseRendererSurfaces(void)
+{
+    if (lbScaleSurface) {
+        SDL_FreeSurface(lbScaleSurface);
+        lbScaleSurface = NULL;
+    }
+    /* lbScreenSurface is owned by SDL (window surface); only null it. */
+    lbScreenSurface = NULL;
+}
+
+void LbScreenSwap(void)
+{
+    /* Refresh the window surface pointer each frame (guards against resize/alt-tab). */
+    lbScreenSurface = SDL_GetWindowSurface(lbWindow);
+    SDL_Rect dst = { 0, 0, lbScreenSurface->w, lbScreenSurface->h };
+
+    if (lbScaleSurface != NULL)
+    {
+        /* Two-step: convert format (e.g. 8bpp → window BPP) then scale. */
+        if (SDL_BlitSurface(lbDrawSurface, NULL, lbScaleSurface, NULL) < 0) {
+            ERRORLOG("LbScreenSwap: format-convert blit failed: %s", SDL_GetError());
+            return;
+        }
+        if (SDL_BlitScaled(lbScaleSurface, NULL, lbScreenSurface, &dst) < 0) {
+            ERRORLOG("LbScreenSwap: scale blit failed: %s", SDL_GetError());
+            return;
+        }
+    }
+    else if (lbDrawSurface->w != lbScreenSurface->w || lbDrawSurface->h != lbScreenSurface->h)
+    {
+        if (SDL_BlitScaled(lbDrawSurface, NULL, lbScreenSurface, &dst) < 0) {
+            ERRORLOG("LbScreenSwap: scale blit failed: %s", SDL_GetError());
+            return;
+        }
+    }
+    else
+    {
+        if (SDL_BlitSurface(lbDrawSurface, NULL, lbScreenSurface, NULL) < 0) {
+            ERRORLOG("LbScreenSwap: blit failed: %s", SDL_GetError());
+            return;
+        }
+    }
+
+    if (SDL_UpdateWindowSurface(lbWindow) < 0) {
+        ERRORDBG(11, "LbScreenSwap: flip failed: %s", SDL_GetError());
+    }
+}
+
+void LbScreenClearIndex(uint8_t colour_index)
+{
+    if (lbDrawSurface)
+        SDL_FillRect(lbDrawSurface, NULL, colour_index);
+}
+
+uint8_t* LbScreenGetPixels(int* out_pitch)
+{
+    if (!lbDrawSurface)
+        return NULL;
+    if (SDL_LockSurface(lbDrawSurface) < 0)
+        return NULL;
+    if (out_pitch)
+        *out_pitch = lbDrawSurface->pitch;
+    return (uint8_t*)lbDrawSurface->pixels;
+}
+
+void LbScreenReleasePixels(void)
+{
+    if (lbDrawSurface)
+        SDL_UnlockSurface(lbDrawSurface);
 }
 /******************************************************************************/
 #ifdef __cplusplus

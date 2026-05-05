@@ -249,6 +249,9 @@ extern volatile TbBool lbUseSdk;
 extern volatile TbDisplayStructEx lbDisplayEx;
 extern unsigned char lbPalette[PALETTE_SIZE];
 
+#define VGA6_MAX                                63.0f // VGA 6-bit palette component range (0–63)
+#define UPP_BASE                                16   // units_per_pixel_best value at base resolution (640x400)
+
 #define DEFAULT_UI_SCALE                       128 // is equivilent to size 1 or 100%
 #define DEFAULT_ASPECT_RATIO_FACTOR            160 // is equivilent to 16/10 * 100
 #define DEFAULT_FIRST_PERSON_HORIZONTAL_FOV     94 // 94 degrees at 16/10 aspect ratio

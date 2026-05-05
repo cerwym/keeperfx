@@ -25,7 +25,6 @@
 #include "engine_render.h"    // draw_3d_sprites_for_bucket(), draw_nonspatial_sprites_no_shadows()
 #include "bflib_render.h"      // PolyPoint, render_fade_tables
 #include "bflib_vidraw.h"      // vec_window_width, vec_window_height
-#include "bflib_video.h"       // MyScreenWidth, MyScreenHeight
 #include "bflib_basics.h"      // ERRORLOG / SYNCLOG / WARNLOG
 #include "renderer/RenderPass_C.h" // RenderPass_DrawNow()
 #include "renderer/RenderPass.h"    // RenderPassSystem::SetScreenSize()
@@ -36,6 +35,7 @@
 
 #include <glad/glad.h>
 #include <cassert>
+#include <chrono>
 #include <cstdlib>
 #include <cstring>
 #include "kfx/profiling/KfxProfiling.h"
@@ -210,6 +210,11 @@ bool GLWorldViewRenderer::init_gl_resources()
     m_loc_shade_scale   = glGetUniformLocation(m_shader, "u_shade_scale");
     m_loc_shade_gamma   = glGetUniformLocation(m_shader, "u_shade_gamma");
     m_loc_lighting_mode = glGetUniformLocation(m_shader, "u_lighting_mode");
+    m_loc_darkness_mode = glGetUniformLocation(m_shader, "u_darkness_mode");
+    m_loc_fade_table    = glGetUniformLocation(m_shader, "u_fade_table");
+    m_loc_time          = glGetUniformLocation(m_shader, "u_time");
+    m_loc_fog_speed     = glGetUniformLocation(m_shader, "u_fog_speed");
+    m_loc_fog_density   = glGetUniformLocation(m_shader, "u_fog_density");
     m_loc_lightmap      = glGetUniformLocation(m_shader, "u_lightmap");
     m_loc_missing_tile  = glGetUniformLocation(m_shader, "u_missing_tile");
     glUniform1f(m_loc_fullbright,    0.0f);
@@ -217,6 +222,11 @@ bool GLWorldViewRenderer::init_gl_resources()
     glUniform1f(m_loc_shade_scale,   1.0f);
     glUniform1f(m_loc_shade_gamma,   1.0f);
     glUniform1i(m_loc_lighting_mode, RENDERER_LIGHTING_SOFTWARE);
+    glUniform1i(m_loc_darkness_mode, RENDERER_DARKNESS_LINEAR);
+    glUniform1i(m_loc_fade_table,    3);  // GL_TEXTURE3
+    glUniform1f(m_loc_time,          0.0f);
+    glUniform1f(m_loc_fog_speed,     1.0f);
+    glUniform1f(m_loc_fog_density,   0.4f);
     glUniform1i(m_loc_lightmap,      2);  // GL_TEXTURE2
     glUniform1f(m_loc_missing_tile,  0.0f);
     m_tile_filter_applied = -1;  // force apply on first flush
@@ -779,15 +789,15 @@ void GLWorldViewRenderer::BeginHandSpriteRendering()
 
     // Hand sprites are at mouse position in full-screen pixel coordinates.
     // Override viewport to full screen so the kspr shader converts them correctly.
-    m_screen_w = (int)MyScreenWidth;
-    m_screen_h = (int)MyScreenHeight;
+    m_screen_w = m_full_screen_w;
+    m_screen_h = m_full_screen_h;
 
     // z = -1.0 maps to depth 0.0 (near plane); always passes GL_LEQUAL against
     // any world geometry that was written at depth >= 0.0.
     m_current_sprite_z = -1.0f;
 
     // Ensure the GL viewport covers the full window (same as post-GPUFlushNow state).
-    glViewport(0, 0, (int)MyScreenWidth, (int)MyScreenHeight);
+    glViewport(0, 0, m_full_screen_w, m_full_screen_h);
 
     // Hand sprites must always appear on top — disable depth testing so world-pass
     // depth values never cull them.
@@ -924,12 +934,12 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
         if (owner >= 0)
         {
             unsigned char color_idx = get_player_color_idx((PlayerNumber)owner);
-            if (color_idx < 9)
+            if (color_idx < 9 && m_palette_data)
             {
                 uint8_t pal_idx = player_room_colours[color_idx];
-                oc_r = (float)((int)lbPalette[pal_idx * 3 + 0] << 2) / 255.0f;
-                oc_g = (float)((int)lbPalette[pal_idx * 3 + 1] << 2) / 255.0f;
-                oc_b = (float)((int)lbPalette[pal_idx * 3 + 2] << 2) / 255.0f;
+                oc_r = (float)((int)m_palette_data[pal_idx * 3 + 0] << 2) / 255.0f;
+                oc_g = (float)((int)m_palette_data[pal_idx * 3 + 1] << 2) / 255.0f;
+                oc_b = (float)((int)m_palette_data[pal_idx * 3 + 2] << 2) / 255.0f;
             }
         }
         const float oc_a = g_renderer_settings.creature_outline_alpha;
@@ -937,12 +947,17 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
         glDepthFunc(GL_GREATER);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
+        // Push the outline slightly farther from the camera so it only appears
+        // when the sprite is meaningfully behind geometry, not at tile edges
+        // where depth values are nearly equal (avoids stray corner pixels).
+        const float outline_z = m_current_sprite_z + 0.002f;
+
         if (atlas_layer >= 0 && m_kspr_atlas_outline_shader)
         {
             // Atlas path: texture already cached in m_kspr_sprite_array.
             glUseProgram(m_kspr_atlas_outline_shader);
             glUniform2f(m_kspr_atlas_outline_loc_viewport, (float)m_screen_w, (float)m_screen_h);
-            glUniform1f(m_kspr_atlas_outline_loc_z_ndc,    m_current_sprite_z);
+            glUniform1f(m_kspr_atlas_outline_loc_z_ndc,    outline_z);
             glUniform1f(m_kspr_atlas_outline_loc_layer,    (float)atlas_layer);
             glUniform4f(m_kspr_atlas_outline_loc_color,    oc_r, oc_g, oc_b, oc_a);
             glActiveTexture(GL_TEXTURE0);
@@ -971,7 +986,7 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
 
             glUseProgram(m_kspr_outline_shader);
             glUniform2f(m_kspr_outline_loc_viewport, (float)m_screen_w, (float)m_screen_h);
-            glUniform1f(m_kspr_outline_loc_z_ndc,    m_current_sprite_z);
+            glUniform1f(m_kspr_outline_loc_z_ndc,    outline_z);
             glUniform4f(m_kspr_outline_loc_color,    oc_r, oc_g, oc_b, oc_a);
             glDrawArrays(GL_TRIANGLES, 0, 6);
         }
@@ -1335,7 +1350,7 @@ void GLWorldViewRenderer::GPURenderNow()
     if (m_draw_cmds.empty())
         return;
 
-    const int vp_y_gl = (int)MyScreenHeight - m_vp_y - m_screen_h;
+    const int vp_y_gl = m_full_screen_h - m_vp_y - m_screen_h;
     gpu_execute_passes(m_vp_x, vp_y_gl);
 }
 
@@ -1398,6 +1413,16 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
     glUniform1f(m_loc_shade_scale,   g_renderer_settings.shade_scale);
     glUniform1f(m_loc_shade_gamma,   g_renderer_settings.shade_gamma);
     glUniform1i(m_loc_lighting_mode, g_renderer_settings.lighting_mode);
+    glUniform1i(m_loc_darkness_mode, g_renderer_settings.darkness_mode);
+    glUniform1f(m_loc_fog_speed,     g_renderer_settings.fog_speed);
+    glUniform1f(m_loc_fog_density,   g_renderer_settings.fog_density);
+    // Monotonic time in seconds for fog animation (wraps after ~24 days at float precision)
+    {
+        static auto t0 = std::chrono::steady_clock::now();
+        auto now = std::chrono::steady_clock::now();
+        float secs = std::chrono::duration<float>(now - t0).count();
+        glUniform1f(m_loc_time, secs);
+    }
     // Keep m_shader bound — pass 1 (tiles) draws with it immediately below.
     // glUseProgram(0) will fuck up flat-poly draws in pass 1, and the flat-poly shader is only used in pass 2 after all tiles are drawn, so we can defer binding it until then.    
 
@@ -1413,6 +1438,16 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
                     GL_RED_INTEGER, GL_UNSIGNED_SHORT,
                     game.lish.subtile_lightness);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 4);  // restore default
+
+    // Bind fade table to unit 3 unconditionally — the sampler must always
+    // reference a valid texture even when darkness_mode != PALETTE, otherwise
+    // some drivers produce garbage on the PiP / zoom-box FBO render.
+    if (m_fade_tex)
+    {
+        glActiveTexture(GL_TEXTURE3);
+        glBindTexture(GL_TEXTURE_2D, m_fade_tex);
+    }
+
     glActiveTexture(GL_TEXTURE0);  // restore default active texture unit
 
     // Bind palette once for the entire pass — it never changes mid-frame.
@@ -1437,6 +1472,12 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
                                    ? m_atlas->GetAtlasTextureArray()
                                    : 0;
                 glActiveTexture(GL_TEXTURE0);
+                // Unbind any GL_TEXTURE_2D that may linger on unit 0 from the
+                // overhead zoom-box tile pass (which binds a 2D slice of the atlas).
+                // Having both a TEXTURE_2D and TEXTURE_2D_ARRAY bound on the same
+                // unit is undefined behaviour in core GL 3.3 and causes garbled
+                // output on some drivers (notably in FBO renders like the PiP zoom box).
+                glBindTexture(GL_TEXTURE_2D, 0);
                 glBindTexture(GL_TEXTURE_2D_ARRAY, atlas_tex);
                 // When no valid atlas texture is bound the shader would silently
                 // output black tiles (palette[0]).  Set the diagnostic flag so the
@@ -1564,6 +1605,14 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
     // Sprites depth-test against the tile z-buffer written in pass 1 (wall
     // occlusion).  Back-to-front bucket order is preserved because
     // DrawIsometricView recorded CMD_SPRITES entries highest-bucket-first.
+    //
+    // Scissor-clip sprites to the world viewport so they can't be rasterised
+    // into the sidebar region.  The sidebar is painted on top as UI quads,
+    // but without a scissor the GPU still rasterises (and alpha-blends)
+    // sprites behind it, causing visible bleed-through.
+    glEnable(GL_SCISSOR_TEST);
+    glScissor(vp_x, vp_y_gl, m_screen_w, m_screen_h);
+
     for (const auto& cmd : m_draw_cmds)
     {
         if (cmd.type == DrawCmd::CMD_SPRITES)
@@ -1620,12 +1669,14 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
         }
     }
 
+    glDisable(GL_SCISSOR_TEST);
+
     glBindVertexArray(0);
     glUseProgram(0);
     glActiveTexture(GL_TEXTURE0);  // restore — sprite pass may leave unit 1/2 active
     glDepthMask(GL_FALSE);
     glDisable(GL_DEPTH_TEST);
-    glViewport(0, 0, (int)MyScreenWidth, (int)MyScreenHeight);
+    glViewport(0, 0, m_full_screen_w, m_full_screen_h);
 
     // Emit per-frame statistics as Tracy plots.
     KFX_PLOT("WVR/VertCount",          m_vert_count);

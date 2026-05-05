@@ -51,6 +51,7 @@ public:
     void     UnlockFramebuffer() override;
     const char* GetName() const override;
     bool     SupportsRuntimeSwitch() const override;
+    bool     SupportsGPUPasses() const override { return true; }
 
     /** GPU raw-image blit — queues a frontend background image for opaque
      *  palette-decoded rendering at EndFrame() time.  No WScreen write occurs.
@@ -71,6 +72,9 @@ public:
     bool SubmitStagingOverlay() override;
 
     bool SubmitTransparentBlit(const uint8_t* buf, int w, int h) override;
+
+    void DrawSwipeOverlay(struct TbSpriteSheet* sprites, int frame,
+                          bool draw_lr, int engine_window_x) override;
 
     bool SubmitOverheadMap(const uint8_t* tile_colors, int tiles_x, int tiles_y,
                            int dst_x, int dst_y, int dst_w, int dst_h) override;
@@ -182,7 +186,9 @@ private:
     bool              m_rawblit_cached   = false;  // last rawblit retained for palette-fade re-renders
     RawBlitCmd        m_rawblit_cached_cmd = {};
     unsigned int      m_rawblit_shader        = 0;  // palette_blit_vert + rawimage_blit_frag
-    unsigned int      m_overhead_map_shader   = 0;  // palette_blit_vert + overhead_map_frag (discards idx 0)
+    unsigned int      m_overhead_map_shader   = 0;  // palette_blit_vert + overhead_map_frag (RG8 ghost-table)
+    int               m_omap_loc_map_rect   = -1;
+    int               m_omap_loc_screen_size = -1;
     unsigned int      m_rawblit_vao      = 0;
     unsigned int      m_rawblit_vbo      = 0;  // GL_DYNAMIC_DRAW — updated per blit
     unsigned int      m_rawblit_tex      = 0;  // GL_R8 — source image indices
@@ -200,7 +206,7 @@ private:
         int dst_x = 0, dst_y = 0, dst_w = 0, dst_h = 0;
     };
     std::vector<OverheadMapCmd> m_overhead_map_cmds;
-    unsigned int      m_overhead_map_tex     = 0;  // GL_R8, resized to max seen
+    unsigned int      m_overhead_map_tex     = 0;  // GL_RG8, resized to max seen
     int               m_overhead_map_tex_w   = 0;
     int               m_overhead_map_tex_h   = 0;
 
@@ -297,6 +303,37 @@ private:
     };
     std::vector<PiPCmd> m_pip_queue;  ///< Commands accumulated this frame.
     std::vector<PiPFBO> m_pip_fbos;   ///< Per-slot FBO resources (grown on demand).
+
+    // ── Lens post-process pass infrastructure ─────────────────────────────
+    // Scene FBO: world geometry renders here (via FlushSceneToLensFBO) when
+    // lens effects are active, instead of the default framebuffer.
+    unsigned int m_lens_scene_fbo       = 0;
+    unsigned int m_lens_scene_tex       = 0;  // GL_RGBA8 — decoded scene
+    unsigned int m_lens_scene_depth_rb  = 0;  // GL_DEPTH_COMPONENT24
+    // Ping-pong pair for chaining multiple GPU lens passes.
+    unsigned int m_lens_pass_fbo_a      = 0;
+    unsigned int m_lens_pass_tex_a      = 0;
+    unsigned int m_lens_pass_fbo_b      = 0;
+    unsigned int m_lens_pass_tex_b      = 0;
+    int          m_lens_fbo_w           = 0;
+    int          m_lens_fbo_h           = 0;
+    // Passthrough blit shader: copies final lens texture to default framebuffer.
+    unsigned int m_passthrough_shader   = 0;
+    bool         m_lens_active          = false;  // true when lens FBO is bound this frame
+
+    // ── Swipe overlay (possession attack effect) ───────────────────────────
+    // Recorded by DrawSwipeOverlay() as atlas-sprite quads, flushed directly
+    // by EndFrame() after GPURenderNow() while the lens FBO is still bound.
+    // Entirely self-contained: own shader, VAO/VBO, no UIRenderer involvement.
+    struct SwipeVertex { float x, y, u, v, r, g, b, a; };
+    std::vector<SwipeVertex>  m_swipe_verts;    // 6 verts per sprite quad
+    unsigned int              m_swipe_shader = 0;
+    unsigned int              m_swipe_vao    = 0;
+    unsigned int              m_swipe_vbo    = 0;
+    void FlushSwipeQuads();
+
+    void ApplyLensGPUPasses();
+    void EnsureLensFBOs();
 
     /** (Re-)create (or resize) FBO slot at index @p idx to at least w×h. */
     void ensure_pip_fbo(std::size_t idx, int w, int h);

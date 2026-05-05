@@ -47,6 +47,11 @@ void RendererSettings_Reset(void)
     /* Lighting pipeline */
     g_renderer_settings.lighting_mode         = RENDERER_LIGHTING_SOFTWARE;
 
+    /* Darkness mode */
+    g_renderer_settings.darkness_mode         = RENDERER_DARKNESS_PALETTE;
+    g_renderer_settings.fog_speed             = 1.0f;
+    g_renderer_settings.fog_density           = 0.4f;
+
     /* Creature outline */
     g_renderer_settings.creature_outline_enable     = 1;
     g_renderer_settings.creature_outline_alpha      = 0.5f;

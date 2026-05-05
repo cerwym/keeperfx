@@ -69,13 +69,14 @@ void ZoomBoxView::draw(const DrawContext&    ctx,
                        int                   draw_tiles_y,
                        int                   subtile_size)
 {
-    // Tuneable offsets: shift the content (tiles / FBO) independently of the
-    // ornate corner-frame sprites.  Positive = right / down.
+    // Tuneable offsets: shift the isometric PiP content independently of the
+    // ornate corner-frame sprites.  The overhead path has its own built-in
+    // offset in draw_zoom_box_terrain() so it uses the raw screen_rect position.
     const int content_offset_x = 14;
     const int content_offset_y = -14;
 
-    const int scr_x = screen_rect.left + content_offset_x;
-    const int scr_y = screen_rect.top  + content_offset_y;
+    const int scr_x = screen_rect.left;
+    const int scr_y = screen_rect.top;
 
     // Corner radius for the rounded-rect content mask (base-resolution pixels).
     // Approximates the ornate frame's inner contour so content doesn't poke
@@ -85,7 +86,8 @@ void ZoomBoxView::draw(const DrawContext&    ctx,
     RendererSetZoomBoxClipRadius(clip_radius);
 
     if (m_mode == ZBM_ISOMETRIC && RendererHasGPURenderPath())
-        drawIsometric(ctx, view, player, scr_x, scr_y,
+        drawIsometric(ctx, view, player,
+                      scr_x + content_offset_x, scr_y + content_offset_y,
                       stl_x, stl_y, draw_tiles_x, draw_tiles_y, subtile_size);
     else
         drawOverhead(ctx, player, scr_x, scr_y,

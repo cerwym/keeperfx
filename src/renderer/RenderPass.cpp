@@ -318,4 +318,16 @@ void RenderPass_OnPaletteSet(const unsigned char* palette)
     RenderPassSystem::GetInstance().OnPaletteSet(palette);
 }
 
+void RenderPass_Suspend(void)
+{
+    g_render_pass_active = 0;
+}
+
+void RenderPass_Resume(void)
+{
+    // Only re-enable if the system was initialised (has a backend).
+    if (RenderPassSystem::GetInstance().IsInitialised())
+        g_render_pass_active = 1;
+}
+
 } // extern "C"

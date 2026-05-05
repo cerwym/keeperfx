@@ -210,9 +210,9 @@ void GLTextRenderer::SetFont(const struct TbSpriteSheet* font)
         } else if (font == frontend_font[1] || font == frontend_font[2] ||
                    font == frontend_font[3] || font == winfont ||
                    font == font_sprites || font == frontstory_font) {
-            dbc_idx = (lbDisplay.PhysicalScreenWidth < 512) ? 0 : 1;
+            dbc_idx = (m_screen_width < 512) ? 0 : 1;
         } else {
-            dbc_idx = (lbDisplay.PhysicalScreenWidth < 512) ? 0 : 1;
+            dbc_idx = (m_screen_width < 512) ? 0 : 1;
         }
 
         const int32_t fonts_count = dbc_fonts_count();
@@ -261,10 +261,10 @@ void GLTextRenderer::SetClipWindow(int32_t x, int32_t y, int32_t w, int32_t h)
     if (x1 < 0) x1 = 0;
     if (y0 < 0) y0 = 0;
     if (y1 < 0) y1 = 0;
-    if (x0 > lbDisplay.GraphicsScreenWidth)  x0 = lbDisplay.GraphicsScreenWidth;
-    if (x1 > lbDisplay.GraphicsScreenWidth)  x1 = lbDisplay.GraphicsScreenWidth;
-    if (y0 > lbDisplay.GraphicsScreenHeight) y0 = lbDisplay.GraphicsScreenHeight;
-    if (y1 > lbDisplay.GraphicsScreenHeight) y1 = lbDisplay.GraphicsScreenHeight;
+    if (x0 > m_screen_width)  x0 = m_screen_width;
+    if (x1 > m_screen_width)  x1 = m_screen_width;
+    if (y0 > m_screen_height) y0 = m_screen_height;
+    if (y1 > m_screen_height) y1 = m_screen_height;
     m_clip_window = { x0, y0, x1 - x0, y1 - y0 };
 }
 
@@ -460,10 +460,7 @@ void GLTextRenderer::Draw()
     }
 
     if (m_screen_width <= 0 || m_screen_height <= 0)
-    {
-        m_screen_width  = MyScreenWidth;
-        m_screen_height = MyScreenHeight;
-    }
+        return;  // Screen size not yet set — skip rendering this frame.
 
     // Set up GL state once for all draws this frame
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -494,8 +491,8 @@ void GLTextRenderer::Draw()
     m_batch_scissor_x = m_batch_scissor_y = m_batch_scissor_w = m_batch_scissor_h = 0;
 
     // Save globals that FlushSegment control codes will overwrite
-    unsigned char               saved_colour     = lbDisplay.DrawColour;
-    unsigned short              saved_draw_flags = lbDisplay.DrawFlags;
+    unsigned char               saved_colour     = m_text_draw_colour;
+    unsigned short              saved_draw_flags = m_text_draw_flags;
 
     // CRITICAL FIX: Sort pending draws by font pointer to minimize atlas rebinding.
     // Main menu uses 3 different fonts (36BC0DC8, 36BC0E18, 36BC1368) and without
@@ -631,10 +628,10 @@ void GLTextRenderer::Draw()
         m_dbc_font    = d.dbc_font;
         m_dbc_enabled = d.dbc_enabled;
 
-        // Expose draw state as globals so FlushSegment reads/writes
-        // lbDisplay.DrawColour / DrawFlags consistently for control codes.
-        lbDisplay.DrawColour = d.draw_colour;
-        lbDisplay.DrawFlags  = d.draw_flags;
+        // Set per-draw draw state so FlushSegment reads/writes
+        // m_text_draw_flags/colour consistently for control codes.
+        m_text_draw_flags  = d.draw_flags;
+        m_text_draw_colour = d.draw_colour;
 
         // Update batch scissor — flush if it changed so pending vertices use the old rect
         {
@@ -672,9 +669,9 @@ void GLTextRenderer::Draw()
     glDisable(GL_SCISSOR_TEST);
     m_pending.clear();
 
-    // Restore globals overwritten during layout
-    lbDisplay.DrawColour = saved_colour;
-    lbDisplay.DrawFlags  = saved_draw_flags;
+    // Restore draw state overwritten during layout
+    m_text_draw_colour = saved_colour;
+    m_text_draw_flags  = saved_draw_flags;
 
     // Restore GL state — depth test stays OFF; all passes after text
     // (screen tint, cursor) are 2D overlays that must not depth-test.
@@ -736,21 +733,21 @@ void GLTextRenderer::FlushSegment(const char* sbuf, const char* ebuf,
         if (ch == ' ')  { current_x += space_len; continue; }
         if (ch == '\t') { current_x += space_len * (float)LbTextGetSpacesPerTab(); continue; }
 
-        // Control codes 1–14: update lbDisplay globals (mirrors put_down_simpletext_sprites)
+        // Control codes 1–14: update m_text_draw_flags/colour (mirrors put_down_simpletext_sprites)
         if (ch < 15)
         {
             switch (ch)
             {
-                case 1:  lbDisplay.DrawFlags ^= Lb_SPRITE_TRANSPAR4;   break;
-                case 2:  lbDisplay.DrawFlags ^= Lb_SPRITE_TRANSPAR8;   break;
-                case 3:  lbDisplay.DrawFlags ^= Lb_SPRITE_OUTLINE;     break;
-                case 4:  lbDisplay.DrawFlags ^= Lb_SPRITE_FLIP_HORIZ;  break;
-                case 5:  lbDisplay.DrawFlags ^= Lb_SPRITE_FLIP_VERTIC; break;
-                case 11: lbDisplay.DrawFlags ^= Lb_TEXT_UNDERLINE;     break;
-                case 12: lbDisplay.DrawFlags ^= Lb_TEXT_ONE_COLOR;     break;
+                case 1:  m_text_draw_flags ^= Lb_SPRITE_TRANSPAR4;   break;
+                case 2:  m_text_draw_flags ^= Lb_SPRITE_TRANSPAR8;   break;
+                case 3:  m_text_draw_flags ^= Lb_SPRITE_OUTLINE;     break;
+                case 4:  m_text_draw_flags ^= Lb_SPRITE_FLIP_HORIZ;  break;
+                case 5:  m_text_draw_flags ^= Lb_SPRITE_FLIP_VERTIC; break;
+                case 11: m_text_draw_flags ^= Lb_TEXT_UNDERLINE;     break;
+                case 12: m_text_draw_flags ^= Lb_TEXT_ONE_COLOR;     break;
                 case 14:
                     ++c;
-                    if (c < ebuf) lbDisplay.DrawColour = (unsigned char)*c;
+                    if (c < ebuf) m_text_draw_colour = (unsigned char)*c;
                     break;
                 default: break;
             }
@@ -770,13 +767,13 @@ void GLTextRenderer::FlushSegment(const char* sbuf, const char* ebuf,
         if (m_active_dbc_atlas)
         {
             // DBC glyphs are monochrome masks — always force a palette index.
-            forced_idx = (lbDisplay.DrawFlags & Lb_TEXT_ONE_COLOR)
-                       ? (float)lbDisplay.DrawColour : (float)m_current_dbc_colour0;
+            forced_idx = (m_text_draw_flags & Lb_TEXT_ONE_COLOR)
+                       ? (float)m_text_draw_colour : (float)m_current_dbc_colour0;
         }
         else
         {
-            forced_idx = (lbDisplay.DrawFlags & Lb_TEXT_ONE_COLOR)
-                       ? (float)lbDisplay.DrawColour : -1.0f;
+            forced_idx = (m_text_draw_flags & Lb_TEXT_ONE_COLOR)
+                       ? (float)m_text_draw_colour : -1.0f;
         }
                          
         int glyph_width = GenerateCharQuad(chr, current_x, screen_y, scale_factor,

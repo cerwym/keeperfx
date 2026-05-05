@@ -21,12 +21,13 @@
 #include "renderer/opengl/GLUIRenderer.h"
 #include "renderer/opengl/GLWorldViewRenderer.h"
 #include "renderer/opengl/GLSpriteAtlas.h"
-#include "bflib_video.h"       // lbDisplay.DrawFlags
-#include "engine_render.h"     // process_keeper_sprite
+#include "bflib_video.h"       // lbDisplay.DrawFlags (SubmitKeeperHandSprite capture)
+#include "engine_render.h"     // process_keeper_sprite_ex, EngineSpriteDrawUsingAlpha
 #include "globals.h"
 #include <glad/glad.h>
 #include "post_inc.h"
 
+// Read at SubmitKeeperHandSprite time to capture alpha state alongside DrawFlags.
 extern "C" unsigned char EngineSpriteDrawUsingAlpha;
 
 /******************************************************************************/
@@ -88,17 +89,12 @@ void GLCursorLayer::Draw()
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         m_wvr->BeginHandSpriteRendering();
 
-        unsigned int  saved_flags = lbDisplay.DrawFlags;
-        unsigned char saved_alpha = EngineSpriteDrawUsingAlpha;
         for (const auto& k : m_keepers)
         {
-            lbDisplay.DrawFlags        = k.draw_flags;
-            EngineSpriteDrawUsingAlpha = k.draw_alpha;
-            process_keeper_sprite(k.x, k.y, k.kspr_base,
-                                  k.angle, k.sprgroup, k.scale);
+            process_keeper_sprite_ex(k.x, k.y, k.kspr_base,
+                                     k.angle, k.sprgroup, k.scale,
+                                     k.draw_flags, k.draw_alpha);
         }
-        lbDisplay.DrawFlags        = saved_flags;
-        EngineSpriteDrawUsingAlpha = saved_alpha;
 
         m_wvr->EndHandSpriteRendering();
         glDisable(GL_BLEND);

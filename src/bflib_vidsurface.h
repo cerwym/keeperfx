@@ -47,6 +47,31 @@ TbResult LbScreenSurfaceBlit(struct SSurface *surf, unsigned long x, unsigned lo
     struct TbRect *rect, unsigned long blflags);
 void *LbScreenSurfaceLock(struct SSurface *surf);
 TbResult LbScreenSurfaceUnlock(struct SSurface *surf);
+
+/** Obtain the SDL window surface and create an intermediate scale surface when
+ *  the draw surface BPP differs from the window BPP.  Call once from
+ *  RendererSoftware::Init() after the SDL window exists.
+ *  Returns Lb_SUCCESS on success or Lb_FAIL if the window surface is unavailable. */
+TbResult LbScreenSetupRendererSurfaces(void);
+
+/** Release resources allocated by LbScreenSetupRendererSurfaces().
+ *  lbScreenSurface is owned by SDL and is only nulled, not freed. */
+void LbScreenReleaseRendererSurfaces(void);
+
+/** Present the completed frame: runs the blit chain and calls SDL_UpdateWindowSurface.
+ *  Refreshes the window surface pointer each call (guards against resize/alt-tab). */
+void LbScreenSwap(void);
+
+/** Fill the draw surface with colour_index (palette index, not RGB). */
+void LbScreenClearIndex(uint8_t colour_index);
+
+/** Lock the draw surface for CPU pixel writes.
+ *  Returns the pixel pointer and writes the surface pitch to *out_pitch.
+ *  Returns NULL on failure. */
+uint8_t* LbScreenGetPixels(int* out_pitch);
+
+/** Unlock the draw surface after CPU pixel writes. */
+void LbScreenReleasePixels(void);
 /******************************************************************************/
 #ifdef __cplusplus
 }

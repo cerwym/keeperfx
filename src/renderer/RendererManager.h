@@ -167,6 +167,18 @@ TbScreenCoord RendererScreenHeight(void);
  *  Replaces lbDisplay.WScreen reads. */
 unsigned char* RendererGetWScreen(void);
 
+/** Redirect the CPU framebuffer pointer to a caller-owned buffer.
+ *  Subsequent sprite draws will rasterise into @p buf instead of the
+ *  default framebuffer.  Pass NULL to restore normal operation.
+ *  Replaces direct lbDisplay.WScreen writes. */
+void RendererSetWScreen(unsigned char* buf);
+
+/** Override the graphics buffer dimensions.
+ *  Must be paired with RendererSetWScreen() when redirecting sprite drawing
+ *  to a scratch buffer of different size.
+ *  Replaces direct lbDisplay.GraphicsScreenWidth/Height writes. */
+void RendererSetScreenDimensions(int width, int height);
+
 /******************************************************************************/
 /* Palette management (replaces LbPalette* functions)                         */
 /******************************************************************************/
@@ -436,6 +448,16 @@ TbBool RendererSubmitStagingOverlay(void);
  *          false (software renderer: caller should draw to WScreen + SubmitStagingOverlay). */
 TbBool RendererSubmitTransparentBlit(const unsigned char* buf, int w, int h);
 
+/** Draw the creature swipe overlay in possession mode.
+ *  Delegates to the active renderer's DrawSwipeOverlay() which handles
+ *  sprite layout, rendering, and compositing in a backend-specific way.
+ *  @param sprites         The loaded swipe sprite sheet.
+ *  @param frame           Frame index (0 – SWIPE_SPRITE_FRAMES-1).
+ *  @param draw_lr         true = left-to-right, false = right-to-left (mirrored).
+ *  @param engine_window_x Engine viewport X offset (for centering in LR mode). */
+void RendererDrawSwipeOverlay(struct TbSpriteSheet* sprites, int frame,
+                              int draw_lr, int engine_window_x);
+
 /** Submit the overhead (parchment) map tile colours for GPU rendering.
  *  The caller provides one palette index per map tile (tiles_x × tiles_y,
  *  row-major, background=0 for unrevealed tiles that need ghost effects).
@@ -546,6 +568,13 @@ void UIRenderer_SubmitPanelSprite(int32_t x, int32_t y, int units_per_px, int32_
 struct TbSprite;
 void UIRenderer_SubmitPanelSpriteRaw(int32_t x, int32_t y, int units_per_px, const struct TbSprite* spr);
 
+/** Submit a panel sprite with an opaque background fill behind it.
+ *  Draws a solid box at the sprite's screen rect in bg_color_idx, then the sprite
+ *  on top.  Use for portraits and icons that need a solid backing so transparent
+ *  atlas pixels (index 0) don't punch through to the panel behind. */
+void UIRenderer_SubmitPanelSpriteWithBg(int32_t x, int32_t y, int units_per_px,
+                                        const struct TbSprite* spr, unsigned char bg_color_idx);
+
 /** Submit a panel sprite drawn entirely in a single flat colour (sprite used as discard mask).
  *  GPU: atlas R8 index used to discard transparent pixels; all opaque pixels output color_idx.
  *  CPU fallback: LbSpriteDrawResizedOneColour. */
@@ -623,6 +652,7 @@ struct TiledSprite;
 void UIRenderer_SubmitTiledSprite(int32_t x, int32_t y, int units_per_px, const struct TiledSprite* bigspr);
 
 void UIRenderer_SetLayer(int layer);
+void UIRenderer_SetGameViewport(int x, int y, int w, int h);
 void UIRenderer_DrawBack(void);
 void UIRenderer_DrawFront(void);
 void UIRenderer_Draw(void);

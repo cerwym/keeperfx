@@ -248,6 +248,14 @@ TbBool MistEffect::Setup(long lens_idx)
                          (unsigned char)cfg->mist_sec_x_step,
                          (unsigned char)cfg->mist_sec_y_step);
     m_gpu_pass.Init();
+#else
+    if (!m_gl_pass_ready)
+    {
+        if (m_gl_pass.Init())
+            m_gl_pass_ready = true;
+        else
+            SYNCDBG(7, "GL mist pass init failed — CPU fallback");
+    }
 #endif
     
     SYNCDBG(7, "Mist effect ready");
@@ -267,8 +275,10 @@ void MistEffect::Cleanup()
         m_current_lens = -1;
 #ifdef PLATFORM_VITA
         m_gpu_pass.Free();
+#else
+        m_gl_pass.Free();
+        m_gl_pass_ready = false;
 #endif
-        SYNCDBG(9, "Mist effect cleaned up");
     }
 }
 

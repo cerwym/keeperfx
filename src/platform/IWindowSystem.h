@@ -58,6 +58,12 @@ public:
      *  No-op on platforms where warping is meaningless. */
     virtual void WarpCursor(int /*x*/, int /*y*/) {}
 
+    // ----- Display info -----
+
+    /** Returns the refresh rate (Hz) of the display the game window is on.
+     *  Returns 0 when unavailable or not applicable (consoles with fixed rate). */
+    virtual int GetDisplayRefreshRate() const { return 0; }
+
     // ----- Per-frame poll -----
 
     /** Called once per event-poll cycle from LbWindowsControl().

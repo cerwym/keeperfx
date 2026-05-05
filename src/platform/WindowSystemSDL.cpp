@@ -66,3 +66,16 @@ void WindowSystemSDL::WarpCursor(int x, int y)
 {
     SDL_WarpMouseInWindow(lbWindow, x, y);
 }
+
+int WindowSystemSDL::GetDisplayRefreshRate() const
+{
+    if (lbWindow == nullptr)
+        return 0;
+    int display_index = SDL_GetWindowDisplayIndex(lbWindow);
+    if (display_index < 0)
+        return 0;
+    SDL_DisplayMode mode;
+    if (SDL_GetCurrentDisplayMode(display_index, &mode) == 0 && mode.refresh_rate > 0)
+        return mode.refresh_rate;
+    return 0;
+}

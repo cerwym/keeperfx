@@ -45,7 +45,13 @@ std::string get_embedded_shader_source(const char* shader_name)
         {"world_vert.glsl", WORLD_VERTEX_SHADER},
         {"world_frag.glsl", WORLD_FRAGMENT_SHADER},
         {"flatpoly_vert.glsl", FLATPOLY_VERTEX_SHADER},
-        {"flatpoly_frag.glsl", FLATPOLY_FRAGMENT_SHADER}
+        {"flatpoly_frag.glsl", FLATPOLY_FRAGMENT_SHADER},
+        {"passthrough_frag.glsl", PASSTHROUGH_FRAGMENT_SHADER},
+        {"lens_displacement_frag.glsl", LENS_DISPLACEMENT_FRAGMENT_SHADER},
+        {"lens_mist_frag.glsl", LENS_MIST_FRAGMENT_SHADER},
+        {"lens_flyeye_frag.glsl", LENS_FLYEYE_FRAGMENT_SHADER},
+        {"lens_palette_frag.glsl", LENS_PALETTE_FRAGMENT_SHADER},
+        {"lens_overlay_frag.glsl", LENS_OVERLAY_FRAGMENT_SHADER}
     };
 
     auto it = shader_map.find(shader_name);

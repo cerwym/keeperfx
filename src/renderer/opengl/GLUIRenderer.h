@@ -97,6 +97,7 @@ public:
     virtual void SetLayer(int layer) override;
     virtual void SetWorldDepth(float ndc_z) override;
     virtual void ClearWorldDepth() override;
+    void SetGameViewport(int x, int y, int w, int h);
     virtual void SetTopOverlay() override;
     virtual void ClearTopOverlay() override;
     virtual void DrawBack() override;
@@ -150,6 +151,11 @@ public:
      *  @return true if successful */
     bool SetFontAtlas(GLFontAtlas* atlas);
 
+    /** Supply the active 256-colour VGA palette (768 bytes: R,G,B × 256).
+     *  Called by RendererOpenGL::BeginFrame().  Eliminates the direct lbPalette
+     *  read from submission methods. */
+    void SetPaletteSource(const uint8_t* palette) { m_palette_data = palette; }
+
     /** Set palette texture for color lookups.
      *  @param palette_texture_id OpenGL texture ID for 256-color palette
      *  @return true if successful */
@@ -194,6 +200,9 @@ private:
     // Screen properties
     int m_screen_width;
     int m_screen_height;
+
+    // Active VGA palette (R,G,B × 256) — source pointer registered via SetPaletteSource by SetPaletteData(), eliminates lbPalette reads.
+    const uint8_t* m_palette_data = nullptr;
     
     // Resources
     GLSpriteAtlas* m_sprite_atlas;
@@ -232,6 +241,15 @@ private:
     float m_world_z             = 0.0f;  // NDC z for active world-depth batch
     bool  m_world_depth_active  = false; // when true, SubmitQuad/SubmitLine use layer=2, z=m_world_z
     bool  m_top_overlay_active  = false; // when true, SubmitQuad/SubmitLine use layer=3 (drawn last, depth-test OFF)
+
+    // Game viewport rect (screen pixels) — set each frame by SetGameViewport().
+    // Used to scissor-clip layer-2 sprites so they don't bleed onto the sidebar,
+    // overhead map, or zoom box.
+    int  m_game_vp_x = 0;
+    int  m_game_vp_y = 0;
+    int  m_game_vp_w = 0;
+    int  m_game_vp_h = 0;
+    bool m_game_vp_set = false;
 
     // Internal methods
     bool CreateShaders();

@@ -76,6 +76,9 @@ public:
     
     // Returns the name of the active backend ("GPU_VITA", "SOFTWARE", etc.)
     const char* GetBackendName() const;
+
+    // Returns true if a backend has been initialised.
+    bool IsInitialised() const { return m_backend != nullptr; }
     
 private:
     RenderPassSystem();

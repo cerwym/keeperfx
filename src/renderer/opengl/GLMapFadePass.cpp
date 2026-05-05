@@ -14,10 +14,8 @@
 #include "renderer/RendererOpenGL.h"      // FlushSceneToFBO
 #include "renderer/RendererManager.h"     // RendererGetActive, WorldViewRenderer_BeginWorldPass
 #include "renderer/opengl/GLWorldViewRenderer.h" // BeginWorldPass
-#include "bflib_video.h"      // MyScreenWidth/Height, pixel_size, lbDisplay
-#include "bflib_vidraw.h"     // vec_window_width/height
 #include "engine_redraw.h"    // redraw_isometric_view, redraw_frontview, map_fade_in/out, setup/store_engine_window
-#include "engine_render.h"    // vert_offset, hori_offset, x_init_off, y_init_off, draw_view
+#include "engine_render.h"    // EngineRenderState, engine_save/restore_render_state, draw_view
 #include "gui_parchment.h"    // load_parchment_file, redraw_minimal_overhead_view
 #include "player_data.h"      // get_my_player, view_mode_restore
 #include "game_legacy.h"      // game.process_turn_time
@@ -162,8 +160,8 @@ bool GLMapFadePass::CaptureAndUploadFrames()
     }
 
     struct PlayerInfo* player = get_my_player();
-    const int w = (int)MyScreenWidth;
-    const int h = (int)MyScreenHeight;
+    const int w = m_screen_w;
+    const int h = m_screen_h;
     if (w < 1 || h < 1)
     {
         WARNLOG("GLMapFadePass::CaptureAndUploadFrames — degenerate screen size %dx%d", w, h);
@@ -196,25 +194,15 @@ bool GLMapFadePass::CaptureAndUploadFrames()
     // The GL renderer uses a fullscreen viewport (0,0,w,h) — the sidebar
     // paints on top — so the captured view always matches the live view.
     {
-        // Save engine window and vec_window state.
-        const int32_t saved_vw = vec_window_width;
-        const int32_t saved_vh = vec_window_height;
+        // Save engine projection/window state and set up for FBO dimensions.
+        struct EngineRenderState saved_state;
+        engine_save_render_state(&saved_state);
 
-        vec_window_width  = w;
-        vec_window_height = h;
-
-        TbGraphicsWindow saved_ewnd;
-        store_engine_window(&saved_ewnd, 1);
         setup_engine_window(0, 0, w, h);
 
         // Tell the world renderer about the FBO target dimensions.
+        // BeginWorldPass also sets vec_window_width/height from w,h.
         gl_rend->GetWorldRenderer()->BeginWorldPass(nullptr, 0, w, h, 0, 0);
-
-        // Save projection globals so main-view mouse→world unprojection is unaffected.
-        const Offset saved_vert[3] = { vert_offset[0], vert_offset[1], vert_offset[2] };
-        const Offset saved_hori[3] = { hori_offset[0], hori_offset[1], hori_offset[2] };
-        const int32_t saved_x_init  = x_init_off;
-        const int32_t saved_y_init  = y_init_off;
 
         // Re-render the 3D view using the appropriate camera.
         struct Camera* cam;
@@ -225,16 +213,8 @@ bool GLMapFadePass::CaptureAndUploadFrames()
             cam = get_local_camera(&player->cameras[CamIV_FrontView]);
         draw_view(cam, 0);
 
-        // Restore projection globals and engine window.
-        vert_offset[0] = saved_vert[0]; vert_offset[1] = saved_vert[1]; vert_offset[2] = saved_vert[2];
-        hori_offset[0] = saved_hori[0]; hori_offset[1] = saved_hori[1]; hori_offset[2] = saved_hori[2];
-        x_init_off = saved_x_init;
-        y_init_off = saved_y_init;
-
-        setup_engine_window(saved_ewnd.x, saved_ewnd.y,
-                            saved_ewnd.width, saved_ewnd.height);
-        vec_window_width  = saved_vw;
-        vec_window_height = saved_vh;
+        // Restore engine projection/window state.
+        engine_restore_render_state(&saved_state);
 
         // Flush world geometry into the FBO.
         glBindFramebuffer(GL_FRAMEBUFFER, fbo);
