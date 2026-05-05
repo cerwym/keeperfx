@@ -8,7 +8,6 @@
 #include "pre_inc.h"
 #include "globals.h"
 #include "renderer/opengl/GLLensPass.h"
-#include "renderer/opengl/GLShaderLoader.h"
 #include "renderer/opengl/GLShaders.h"
 #include "bflib_basics.h"
 
@@ -61,18 +60,10 @@ void GLLensPassBase::Free()
     if (m_vbo)  { glDeleteBuffers(1, &m_vbo); m_vbo = 0; }
 }
 
-bool GLLensPassBase::CompilePass(const char* frag_shader_name)
+bool GLLensPassBase::CompilePass(const char* frag_src)
 {
-    std::string vert_src = get_embedded_shader_source("palette_blit_vert.glsl");
-    std::string frag_src = get_embedded_shader_source(frag_shader_name);
-    if (vert_src.empty() || frag_src.empty())
-    {
-        ERRORLOG("GLLensPass: shader source '%s' not found", frag_shader_name);
-        return false;
-    }
-
-    unsigned int vs = compile_pass_shader(GL_VERTEX_SHADER, vert_src.c_str());
-    unsigned int fs = compile_pass_shader(GL_FRAGMENT_SHADER, frag_src.c_str());
+    unsigned int vs = compile_pass_shader(GL_VERTEX_SHADER,   PALETTE_BLIT_VERTEX_SHADER);
+    unsigned int fs = compile_pass_shader(GL_FRAGMENT_SHADER, frag_src);
     if (!vs || !fs)
     {
         if (vs) glDeleteShader(vs);

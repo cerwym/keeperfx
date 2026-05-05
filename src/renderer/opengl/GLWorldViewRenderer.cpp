@@ -11,7 +11,7 @@
 #ifdef RENDERER_OPENGL_ENABLED
 
 #include "renderer/opengl/GLTileAtlas.h"
-#include "renderer/opengl/GLShaderLoader.h"
+#include "renderer/opengl/GLShaders.h"
 #include "renderer/opengl/GLTextRenderer.h"
 #include "renderer/backends/SoftwareWorldViewRenderer.h"
 #include "renderer/ITileAtlas.h"
@@ -323,17 +323,8 @@ void GLWorldViewRenderer::free_gl_resources()
 
 bool GLWorldViewRenderer::compile_world_shaders()
 {
-    std::string vert_src = get_embedded_shader_source("world_vert.glsl");
-    std::string frag_src = get_embedded_shader_source("world_frag.glsl");
-    if (vert_src.empty() || frag_src.empty())
-    {
-        ERRORLOG("GLWorldViewRenderer: world shader source missing (vert=%zu frag=%zu)",
-                 vert_src.size(), frag_src.size());
-        return false;
-    }
-
-    GLuint vert = compile_shader_src(GL_VERTEX_SHADER,   vert_src.c_str(), "world_vert.glsl");
-    GLuint frag = compile_shader_src(GL_FRAGMENT_SHADER, frag_src.c_str(), "world_frag.glsl");
+    GLuint vert = compile_shader_src(GL_VERTEX_SHADER,   WORLD_VERTEX_SHADER,   "world_vert.glsl");
+    GLuint frag = compile_shader_src(GL_FRAGMENT_SHADER, WORLD_FRAGMENT_SHADER, "world_frag.glsl");
     if (!vert || !frag)
     {
         if (vert) glDeleteShader(vert);
@@ -364,13 +355,8 @@ bool GLWorldViewRenderer::compile_world_shaders()
 
 bool GLWorldViewRenderer::init_shadow_shader()
 {
-    std::string sv_src = get_embedded_shader_source("shadow_vert.glsl");
-    std::string sf_src = get_embedded_shader_source("shadow_frag.glsl");
-    if (sv_src.empty() || sf_src.empty())
-        return false;
-
-    GLuint sv = compile_shader_src(GL_VERTEX_SHADER,   sv_src.c_str(), "shadow_vert.glsl");
-    GLuint sf = compile_shader_src(GL_FRAGMENT_SHADER, sf_src.c_str(), "shadow_frag.glsl");
+    GLuint sv = compile_shader_src(GL_VERTEX_SHADER,   SHADOW_VERTEX_SHADER, "shadow_vert.glsl");
+    GLuint sf = compile_shader_src(GL_FRAGMENT_SHADER, SHADOW_FRAGMENT_SHADER, "shadow_frag.glsl");
     if (!sv || !sf)
     {
         if (sv) glDeleteShader(sv);
@@ -438,13 +424,8 @@ bool GLWorldViewRenderer::init_shadow_shader()
 
 bool GLWorldViewRenderer::init_keeper_sprite_shader()
 {
-    std::string sv_src = get_embedded_shader_source("kspr_vert.glsl");
-    std::string sf_src = get_embedded_shader_source("kspr_frag.glsl");
-    if (sv_src.empty() || sf_src.empty())
-        return false;
-
-    GLuint sv = compile_shader_src(GL_VERTEX_SHADER,   sv_src.c_str(), "kspr_vert.glsl");
-    GLuint sf = compile_shader_src(GL_FRAGMENT_SHADER, sf_src.c_str(), "kspr_frag.glsl");
+    GLuint sv = compile_shader_src(GL_VERTEX_SHADER,   KSPR_VERTEX_SHADER,   "kspr_vert.glsl");
+    GLuint sf = compile_shader_src(GL_FRAGMENT_SHADER, KSPR_FRAGMENT_SHADER, "kspr_frag.glsl");
     if (!sv || !sf)
     {
         if (sv) glDeleteShader(sv);
@@ -483,14 +464,8 @@ bool GLWorldViewRenderer::init_keeper_sprite_shader()
     // Compile the additive glow shader (same vertex shader, glow fragment shader).
     // Uses u_sprite (GL_TEXTURE0), u_viewport, and u_z_ndc only — no palette needed.
     {
-        std::string gf_src = get_embedded_shader_source("kspr_glow_frag.glsl");
-        if (gf_src.empty())
-        {
-            ERRORLOG("GLWorldViewRenderer: failed to load glow shaders");
-            return false;
-        }
-        GLuint gv = compile_shader_src(GL_VERTEX_SHADER,   sv_src.c_str(),    "kspr_vert.glsl");
-        GLuint gf = compile_shader_src(GL_FRAGMENT_SHADER, gf_src.c_str(), "kspr_glow_frag.glsl");
+        GLuint gv = compile_shader_src(GL_VERTEX_SHADER,   KSPR_VERTEX_SHADER,       "kspr_vert.glsl");
+        GLuint gf = compile_shader_src(GL_FRAGMENT_SHADER, KSPR_GLOW_FRAGMENT_SHADER, "kspr_glow_frag.glsl");
         if (!gv || !gf)
         {
             if (gv) glDeleteShader(gv);
@@ -570,10 +545,9 @@ bool GLWorldViewRenderer::init_keeper_sprite_shader()
             break;
         }
 
-        std::string af_src = get_embedded_shader_source("kspr_array_frag.glsl");
-        if (af_src.empty()) break;
+        std::string af_src = KSPR_ARRAY_FRAGMENT_SHADER;
 
-        GLuint av = compile_shader_src(GL_VERTEX_SHADER,   sv_src.c_str(), "kspr_vert.glsl");
+        GLuint av = compile_shader_src(GL_VERTEX_SHADER,   KSPR_VERTEX_SHADER,        "kspr_vert.glsl");
         GLuint af = compile_shader_src(GL_FRAGMENT_SHADER, af_src.c_str(), "kspr_array_frag.glsl");
         if (!av || !af) { if (av) glDeleteShader(av); if (af) glDeleteShader(af); break; }
 
@@ -637,12 +611,12 @@ bool GLWorldViewRenderer::init_keeper_sprite_shader()
     // Two variants: single-texture (fallback path) and array-atlas (cached path).
     // Compiled opportunistically — missing shaders just disable the outline.
     {
-        std::string of_src  = get_embedded_shader_source("kspr_outline_frag.glsl");
-        std::string oaf_src = get_embedded_shader_source("kspr_array_outline_frag.glsl");
+        std::string of_src  = KSPR_OUTLINE_FRAGMENT_SHADER;
+        std::string oaf_src = KSPR_ARRAY_OUTLINE_FRAGMENT_SHADER;
 
         if (!of_src.empty())
         {
-            GLuint ov = compile_shader_src(GL_VERTEX_SHADER,   sv_src.c_str(), "kspr_vert.glsl");
+            GLuint ov = compile_shader_src(GL_VERTEX_SHADER,   KSPR_VERTEX_SHADER,           "kspr_vert.glsl");
             GLuint of = compile_shader_src(GL_FRAGMENT_SHADER, of_src.c_str(), "kspr_outline_frag.glsl");
             if (ov && of)
             {
@@ -678,7 +652,7 @@ bool GLWorldViewRenderer::init_keeper_sprite_shader()
 
         if (!oaf_src.empty() && m_kspr_atlas_shader)
         {
-            GLuint oav = compile_shader_src(GL_VERTEX_SHADER,   sv_src.c_str(),  "kspr_vert.glsl");
+            GLuint oav = compile_shader_src(GL_VERTEX_SHADER,   KSPR_VERTEX_SHADER,                 "kspr_vert.glsl");
             GLuint oaf = compile_shader_src(GL_FRAGMENT_SHADER, oaf_src.c_str(), "kspr_array_outline_frag.glsl");
             if (oav && oaf)
             {
@@ -720,13 +694,8 @@ bool GLWorldViewRenderer::init_keeper_sprite_shader()
 
 bool GLWorldViewRenderer::init_flatpoly_shader()
 {
-    std::string sv_src = get_embedded_shader_source("flatpoly_vert.glsl");
-    std::string sf_src = get_embedded_shader_source("flatpoly_frag.glsl");
-    if (sv_src.empty() || sf_src.empty())
-        return false;
-
-    GLuint sv = compile_shader_src(GL_VERTEX_SHADER,   sv_src.c_str(), "flatpoly_vert.glsl");
-    GLuint sf = compile_shader_src(GL_FRAGMENT_SHADER, sf_src.c_str(), "flatpoly_frag.glsl");
+    GLuint sv = compile_shader_src(GL_VERTEX_SHADER,   FLATPOLY_VERTEX_SHADER,   "flatpoly_vert.glsl");
+    GLuint sf = compile_shader_src(GL_FRAGMENT_SHADER, FLATPOLY_FRAGMENT_SHADER, "flatpoly_frag.glsl");
     if (!sv || !sf)
     {
         if (sv) glDeleteShader(sv);

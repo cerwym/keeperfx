@@ -21,7 +21,6 @@
 #include "renderer/opengl/GLTextRenderer.h"
 #include "renderer/opengl/GLMapFadePass.h"
 #include "renderer/opengl/GLShaders.h"
-#include "renderer/opengl/GLShaderLoader.h"
 #include "renderer/opengl/GLLensPass.h"
 #include "kfx/profiling/KfxProfiling.h"
 #include "kfx/lense/LensManager.h"
@@ -189,16 +188,8 @@ bool RendererOpenGL::Init()
     // Compile shader: reuse palette_blit_vert.glsl + rawimage_blit_frag.glsl.
     // Fatal if shader compilation fails — no CPU fallback is permitted in GL mode.
     {
-        std::string rv_src = get_embedded_shader_source("palette_blit_vert.glsl");
-        std::string rf_src = get_embedded_shader_source("rawimage_blit_frag.glsl");
-        if (rv_src.empty() || rf_src.empty())
-        {
-            ERRORLOG("RendererOpenGL::Init: rawimage blit shader source missing");
-            platform_destroy_gl_context();
-            return false;
-        }
-        unsigned int rv = compile_shader(GL_VERTEX_SHADER,   rv_src.c_str());
-        unsigned int rf = compile_shader(GL_FRAGMENT_SHADER, rf_src.c_str());
+        unsigned int rv = compile_shader(GL_VERTEX_SHADER,   PALETTE_BLIT_VERTEX_SHADER);
+        unsigned int rf = compile_shader(GL_FRAGMENT_SHADER, RAWIMAGE_BLIT_FRAGMENT_SHADER);
         if (!rv || !rf)
         {
             if (rv) glDeleteShader(rv);
@@ -236,8 +227,8 @@ bool RendererOpenGL::Init()
     // index 0 so that unrevealed tiles are transparent (parchment shows through).
     // Blending is enabled for the overhead map pass.
     {
-        std::string rv_src = get_embedded_shader_source("palette_blit_vert.glsl");
-        std::string rf_src = get_embedded_shader_source("overhead_map_frag.glsl");
+        std::string rv_src = PALETTE_BLIT_VERTEX_SHADER;
+        std::string rf_src = OVERHEAD_MAP_FRAGMENT_SHADER;
         if (!rv_src.empty() && !rf_src.empty())
         {
             unsigned int rv = compile_shader(GL_VERTEX_SHADER,   rv_src.c_str());
@@ -286,8 +277,8 @@ bool RendererOpenGL::Init()
     // Index 0 is discarded so transparent tile pixels let the parchment show
     // through.  Non-fatal: falls back to no-draw if compile fails.
     {
-        std::string rv_src = get_embedded_shader_source("palette_blit_vert.glsl");
-        std::string rf_src = get_embedded_shader_source("zoom_tile_frag.glsl");
+        std::string rv_src = PALETTE_BLIT_VERTEX_SHADER;
+        std::string rf_src = ZOOM_TILE_FRAGMENT_SHADER;
         if (!rv_src.empty() && !rf_src.empty())
         {
             unsigned int rv = compile_shader(GL_VERTEX_SHADER,   rv_src.c_str());
@@ -405,16 +396,8 @@ bool RendererOpenGL::Init()
     // The zoom fragment shader uses gl_FragCoord to compute source UVs from
     // per-frame uniforms (zoom centre in map & screen coords, scale).
     {
-        std::string zv_src = get_embedded_shader_source("palette_blit_vert.glsl");
-        std::string zf_src = get_embedded_shader_source("landview_zoom_frag.glsl");
-        if (zv_src.empty() || zf_src.empty())
-        {
-            ERRORLOG("RendererOpenGL::Init: landview zoom shader source missing");
-            platform_destroy_gl_context();
-            return false;
-        }
-        unsigned int zv = compile_shader(GL_VERTEX_SHADER,   zv_src.c_str());
-        unsigned int zf = compile_shader(GL_FRAGMENT_SHADER, zf_src.c_str());
+        unsigned int zv = compile_shader(GL_VERTEX_SHADER,   PALETTE_BLIT_VERTEX_SHADER);
+        unsigned int zf = compile_shader(GL_FRAGMENT_SHADER, LANDVIEW_ZOOM_FRAGMENT_SHADER);
         if (!zv || !zf)
         {
             if (zv) glDeleteShader(zv);
@@ -1770,9 +1753,6 @@ void RendererOpenGL::EnsureLensFBOs()
     // Compile passthrough shader (blit final texture to screen)
     if (!m_passthrough_shader)
     {
-        std::string vert_src = get_embedded_shader_source("palette_blit_vert.glsl");
-        std::string frag_src = get_embedded_shader_source("passthrough_frag.glsl");
-        if (!vert_src.empty() && !frag_src.empty())
         {
             auto cs = [](GLenum type, const char* src) -> unsigned int {
                 unsigned int s = glCreateShader(type);
@@ -1783,8 +1763,8 @@ void RendererOpenGL::EnsureLensFBOs()
                 if (!ok) { glDeleteShader(s); return 0; }
                 return s;
             };
-            unsigned int vs = cs(GL_VERTEX_SHADER, vert_src.c_str());
-            unsigned int fs = cs(GL_FRAGMENT_SHADER, frag_src.c_str());
+            unsigned int vs = cs(GL_VERTEX_SHADER,   PALETTE_BLIT_VERTEX_SHADER);
+            unsigned int fs = cs(GL_FRAGMENT_SHADER, PASSTHROUGH_FRAGMENT_SHADER);
             if (vs && fs)
             {
                 m_passthrough_shader = glCreateProgram();
@@ -2190,13 +2170,8 @@ IUIRenderer* RendererOpenGL::GetUIRenderer()
 
 bool RendererOpenGL::compile_shaders()
 {
-    std::string vert_src = get_embedded_shader_source("palette_blit_vert.glsl");
-    std::string frag_src = get_embedded_shader_source("palette_blit_frag.glsl");
-    if (vert_src.empty() || frag_src.empty())
-        return false;
-
-    unsigned int vert = compile_shader(GL_VERTEX_SHADER,   vert_src.c_str());
-    unsigned int frag = compile_shader(GL_FRAGMENT_SHADER, frag_src.c_str());
+    unsigned int vert = compile_shader(GL_VERTEX_SHADER,   PALETTE_BLIT_VERTEX_SHADER);
+    unsigned int frag = compile_shader(GL_FRAGMENT_SHADER, PALETTE_BLIT_FRAGMENT_SHADER);
     if (!vert || !frag)
     {
         if (vert) glDeleteShader(vert);
@@ -2227,8 +2202,8 @@ bool RendererOpenGL::compile_shaders()
     // Non-fatal: if this fails, palette effects (possession, white flash, etc.)
     // won't show on the 3D world pass but gameplay is unaffected.
     {
-        std::string tv_src = get_embedded_shader_source("screen_tint_vert.glsl");
-        std::string tf_src = get_embedded_shader_source("screen_tint_frag.glsl");
+        std::string tv_src = SCREEN_TINT_VERTEX_SHADER;
+        std::string tf_src = SCREEN_TINT_FRAGMENT_SHADER;
         if (!tv_src.empty() && !tf_src.empty())
         {
             unsigned int tv = compile_shader(GL_VERTEX_SHADER,   tv_src.c_str());
