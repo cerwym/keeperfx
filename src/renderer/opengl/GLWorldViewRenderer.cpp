@@ -134,6 +134,16 @@ GLWorldViewRenderer::~GLWorldViewRenderer()
 
 /******************************************************************************/
 
+bool GLWorldViewRenderer::CompileShaders()
+{
+    // init_gl_resources() is idempotent (guarded by m_initialized).
+    // It compiles all GLSL programs for world, shadow, keeper-sprite, and
+    // flat-poly passes, and also calls m_text_renderer->CompileShaders().
+    return init_gl_resources();
+}
+
+/******************************************************************************/
+
 bool GLWorldViewRenderer::init_gl_resources()
 {
     if (m_initialized)
@@ -268,6 +278,12 @@ bool GLWorldViewRenderer::init_gl_resources()
     if (m_text_renderer && !m_text_renderer->Init())
     {
         ERRORLOG("GLWorldViewRenderer: failed to initialise text renderer");
+        free_gl_resources();
+        return false;
+    }
+    if (m_text_renderer && !m_text_renderer->CompileShaders())
+    {
+        ERRORLOG("GLWorldViewRenderer: failed to compile text renderer shaders");
         free_gl_resources();
         return false;
     }
@@ -1148,8 +1164,6 @@ void GLWorldViewRenderer::BeginWorldPass(unsigned char* framebuf, int pitch,
     }
     else
     {
-        assert("GLWorldViewRendererer::BeginWorldPass - Fall back to SW world, this shouldn't be allowed anymore, "
-               "check init flow.");
     }
 
     // Set screen size for text renderer
@@ -1662,7 +1676,7 @@ void GLWorldViewRenderer::DrawIsometricView()
 {
     KFX_ZONE("WVR::DrawIsometricView");
     if (!m_initialized) {
-        SYNCLOG("WVR::DrawIsometricView not initialized, tried to fallback to SW.");
+        SYNCLOG("GLWorldViewRenderer asked to draw ISO and wasnt initialized, returning...");
         return;
     }
 
@@ -1884,10 +1898,7 @@ void GLWorldViewRenderer::DrawFrontView(struct Camera* cam)
 {
     // When the GPU renderer is active, front-view geometry is already captured
     // via the bucket walk in DrawIsometricView (the engine fills the same
-    // bucket list for both iso and front views).  Calling the software fallback
-    // would draw into the staging buffer and then we'd have to zero it to
-    // prevent those CPU-rasterised pixels from compositing over the GPU output,
-    // which causes a visible flicker frame.  Skip it entirely.
+    // bucket list for both iso and front views).
     if (m_initialized)
         return;
 }

@@ -27,6 +27,7 @@
 #include <unordered_map>
 #include "renderer/IWorldViewRenderer.h"
 #include "renderer/WorldVertex.h"
+#include "renderer/opengl/IGLShaderCompilable.h"
 #include "bflib_render.h"   // PolyPoint (needed by ShadowCmd)
 
 class ITileAtlas;
@@ -34,7 +35,7 @@ class GLTextRenderer;
 
 /******************************************************************************/
 
-class GLWorldViewRenderer : public IWorldViewRenderer {
+class GLWorldViewRenderer : public IWorldViewRenderer, public IGLShaderCompilable {
 public:
     /**
      * @param atlas       Tile atlas providing GL texture handles.
@@ -56,6 +57,13 @@ public:
     void DrawIsometricView() override;
     void DrawFrontView(struct Camera* cam) override;
     const char* GetName() const override { return "GLWorldViewRenderer"; }
+    const char* RendererName() const override { return "GLWorldViewRenderer"; }
+
+    /** Compile all GLSL programs owned by this renderer and its internal
+     *  text sub-renderer.  Idempotent — safe to call after construction
+     *  (the first call also performs non-shader GL initialisation).
+     *  Called by the bootstrapper in RendererManager::RendererInit(). */
+    bool CompileShaders() override;
     /** Notify of the full OS-window dimensions (not the world viewport).
      *  Called by RendererOpenGL::BeginFrame() so that BeginHandSpriteRendering()
      *  and gpu_execute_passes() do not need to read MyScreenWidth/Height directly. */
