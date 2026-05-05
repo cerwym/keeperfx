@@ -244,16 +244,15 @@ void RendererSubmitZoomBoxTiles(const unsigned short* tile_block_ids, int tiles_
 /* Zoom-box render mode                                                       */
 /******************************************************************************/
 
-static ZoomBoxMode s_zoom_box_mode = ZBM_ISOMETRIC;
 
 ZoomBoxMode RendererGetZoomBoxMode(void)
 {
-    return s_zoom_box_mode;
+    return static_cast<ZoomBoxMode>(g_renderer_settings.zoom_box_mode);
 }
 
 void RendererSetZoomBoxMode(ZoomBoxMode mode)
 {
-    s_zoom_box_mode = mode;
+    g_renderer_settings.zoom_box_mode = mode;
 }
 
 static float s_zoom_box_clip_radius = -1.0f;
