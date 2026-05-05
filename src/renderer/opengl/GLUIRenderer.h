@@ -12,6 +12,7 @@
 #pragma once
 
 #include "renderer/IUIRenderer.h"
+#include "renderer/opengl/IGLShaderCompilable.h"
 #include <vector>
 #include <cstdint>
 
@@ -67,7 +68,7 @@ struct FBOQuad {
  * OpenGL implementation of IUIRenderer.
  * Batches UI elements and renders with GPU shaders to eliminate flickering.
  */
-class GLUIRenderer : public IUIRenderer {
+class GLUIRenderer : public IUIRenderer, public IGLShaderCompilable {
 public:
     GLUIRenderer();
     virtual ~GLUIRenderer();
@@ -105,6 +106,11 @@ public:
     virtual void Draw() override;
     virtual void Clear() override;
     virtual const char* GetName() const override { return "OPENGL_UI"; }
+    const char* RendererName() const override { return "GLUIRenderer"; }
+
+    /** Compile all GLSL programs owned by this renderer.
+     *  Called by the bootstrapper in RendererManager::RendererInit(). */
+    bool CompileShaders() override;
 
     /** Flush any atlas-quad sprites submitted since the last FlushFront().
      *  Called by GLCursorLayer::Draw() to render the OS pointer sprite
@@ -252,7 +258,6 @@ private:
     bool m_game_vp_set = false;
 
     // Internal methods
-    bool CreateShaders();
     void CreateVertexArrays();
     void FlushQuads(int layer);       // Render and remove only quads matching layer
     void FlushLines(int layer);       // Render and remove only lines matching layer

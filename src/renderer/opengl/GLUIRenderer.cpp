@@ -85,15 +85,6 @@ GLUIRenderer::~GLUIRenderer()
 
 bool GLUIRenderer::Init()
 {
-    // Create the three independent shader programs.
-    if (!CreateShaders())
-    {
-        ERRORLOG("GLUIRenderer: Failed to create shaders");
-        return false;
-    }
-
-    // Create vertex arrays and buffers (shared across all three programs,
-    // same VAO layout for UI_VERTEX_SHADER).
     CreateVertexArrays();
     return true;
 }
@@ -969,7 +960,7 @@ static GLuint LinkProgram(GLuint vert, GLuint frag, const char* label,
     return prog;
 }
 
-bool GLUIRenderer::CreateShaders()
+bool GLUIRenderer::CompileShaders()
 {
     // Compile shared vertex shader once.
     GLuint vert = CompileStage(GL_VERTEX_SHADER, UI_VERTEX_SHADER, "UI_VERTEX");
