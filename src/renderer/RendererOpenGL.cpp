@@ -1039,7 +1039,7 @@ void RendererOpenGL::EndFrame()
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
             glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, atlas_tex);
+            glBindTexture(GL_TEXTURE_2D_ARRAY, atlas_tex);
             glActiveTexture(GL_TEXTURE1);
             glBindTexture(GL_TEXTURE_2D, m_texPalette);
 
@@ -1075,6 +1075,9 @@ void RendererOpenGL::EndFrame()
             glBindVertexArray(0);
             glDisable(GL_BLEND);
             glDepthMask(GL_TRUE);
+            // Unbind the TEXTURE_2D_ARRAY so subsequent passes that bind
+            // TEXTURE_2D on unit 0 do not leave the array target dirty.
+            glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
             glActiveTexture(GL_TEXTURE0);
         }
     }
