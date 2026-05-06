@@ -71,6 +71,7 @@
 #include "frontmenu_ingame_tabs.h"
 #include "frontmenu_ingame_evnt.h"
 #include "frontmenu_ingame_opts.h"
+#include "frontmenu_ingame_map.h"
 #include "lvl_filesdk1.h"
 #include "thing_stats.h"
 #include "thing_traps.h"
@@ -3346,6 +3347,83 @@ void draw_active_menus_buttons(void)
             if (gmnu->visual_state == 2)
               draw_menu_buttons(gmnu);
             lbDisplay.DrawFlags &= ~Lb_SPRITE_TRANSPAR4;
+        }
+    }
+    // Debug: draw collision boxes for all active GUI buttons
+    if (g_renderer_settings.debug_gui_hitboxes) {
+        for (int i = 0; i < ACTIVE_BUTTONS_COUNT; i++) {
+            struct GuiButton *gbtn = &active_buttons[i];
+            if (!(gbtn->flags & LbBtnF_Active))
+                continue;
+            // Skip suppressed (no-hover) buttons – e.g. empty event slots
+            if (gbtn->btype_value & LbBFeF_NoMouseOver)
+                continue;
+            // Skip buttons with zero size (spacers / null areas)
+            if (gbtn->width <= 0 || gbtn->height <= 0)
+                continue;
+            TbPixel col;
+            if (gbtn->flags & LbBtnF_MouseOver)
+                col = colours[15][15][0]; // yellow – hovered
+            else
+                col = colours[0][15][0];  // green – normal
+            if (gbtn->hit_shape > 0) {
+                // Inset AABB: visualise the tighter hit region
+                short ins = gbtn->hit_shape;
+                UIRenderer_SubmitOutlineBox(gbtn->pos_x + ins, gbtn->pos_y + ins,
+                    gbtn->width - 2 * ins, gbtn->height - 2 * ins, col);
+            } else if (gbtn->hit_shape == -1) {
+                // Ellipse: draw the outer AABB dimly, then a cross at the ellipse centre
+                TbPixel dim_col = colours[0][7][0];
+                UIRenderer_SubmitOutlineBox(gbtn->pos_x, gbtn->pos_y, gbtn->width, gbtn->height, dim_col);
+                int cx = gbtn->pos_x + gbtn->width / 2;
+                int cy = gbtn->pos_y + gbtn->height / 2;
+                int arm_x = gbtn->width / 4;
+                int arm_y = gbtn->height / 4;
+                UIRenderer_SubmitSolidBox(cx - arm_x, cy - 1, 2 * arm_x, 2, col);
+                UIRenderer_SubmitSolidBox(cx - 1, cy - arm_y, 2, 2 * arm_y, col);
+            } else if (gbtn->hit_mask) {
+                // Per-pixel mask: draw a scanline silhouette using the sprite's
+                // actual draw position (scr_pos) and rendered size (not the hit rect).
+                int rw = (gbtn->hit_mask_render_w > 0) ? gbtn->hit_mask_render_w : gbtn->width;
+                int rh = (gbtn->hit_mask_render_h > 0) ? gbtn->hit_mask_render_h : gbtn->height;
+                float sx_scale = (gbtn->hit_mask_w > 0) ? (float)rw / gbtn->hit_mask_w : 1.0f;
+                float sy_scale = (gbtn->hit_mask_h > 0) ? (float)rh / gbtn->hit_mask_h : 1.0f;
+                for (int my = 0; my < gbtn->hit_mask_h; ++my) {
+                    int first = -1, last = -1;
+                    for (int mx = 0; mx < gbtn->hit_mask_w; ++mx) {
+                        int bidx = my * gbtn->hit_mask_stride + (mx >> 3);
+                        if ((gbtn->hit_mask[bidx] >> (mx & 7)) & 1) {
+                            if (first < 0) first = mx;
+                            last = mx;
+                        }
+                    }
+                    if (first < 0) continue;
+                    int px = gbtn->scr_pos_x + (int)(first * sx_scale);
+                    int py = gbtn->scr_pos_y + (int)(my    * sy_scale);
+                    int pw = (int)((last - first + 1) * sx_scale) + 1;
+                    int ph = (int)sy_scale + 1;
+                    UIRenderer_SubmitSolidBox(px, py, pw, ph, col);
+                }
+            } else {
+                // Full AABB
+                UIRenderer_SubmitOutlineBox(gbtn->pos_x, gbtn->pos_y, gbtn->width, gbtn->height, col);
+            }
+        }
+        // Minimap circular hit area (bounding square + cross at centre)
+        if (menu_id_to_number(GMnu_MAIN) >= 0) {
+            struct PlayerInfo *player = get_my_player();
+            int mm_units_per_px = (16 * status_panel_width + 140 / 2) / 140;
+            int mm_r = PANEL_MAP_RADIUS * mm_units_per_px / 16;
+            TbPixel mm_col = colours[0][15][15]; // cyan
+            // Bounding square of the circle
+            UIRenderer_SubmitOutlineBox(player->minimap_pos_x, player->minimap_pos_y,
+                                        2 * mm_r, 2 * mm_r, mm_col);
+            // Cross at centre to indicate the true circular boundary
+            int cx = player->minimap_pos_x + mm_r;
+            int cy = player->minimap_pos_y + mm_r;
+            int arm = mm_r / 4;
+            UIRenderer_SubmitSolidBox(cx - arm, cy - 1, 2 * arm, 2, mm_col);
+            UIRenderer_SubmitSolidBox(cx - 1, cy - arm, 2, 2 * arm, mm_col);
         }
     }
     SYNCDBG(9,"Finished");
