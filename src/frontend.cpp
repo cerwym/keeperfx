@@ -2100,6 +2100,23 @@ int create_button(struct GuiMenu *gmnu, struct GuiButtonInit *gbinit, int units_
     gbtn->content = gbinit->content;
     gbtn->maxval = gbinit->maxval;
     gbtn->maintain_call = gbinit->maintain_call;
+    // hit_shape: shape-selector values (0=AABB, -1=ellipse) pass through; positive insets scale to pixels
+    gbtn->hit_shape = (gbinit->hit_shape > 0)
+        ? (short)((gbinit->hit_shape * units_per_px + 8) / 16)
+        : gbinit->hit_shape;
+    // Per-pixel alpha mask (GL mode only; NULL on software renderer)
+    // Use +1 (std variant) for draw functions that size on +1; +0 for those that size on +0 (autopilot).
+    gbtn->hit_mask = NULL; gbtn->hit_mask_w = 0; gbtn->hit_mask_h = 0; gbtn->hit_mask_stride = 0;
+    if (gbtn->hit_shape == -2 && gbinit->sprite_idx > 0) {
+        int sizing_spr_offset = (gbinit->draw_call == gui_area_autopilot_button) ? 0 : 1;
+        int mw = 0, mh = 0, ms = 0;
+        gbtn->hit_mask = UIRenderer_QueryPanelSpriteMask(gbinit->sprite_idx + sizing_spr_offset, &mw, &mh, &ms);
+        if (gbtn->hit_mask) {
+            gbtn->hit_mask_w      = (short)mw;
+            gbtn->hit_mask_h      = (short)mh;
+            gbtn->hit_mask_stride = (short)ms;
+        }
+    }
     gbtn->flags |= LbBtnF_Enabled;
     gbtn->flags &= ~LbBtnF_MouseOver;
     gbtn->button_state_left_pressed = 0;
@@ -2142,6 +2159,28 @@ int create_button(struct GuiMenu *gmnu, struct GuiButtonInit *gbinit, int units_
     {
         gbtn->button_state_left_pressed = 0;
         gbtn->button_state_right_pressed = 0;
+    }
+    // Compute actual rendered pixel dimensions for the alpha-mask buttons.
+    // Done here because scr_pos_x/y are now finalised.
+    gbtn->hit_mask_render_w = gbtn->width;
+    gbtn->hit_mask_render_h = gbtn->height;
+    if (gbtn->hit_mask && gbtn->hit_mask_w > 0 && gbtn->hit_mask_h > 0) {
+        // Determine which sprite and which axis the draw function uses for sizing
+        int sizing_spr_offset = (gbinit->draw_call == gui_area_autopilot_button) ? 0 : 1;
+        const struct TbSprite* spr_sz = get_panel_sprite(gbtn->sprite_idx + sizing_spr_offset);
+        if (spr_sz && spr_sz->SWidth > 0 && spr_sz->SHeight > 0) {
+            int su;
+            if (gbinit->draw_call == gui_area_new_vertical_button
+             || gbinit->draw_call == gui_area_autopilot_button) {
+                // height-driven: sprite scaled to fill gbtn->height
+                su = (gbtn->height * 16 + spr_sz->SHeight / 2) / spr_sz->SHeight;
+            } else {
+                // width-driven: sprite scaled to fill gbtn->width
+                su = (gbtn->width  * 16 + spr_sz->SWidth  / 2) / spr_sz->SWidth;
+            }
+            gbtn->hit_mask_render_w = (short)(spr_sz->SWidth  * su / 16);
+            gbtn->hit_mask_render_h = (short)(spr_sz->SHeight * su / 16);
+        }
     }
     SYNCDBG(11,"Created button %d at (%d,%d) size (%d,%d)",gidx,
         gbtn->pos_x,gbtn->pos_y,gbtn->width,gbtn->height);
