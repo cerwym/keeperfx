@@ -118,7 +118,9 @@ struct DraggingBox {
 struct GuiButtonInit {
     char gbtype; /**< GUI Button Type, directly copied to button instance. */
     short id_num; /**< GUI Button ID, directly copied to button instance. If there is no need of identifying the button within game code, it should be set to BID_DEFAULT.*/
-    short unused_field; // unused
+    /** Hit-shape override: 0=full AABB (default), >0=inset AABB by N logical units,
+     *  -1=inscribed ellipse, -2=per-pixel alpha mask (GL only; falls back to AABB in software). */
+    short hit_shape;
     unsigned short button_flags; // two bool values; maybe convert it to flags?
     Gf_Btn_Callback click_event;
     Gf_Btn_Callback rclick_event;
@@ -167,6 +169,19 @@ struct GuiButton {
        union GuiVariant content;
        unsigned short slide_val; // slider value, scaled 0..255
        short has_shown_before; // GUI tooltips take longer to display the next time you show them
+       /** Hit-shape override, copied from GuiButtonInit and scaled to pixels: 0=AABB, >0=inset by N px, -1=ellipse. */
+       short hit_shape;
+       /** Per-pixel transparency mask at the sprite's native resolution (GL mode only; NULL = use hit_shape).
+        *  Heap-allocated; freed in kill_button(). */
+       unsigned char* hit_mask;
+       short hit_mask_w;      /**< Native sprite pixel width for the mask. */
+       short hit_mask_h;      /**< Native sprite pixel height for the mask. */
+       short hit_mask_stride; /**< Row stride in bytes ((w+7)/8). */
+       /** Actual rendered screen size of the masked sprite (pixels).
+        *  Computed at create_button() time from draw function + sprite aspect ratio.
+        *  Used for mask↔screen coordinate mapping in hit test and debug overlay. */
+       short hit_mask_render_w;
+       short hit_mask_render_h;
 };
 
 struct GuiMenu {
