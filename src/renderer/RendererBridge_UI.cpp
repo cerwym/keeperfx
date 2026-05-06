@@ -272,3 +272,13 @@ void UIRenderer_Clear(void)
     IUIRenderer* ui = RendererGetUIRenderer();
     if (ui) ui->Clear();
 }
+
+unsigned char* UIRenderer_QueryPanelSpriteMask(int32_t spridx, int* out_w, int* out_h, int* out_stride)
+{
+    IUIRenderer* ui = RendererGetUIRenderer();
+    if (!ui) return nullptr;
+    const struct TbSprite* spr = get_panel_sprite(get_player_colored_icon_idx(spridx, my_player_number));
+    SpriteHandle h = RendererResolveSprite(spr);
+    if (h == kInvalidSpriteHandle) return nullptr;
+    return (unsigned char*)ui->QuerySpriteMask(h, out_w, out_h, out_stride);
+}

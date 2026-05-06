@@ -192,6 +192,22 @@ public:
 
     virtual const char* GetName() const;
 
+    // -------------------------------------------------------------------------
+    // Hit-mask query (GPU only; software renderer returns nullptr)
+    // -------------------------------------------------------------------------
+
+    /** Return a packed 1-bit-per-pixel transparency mask for the sprite at handle h,
+     *  at the sprite's native resolution.  Bit=1 means opaque; bit=0 means transparent.
+     *  Pixel order: left-to-right, top-to-bottom; bit 0 of byte 0 is the top-left pixel.
+     *  The returned buffer is heap-allocated — caller must free() it.
+     *  Returns nullptr on the CPU/software renderer (no atlas to read from),
+     *  or if the handle is invalid.
+     *
+     *  @param out_w      Receives the sprite's native pixel width.
+     *  @param out_h      Receives the sprite's native pixel height.
+     *  @param out_stride Receives the row stride in bytes ((w+7)/8). */
+    virtual uint8_t* QuerySpriteMask(SpriteHandle /*h*/, int* /*out_w*/, int* /*out_h*/, int* /*out_stride*/) { return nullptr; }
+
 protected:
     /** Sprite handle → raw TbSprite* map, used by CPU default implementations. */
     std::unordered_map<SpriteHandle, const struct TbSprite*> m_handle_to_sprite;

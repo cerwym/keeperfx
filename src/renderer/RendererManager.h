@@ -659,6 +659,15 @@ void UIRenderer_DrawFront(void);
 void UIRenderer_Draw(void);
 void UIRenderer_Clear(void);
 
+/** Query a packed 1-bit-per-pixel transparency mask for the panel sprite at index spridx,
+ *  at the sprite's native resolution (GL mode only; returns NULL in software mode).
+ *  Bit=1 means opaque, bit=0 means transparent.  Bit order: bit 0 of byte 0 is the
+ *  top-left pixel, left-to-right within each byte, rows top-to-bottom.
+ *  The returned buffer is heap-allocated — caller must free() it.
+ *  out_w/out_h receive the sprite's native pixel dimensions;
+ *  out_stride receives the row byte stride ((w+7)/8). */
+unsigned char* UIRenderer_QueryPanelSpriteMask(int32_t spridx, int* out_w, int* out_h, int* out_stride);
+
 /** Apply a complete RendererSettings snapshot to the active renderer.
  *  Also copies *s into g_renderer_settings so subsequent reads are consistent.
  *  Safe to call from C translation units. */
