@@ -20,6 +20,7 @@
 #include "pre_inc.h"
 #include "gui_frontbtns.h"
 
+#include <stdlib.h>     /* free() — for hit_mask release in kill_button() */
 #include "globals.h"
 #include "bflib_basics.h"
 #include "bflib_guibtns.h"
@@ -371,6 +372,8 @@ void kill_button(struct GuiButton *gbtn)
         gbtn->maintain_call = NULL;
         gbtn->content.ptr = NULL;
         gbtn->gmenu_idx = 0;
+        if (gbtn->hit_mask) { free(gbtn->hit_mask); gbtn->hit_mask = NULL; }
+        gbtn->hit_mask_w = gbtn->hit_mask_h = gbtn->hit_mask_stride = 0;
     }
 }
 

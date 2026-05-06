@@ -115,6 +115,7 @@ void maintain_trap_next_page_button(struct GuiButton *gbtn);
 void gui_switch_players_visible(struct GuiButton* gbtn);
 
 void go_to_adjacent_menu_tab(int direction);
+void gui_area_autopilot_button(struct GuiButton *gbtn);
 /******************************************************************************/
 #ifdef __cplusplus
 }
