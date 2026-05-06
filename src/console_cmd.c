@@ -2312,6 +2312,21 @@ TbBool cmd_renderer_zoom_box_mode(PlayerNumber plyr_idx, char* args)
     return true;
 }
 
+TbBool cmd_renderer_debug_gui_hitboxes(PlayerNumber plyr_idx, char* args)
+{
+    char* tok = strsep(&args, " ");
+    if (tok == NULL) {
+        targeted_message_add(MsgType_Player, plyr_idx, plyr_idx, GUI_MESSAGES_DELAY,
+            "renderer.debug_gui_hitboxes = %d", g_renderer_settings.debug_gui_hitboxes);
+        return true;
+    }
+    int v = atoi(tok);
+    g_renderer_settings.debug_gui_hitboxes = (v != 0) ? 1 : 0;
+    targeted_message_add(MsgType_Player, plyr_idx, plyr_idx, GUI_MESSAGES_DELAY,
+        "renderer.debug_gui_hitboxes = %d", g_renderer_settings.debug_gui_hitboxes);
+    return true;
+}
+
 TbBool cmd_cheat_menu(PlayerNumber plyr_idx, char * args)
 {
     if (game.easter_eggs_enabled == false) {
@@ -2497,6 +2512,7 @@ static const struct ConsoleCommand console_commands[] = {
     { "renderer.fog_speed",      cmd_renderer_fog_speed },
     { "renderer.fog_density",    cmd_renderer_fog_density },
     { "renderer.zoom_box_mode",  cmd_renderer_zoom_box_mode },
+    { "renderer.debug_gui_hitboxes", cmd_renderer_debug_gui_hitboxes },
     { "creature.chicken", cmd_chicken_creature},
 };
 static const int console_command_count = sizeof(console_commands) / sizeof(*console_commands);

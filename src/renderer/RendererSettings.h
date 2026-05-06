@@ -187,6 +187,13 @@ typedef struct RendererSettings {
      *  Default: 0. */
     int   show_depth;
 
+    /** GUI hit-box debug overlay.
+     *  0 = off (default); 1 = draw coloured outline rectangles over every
+     *  active GuiButton's collision box (pos_x/pos_y/width/height) and the
+     *  minimap circular hit area.
+     *  Green = normal button, yellow = currently hovered, cyan = minimap circle. */
+    int   debug_gui_hitboxes;
+
     /* --- Lighting pipeline --- */
 
     /** Lighting pipeline mode.
