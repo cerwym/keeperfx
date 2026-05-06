@@ -152,6 +152,9 @@ public:
      *  @return true if successful */
     bool SetSpriteAtlas(GLSpriteAtlas* atlas);
 
+    /** IUIRenderer override: delegate to GLSpriteAtlas::GetSpriteMask(). */
+    virtual uint8_t* QuerySpriteMask(SpriteHandle h, int* out_w, int* out_h, int* out_stride) override;
+
     /** Set font atlas for text rendering.
      *  @param atlas Font atlas for floating text
      *  @return true if successful */

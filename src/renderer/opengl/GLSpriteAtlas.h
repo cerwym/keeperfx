@@ -58,6 +58,14 @@ public:
     /** Look up precomputed UV by sprite pointer (convenience overload for legacy callers). */
     bool GetUV(const struct TbSprite* spr, SpriteUV& out) const;
 
+    /** Build a packed 1-bit-per-pixel transparency mask for the sprite associated with
+     *  handle h, at the sprite's native resolution.  Pixel order: left-to-right,
+     *  top-to-bottom; bit 0 of byte 0 is the top-left pixel.  Opaque = 1, transparent = 0.
+     *  Returns a heap-allocated buffer (caller must free() it) and writes the sprite's
+     *  native pixel dimensions and the row stride in bytes into out_w / out_h / out_stride.
+     *  Returns nullptr if h is invalid or the sprite is empty. */
+    uint8_t* GetSpriteMask(SpriteHandle h, int* out_w, int* out_h, int* out_stride) const;
+
     GLuint GetTexture() const { return m_texture; }
     size_t GetRegisteredCount() const { return m_sprite_to_handle.size(); }
 

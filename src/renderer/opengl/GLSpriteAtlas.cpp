@@ -11,6 +11,7 @@
 #ifdef RENDERER_OPENGL_ENABLED
 
 #include <cstring>
+#include <cstdlib>
 #include "bflib_basics.h"
 #include "bflib_sprite.h"
 #include "kfx/profiling/KfxProfiling.h"
@@ -230,6 +231,39 @@ bool GLSpriteAtlas::GetUV(SpriteHandle h, SpriteUV& out) const
 bool GLSpriteAtlas::GetUV(const struct TbSprite* spr, SpriteUV& out) const
 {
     return GetUV(GetHandle(spr), out);
+}
+
+uint8_t* GLSpriteAtlas::GetSpriteMask(SpriteHandle h, int* out_w, int* out_h, int* out_stride) const
+{
+    SpriteUV uv;
+    if (!GetUV(h, uv)) return nullptr;
+
+    const int w = uv.pixel_w;
+    const int h_px = uv.pixel_h;
+    if (w <= 0 || h_px <= 0) return nullptr;
+
+    // Compute the top-left pixel in the atlas from UV coordinates
+    const int atlas_x = (int)(uv.u0 * (float)k_atlas_w + 0.5f);
+    const int atlas_y = (int)(uv.v0 * (float)k_atlas_h + 0.5f);
+
+    // Stride in bytes: one bit per pixel, rounded up to whole bytes
+    const int stride = (w + 7) / 8;
+    uint8_t* mask = (uint8_t*)calloc((size_t)stride * h_px, 1);
+    if (!mask) return nullptr;
+
+    for (int y = 0; y < h_px; ++y) {
+        const uint8_t* src_row = m_pixels.data() + (size_t)(atlas_y + y) * k_atlas_w + atlas_x;
+        for (int x = 0; x < w; ++x) {
+            if (src_row[x] != 0) {
+                mask[y * stride + (x >> 3)] |= (uint8_t)(1u << (x & 7));
+            }
+        }
+    }
+
+    *out_w      = w;
+    *out_h      = h_px;
+    *out_stride = stride;
+    return mask;
 }
 
 #endif // RENDERER_OPENGL_ENABLED

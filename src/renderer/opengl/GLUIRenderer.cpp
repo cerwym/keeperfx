@@ -128,6 +128,12 @@ bool GLUIRenderer::SetSpriteAtlas(GLSpriteAtlas* atlas)
     return true;
 }
 
+uint8_t* GLUIRenderer::QuerySpriteMask(SpriteHandle h, int* out_w, int* out_h, int* out_stride)
+{
+    if (!m_sprite_atlas) return nullptr;
+    return m_sprite_atlas->GetSpriteMask(h, out_w, out_h, out_stride);
+}
+
 bool GLUIRenderer::SetFontAtlas(GLFontAtlas* atlas)
 {
     m_font_atlas = atlas;
