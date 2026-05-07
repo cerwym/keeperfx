@@ -793,6 +793,13 @@ void GLWorldViewRenderer::EndHandSpriteRendering()
     m_screen_w         = m_saved_screen_w;
     m_screen_h         = m_saved_screen_h;
     m_current_sprite_z = m_saved_sprite_z;
+
+    // Restore GL state dirtied by BeginHandSpriteRendering so the next frame's
+    // glClear(GL_DEPTH_BUFFER_BIT) actually clears (requires depthMask=GL_TRUE)
+    // and subsequent passes start from a known state.
+    glDepthMask(GL_TRUE);
+    glEnable(GL_DEPTH_TEST);
+    glDisable(GL_BLEND);
 }
 
 /******************************************************************************/
@@ -991,8 +998,6 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
         glBindTexture(GL_TEXTURE_2D_ARRAY, m_kspr_sprite_array);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         glDrawArrays(GL_TRIANGLES, 0, 6);
-        glDisable(GL_BLEND);
-        glDepthMask(GL_TRUE);
         glBindVertexArray(0);
         glUseProgram(0);
         return 1;
@@ -1060,8 +1065,6 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
 
     glDrawArrays(GL_TRIANGLES, 0, 6);
 
-    glDisable(GL_BLEND);
-    glDepthMask(GL_TRUE);
     glBindVertexArray(0);
     glUseProgram(0);
 
