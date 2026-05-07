@@ -555,9 +555,29 @@ void SDLCALL on_music_finished() {
 } // local
 
 extern "C" void FreeAudio() {
+	// Stop all SDL_mixer playback first
+	Mix_HaltMusic();
+	Mix_HaltChannel(-1);
+
+	// Free SDL_mixer resources before OpenAL cleanup
+	{
+		std::lock_guard<std::mutex> guard(g_mix_mutex);
+		if (auto music = g_mix_music.exchange(nullptr)) {
+			Mix_FreeMusic(music);
+		}
+		if (g_streamed_sample) {
+			Mix_FreeChunk(g_streamed_sample);
+			g_streamed_sample = nullptr;
+		}
+	}
+
+	// Clear OpenAL sources and buffers while context is still current
+	// The unique_ptr destructors will handle proper OpenAL cleanup
 	g_sources.clear();
 	g_banks[0].clear();
 	g_banks[1].clear();
+
+	// Now destroy OpenAL context and device (unique_ptr handles proper cleanup)
 	g_openal_context = nullptr;
 	g_openal_device = nullptr;
 }
