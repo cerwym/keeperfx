@@ -78,14 +78,14 @@ TbBool check_if_pos_is_over_button(const struct GuiButton *gbtn, TbScreenPos pos
     if (gbtn->hit_shape == -1)
     {
         // Inscribed ellipse: (nx/a)^2 + (ny/b)^2 <= 1, evaluated with fixed-point scale
-        long a = gbtn->width / 2;
-        long b = gbtn->height / 2;
+        int32_t a = gbtn->width / 2;
+        int32_t b = gbtn->height / 2;
         if (a <= 0 || b <= 0)
             return false;
-        long nx = (long)pos_x - (x + a);
-        long ny = (long)pos_y - (y + b);
-        long snx = nx * 256 / a;
-        long sny = ny * 256 / b;
+        int32_t nx = (int32_t)pos_x - (x + a);
+        int32_t ny = (int32_t)pos_y - (y + b);
+        int32_t snx = nx * 256 / a;
+        int32_t sny = ny * 256 / b;
         return (snx * snx + sny * sny) <= (256 * 256);
     }
     TbScreenPos inset = (gbtn->hit_shape > 0) ? (TbScreenPos)gbtn->hit_shape : 0;
