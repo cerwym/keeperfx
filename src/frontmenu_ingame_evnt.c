@@ -402,6 +402,7 @@ void draw_bonus_timer(void)
         struct GuiMenu *gmnu = get_active_menu(menu_id_to_number(GMnu_MAIN));
         scr_x = (gmnu->width + (width >> 1) - 16 * units_per_pixel / 16);
     }
+    UIRenderer_BeginTopOverlay();
     LbTextSetWindow(scr_x, scr_y, width, height);
     draw_slab64k(scr_x, scr_y, units_per_pixel, width, height);
     int tx_units_per_px;
@@ -422,6 +423,7 @@ void draw_bonus_timer(void)
         y = 0;
     }
     LbTextDrawResized(0, y, tx_units_per_px, text);
+    UIRenderer_EndTopOverlay();
     LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
 }
 
@@ -478,6 +480,7 @@ void draw_timer(void)
     {
         scr_y <<= 2;
     }
+    UIRenderer_BeginTopOverlay();
     LbTextSetWindow(scr_x, scr_y, width, height);
     draw_slab64k(scr_x, scr_y, units_per_pixel, width, height);
     int tx_units_per_px;
@@ -498,6 +501,7 @@ void draw_timer(void)
         y = 0;
     }
     LbTextDrawResized(0, y, tx_units_per_px, text);
+    UIRenderer_EndTopOverlay();
     LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
 }
 
@@ -635,6 +639,7 @@ void draw_script_timer(PlayerNumber plyr_idx, unsigned char timer_id, unsigned l
         struct GuiMenu *gmnu = get_active_menu(menu_id_to_number(GMnu_MAIN));
         scr_x = (gmnu->width + (width >> 1) - 16 * units_per_pixel / 16);
     }
+    UIRenderer_BeginTopOverlay();
     LbTextSetWindow(scr_x, scr_y, width, height);
     draw_slab64k(scr_x, scr_y, units_per_pixel, width, height);
     int tx_units_per_px;
@@ -655,6 +660,7 @@ void draw_script_timer(PlayerNumber plyr_idx, unsigned char timer_id, unsigned l
         y = 0;
     }
     LbTextDrawResized(0, y, tx_units_per_px, text);
+    UIRenderer_EndTopOverlay();
     LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
 }
 
@@ -714,6 +720,7 @@ void draw_script_variable(PlayerNumber plyr_idx, unsigned char valtype, unsigned
     {
         scr_x -= ((width + (width >> 1)) - 16 * units_per_pixel / 16);
     }
+    UIRenderer_BeginTopOverlay();
     LbTextSetWindow(scr_x, scr_y, width, height);
     draw_slab64k(scr_x, scr_y, units_per_pixel, width, height);
     int tx_units_per_px;
@@ -729,6 +736,7 @@ void draw_script_variable(PlayerNumber plyr_idx, unsigned char valtype, unsigned
         y = 0;
     }
     LbTextDrawResized(0, y, tx_units_per_px, text);
+    UIRenderer_EndTopOverlay();
     LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
 }
 
@@ -737,6 +745,7 @@ int consolelog_simultaneous_message_count = 21;
 int consolelog_max_line_width = 1250; // Maximum line width
 void draw_consolelog()
 {
+    UIRenderer_BeginTopOverlay();
     draw_round_slab64k(0, 0, units_per_pixel, lbDisplay.GraphicsScreenWidth, (lbDisplay.GraphicsScreenHeight/2), ROUNDSLAB64K_DARK);
     LbTextSetFont(winfont);
     lbDisplay.DrawFlags = Lb_TEXT_HALIGN_LEFT;
@@ -783,6 +792,7 @@ void draw_consolelog()
         }
     }
     lbDisplay.DrawFlags = Lb_TEXT_HALIGN_LEFT;
+    UIRenderer_EndTopOverlay();
 }
 
 void draw_frametime()

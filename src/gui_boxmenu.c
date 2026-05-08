@@ -664,6 +664,7 @@ void gui_draw_box(struct GuiBox *gbox)
     long lnheight = pixel_size * LbTextLineHeight() + 2;
     long pos_y = gbox->pos_y + 8;
     long pos_x = gbox->pos_x + 8;
+    UIRenderer_BeginTopOverlay();
     if (gbox != gui_get_highest_priority_box())
     {
         UIRenderer_SubmitSolidBoxAlpha(gbox->pos_x/pixel_size, gbox->pos_y/pixel_size, gbox->width/pixel_size, gbox->height/pixel_size, colours[6][0][0], 0.5f);
@@ -708,6 +709,7 @@ void gui_draw_box(struct GuiBox *gbox)
             pos_y += lnheight;
         }
     }
+    UIRenderer_EndTopOverlay();
 }
 
 TbBool gui_process_option_inputs(struct GuiBox *gbox, struct GuiBoxOption *goptn)

@@ -1051,9 +1051,11 @@ void redraw_display(void)
                   text_x -= 12;
               }
           }
+          UIRenderer_BeginTopOverlay();
           LbTextSetWindow(text_x, pos_y, text_w, h);
           draw_slab64k(pos_x, pos_y, units_per_pixel, w, h);
           LbTextDrawResized(0, 0, tx_units_per_px, text);
+          UIRenderer_EndTopOverlay();
           LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
     }
     if (game.armageddon_cast_turn != 0)
@@ -1082,9 +1084,11 @@ void redraw_display(void)
         }
         long pos_x = MyScreenWidth - w - 16 * units_per_pixel / 16;
         long pos_y = 16 * units_per_pixel / 16;
+        UIRenderer_BeginTopOverlay();
         LbTextSetWindow(pos_x, pos_y, w, h);
         draw_slab64k(pos_x, pos_y, units_per_pixel, w, h);
         LbTextDrawResized(0, 0, tx_units_per_px, text);
+        UIRenderer_EndTopOverlay();
         LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
     }
     draw_eastegg();
