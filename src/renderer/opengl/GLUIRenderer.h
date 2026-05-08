@@ -103,6 +103,14 @@ public:
     virtual void ClearTopOverlay() override;
     virtual void DrawBack() override;
     virtual void DrawFront() override;
+    /** Layer-1 portion of DrawFront: FBOQuads + layer-1 sprites + minimap +
+     *  layer-1 lines.  Does NOT flush layer-2/3 or restore GL state.
+     *  Must be followed by DrawFrontOverlay(). */
+    void DrawFrontBase();
+    /** Layer-2/3 portion of DrawFront: depth-tested layer-2, top-overlay layer-3,
+     *  and GL state cleanup.  Call after DrawFrontBase() (and any intermediate
+     *  direct-GL passes that must draw between layer-1 and layer-3). */
+    void DrawFrontOverlay();
     virtual void Draw() override;
     virtual void Clear() override;
     virtual const char* GetName() const override { return "OPENGL_UI"; }

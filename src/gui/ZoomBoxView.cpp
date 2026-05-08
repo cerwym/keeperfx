@@ -193,8 +193,12 @@ void ZoomBoxView::drawCornerFrames(int scr_x, int scr_y,
     const int end_x = scr_x - scale_46 + draw_tiles_x * subtile_size;
     const int end_y = scr_y - scale_58 + draw_tiles_y * subtile_size;
 
+    // Submit as top-overlay (layer 3) so corner frames always draw on top of
+    // all overhead map sprites, zoom box content, and other layer-1 UI quads.
+    UIRenderer_BeginTopOverlay();
     UIRenderer_SubmitButtonSprite(beg_x, beg_y, bs_units_per_px, GBS_parchment_map_frame_deco_b_tl);
     UIRenderer_SubmitButtonSprite(end_x, beg_y, bs_units_per_px, GBS_parchment_map_frame_deco_b_tr);
     UIRenderer_SubmitButtonSprite(beg_x, end_y, bs_units_per_px, GBS_parchment_map_frame_deco_b_bl);
     UIRenderer_SubmitButtonSprite(end_x, end_y, bs_units_per_px, GBS_parchment_map_frame_deco_b_br);
+    UIRenderer_EndTopOverlay();
 }

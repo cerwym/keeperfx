@@ -345,12 +345,14 @@ bool GLUIRenderer::SubmitSlabBackground(int x, int y, int w, int h)
     }
     float u1 = (float)w / (float)m_slab_dim;
     float v1 = (float)h / (float)m_slab_dim;
-    // Always submit on layer 0 (back, rendered before the staging-buffer blit).
-    // Force world-depth off so SubmitQuad doesn't redirect to layer 2.
     int saved_layer = m_current_layer;
     bool saved_world_depth = m_world_depth_active;
     bool saved_top_overlay = m_top_overlay_active;
-    m_current_layer = 0;
+    // When called inside a BeginTopOverlay/EndTopOverlay scope (e.g. tooltip
+    // background), submit to layer 3 so the slab renders on top of all layer-1
+    // and layer-2 sprites.  Otherwise always use layer 0 (back, rendered before
+    // the staging-buffer blit) for sidebar panels and other background slabs.
+    m_current_layer = saved_top_overlay ? 3 : 0;
     m_world_depth_active = false;
     m_top_overlay_active = false;
     // Opaque black backing quad — blocks world geometry from bleeding through
@@ -429,58 +431,10 @@ void GLUIRenderer::DrawBack()
     KFX_GPU_ZONE("UIPass::Back");
     KFX_GL_SCOPE(back_grp, "UIPass/Back");
 
-    static int s_back_frame = 0;
-    ++s_back_frame;
-
     // Render only layer-0 (back) quads — the sidebar background panels that must land
     // beneath the CPU staging-buffer blit.  No hand sprites, minimap, or lines here.
-    if (m_ui_quads.empty()) {
-        // Log every empty-back frame for the first 200 + every 300th after
-        if (s_back_frame <= 200 || (s_back_frame % 300) == 0)
-            SYNCLOG("FLICKER-DIAG-BACK[%d]: EMPTY (total quads=0)", s_back_frame);
+    if (m_ui_quads.empty())
         return;
-    }
-
-    { // Exhaustive per-frame diagnostic
-        int back_quads = 0, front_quads = 0, layer2 = 0, layer3 = 0;
-        for (auto& q : m_ui_quads) {
-            if (q.layer == 0) back_quads++;
-            else if (q.layer == 1) front_quads++;
-            else if (q.layer == 2) layer2++;
-            else if (q.layer == 3) layer3++;
-        }
-        static int s_prev_back = 0;
-        bool anomaly = (s_prev_back >= 4 && back_quads < s_prev_back / 2);
-        // Log anomalies immediately; periodic every 300 frames
-        if (anomaly || (s_back_frame % 300) == 0)
-            SYNCLOG("FLICKER-DIAG-BACK[%d]: back=%d(prev %d) front=%d L2=%d L3=%d total=%d",
-                    s_back_frame, back_quads, s_prev_back, front_quads, layer2, layer3,
-                    (int)m_ui_quads.size());
-        // Log every frame for 10 frames after an anomaly
-        static int s_anomaly_countdown = 0;
-        if (anomaly) s_anomaly_countdown = 10;
-        if (s_anomaly_countdown > 0) {
-            SYNCLOG("FLICKER-DIAG-BACK[%d]: ANOMALY-TRACE back=%d(prev %d) total=%d countdown=%d",
-                    s_back_frame, back_quads, s_prev_back, (int)m_ui_quads.size(), s_anomaly_countdown);
-            --s_anomaly_countdown;
-        }
-        s_prev_back = back_quads;
-    }
-
-    // GL state audit before rendering
-    {
-        GLint draw_fbo = 0;
-        glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &draw_fbo);
-        GLboolean scissor = glIsEnabled(GL_SCISSOR_TEST);
-        GLint vp[4];
-        glGetIntegerv(GL_VIEWPORT, vp);
-        if (draw_fbo != 0 || scissor) {
-            SYNCLOG("FLICKER-DIAG-BACK[%d]: BAD STATE fbo=%d scissor=%d vp=[%d,%d,%d,%d]",
-                    s_back_frame, draw_fbo, (int)scissor, vp[0], vp[1], vp[2], vp[3]);
-            if (draw_fbo != 0) glBindFramebuffer(GL_FRAMEBUFFER, 0);
-            if (scissor) glDisable(GL_SCISSOR_TEST);
-        }
-    }
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -488,40 +442,6 @@ void GLUIRenderer::DrawBack()
     glDepthMask(GL_FALSE);
 
     FlushQuads(0);
-
-    // Z-FIGHT-DIAG: Read back a pixel in the sidebar area AFTER DrawBack to verify
-    // the backing quad + slab actually rendered.  A pure-black pixel means only the
-    // backing quad drew (slab failed).  A world-colour pixel means neither rendered.
-    {
-        static int s_readback_frame = 0;
-        ++s_readback_frame;
-        // Sample at (20, screen_height/2) — deep inside the sidebar
-        int sample_x = 20;
-        int sample_y = m_screen_height / 2;
-        int gl_y = m_screen_height - sample_y - 1;
-        uint8_t pixel[4] = {};
-        glReadPixels(sample_x, gl_y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
-        // Log first 60 frames + every 300th + any frame where the pixel is nearly black
-        // (backing quad visible but slab NOT) or unexpected color
-        bool is_black = (pixel[0] < 5 && pixel[1] < 5 && pixel[2] < 5);
-        bool anomaly = is_black && (s_readback_frame > 10); // after init frames
-        if (s_readback_frame <= 60 || (s_readback_frame % 300) == 0 || anomaly) {
-            SYNCLOG("Z-FIGHT-DIAG-PIXEL[%d]: sidebar(%d,%d) RGBA=(%d,%d,%d,%d)%s",
-                    s_readback_frame, sample_x, sample_y,
-                    pixel[0], pixel[1], pixel[2], pixel[3],
-                    is_black ? " BLACK(backing only?)" : "");
-        }
-        // Also detect frame-to-frame colour instability
-        static uint8_t s_prev_pixel[4] = {};
-        int diff = abs(pixel[0] - s_prev_pixel[0]) + abs(pixel[1] - s_prev_pixel[1]) + abs(pixel[2] - s_prev_pixel[2]);
-        if (diff > 30 && s_readback_frame > 10) {
-            SYNCLOG("Z-FIGHT-DIAG-PIXEL[%d]: UNSTABLE! prev=(%d,%d,%d) now=(%d,%d,%d) diff=%d",
-                    s_readback_frame,
-                    s_prev_pixel[0], s_prev_pixel[1], s_prev_pixel[2],
-                    pixel[0], pixel[1], pixel[2], diff);
-        }
-        memcpy(s_prev_pixel, pixel, 4);
-    }
 
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
@@ -538,7 +458,8 @@ static void FlushFBOQuads_impl(const std::vector<FBOQuad>& quads, GLuint prog, G
 
     // Scissor test must be off: a stale scissor rect from a previous pass (e.g. a UI
     // clipping region) would silently discard parts of the FBO quad.
-    GLboolean scissor_was_enabled = glIsEnabled(GL_SCISSOR_TEST);
+    // DrawFront() guarantees scissor is disabled before calling this; disable again
+    // defensively in case this is called from another context.
     glDisable(GL_SCISSOR_TEST);
 
     glUseProgram(prog);
@@ -582,72 +503,20 @@ static void FlushFBOQuads_impl(const std::vector<FBOQuad>& quads, GLuint prog, G
     glBindVertexArray(0);
     glDepthMask(GL_TRUE);
     glActiveTexture(GL_TEXTURE0);
-    if (scissor_was_enabled)
-        glEnable(GL_SCISSOR_TEST);
 }
 
-void GLUIRenderer::DrawFront()
+void GLUIRenderer::DrawFrontBase()
 {
-    KFX_ZONE("UIRenderer::DrawFront");
-    KFX_GPU_ZONE("UIPass::Front");
-    KFX_GL_SCOPE(front_grp, "UIPass/Front");
-
-    static int s_frame_num = 0;
-    ++s_frame_num;
-
     if (m_ui_quads.empty() && m_ui_lines.empty() && !m_minimap_pending && m_fbo_quads.empty())
-    {
-        // Log EVERY empty-front frame
-        if (s_frame_num <= 200 || (s_frame_num % 300) == 0)
-            SYNCLOG("FLICKER-DIAG-FRONT[%d]: EMPTY (quads=0 lines=0 minimap=0 fbo=0)", s_frame_num);
         return;
-    }
-
-    { // Exhaustive per-frame diagnostic
-        int layer_counts[4] = {};
-        for (auto& q : m_ui_quads) {
-            if (q.layer < 4) layer_counts[q.layer]++;
-        }
-        int front_lines = 0;
-        for (auto& l : m_ui_lines) if (l.layer == 1) front_lines++;
-
-        static int s_prev_quads = 0;
-        bool anomaly = (s_prev_quads >= 4 && layer_counts[1] < s_prev_quads / 2);
-        if (anomaly || (s_frame_num % 300) == 0)
-            SYNCLOG("FLICKER-DIAG-FRONT[%d]: L0=%d L1=%d L2=%d L3=%d lines=%d minimap=%d fbo=%d total=%d",
-                    s_frame_num, layer_counts[0], layer_counts[1], layer_counts[2], layer_counts[3],
-                    front_lines, (int)m_minimap_pending, (int)m_fbo_quads.size(),
-                    (int)m_ui_quads.size());
-
-        // Trace 10 frames after anomaly
-        static int s_anomaly_countdown = 0;
-        if (anomaly) s_anomaly_countdown = 10;
-        if (s_anomaly_countdown > 0) {
-            SYNCLOG("FLICKER-DIAG-FRONT[%d]: ANOMALY-TRACE L1=%d(prev %d) total=%d countdown=%d",
-                    s_frame_num, layer_counts[1], s_prev_quads,
-                    (int)m_ui_quads.size(), s_anomaly_countdown);
-            --s_anomaly_countdown;
-        }
-        s_prev_quads = layer_counts[1];
-    }
 
     // Guarantee full-screen viewport.  The PiP path leaves the viewport at
     // pip_w×pip_h after FlushPiPSprites(); without this reset every draw call
     // below would be clipped to the tiny pip-sized scissor region.
     glViewport(0, 0, m_screen_width, m_screen_height);
-
-    // ── FLICKER-DIAG: check for stale scissor or wrong FBO ──
-    {
-        GLboolean scissor = glIsEnabled(GL_SCISSOR_TEST);
-        GLint draw_fbo = 0;
-        glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &draw_fbo);
-        if (scissor || draw_fbo != 0) {
-            SYNCLOG("FLICKER-DIAG: BAD GL STATE entering DrawFront: scissor=%d fbo=%d",
-                    (int)scissor, draw_fbo);
-            if (scissor) glDisable(GL_SCISSOR_TEST);
-            if (draw_fbo != 0) glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        }
-    }
+    // Ensure scissor is off and default framebuffer is bound before UI draws.
+    glDisable(GL_SCISSOR_TEST);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -701,6 +570,21 @@ void GLUIRenderer::DrawFront()
 
     // Flush slab-selector lines and other line geometry (front layer).
     FlushLines(1);
+    // GL state (blend enabled, depth test off, depthMask false) is left as-is
+    // for the caller to run any intermediate passes before DrawFrontOverlay().
+}
+
+void GLUIRenderer::DrawFrontOverlay()
+{
+    // Re-establish expected GL state — the caller may have run direct-GL passes
+    // (e.g. zoom box tile render) between DrawFrontBase() and here.
+    glViewport(0, 0, m_screen_width, m_screen_height);
+    glDisable(GL_SCISSOR_TEST);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
 
     // Flush world-depth-tagged elements (layer 2) — these are non-spatial sprites
     // (status flowers, room flags, slab selectors, floating numbers) submitted via
@@ -738,37 +622,26 @@ void GLUIRenderer::DrawFront()
         }
     }
 
-    // Layer 3: top-overlay — cursor-driven affordances (slab selector) drawn dead-last,
-    // depth test OFF, so they are never obscured by any world or UI element.
+    // Layer 3: top-overlay — tooltip slab+text, zoom-box corner frames, slab
+    // selector — drawn dead-last, depth test OFF, never obscured by world or UI.
     FlushQuads(3);
     FlushLines(3);
-
-    // Z-FIGHT-DIAG: Read back same sidebar pixel AFTER all front layers to detect
-    // if anything drew over the sidebar (world bleed-through, stale depth, etc.)
-    {
-        static int s_front_frame = 0;
-        ++s_front_frame;
-        int sample_x = 20;
-        int sample_y = m_screen_height / 2;
-        int gl_y = m_screen_height - sample_y - 1;
-        uint8_t pixel[4] = {};
-        glReadPixels(sample_x, gl_y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
-        static uint8_t s_prev_pixel[4] = {};
-        int diff = abs(pixel[0] - s_prev_pixel[0]) + abs(pixel[1] - s_prev_pixel[1]) + abs(pixel[2] - s_prev_pixel[2]);
-        bool is_black = (pixel[0] < 5 && pixel[1] < 5 && pixel[2] < 5);
-        if (s_front_frame <= 60 || (s_front_frame % 300) == 0 || (diff > 30 && s_front_frame > 10)) {
-            SYNCLOG("Z-FIGHT-DIAG-FRONT-PIXEL[%d]: sidebar(%d,%d) RGBA=(%d,%d,%d,%d) diff=%d%s",
-                    s_front_frame, sample_x, sample_y,
-                    pixel[0], pixel[1], pixel[2], pixel[3], diff,
-                    is_black ? " BLACK" : "");
-        }
-        memcpy(s_prev_pixel, pixel, 4);
-    }
 
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
     glUseProgram(0);
 }
+
+void GLUIRenderer::DrawFront()
+{
+    KFX_ZONE("UIRenderer::DrawFront");
+    KFX_GPU_ZONE("UIPass::Front");
+    KFX_GL_SCOPE(front_grp, "UIPass/Front");
+
+    DrawFrontBase();
+    DrawFrontOverlay();
+}
+
 
 void GLUIRenderer::BeginPiPSprites()
 {
@@ -1112,10 +985,6 @@ void GLUIRenderer::FlushQuads(int layer)
         [layer](const UIQuad& q) { return (int)q.layer == layer; });
     if (mid == m_ui_quads.begin()) return;  // nothing for this layer
 
-    int flush_quad_count = (int)(mid - m_ui_quads.begin());
-    int flush_draw_calls = 0;
-    int flush_total_verts = 0;
-
     // Reset texture unit state from whatever GPUFlushNow (or a previous pass) left
     // behind.  The world renderer leaves the tile atlas bound at unit 0 (GL_TEXTURE_2D)
     // and the palette at unit 1 (GL_TEXTURE_2D 256×1) with GL_TEXTURE1 as the active unit.
@@ -1147,15 +1016,6 @@ void GLUIRenderer::FlushQuads(int layer)
         switch (pass) {
         case PASS_SLAB:
             if (!m_slab_texture) { m_vertices.clear(); return; }
-            {
-                static int s_slab_diag = 0;
-                if (s_slab_diag < 5 || (s_slab_diag % 300) == 0) {
-                    SYNCLOG("SLAB-DIAG[%d]: tex=%u pal=%u dim=%d verts=%d",
-                            s_slab_diag, m_slab_texture, m_palette_texture, m_slab_dim,
-                            (int)m_vertices.size());
-                }
-                ++s_slab_diag;
-            }
             glUseProgram(m_prog_sprite);
             glUniform2f(m_loc_screen_sprite, (float)m_screen_width, (float)m_screen_height);
             glActiveTexture(GL_TEXTURE0);
@@ -1222,8 +1082,6 @@ void GLUIRenderer::FlushQuads(int layer)
         glBufferData(GL_ARRAY_BUFFER, sizeof(GLUIVertex) * m_vertices.size(), nullptr, GL_DYNAMIC_DRAW);
         glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(GLUIVertex) * m_vertices.size(), m_vertices.data());
         glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_vertices.size());
-        flush_draw_calls++;
-        flush_total_verts += (int)m_vertices.size();
         m_vertices.clear();
     };
 
@@ -1232,29 +1090,6 @@ void GLUIRenderer::FlushQuads(int layer)
     PassType current_pass = classify(m_ui_quads.begin()->mode);
     current_remap_row = m_ui_quads.begin()->remap_row;
     m_vertices.clear();
-
-    // Trace pass types for first few frames to diagnose missing PASS_SLAB
-    {
-        static int s_walk_trace = 0;
-        if (s_walk_trace < 5 && layer == 0) {
-            const char* names[] = {"SLAB","SOLID","SPRITE","COLORED","FONT","REMAP"};
-            int counts[6] = {};
-            for (auto it = m_ui_quads.begin(); it != mid; ++it) {
-                PassType p = classify(it->mode);
-                if (p >= 0 && p <= 5) counts[p]++;
-            }
-            SYNCLOG("FLUSH-WALK[%d]: layer=%d quads=%d passes: SLAB=%d SOLID=%d SPRITE=%d COLORED=%d FONT=%d REMAP=%d",
-                    s_walk_trace, layer, flush_quad_count,
-                    counts[0], counts[1], counts[2], counts[3], counts[4], counts[5]);
-            // Also log first 4 quads' modes
-            int i = 0;
-            for (auto it = m_ui_quads.begin(); it != mid && i < 4; ++it, ++i) {
-                SYNCLOG("  quad[%d]: mode=%.1f z=%.3f layer=%d pass=%s",
-                        i, it->mode, it->z, (int)it->layer, names[classify(it->mode)]);
-            }
-            ++s_walk_trace;
-        }
-    }
 
     for (auto it = m_ui_quads.begin(); it != mid; ++it) {
         PassType pass = classify(it->mode);
@@ -1267,23 +1102,6 @@ void GLUIRenderer::FlushQuads(int layer)
         ExpandQuadToVertices(*it);
     }
     flush_batch(current_pass);
-
-    // Per-layer flush summary (periodic + anomaly).
-    // Skip tracking when flush_quad_count <= 2: DrawCursorSprites and
-    // DrawPiPSprites also call FlushQuads(1) with 1-2 quads, which
-    // contaminates the static prev counter and creates false-positive anomalies.
-    if (flush_quad_count > 2)
-    {
-        static int s_flush_frame = 0;
-        static int s_prev_verts[4] = {};
-        ++s_flush_frame;
-        bool vert_anomaly = (layer < 4 && s_prev_verts[layer] > 100 && flush_total_verts < s_prev_verts[layer] / 2);
-        if (vert_anomaly || (s_flush_frame % 300) == 0)
-            SYNCLOG("FLICKER-DIAG-FLUSH[%d]: layer=%d quads=%d draws=%d verts=%d(prev %d)",
-                    s_flush_frame, layer, flush_quad_count, flush_draw_calls,
-                    flush_total_verts, layer < 4 ? s_prev_verts[layer] : 0);
-        if (layer < 4) s_prev_verts[layer] = flush_total_verts;
-    }
 
     glBindVertexArray(0);
     m_ui_quads.erase(m_ui_quads.begin(), mid);  // Remove flushed layer-N quads                                                                                                                                                                                                            

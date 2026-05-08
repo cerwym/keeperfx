@@ -668,31 +668,6 @@ bool RendererOpenGL::BeginFrame()
  *  ============================================================ */
 void RendererOpenGL::EndFrame()
 {
-    // ── Flicker diagnostic: per-frame pipeline tracking ──
-    {
-        static int s_ef_count = 0;
-        ++s_ef_count;
-
-        if (!m_frame_begun) {
-            SYNCLOG("FLICKER-DIAG-ENDFRAME[%d]: WITHOUT BeginFrame — UI queues empty",
-                    s_ef_count);
-        }
-    }
-
-    // ── Flicker diagnostic: GL error audit ──────────────────────────────────
-    // Check for accumulated GL errors from previous frame's deferred operations.
-    // A GL error set by any call silently causes subsequent operations to fail
-    // (e.g. textures fail to bind, draw calls produce nothing).  Drain them.
-    {
-        GLenum err;
-        while ((err = glGetError()) != GL_NO_ERROR)
-        {
-            static int s_glerr_count = 0;
-            if (++s_glerr_count <= 50)
-                SYNCLOG("FLICKER-DIAG: GL error 0x%X at start of EndFrame (count=%d)", err, s_glerr_count);
-        }
-    }
-
     // Upload palette unconditionally — it may have changed this frame via LbPaletteSet.
     // Palette switches happen rarely (level load, possession), so the overhead of a
     // 1 KB CPU expand + glTexSubImage2D is negligible compared to other frame work.
@@ -701,6 +676,11 @@ void RendererOpenGL::EndFrame()
     // Restore depth mask before clearing — GPURenderNow() ends with
     // glDepthMask(GL_FALSE) to protect against accidental depth writes during
     // the overlay blit, but glClear(GL_DEPTH_BUFFER_BIT) respects the mask.
+    // Disable scissor unconditionally: if the previous frame's GPURenderNow
+    // returned early (no world geometry), gpu_execute_passes never ran and
+    // GL_SCISSOR_TEST may still be set to the world-viewport rect, causing
+    // glClear to only clear part of the framebuffer and leaving stale pixels.
+    glDisable(GL_SCISSOR_TEST);
     glDepthMask(GL_TRUE);
     {
         // Resolve palette index → RGBA for the GL clear colour.
@@ -764,15 +744,6 @@ void RendererOpenGL::EndFrame()
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         ApplyLensGPUPasses();
         m_lens_active = false;
-    }
-
-    // GL error check after world pass
-    {
-        GLenum err = glGetError();
-        if (err != GL_NO_ERROR) {
-            static int s_cnt = 0;
-            if (++s_cnt <= 20) SYNCLOG("FLICKER-DIAG: GL error 0x%X after GPURenderNow (%d)", err, s_cnt);
-        }
     }
 
     // Draw layer-0 (back) GPU UI elements — sidebar background panels.
@@ -952,137 +923,6 @@ void RendererOpenGL::EndFrame()
     }
     m_overhead_map_cmds.clear();
 
-    // ── Zoom-box tile quads (ZBM_OVERHEAD with actual tile textures) ───────
-    // Queued by SubmitZoomBoxTiles(); each entry is one tile quad with UV into
-    // the tile atlas.  Drawn on top of the overhead map.
-    // Step 1: fill each zoom box region with solid black so unrevealed tiles
-    //         and skipped rock tiles appear black rather than showing whatever
-    //         is underneath (overhead map, parchment).
-    if (!m_zoom_box_bg_cmds.empty())
-    {
-        glViewport(0, 0, m_screenW, m_screenH);
-        glDisable(GL_DEPTH_TEST);
-        glDisable(GL_BLEND);
-        glDepthMask(GL_FALSE);
-        // Draw a solid-black opaque quad for each zoom-box slot using the
-        // screen-tint shader (flat colour, no texture).  This is more robust
-        // than glClear+scissor because it goes through the same render pipeline
-        // as every other 2-D draw (no scissor state to manage, no glClearColor
-        // side-effects, pixel-perfect NDC coverage guaranteed).
-        if (m_tintProg)
-        {
-            static const float k_black[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
-            glUseProgram(m_tintProg);
-            glUniform4fv(m_uTintColor, 1, k_black);
-            glUniform1f(m_uTintClipScrH, (float)m_screenH);
-            glBindVertexArray(m_rawblit_vao);
-            glBindBuffer(GL_ARRAY_BUFFER, m_rawblit_vbo);
-            const float sw = (float)m_screenW;
-            const float sh = (float)m_screenH;
-            for (const ZoomBoxBgCmd& bg : m_zoom_box_bg_cmds)
-            {
-                // Use the clip radius captured at queue time.
-                glUniform1f(m_uTintClipRadius, bg.clip_radius);
-                if (bg.clip_radius >= 0.0f)
-                {
-                    float cr[4] = { (float)bg.x, (float)bg.y,
-                                    (float)(bg.x + bg.w), (float)(bg.y + bg.h) };
-                    glUniform4fv(m_uTintClipRect, 1, cr);
-                }
-                Vec2f ndc0 = ScreenToNDC((float)bg.x,          (float)bg.y,          sw, sh);
-                Vec2f ndc1 = ScreenToNDC((float)(bg.x + bg.w),  (float)(bg.y + bg.h), sw, sh);
-                // Two triangles; UV ignored by tint shader (location 1 unused).
-                const float verts[6][4] = {
-                    { ndc0.x, ndc1.y,  0.f, 0.f },
-                    { ndc1.x, ndc1.y,  0.f, 0.f },
-                    { ndc1.x, ndc0.y,  0.f, 0.f },
-                    { ndc0.x, ndc1.y,  0.f, 0.f },
-                    { ndc1.x, ndc0.y,  0.f, 0.f },
-                    { ndc0.x, ndc0.y,  0.f, 0.f },
-                };
-                glBufferData(GL_ARRAY_BUFFER, sizeof(verts), nullptr, GL_DYNAMIC_DRAW);
-                glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(verts), verts);
-                glDrawArrays(GL_TRIANGLES, 0, 6);
-            }
-            glBindVertexArray(0);
-        }
-        else
-        {
-            // Fallback for the rare case m_tintProg is unavailable.
-            float saved_cc[4];
-            glGetFloatv(GL_COLOR_CLEAR_VALUE, saved_cc);
-            glClearColor(KFX_GL_CLEAR_COLOR);
-            glEnable(GL_SCISSOR_TEST);
-            for (const ZoomBoxBgCmd& bg : m_zoom_box_bg_cmds)
-            {
-                int gl_y = m_screenH - (bg.y + bg.h);
-                glScissor(bg.x, gl_y, bg.w, bg.h);
-                glClear(GL_COLOR_BUFFER_BIT);
-            }
-            glDisable(GL_SCISSOR_TEST);
-            glClearColor(saved_cc[0], saved_cc[1], saved_cc[2], saved_cc[3]);
-        }
-        glDepthMask(GL_TRUE);
-    }
-    m_zoom_box_bg_cmds.clear();
-
-    // Step 2: draw textured tile quads on top of the black background.
-    if (!m_zoom_tile_cmds.empty() && m_zoom_tile_shader && m_tile_atlas)
-    {
-        GLuint atlas_tex = m_tile_atlas->GetAtlasTexture(0);
-        if (atlas_tex)
-        {
-            glViewport(0, 0, m_screenW, m_screenH);
-            glDisable(GL_DEPTH_TEST);
-            glDepthMask(GL_FALSE);
-            glEnable(GL_BLEND);
-            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D_ARRAY, atlas_tex);
-            glActiveTexture(GL_TEXTURE1);
-            glBindTexture(GL_TEXTURE_2D, m_texPalette);
-
-            glUseProgram(m_zoom_tile_shader);
-            // Use cached clip radius/rect from SubmitZoomBoxTiles().
-            glUniform1f(m_uZoomClipRadius, m_zoom_clip_radius);
-            glUniform1f(m_uZoomClipScrH, (float)m_screenH);
-            if (m_zoom_clip_radius >= 0.0f)
-                glUniform4fv(m_uZoomClipRect, 1, m_zoom_clip_rect);
-            glBindVertexArray(m_rawblit_vao);
-            glBindBuffer(GL_ARRAY_BUFFER, m_rawblit_vbo);
-
-            const float sw = (float)m_screenW;
-            const float sh = (float)m_screenH;
-
-            for (const ZoomTileCmd& c : m_zoom_tile_cmds)
-            {
-                Vec2f ndc0 = ScreenToNDC(c.dst_x,             c.dst_y,             sw, sh);
-                Vec2f ndc1 = ScreenToNDC(c.dst_x + c.dst_w,   c.dst_y + c.dst_h,   sw, sh);
-                const float verts[6][4] = {
-                    { ndc0.x, ndc1.y,  c.u0, c.v1 },
-                    { ndc1.x, ndc1.y,  c.u1, c.v1 },
-                    { ndc1.x, ndc0.y,  c.u1, c.v0 },
-                    { ndc0.x, ndc1.y,  c.u0, c.v1 },
-                    { ndc1.x, ndc0.y,  c.u1, c.v0 },
-                    { ndc0.x, ndc0.y,  c.u0, c.v0 },
-                };
-                glBufferData(GL_ARRAY_BUFFER, sizeof(verts), nullptr, GL_DYNAMIC_DRAW);
-                glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(verts), verts);
-                glDrawArrays(GL_TRIANGLES, 0, 6);
-            }
-
-            glBindVertexArray(0);
-            glDisable(GL_BLEND);
-            glDepthMask(GL_TRUE);
-            // Unbind the TEXTURE_2D_ARRAY so subsequent passes that bind
-            // TEXTURE_2D on unit 0 do not leave the array target dirty.
-            glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
-            glActiveTexture(GL_TEXTURE0);
-        }
-    }
-    m_zoom_tile_cmds.clear();
-
     // ── PiP isometric render (ZBM_ISOMETRIC zoom-box mode) ────────────────
     // Each entry in m_pip_queue is rendered into its own FBO slot (grown on
     // demand) then submitted to GLUIRenderer for compositing.  Queue cleared.
@@ -1141,7 +981,6 @@ void RendererOpenGL::EndFrame()
             vec_window_width  = saved_vw;
             vec_window_height = saved_vh;
 
-            GLboolean scissor_was_enabled = glIsEnabled(GL_SCISSOR_TEST);
             glDisable(GL_SCISSOR_TEST);
             glBindFramebuffer(GL_FRAMEBUFFER, fbo.fbo);
             glViewport(0, 0, pw, ph);
@@ -1153,8 +992,6 @@ void RendererOpenGL::EndFrame()
                 ui->DrawPiPSprites(pw, ph);
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
             glViewport(0, 0, m_screenW, m_screenH);
-            if (scissor_was_enabled)
-                glEnable(GL_SCISSOR_TEST);
 
             if (ui)
                 ui->SubmitFBOQuad(pcmd.x, pcmd.y, pw, ph, fbo.color_tex, pcmd.clip_radius);
@@ -1329,17 +1166,140 @@ void RendererOpenGL::EndFrame()
             mfp->RenderGPUComposePass();
     }
 
-    // Draw layer-1 (front) GPU UI elements — escape menu, minimap, slab
-    // selectors, power-hand — on top of everything else.
-    UIRenderer_DrawFront();
-    // GL error check after UI front pass
+    // Draw layer-1 (front) GPU UI elements first.
+    // Layer-1 flush: FBO quads (PiP), atlas sprites, minimap — everything except
+    // layer-2/3 (world-depth overlays, top-overlay tooltip/zoom-box corners).
+    GLUIRenderer* ui_gl = dynamic_cast<GLUIRenderer*>(m_uiRenderer);
+    if (ui_gl)
+        ui_gl->DrawFrontBase();
+
+    // ── Zoom-box tile quads (ZBM_OVERHEAD with actual tile textures) ───────
+    // Drawn AFTER layer-1 sprites so the tile render lands on top of all
+    // parchment-map UI sprites (overhead creatures, room icons, call-to-arms).
+    // The layer-3 top-overlay (tooltip, corner frames) will follow in
+    // DrawFrontOverlay() below, so they are unaffected.
+    // Step 1: fill each zoom box region with solid black so unrevealed tiles
+    //         and skipped rock tiles appear black rather than showing whatever
+    //         is underneath (overhead map, parchment).
+    if (!m_zoom_box_bg_cmds.empty())
     {
-        GLenum err = glGetError();
-        if (err != GL_NO_ERROR) {
-            static int s_cnt = 0;
-            if (++s_cnt <= 20) SYNCLOG("FLICKER-DIAG: GL error 0x%X after DrawFront (%d)", err, s_cnt);
+        glViewport(0, 0, m_screenW, m_screenH);
+        glDisable(GL_DEPTH_TEST);
+        glDisable(GL_BLEND);
+        glDepthMask(GL_FALSE);
+        if (m_tintProg)
+        {
+            static const float k_black[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+            glUseProgram(m_tintProg);
+            glUniform4fv(m_uTintColor, 1, k_black);
+            glUniform1f(m_uTintClipScrH, (float)m_screenH);
+            glBindVertexArray(m_rawblit_vao);
+            glBindBuffer(GL_ARRAY_BUFFER, m_rawblit_vbo);
+            const float sw = (float)m_screenW;
+            const float sh = (float)m_screenH;
+            for (const ZoomBoxBgCmd& bg : m_zoom_box_bg_cmds)
+            {
+                glUniform1f(m_uTintClipRadius, bg.clip_radius);
+                if (bg.clip_radius >= 0.0f)
+                {
+                    float cr[4] = { (float)bg.x, (float)bg.y,
+                                    (float)(bg.x + bg.w), (float)(bg.y + bg.h) };
+                    glUniform4fv(m_uTintClipRect, 1, cr);
+                }
+                Vec2f ndc0 = ScreenToNDC((float)bg.x,          (float)bg.y,          sw, sh);
+                Vec2f ndc1 = ScreenToNDC((float)(bg.x + bg.w),  (float)(bg.y + bg.h), sw, sh);
+                const float verts[6][4] = {
+                    { ndc0.x, ndc1.y,  0.f, 0.f },
+                    { ndc1.x, ndc1.y,  0.f, 0.f },
+                    { ndc1.x, ndc0.y,  0.f, 0.f },
+                    { ndc0.x, ndc1.y,  0.f, 0.f },
+                    { ndc1.x, ndc0.y,  0.f, 0.f },
+                    { ndc0.x, ndc0.y,  0.f, 0.f },
+                };
+                glBufferData(GL_ARRAY_BUFFER, sizeof(verts), nullptr, GL_DYNAMIC_DRAW);
+                glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(verts), verts);
+                glDrawArrays(GL_TRIANGLES, 0, 6);
+            }
+            glBindVertexArray(0);
+        }
+        else
+        {
+            float saved_cc[4];
+            glGetFloatv(GL_COLOR_CLEAR_VALUE, saved_cc);
+            glClearColor(KFX_GL_CLEAR_COLOR);
+            glEnable(GL_SCISSOR_TEST);
+            for (const ZoomBoxBgCmd& bg : m_zoom_box_bg_cmds)
+            {
+                int gl_y = m_screenH - (bg.y + bg.h);
+                glScissor(bg.x, gl_y, bg.w, bg.h);
+                glClear(GL_COLOR_BUFFER_BIT);
+            }
+            glDisable(GL_SCISSOR_TEST);
+            glClearColor(saved_cc[0], saved_cc[1], saved_cc[2], saved_cc[3]);
+        }
+        glDepthMask(GL_TRUE);
+    }
+    m_zoom_box_bg_cmds.clear();
+
+    // Step 2: draw textured tile quads on top of the black background.
+    if (!m_zoom_tile_cmds.empty() && m_zoom_tile_shader && m_tile_atlas)
+    {
+        GLuint atlas_tex = m_tile_atlas->GetAtlasTexture(0);
+        if (atlas_tex)
+        {
+            glViewport(0, 0, m_screenW, m_screenH);
+            glDisable(GL_DEPTH_TEST);
+            glDepthMask(GL_FALSE);
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D_ARRAY, atlas_tex);
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(GL_TEXTURE_2D, m_texPalette);
+
+            glUseProgram(m_zoom_tile_shader);
+            glUniform1f(m_uZoomClipRadius, m_zoom_clip_radius);
+            glUniform1f(m_uZoomClipScrH, (float)m_screenH);
+            if (m_zoom_clip_radius >= 0.0f)
+                glUniform4fv(m_uZoomClipRect, 1, m_zoom_clip_rect);
+            glBindVertexArray(m_rawblit_vao);
+            glBindBuffer(GL_ARRAY_BUFFER, m_rawblit_vbo);
+
+            const float sw = (float)m_screenW;
+            const float sh = (float)m_screenH;
+
+            for (const ZoomTileCmd& c : m_zoom_tile_cmds)
+            {
+                Vec2f ndc0 = ScreenToNDC(c.dst_x,             c.dst_y,             sw, sh);
+                Vec2f ndc1 = ScreenToNDC(c.dst_x + c.dst_w,   c.dst_y + c.dst_h,   sw, sh);
+                const float verts[6][4] = {
+                    { ndc0.x, ndc1.y,  c.u0, c.v1 },
+                    { ndc1.x, ndc1.y,  c.u1, c.v1 },
+                    { ndc1.x, ndc0.y,  c.u1, c.v0 },
+                    { ndc0.x, ndc1.y,  c.u0, c.v1 },
+                    { ndc1.x, ndc0.y,  c.u1, c.v0 },
+                    { ndc0.x, ndc0.y,  c.u0, c.v0 },
+                };
+                glBufferData(GL_ARRAY_BUFFER, sizeof(verts), nullptr, GL_DYNAMIC_DRAW);
+                glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(verts), verts);
+                glDrawArrays(GL_TRIANGLES, 0, 6);
+            }
+
+            glBindVertexArray(0);
+            glDisable(GL_BLEND);
+            glDepthMask(GL_TRUE);
+            glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+            glActiveTexture(GL_TEXTURE0);
         }
     }
+    m_zoom_tile_cmds.clear();
+
+    // Layer-2/3 overlay: world-depth sprites and top-overlay (tooltip, corner frames).
+    if (ui_gl)
+        ui_gl->DrawFrontOverlay();
+    else
+        UIRenderer_DrawFront();  // fallback for non-GL UI renderers
 
     // Text on top of all sprites (sidebar labels, event messages, tooltips).
     TextRenderer_Draw();
@@ -1373,19 +1333,6 @@ void RendererOpenGL::EndFrame()
     // Cursor drawn last — after the screen-tint overlay — so it is always on
     // top of every other rendered layer including possession/death-flash tints.
     CursorLayer_Draw();
-
-    // ── Pre-swap GL error audit ──
-    {
-        GLenum err;
-        int errcount = 0;
-        while ((err = glGetError()) != GL_NO_ERROR) {
-            if (++errcount <= 5) {
-                static int s_preswap_frame = 0;
-                ++s_preswap_frame;
-                SYNCLOG("FLICKER-DIAG-PRESWAP[%d]: GL error 0x%X before swap", s_preswap_frame, err);
-            }
-        }
-    }
 
     RenderPass_EndFrame();
     platform_swap_gl_buffers(lbWindow);

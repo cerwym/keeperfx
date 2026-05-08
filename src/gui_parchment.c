@@ -505,6 +505,7 @@ void draw_overhead_room_icons(const struct TbRect *map_area, long block_size, Pl
                     const struct TbSprite* spr = get_panel_sprite(sprite_idx);
                     long pos_x = map_area->left + (block_size * room->central_stl_x / STL_PER_SLB) - (spr->SWidth * ps_units_per_px / 16 / 2);
                     long pos_y = map_area->top + (block_size * room->central_stl_y / STL_PER_SLB) - (spr->SHeight * ps_units_per_px / 16 / 2);
+                    if (RendererPointInZoomBoxScreenRect((int)pos_x, (int)pos_y)) continue;
                     // In GL mode draw via UIRenderer; dimmed rooms are skipped (binary blink vs TRANSPAR4 dim).
                     // In software mode set DrawFlags so LbSpriteDrawResized respects the dimming effect.
                     if (!dimmed) {
@@ -536,6 +537,7 @@ int draw_overhead_call_to_arms(const struct TbRect *map_area, long block_size, P
             long pos_y = map_area->top + block_size * (int)dungeon->cta_stl_y / STL_PER_SLB;
             long radius = (((m & 7) + m) >> 3) / pixel_size;
             unsigned char col = player_room_colours[get_player_color_idx(i)];
+            if (RendererPointInZoomBoxScreenRect((int)pos_x, (int)pos_y)) { n++; continue; }
             // GPU path: approximate pulsing circle as an outline rectangle.
             // Software path: LbDrawCircle via DrawFlags=Lb_SPRITE_OUTLINE.
             UIRenderer_SubmitOutlineBox(pos_x - radius, pos_y - radius, radius * 2, radius * 2, col);
@@ -583,20 +585,18 @@ int draw_overhead_creatures(const struct TbRect *map_area, long block_size, Play
                 long pos_x = map_area->left + block_size * (int)thing->mappos.x.stl.num / STL_PER_SLB;
                 long pos_y = map_area->top + block_size * (int)thing->mappos.y.stl.num / STL_PER_SLB;
                 if (thing->owner == plyr_idx)
-                {
                     col = col2;
-
-                }
                 else
-                {
                     col = col1;
-                }
-                pixel_end = get_pixels_scaled_and_zoomed(TWO_PIXELS);
-                for (p = 0; p < pixel_end; p++)
+                if (!RendererPointInZoomBoxScreenRect((int)pos_x, (int)pos_y))
                 {
-                    UIRenderer_SubmitSolidBox(pos_x + draw_square[p].delta_x, pos_y + draw_square[p].delta_y, 1, 1, col);
+                    pixel_end = get_pixels_scaled_and_zoomed(TWO_PIXELS);
+                    for (p = 0; p < pixel_end; p++)
+                    {
+                        UIRenderer_SubmitSolidBox(pos_x + draw_square[p].delta_x, pos_y + draw_square[p].delta_y, 1, 1, col);
+                    }
+                    n++;
                 }
-                n++;
             } else
             // Special tunneler code
             if (is_hero_tunnelling_to_attack(thing))
@@ -622,6 +622,7 @@ int draw_overhead_creatures(const struct TbRect *map_area, long block_size, Play
                         break;
                     long pos_x = map_area->left + block_size * stl_num_decode_x(memberpos) / STL_PER_SLB;
                     long pos_y = map_area->top + block_size * stl_num_decode_y(memberpos) / STL_PER_SLB;
+                    if (RendererPointInZoomBoxScreenRect((int)pos_x, (int)pos_y)) { n++; continue; }
                     pixel_end = get_pixels_scaled_and_zoomed(TWO_PIXELS);
                     for (p = 0; p < pixel_end; p++)
                     {
@@ -666,6 +667,8 @@ int draw_overhead_traps(const struct TbRect *map_area, long block_size, PlayerNu
                 {
                     long pos_x = map_area->left + (block_size * (int)thing->mappos.x.stl.num / STL_PER_SLB) + ((block_size + 1)/5);
                     long pos_y = map_area->top + (block_size * (int)thing->mappos.y.stl.num / STL_PER_SLB) + ((block_size + 1)/5);
+                    if (!RendererPointInZoomBoxScreenRect((int)pos_x, (int)pos_y))
+                    {
                     short pixels_amount = scale_pixel(ONE_PIXEL);
                     short pixel_end = get_pixels_scaled_and_zoomed(ONE_PIXEL);
                     short colour = 60;
@@ -679,6 +682,7 @@ int draw_overhead_traps(const struct TbRect *map_area, long block_size, PlayerNu
                         UIRenderer_SubmitSolidBox(pos_x + draw_square[p].delta_x, pos_y - pixels_amount + draw_square[p].delta_y, 1, 1, colour);
                     }
                     n++;
+                    }
                 }
             }
         }
@@ -717,20 +721,24 @@ int draw_overhead_spells(const struct TbRect *map_area, long block_size, PlayerN
               {
                   long pos_x = map_area->left + block_size * (int)thing->mappos.x.stl.num / STL_PER_SLB  + ((block_size + 1)/5);
                   long pos_y = map_area->top + block_size * (int)thing->mappos.y.stl.num / STL_PER_SLB + ((block_size + 1)/5);
+                  if (!RendererPointInZoomBoxScreenRect((int)pos_x, (int)pos_y)) {
                   short pixel_end = get_pixels_scaled_and_zoomed(TWO_PIXELS);
                   for (int p = 0; p < pixel_end; p++)
                   {
                       UIRenderer_SubmitSolidBox(pos_x + draw_square[p].delta_x, pos_y + draw_square[p].delta_y, 1, 1, colours[15][0][15]);
+                  }
                   }
               }
               else if ( thing_is_workshop_crate(thing) )
               {
                   long pos_x = map_area->left + block_size * (int)thing->mappos.x.stl.num / STL_PER_SLB  + ((block_size + 1)/5);
                   long pos_y = map_area->top + block_size * (int)thing->mappos.y.stl.num / STL_PER_SLB + ((block_size + 1)/5);
+                  if (!RendererPointInZoomBoxScreenRect((int)pos_x, (int)pos_y)) {
                   short pixel_end = get_pixels_scaled_and_zoomed(TWO_PIXELS);
                   for (int p = 0; p < pixel_end; p++)
                   {
                       UIRenderer_SubmitSolidBox(pos_x + draw_square[p].delta_x, pos_y + draw_square[p].delta_y, 1, 1, colours[7][6][7]);
+                  }
                   }
               }
             }
@@ -964,8 +972,9 @@ void draw_zoom_box_things(long scrtop_x, long scrtop_y, int stl_x, int stl_y, Pl
     if (RendererHasGPURenderPath())
     {
         // GPU: UIRenderer_Submit* calls take absolute screen coordinates.
-        // Use scrtop_x/scrtop_y as the tile-grid origin rather than a
-        // graphics window, so each tile position is correct on screen.
+        // Submit creature/trap/object icons as top-overlay (layer 3) so they
+        // are always drawn above the zoom-box tile pass and all layer-1 sprites.
+        UIRenderer_BeginTopOverlay();
         int scr_y = scrtop_y;
         for (int map_dy = 0; map_dy < draw_tiles_y; map_dy++)
         {
@@ -979,6 +988,7 @@ void draw_zoom_box_things(long scrtop_x, long scrtop_y, int stl_x, int stl_y, Pl
             }
             scr_y += subtile_size;
         }
+        UIRenderer_EndTopOverlay();
         return;
     }
 

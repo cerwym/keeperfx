@@ -268,6 +268,32 @@ float RendererGetZoomBoxClipRadius(void)
     return s_zoom_box_clip_radius;
 }
 
+// Screen-space rect of the active zoom box for the current frame.
+// Set by ZoomBoxView::draw() (via RendererSetZoomBoxScreenRect) before terrain
+// and things are submitted so draw_overhead_* can skip markers inside the box.
+struct { int x0, y0, x1, y1; int active; } s_zoom_box_screen_rect = {0,0,0,0,0};
+
+void RendererSetZoomBoxScreenRect(int x0, int y0, int x1, int y1)
+{
+    s_zoom_box_screen_rect.x0 = x0;
+    s_zoom_box_screen_rect.y0 = y0;
+    s_zoom_box_screen_rect.x1 = x1;
+    s_zoom_box_screen_rect.y1 = y1;
+    s_zoom_box_screen_rect.active = 1;
+}
+
+void RendererClearZoomBoxScreenRect(void)
+{
+    s_zoom_box_screen_rect.active = 0;
+}
+
+int RendererPointInZoomBoxScreenRect(int x, int y)
+{
+    if (!s_zoom_box_screen_rect.active) return 0;
+    return (x >= s_zoom_box_screen_rect.x0 && x < s_zoom_box_screen_rect.x1 &&
+            y >= s_zoom_box_screen_rect.y0 && y < s_zoom_box_screen_rect.y1);
+}
+
 void RendererSchedulePiPRender(struct Camera* cam, int x, int y, int w, int h)
 {
 #ifdef RENDERER_OPENGL_ENABLED

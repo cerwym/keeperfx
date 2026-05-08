@@ -74,36 +74,55 @@ void ParchmentScene::draw(const DrawContext& ctx, const ClientViewState& view)
     load_parchment_file();
     // Draw the parchment background texture.
     draw_map_parchment();
-    // Draw the overhead 2D map tiles, creatures, rooms.
-    draw_2d_map();
-    // Draw all in-game GUI panels and menus.
-    draw_gui();
-    gui_draw_all_boxes();
-    // Draw zoom box (ZoomBoxView handles placement + render below).
-    // draw_zoom_box() stub in gui_parchment.c is a no-op — we own this now.
-    // Map level name and tooltip overlay.
-    draw_map_level_name();
-    draw_tooltip();
 
     // -------------------------------------------------------------------------
-    // Zoom box — scene computes placement, ZoomBoxView renders.
+    // Compute zoom box placement before draw_2d_map() so we can register the
+    // screen rect with the renderer.  Overhead marker functions (draw_overhead_
+    // creatures, draw_overhead_traps, etc.) query RendererPointInZoomBoxScreenRect
+    // and skip any dot that falls inside the box, preventing bleed-through.
     // -------------------------------------------------------------------------
-    if (!m_zoom_box)
-        return;
-
-    const PlayerInfo* player = get_my_player();
-    if (!player)
-        return;
-
     TbRect  screen_rect   = {};
     int     stl_x         = 0;
     int     stl_y         = 0;
     int     draw_tiles    = 0;
     int     subtile_size  = 0;
+    bool    has_zoom_box  = false;
 
-    if (!computeZoomBoxPlacement(ctx, view,
-                                 &screen_rect, &stl_x, &stl_y,
-                                 &draw_tiles, &subtile_size))
+    if (m_zoom_box)
+    {
+        const PlayerInfo* player = get_my_player();
+        if (player && computeZoomBoxPlacement(ctx, view,
+                                              &screen_rect, &stl_x, &stl_y,
+                                              &draw_tiles, &subtile_size))
+        {
+            has_zoom_box = true;
+            RendererSetZoomBoxScreenRect(screen_rect.left, screen_rect.top,
+                                         screen_rect.right, screen_rect.bottom);
+        }
+    }
+
+    // Draw the overhead 2D map tiles, creatures, rooms.
+    // Creature dots that fall inside the zoom box rect are culled by the
+    // renderer marker functions (via RendererPointInZoomBoxScreenRect).
+    draw_2d_map();
+
+    RendererClearZoomBoxScreenRect();
+
+    // Draw all in-game GUI panels and menus.
+    draw_gui();
+    gui_draw_all_boxes();
+    // Map level name and tooltip overlay.
+    draw_map_level_name();
+    draw_tooltip();
+
+    // -------------------------------------------------------------------------
+    // Zoom box render.
+    // -------------------------------------------------------------------------
+    if (!has_zoom_box)
+        return;
+
+    const PlayerInfo* player = get_my_player();
+    if (!player)
         return;
 
     m_zoom_box->draw(ctx, view, player,

@@ -506,6 +506,15 @@ void RendererSetZoomBoxClipRadius(float radius);
 /** Get the current zoom-box clip radius.  Negative = no clipping. */
 float RendererGetZoomBoxClipRadius(void);
 
+/** Register the screen-space rect of the active zoom box so that overhead
+ *  map markers (creature dots, call-to-arms circles, etc.) can be culled
+ *  when they fall inside the box.  Call before draw_2d_map() runs.
+ *  RendererClearZoomBoxScreenRect() resets it at end-of-frame. */
+void RendererSetZoomBoxScreenRect(int x0, int y0, int x1, int y1);
+void RendererClearZoomBoxScreenRect(void);
+/** Returns non-zero if (x,y) lies inside the registered zoom box rect. */
+int  RendererPointInZoomBoxScreenRect(int x, int y);
+
 /** Schedule a picture-in-picture isometric render for the zoom box.
  *  Call from draw_zoom_box() when the mode is ZBM_ISOMETRIC.
  *  @param cam  Pointer to the camera whose view should be rendered.  The struct
