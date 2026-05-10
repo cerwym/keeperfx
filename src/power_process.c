@@ -18,6 +18,7 @@
 /******************************************************************************/
 #include "kfx_memory.h"
 #include "pre_inc.h"
+#include "kfx/engine/cameras.h"
 #include "power_process.h"
 
 #include "globals.h"
@@ -246,7 +247,7 @@ void lightning_modify_palette(struct Thing *thing)
       myplyr->additional_flags &= ~PlaAF_LightningPaletteIsActive;
       return;
     }
-    if (myplyr->acamera == NULL)
+    if (!camera_is_active(myplyr->id_number))
     {
         ERRORLOG("No active camera");
         return;
@@ -255,7 +256,7 @@ void lightning_modify_palette(struct Thing *thing)
     {
         if ((myplyr->additional_flags & PlaAF_LightningPaletteIsActive) != 0)
         {
-            if (get_chessboard_distance(&myplyr->acamera->mappos, &thing->mappos) < 11520)
+            if (get_chessboard_distance(&camera_get_active(myplyr->id_number)->mappos, &thing->mappos) < 11520)
             {
                 PaletteSetPlayerPalette(myplyr, engine_palette);
                 myplyr->additional_flags &= ~PlaAF_LightningPaletteIsActive;
@@ -267,7 +268,7 @@ void lightning_modify_palette(struct Thing *thing)
     {
         if ((myplyr->additional_flags & PlaAF_LightningPaletteIsActive) == 0)
         {
-            if (get_chessboard_distance(&myplyr->acamera->mappos, &thing->mappos) < 11520)
+            if (get_chessboard_distance(&camera_get_active(myplyr->id_number)->mappos, &thing->mappos) < 11520)
             {
               PaletteSetPlayerPalette(myplyr, lightning_palette);
               myplyr->additional_flags |= PlaAF_LightningPaletteIsActive;
@@ -374,7 +375,7 @@ void god_lightning_choose_next_creature(struct Thing *shotng)
 void draw_god_lightning(struct Thing *shotng)
 {
     struct PlayerInfo* player = get_player(shotng->owner);
-    const struct Camera* cam = get_local_camera(player->acamera);
+    const struct Camera* cam = get_local_active_camera(player->id_number);
     if (cam == NULL) {
         return;
     }

@@ -33,6 +33,9 @@ extern "C" {
 #endif
 /******************************************************************************/
 
+extern char lbDrawAreaTitle[128];
+extern SDL_Window *lbWindow;
+
 /** Internal screen surface structure. */
 SDL_Surface * lbScreenSurface;
 /** Internal drawing surface structure.
@@ -194,6 +197,33 @@ TbResult LbScreenSurfaceUnlock(struct SSurface *surf)
 
 TbResult LbScreenSetupRendererSurfaces(void)
 {
+    // Check if the window was created with SDL_WINDOW_OPENGL flag.
+    // If so, we cannot use SDL_GetWindowSurface() on it — we must recreate
+    // the window without the OpenGL flag to enable software rendering.
+    if (lbWindow != NULL && (SDL_GetWindowFlags(lbWindow) & SDL_WINDOW_OPENGL))
+    {
+        SYNCLOG("LbScreenSetupRendererSurfaces: window has SDL_WINDOW_OPENGL flag, recreating for software rendering");
+
+        // Save current window state
+        int x, y, w, h;
+        SDL_GetWindowPosition(lbWindow, &x, &y);
+        SDL_GetWindowSize(lbWindow, &w, &h);
+        Uint32 flags = SDL_GetWindowFlags(lbWindow);
+
+        // Remove OpenGL flag and recreate the window
+        flags &= ~SDL_WINDOW_OPENGL;
+
+        SDL_DestroyWindow(lbWindow);
+        lbWindow = SDL_CreateWindow(lbDrawAreaTitle, x, y, w, h, flags);
+
+        if (!lbWindow) {
+            ERRORLOG("LbScreenSetupRendererSurfaces: failed to recreate window: %s", SDL_GetError());
+            return Lb_FAIL;
+        }
+
+        SDL_ShowWindow(lbWindow); // ensure it's visible
+    }
+
     lbScreenSurface = SDL_GetWindowSurface(lbWindow);
     if (!lbScreenSurface) {
         ERRORLOG("LbScreenSetupRendererSurfaces: SDL_GetWindowSurface failed: %s", SDL_GetError());

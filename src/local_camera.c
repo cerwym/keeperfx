@@ -32,6 +32,7 @@
 #include "map_data.h"
 #include "bflib_math.h"
 #include "frontmenu_ingame_map.h"
+#include "kfx/engine/cameras.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -81,7 +82,7 @@ void send_camera_catchup_packets(struct PlayerInfo *player)
     int cam_idx = (player->view_mode == PVM_FrontView) ? CamIV_FrontView : CamIV_Isometric;
     
     struct Camera* local_cam = &destination_local_cameras[cam_idx];
-    struct Camera* packet_cam = &player->cameras[cam_idx];
+    struct Camera* packet_cam = camera_get_slot(player->id_number, cam_idx);
     struct Packet* pckt = get_packet(player->id_number);
     
     long diff_map_x = local_cam->mappos.x.val - packet_cam->mappos.x.val;
@@ -142,8 +143,8 @@ void init_local_cameras(struct PlayerInfo *player)
     if (!is_my_player(player)) {
         return;
     }
-    for (int i = 0; i < 4; i++) {
-        sync_camera_state(i, &player->cameras[i]);
+    for (int i = 0; i < CamIV_EndList; i++) {
+        sync_camera_state(i, camera_get_slot(player->id_number, i));
     }
     local_camera_ready = true;
 }
@@ -310,12 +311,12 @@ void sync_local_camera(struct PlayerInfo *player)
     if (!is_my_player(player) || !local_camera_ready) {
         return;
     }
-    if (player->acamera == &player->cameras[CamIV_FirstPerson]) {
-        sync_first_person_camera(player->acamera, player);
+    if (camera_get_active_idx(player->id_number) == CamIV_FirstPerson) {
+        sync_first_person_camera(camera_get_active(player->id_number), player);
         return;
     }
     for (int cam_idx = CamIV_Isometric; cam_idx <= CamIV_FrontView; cam_idx++) {
-        sync_camera_state(cam_idx, &player->cameras[cam_idx]);
+        sync_camera_state(cam_idx, camera_get_slot(player->id_number, cam_idx));
     }
     if (player->view_mode == PVM_ParchmentView) {
         reset_all_minimap_interpolation = true;
@@ -328,7 +329,7 @@ void set_local_camera_destination(struct PlayerInfo *player)
         return;
     }
     for (int cam_idx = CamIV_Isometric; cam_idx <= CamIV_FrontView; cam_idx++) {
-        destination_local_cameras[cam_idx] = player->cameras[cam_idx];
+        destination_local_cameras[cam_idx] = *camera_get_slot(player->id_number, cam_idx);
     }
     struct Thing *ctrltng = thing_get(player->controlled_thing_idx);
     if (thing_exists(ctrltng)) {
@@ -337,18 +338,16 @@ void set_local_camera_destination(struct PlayerInfo *player)
     }
 }
 
-struct Camera* get_local_camera(struct Camera* cam)
+struct Camera* get_local_camera(int cam_idx)
 {
-    if (!local_camera_ready) {
-        return cam;
-    }
-    struct PlayerInfo *player = get_my_player();
-    for (int cam_idx = CamIV_Isometric; cam_idx <= CamIV_FrontView; cam_idx++) {
-        if (cam == &player->cameras[cam_idx]) {
-            return &local_cameras[cam_idx];
-        }
-    }
-    return cam;
+    if (!local_camera_ready)
+        return camera_get_slot(my_player_number, cam_idx);
+    return &local_cameras[cam_idx];
+}
+
+struct Camera* get_local_active_camera(int plyr_idx)
+{
+    return get_local_camera(camera_get_active_idx(plyr_idx));
 }
 /******************************************************************************/
 #ifdef __cplusplus

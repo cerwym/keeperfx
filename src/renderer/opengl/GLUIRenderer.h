@@ -182,6 +182,14 @@ public:
      *  @param tex GL_TEXTURE_2D, R8, 256×256 — owned by RendererOpenGL */
     void SetFadeTexture(GLuint tex);
 
+        /** Called once per frame by EndFrame(), before DrawBack().
+     *  When replay=true and the queues are empty, restores the last real frame's
+     *  full UI snapshot (all layers) so the sidebar stays visible during
+     *  palette-fade loops.  When replay=false and queues are non-empty, saves
+     *  a fresh snapshot.  Intentionally a no-op when queues are already populated
+     *  (real frame with fresh content). */
+    void SetStaleReplay(bool replay);
+
 private:
     // GPU shader programs — one per rendering domain to isolate texture unit bindings.
     GLuint m_prog_sprite;          // palette-indexed atlas sprites (unit 0 = atlas R8, unit 1 = palette 1D)
@@ -278,6 +286,8 @@ private:
                    float r, float g, float b, float a, float z, float mode, uint32_t texture_id = 0);
     void SubmitLine(float x1, float y1, float x2, float y2, float r, float g, float b, float a, 
                    float z, float thickness = 2.0f);
+
+
 };
 
 /******************************************************************************/

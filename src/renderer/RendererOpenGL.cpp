@@ -597,8 +597,14 @@ bool RendererOpenGL::BeginFrame()
     }
 
     RenderPass_BeginFrame();
-    UIRenderer_Clear();
-    CursorLayer_Clear();
+    // Don't clear UI/cursor queues during palette fades — RendererPresentFrame()
+    // is called in a tight loop with no draw_gui() in between.  The queues keep
+    // their content so the sidebar stays visible while the palette darkens.
+    if (!RendererIsFadeCachePreserved())
+    {
+        UIRenderer_Clear();
+        CursorLayer_Clear();
+    }
     return true;
 }
 
@@ -1343,8 +1349,12 @@ void RendererOpenGL::EndFrame()
     // BeginFrame(), the second+ swap re-renders stale UI/cursor entries over
     // a glClear'd background (world geometry was already consumed on the first
     // swap), causing visible flicker.
-    UIRenderer_Clear();
-    CursorLayer_Clear();
+    // Don't clear during fades — preserve queue content for the next fade iteration.
+    if (!RendererIsFadeCachePreserved())
+    {
+        UIRenderer_Clear();
+        CursorLayer_Clear();
+    }
 
     // Collect pending GPU timer query results for Tracy GPU zones.
     KFX_GPU_COLLECT();

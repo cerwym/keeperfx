@@ -43,6 +43,7 @@
 #include "config_settings.h"
 #include "game_legacy.h"
 #include "local_camera.h"
+#include "kfx/engine/cameras.h"
 #include "keeperfx.hpp"
 #include "renderer/RendererManager.h"
 #include "post_inc.h"
@@ -450,13 +451,13 @@ TbBool input_gameplay_tooltips(TbBool gameplay_on)
     struct PlayerInfo* player = get_my_player();
     if ((gameplay_on) && (tool_tip_time == 0) && (!busy_doing_gui))
     {
-        if (player->acamera == NULL)
+        if (!camera_is_active(player->id_number))
         {
             ERRORLOG("No active camera");
             return false;
         }
         struct Coord3d mappos;
-        if (screen_to_map(get_local_camera(player->acamera), GetMouseX(), GetMouseY(), &mappos))
+        if (screen_to_map(get_local_active_camera(player->id_number), GetMouseX(), GetMouseY(), &mappos))
         {
             if (subtile_revealed(mappos.x.stl.num,mappos.y.stl.num, player->id_number))
             {

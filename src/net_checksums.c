@@ -19,6 +19,7 @@
 #include "kfx_memory.h"
 #include "pre_inc.h"
 #include "net_checksums.h"
+#include "kfx/engine/cameras.h"
 #include "game_legacy.h"
 #include "net_game.h"
 #include "packets.h"
@@ -109,10 +110,10 @@ TbBigChecksum get_thing_checksum(const struct Thing* thing) {
 }
 
 static TbBigChecksum compute_player_checksum(struct PlayerInfo *player) {
-    if ((player->allocflags & PlaF_CompCtrl) != 0 || player->acamera == NULL) {
+    if ((player->allocflags & PlaF_CompCtrl) != 0 || !camera_is_active(player->id_number)) {
         return 0;
     }
-    struct Coord3d* mappos = &(player->acamera->mappos);
+    struct Coord3d* mappos = &(camera_get_active(player->id_number)->mappos);
     TbBigChecksum checksum = 0;
     CHECKSUM_ADD(checksum, player->instance_remain_turns);
     CHECKSUM_ADD(checksum, player->instance_num);
@@ -290,14 +291,14 @@ void update_turn_checksums(void) {
         }
         for (int i = 0; i < PLAYERS_COUNT; i++) {
             struct PlayerInfo* player = get_player(i);
-            if (!player_exists(player) || ((player->allocflags & PlaF_CompCtrl) != 0) || player->acamera == NULL) {
+            if (!player_exists(player) || ((player->allocflags & PlaF_CompCtrl) != 0) || !camera_is_active(player->id_number)) {
                 continue;
             }
             struct LogPlayerDesyncInfo* player_snapshot = &snapshot_info->players[snapshot_info->player_count++];
             player_snapshot->id = i;
             player_snapshot->instance_num = player->instance_num;
             player_snapshot->instance_remain_turns = player->instance_remain_turns;
-            player_snapshot->mappos = player->acamera->mappos;
+            player_snapshot->mappos = camera_get_active(player->id_number)->mappos;
             player_snapshot->checksum = compute_player_checksum(player);
         }
         for (struct Room* room = start_rooms; room < end_rooms; room++) {

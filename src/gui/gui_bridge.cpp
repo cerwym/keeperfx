@@ -14,6 +14,7 @@
 #include "player_data.h"        // PlayerInfo, get_my_player, is_my_player
 #include "config_settings.h"    // settings, save_settings
 #include "engine_camera.h"      // CamIV_*
+#include "kfx/engine/cameras.h"
 #include "local_camera.h"       // set_local_camera_destination
 #include "bflib_video.h"        // scale_value_for_resolution, LbScreenWidth/Height, pixel_size
 #include "bflib_planar.h"       // TbRect
@@ -114,9 +115,9 @@ void GUIBridge_SetMapRotation(int angle)
     struct PlayerInfo* player = get_my_player();
     if (!player) return;
 
-    player->cameras[CamIV_Parchment].rotation_angle_x = angle;
-    player->cameras[CamIV_FrontView].rotation_angle_x = angle;
-    player->cameras[CamIV_Isometric].rotation_angle_x = angle;
+    camera_get_slot(player->id_number, CamIV_Parchment)->rotation_angle_x = angle;
+    camera_get_slot(player->id_number, CamIV_FrontView)->rotation_angle_x = angle;
+    camera_get_slot(player->id_number, CamIV_Isometric)->rotation_angle_x = angle;
     set_local_camera_destination(player);
 
     // Mirror into ClientViewState immediately.
@@ -162,7 +163,7 @@ static void togglePiP(int idx)
     slot.stl_x    = player->cursor_subtile_x - 4;
     slot.stl_y    = player->cursor_subtile_y - 4;
     slot.zoom_box = std::make_unique<ZoomBoxView>(RENDERER_ZBM_ISOMETRIC);
-    const Camera* iso_cam = &player->cameras[CamIV_Isometric];
+    const Camera* iso_cam = camera_get_slot(player->id_number, CamIV_Isometric);
     slot.zoom_box->setFixedZoom(get_camera_zoom(const_cast<Camera*>(iso_cam)));
     slot.zoom_box->setFixedRotation(iso_cam->rotation_angle_x);
     slot.enabled  = true;

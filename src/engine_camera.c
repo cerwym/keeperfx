@@ -37,6 +37,7 @@
 #include "player_instances.h"
 #include "frontmenu_ingame_map.h"
 #include "local_camera.h"
+#include "kfx/engine/cameras.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -368,8 +369,11 @@ void view_set_camera_tilt(struct Camera *cam, unsigned char mode)
 
 void init_player_cameras(struct PlayerInfo *player)
 {
-    struct Thing* heartng = get_player_soul_container(player->id_number);
-    struct Camera* cam = &player->cameras[CamIV_FirstPerson];
+    int pi = player->id_number;
+    camera_init_player(pi);
+
+    struct Thing* heartng = get_player_soul_container(pi);
+    struct Camera* cam = camera_get_slot(pi, CamIV_FirstPerson);
     cam->mappos.x.val = 0;
     cam->mappos.y.val = 0;
     cam->mappos.z.val = 256;
@@ -379,7 +383,7 @@ void init_player_cameras(struct PlayerInfo *player)
     cam->rotation_angle_x = ANGLE_EAST;
     cam->view_mode = PVM_CreatureView;
 
-    cam = &player->cameras[CamIV_Isometric];
+    cam = camera_get_slot(pi, CamIV_Isometric);
     cam->mappos.x.val = heartng->mappos.x.val;
     cam->mappos.y.val = heartng->mappos.y.val;
     cam->mappos.z.val = 0;
@@ -394,14 +398,14 @@ void init_player_cameras(struct PlayerInfo *player)
     }
     cam->zoom = player->isometric_view_zoom_level;
 
-    cam = &player->cameras[CamIV_Parchment];
+    cam = camera_get_slot(pi, CamIV_Parchment);
     cam->mappos.x.val = 0;
     cam->mappos.y.val = 0;
     cam->mappos.z.val = 32;
     cam->horizontal_fov = 94;
     cam->view_mode = PVM_ParchmentView;
 
-    cam = &player->cameras[CamIV_FrontView];
+    cam = camera_get_slot(pi, CamIV_FrontView);
     cam->mappos.x.val = heartng->mappos.x.val;
     cam->mappos.y.val = heartng->mappos.y.val;
     cam->mappos.z.val = 32;
@@ -409,6 +413,7 @@ void init_player_cameras(struct PlayerInfo *player)
     cam->view_mode = PVM_FrontView;
     cam->zoom = player->frontview_zoom_level;
 
+    camera_set_active(pi, CamIV_Isometric);
     init_local_cameras(player);
 }
 
@@ -764,7 +769,8 @@ void view_process_camera_inertia(struct Camera *cam)
 void update_player_camera(struct PlayerInfo *player)
 {
     struct Dungeon *dungeon = get_players_dungeon(player);
-    struct Camera *cam = player->acamera;
+    int pi = player->id_number;
+    struct Camera *cam = camera_get_active(pi);
 
     view_process_camera_inertia(cam);
     switch (cam->view_mode)
@@ -782,13 +788,13 @@ void update_player_camera(struct PlayerInfo *player)
     case PVM_IsoWibbleView:
     case PVM_IsoStraightView:
         // correct according to dissassembly
-        player->cameras[CamIV_FrontView].mappos.x.val = cam->mappos.x.val;
-        player->cameras[CamIV_FrontView].mappos.y.val = cam->mappos.y.val;
+        camera_get_slot(pi, CamIV_FrontView)->mappos.x.val = cam->mappos.x.val;
+        camera_get_slot(pi, CamIV_FrontView)->mappos.y.val = cam->mappos.y.val;
         break;
     case PVM_FrontView:
         // correct according to dissassembly
-        player->cameras[CamIV_Isometric].mappos.x.val = cam->mappos.x.val;
-        player->cameras[CamIV_Isometric].mappos.y.val = cam->mappos.y.val;
+        camera_get_slot(pi, CamIV_Isometric)->mappos.x.val = cam->mappos.x.val;
+        camera_get_slot(pi, CamIV_Isometric)->mappos.y.val = cam->mappos.y.val;
         break;
     }
     if (dungeon->camera_deviate_quake) {

@@ -78,6 +78,7 @@
 #include "engine_render.h"
 #include "engine_lenses.h"
 #include "engine_camera.h"
+#include "kfx/engine/cameras.h"
 #include "local_camera.h"
 #include "engine_arrays.h"
 #include "engine_textures.h"
@@ -371,7 +372,7 @@ void process_keeper_spell_aura(struct Thing *thing)
 
 unsigned long lightning_is_close_to_player(struct PlayerInfo *player, struct Coord3d *pos)
 {
-    return get_chessboard_distance(&player->acamera->mappos, pos) < subtile_coord(45,0);
+    return get_chessboard_distance(&camera_get_active(player->id_number)->mappos, pos) < subtile_coord(45,0);
 }
 
 void affect_nearby_stuff_with_vortex(struct Thing *thing)
@@ -669,23 +670,23 @@ TbBool any_player_close_enough_to_see(const struct Coord3d *pos)
         player = get_player(i);
         if ( (player_exists(player)) && ((player->allocflags & PlaF_CompCtrl) == 0))
         {
-            if (player->acamera == NULL)
+            if (!camera_is_active(player->id_number))
                 continue;
-            if (player->acamera->view_mode != PVM_FrontView)
+            if (camera_get_active(player->id_number)->view_mode != PVM_FrontView)
             {
-                if (player->acamera->zoom >= CAMERA_ZOOM_MIN)
+                if (camera_get_active(player->id_number)->zoom >= CAMERA_ZOOM_MIN)
                 {
-                    limit = SHRT_MAX - (2 * player->acamera->zoom);
+                    limit = SHRT_MAX - (2 * camera_get_active(player->id_number)->zoom);
                 }
             }
             else
             {
-                if (player->acamera->zoom >= FRONTVIEW_CAMERA_ZOOM_MIN)
+                if (camera_get_active(player->id_number)->zoom >= FRONTVIEW_CAMERA_ZOOM_MIN)
                 {
-                    limit = SHRT_MAX - (player->acamera->zoom / 3);
+                    limit = SHRT_MAX - (camera_get_active(player->id_number)->zoom / 3);
                 }
             }
-            if (get_chessboard_distance(&player->acamera->mappos, pos) <= limit)
+            if (get_chessboard_distance(&camera_get_active(player->id_number)->mappos, pos) <= limit)
             {
                 return true;
             }
@@ -1571,7 +1572,6 @@ void clear_players_for_save(void)
     unsigned short saved_player_id;
     unsigned short saved_is_active;
     unsigned short saved_allocation_flags;
-    struct Camera cammem;
     int i;
     for (i=0; i < PLAYERS_COUNT; i++)
     {
@@ -1579,14 +1579,14 @@ void clear_players_for_save(void)
       saved_player_id = player->id_number;
       saved_is_active = player->is_active;
       saved_allocation_flags = player->allocflags;
-      memcpy(&cammem,&player->cameras[CamIV_FirstPerson],sizeof(struct Camera));
+      struct Camera cammem = *camera_get_slot(i, CamIV_FirstPerson);
       memset(player, 0, sizeof(struct PlayerInfo));
       player->id_number = saved_player_id;
       player->is_active = saved_is_active;
       set_flag_value(player->allocflags, PlaF_Allocated, ((saved_allocation_flags & PlaF_Allocated) != 0));
       set_flag_value(player->allocflags, PlaF_CompCtrl, ((saved_allocation_flags & PlaF_CompCtrl) != 0));
-      memcpy(&player->cameras[CamIV_FirstPerson],&cammem,sizeof(struct Camera));
-      player->acamera = &player->cameras[CamIV_FirstPerson];
+      *camera_get_slot(i, CamIV_FirstPerson) = cammem;
+      camera_set_active(i, CamIV_FirstPerson);
     }
 }
 
@@ -1788,7 +1788,7 @@ void level_lost_go_first_person(PlayerNumber plyr_idx)
         return;
     }
     spectator_breed = get_players_spectator_model(plyr_idx);
-    player->dungeon_camera_zoom = get_camera_zoom(player->acamera);
+    player->dungeon_camera_zoom = get_camera_zoom(camera_get_active(player->id_number));
     thing = create_and_control_creature_as_controller(player, spectator_breed, &dungeon->mappos);
     if (thing_is_invalid(thing)) {
         ERRORLOG("Unable to create spectator creature");
@@ -2618,7 +2618,7 @@ void update(void)
             struct Thing *thing = thing_get(player->controlled_thing_idx);
             update_first_person_object_ambience(thing);
         }
-        update_footsteps_nearest_camera(player->acamera);
+        update_footsteps_nearest_camera(camera_get_active(player->id_number));
         PaletteFadePlayer(player);
         process_armageddon();
         update_global_lighting();
@@ -2690,12 +2690,12 @@ struct Thing *get_queryable_object_near(MapCoord pos_x, MapCoord pos_y, PlayerNu
 
 void set_player_cameras_position(struct PlayerInfo *player, int32_t pos_x, int32_t pos_y)
 {
-    player->cameras[CamIV_Parchment].mappos.x.val = pos_x;
-    player->cameras[CamIV_FrontView].mappos.x.val = pos_x;
-    player->cameras[CamIV_Isometric].mappos.x.val = pos_x;
-    player->cameras[CamIV_Parchment].mappos.y.val = pos_y;
-    player->cameras[CamIV_FrontView].mappos.y.val = pos_y;
-    player->cameras[CamIV_Isometric].mappos.y.val = pos_y;
+    camera_get_slot(player->id_number, CamIV_Parchment)->mappos.x.val = pos_x;
+    camera_get_slot(player->id_number, CamIV_FrontView)->mappos.x.val = pos_x;
+    camera_get_slot(player->id_number, CamIV_Isometric)->mappos.x.val = pos_x;
+    camera_get_slot(player->id_number, CamIV_Parchment)->mappos.y.val = pos_y;
+    camera_get_slot(player->id_number, CamIV_FrontView)->mappos.y.val = pos_y;
+    camera_get_slot(player->id_number, CamIV_Isometric)->mappos.y.val = pos_y;
 }
 
 void scale_tmap2(long texture_block_index, long flags, long fade_level, long screen_x, long screen_y, long scaled_width, long scaled_height)

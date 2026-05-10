@@ -642,52 +642,55 @@ int RendererSwitch(RendererType type)
     if (type == s_activeType)
         return true; // already active
 
-    IRenderer* next = create_renderer(type);
-    if (!next)
+    // Verify the target renderer type is valid and supports runtime switching
+    // before tearing down the current renderer.
+    IRenderer* test = create_renderer(type);
+    if (!test)
     {
         ERRORLOG("RendererSwitch: unknown or unsupported renderer type %d", (int)type);
         return false;
     }
 
-    if (!next->SupportsRuntimeSwitch())
+    if (!test->SupportsRuntimeSwitch())
     {
-        ERRORLOG("RendererSwitch: backend '%s' does not support runtime switching", next->GetName());
-        delete next;
+        ERRORLOG("RendererSwitch: backend '%s' does not support runtime switching", test->GetName());
+        delete test;
         return false;
     }
+    delete test; // validation passed; tear down and recreate properly
 
-    // Tear down current backend
-    if (s_activeRenderer)
-    {
-        s_activeRenderer->Shutdown();
-        delete s_activeRenderer;
-        s_activeRenderer = nullptr;
-    }
+    // Perform a full shutdown of all renderer subsystems
+    SYNCLOG("RendererSwitch: shutting down current renderer (%s)", s_activeRenderer ? s_activeRenderer->GetName() : "none");
+    RendererShutdown();
 
-    // Bring up new backend
-    if (!next->Init())
+    // Reinitialize with the new renderer type
+    SYNCLOG("RendererSwitch: initializing new renderer (type %d)", (int)type);
+    if (!RendererInit(type))
     {
-        ERRORLOG("RendererSwitch: backend '%s' failed to initialise — falling back to software", next->GetName());
-        delete next;
+        ERRORLOG("RendererSwitch: RendererInit(%d) failed — falling back to software", (int)type);
         // Fallback to software renderer
-        next = new RendererSoftware();
-        if (!next->Init())
+        if (!RendererInit(RENDERER_SOFTWARE))
         {
             ERRORLOG("RendererSwitch: software fallback also failed");
-            delete next;
             return false;
         }
-        type = RENDERER_SOFTWARE;
+        return true; // fallback succeeded
     }
 
-    s_activeRenderer = next;
-    s_activeType     = type;
-    SYNCLOG("Renderer switched to: %s", next->GetName());
+    SYNCLOG("RendererSwitch: successfully switched to %s", s_activeRenderer ? s_activeRenderer->GetName() : "unknown");
     return true;
 }
 
 void RendererShutdown()
 {
+    // Guard against double-shutdown (can happen during exit after runtime renderer switch)
+    static bool s_shutdownInProgress = false;
+    if (s_shutdownInProgress) {
+        SYNCLOG("RendererShutdown: already in progress or completed, skipping");
+        return;
+    }
+    s_shutdownInProgress = true;
+
     RenderPass_Shutdown();
     if (s_cursorLayer)
     {

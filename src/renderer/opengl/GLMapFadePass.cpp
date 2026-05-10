@@ -6,6 +6,7 @@
  */
 /******************************************************************************/
 #include "pre_inc.h"
+#include "kfx/engine/cameras.h"
 #include "renderer/opengl/GLMapFadePass.h"
 
 #ifdef RENDERER_OPENGL_ENABLED
@@ -209,9 +210,9 @@ bool GLMapFadePass::CaptureAndUploadFrames()
         struct Camera* cam;
         if (player->view_mode_restore == PVM_IsoWibbleView ||
             player->view_mode_restore == PVM_IsoStraightView)
-            cam = get_local_camera(&player->cameras[CamIV_Isometric]);
+            cam = get_local_camera(CamIV_Isometric);
         else
-            cam = get_local_camera(&player->cameras[CamIV_FrontView]);
+            cam = get_local_camera(CamIV_FrontView);
         draw_view(cam, 0);
 
         // Restore engine projection/window state.

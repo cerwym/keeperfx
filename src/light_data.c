@@ -19,6 +19,8 @@
 #include "kfx_memory.h"
 #include "pre_inc.h"
 #include "light_data.h"
+#include "local_camera.h"
+#include "kfx/engine/cameras.h"
 
 #include "globals.h"
 #include "bflib_basics.h"
@@ -2279,10 +2281,10 @@ void update_light_render_area(void)
     int delta_x = abs(game.something_light_x);
     int delta_y = abs(game.something_light_y);
     // Prepare the area constraints
-    if (player->acamera != NULL)
+    if (camera_is_active(player->id_number))
     {
-      subtile_y = player->acamera->mappos.y.stl.num;
-      subtile_x = player->acamera->mappos.x.stl.num;
+      subtile_y = camera_get_active(player->id_number)->mappos.y.stl.num;
+      subtile_x = camera_get_active(player->id_number)->mappos.x.stl.num;
     } else
     {
       subtile_y = 0;

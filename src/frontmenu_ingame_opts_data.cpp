@@ -98,8 +98,8 @@ struct GuiButtonInit video_menu_buttons[] = {
   {LbBtnT_ToggleBtn,  BID_DEFAULT, 0, 0, gui_video_cluedo_mode,         NULL,                           NULL,  0,  28, 100,  30, 100,  46, 64, gui_area_no_anim_button, GBS_options_button_grph_wall_hi, GUIStr_OptionWallHeightDesc,        0, {.ptr = &video_cluedo_mode},1, gui_video_cluedo_maintain },
   {LbBtnT_NormalBtn,  BID_DEFAULT, 0, 0, gui_video_gamma_correction,    NULL,                           NULL,  0,  76, 100,  78, 100,  46, 64, gui_area_no_anim_button, GBS_options_button_grph_gamma, GUIStr_OptionGammaCorrectionDesc,   0, {.ptr = &video_gamma_correction}, 0, NULL },
   {LbBtnT_NormalBtn,  BID_DEFAULT, 0, 0, gui_switch_video_mode,         gui_display_current_resolution, NULL,  0, 124, 100, 126, 100,  46, 64, gui_area_no_anim_button, GBS_optionsbutton_resolution, GUIStr_DisplayResolution,           0, {0}, 0, NULL },
-  // Renderer toggle: cycles video_renderer between 0 (software) and 1 (opengl); uses shadow sprite as placeholder
-  {LbBtnT_ToggleBtn,  BID_DEFAULT, 0, 0, gui_video_renderer,            NULL,                           NULL,  0,  28, 140,  30, 140,  46, 64, gui_area_no_anim_button, GBS_options_button_grph_shadow0, GUIStr_OptionRendererDesc,          0, {.ptr = &video_renderer}, 2, NULL },
+  // Renderer toggle: HIDDEN - feature has bugs, needs more work before exposing to users
+  // {LbBtnT_ToggleBtn,  BID_DEFAULT, 0, 0, gui_video_renderer,            NULL,                           NULL,  0,  28, 140,  30, 140,  46, 64, gui_area_no_anim_button, GBS_options_button_grph_shadow0, GUIStr_OptionRendererDesc,          0, {.ptr = &video_renderer}, 2, NULL },
   {              -1,  BID_DEFAULT, 0, 0, NULL,                          NULL,                           NULL,  0,   0,   0,   0,   0,   0,  0, NULL,                              0,                                     0, 0, {0},            0, NULL },
 };
 

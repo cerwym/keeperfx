@@ -18,6 +18,7 @@
 /******************************************************************************/
 #include "kfx_memory.h"
 #include "pre_inc.h"
+#include "kfx/engine/cameras.h"
 #include "packets.h"
 #include "net_received_packets.h"
 #include "net_input_lag.h"
@@ -519,7 +520,7 @@ void process_players_dungeon_control_packet_control(long plyr_idx)
     struct PlayerInfo* player = get_player(plyr_idx);
     struct Packet* pckt = get_packet_direct(player->packet_num);
     SYNCDBG(6,"Processing player %d action %d",(int)plyr_idx,(int)pckt->action);
-    struct Camera* cam = player->acamera;
+    struct Camera* cam = camera_get_active(player->id_number);
     if (cam == NULL) {
         ERRORLOG("No active camera");
         return;
@@ -812,9 +813,9 @@ TbBool process_players_global_packet_action(PlayerNumber plyr_idx)
       // Retired: camera rotation is a local view preference and must not be
       // network-synced.  Callers now write directly via GUIBridge_SetMapRotation().
       // This branch is kept only for savegame / old-packet compatibility.
-      player->cameras[CamIV_Parchment].rotation_angle_x = pckt->actn_par1;
-      player->cameras[CamIV_FrontView].rotation_angle_x = pckt->actn_par1;
-      player->cameras[CamIV_Isometric].rotation_angle_x = pckt->actn_par1;
+      camera_get_slot(player->id_number, CamIV_Parchment)->rotation_angle_x = pckt->actn_par1;
+      camera_get_slot(player->id_number, CamIV_FrontView)->rotation_angle_x = pckt->actn_par1;
+      camera_get_slot(player->id_number, CamIV_Isometric)->rotation_angle_x = pckt->actn_par1;
       set_local_camera_destination(player);
       return 0;
   case PckA_SetPlyrState:
@@ -1022,8 +1023,8 @@ TbBool process_players_global_packet_action(PlayerNumber plyr_idx)
       }
       return false;
   case PckA_SaveViewType:
-      if (player->acamera != NULL)
-        player->view_mode_restore = player->acamera->view_mode;
+      if (camera_is_active(player->id_number))
+        player->view_mode_restore = camera_get_active(player->id_number)->view_mode;
       set_player_mode(player, pckt->actn_par1);
       return false;
   case PckA_LoadViewType:
@@ -1156,8 +1157,8 @@ void process_players_map_packet_control(long plyr_idx)
     struct Packet* pckt = get_packet_direct(player->packet_num);
     // Get map coordinates
     process_map_packet_clicks(plyr_idx);
-    player->cameras[CamIV_Parchment].mappos.x.val = pckt->pos_x;
-    player->cameras[CamIV_Parchment].mappos.y.val = pckt->pos_y;
+    camera_get_slot(player->id_number, CamIV_Parchment)->mappos.x.val = pckt->pos_x;
+    camera_get_slot(player->id_number, CamIV_Parchment)->mappos.y.val = pckt->pos_y;
     set_mouse_light(player);
     SYNCDBG(8,"Finished");
 }

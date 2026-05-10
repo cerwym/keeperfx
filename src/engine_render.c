@@ -48,6 +48,7 @@
 #include "custom_sprites.h"
 #include "engine_arrays.h"
 #include "engine_camera.h"
+#include "kfx/engine/cameras.h"
 #include "engine_lenses.h"
 #include "engine_redraw.h"
 #include "engine_textures.h"
@@ -4910,9 +4911,9 @@ static void draw_engine_number(struct BucketKindFloatingGoldText *num)
     w = scale_ui_value(spr->SWidth) * scale_by_zoom;
     h = scale_ui_value(spr->SHeight) * scale_by_zoom;
     if (
-        player->acamera->view_mode == PVM_IsoWibbleView ||
-        player->acamera->view_mode == PVM_FrontView ||
-        player->acamera->view_mode == PVM_IsoStraightView
+        camera_get_active(player->id_number)->view_mode == PVM_IsoWibbleView ||
+        camera_get_active(player->id_number)->view_mode == PVM_FrontView ||
+        camera_get_active(player->id_number)->view_mode == PVM_IsoStraightView
     ) {
         UIRenderer_SubmitDigitSprites(num->x, num->y - h, w, h, num->lvl);
     }
@@ -4928,7 +4929,7 @@ static void draw_engine_room_flagpole(struct BucketKindRoomFlag *rflg)
         return;
     }
     struct PlayerInfo *player = get_my_player();
-    const struct Camera *cam = get_local_camera(player->acamera);
+    const struct Camera *cam = get_local_active_camera(player->id_number);
 
     if (
         cam->view_mode == PVM_IsoWibbleView ||
@@ -5087,7 +5088,7 @@ void fill_status_sprite_indexes(struct Thing *thing, struct CreatureControl *cct
 void draw_status_sprites(long scrpos_x, long scrpos_y, struct Thing *thing)
 {
     struct PlayerInfo *player = get_my_player();
-    const struct Camera *cam = get_local_camera(player->acamera);
+    const struct Camera *cam = get_local_active_camera(player->id_number);
     if (cam == NULL)
     {
         return;
@@ -5335,7 +5336,7 @@ static void draw_engine_room_flag_top(struct BucketKindRoomFlag *rflg)
         return;
     }
     struct PlayerInfo *player = get_my_player();
-    const struct Camera *cam = get_local_camera(player->acamera);
+    const struct Camera *cam = get_local_active_camera(player->id_number);
 
     if (
         cam->view_mode == PVM_IsoWibbleView ||
@@ -6559,7 +6560,7 @@ void display_drawlist(void) // Draws isometric and 1st person view. Not frontvie
                 break;
             case QK_JontyISOSprite: // Spinning key
                 player = get_my_player();
-                cam = get_local_camera(player->acamera);
+                cam = get_local_active_camera(player->id_number);
                 if (cam != NULL)
                 {
                     if (cam->view_mode == PVM_IsoWibbleView || cam->view_mode == PVM_IsoStraightView) {
@@ -6613,7 +6614,7 @@ void display_drawlist_sprites_only(void)
                 break;
             case QK_JontyISOSprite:
                 player = get_my_player();
-                cam = get_local_camera(player->acamera);
+                cam = get_local_active_camera(player->id_number);
                 if (cam != NULL)
                 {
                     if (cam->view_mode == PVM_IsoWibbleView || cam->view_mode == PVM_IsoStraightView) {
@@ -6683,7 +6684,7 @@ void draw_3d_sprites_for_bucket(long bucket_num)
             break;
         case QK_JontyISOSprite:
             player = get_my_player();
-            cam = get_local_camera(player->acamera);
+            cam = get_local_active_camera(player->id_number);
             if (cam != NULL)
             {
                 if (cam->view_mode == PVM_IsoWibbleView || cam->view_mode == PVM_IsoStraightView)
@@ -6721,6 +6722,17 @@ void draw_frontview_3d_sprites_for_bucket(long bucket_num, struct Camera *cam)
             break;
         }
     }
+}
+
+/** GPU-renderer convenience: fetches the front-view camera from the local
+ *  player and calls draw_frontview_3d_sprites_for_bucket().  This avoids
+ *  exposing struct Camera in the C++ renderer headers. */
+void draw_frontview_3d_sprites_for_bucket_current(long bucket_num)
+{
+    struct PlayerInfo *player = get_my_player();
+    struct Camera *cam = get_local_active_camera(player->id_number);
+    if (cam != NULL)
+        draw_frontview_3d_sprites_for_bucket(bucket_num, cam);
 }
 
 /** Draws all non-spatial sprites (creature shadows, slab selector, status
@@ -8203,12 +8215,12 @@ static void draw_jonty_mapwho(struct BucketKindJontySprite *jspr)
     {
         if ((player->thing_under_hand == thing->index) && ((get_gameturn() % (4 * gui_blink_rate)) >= 2 * gui_blink_rate))
         {
-          if (player->acamera->view_mode == PVM_IsoWibbleView || player->acamera->view_mode == PVM_IsoStraightView)
+          if (camera_get_active(player->id_number)->view_mode == PVM_IsoWibbleView || camera_get_active(player->id_number)->view_mode == PVM_IsoStraightView)
           {
               lbDisplay.DrawFlags |= Lb_TEXT_UNDERLNSHADOW;
               lbSpriteReMapPtr = white_pal;
           }
-          else if (player->acamera->view_mode == PVM_CreatureView)
+          else if (camera_get_active(player->id_number)->view_mode == PVM_CreatureView)
           {
               struct Thing *creatng = thing_get(player->influenced_thing_idx);
               if (thing_is_creature(creatng))

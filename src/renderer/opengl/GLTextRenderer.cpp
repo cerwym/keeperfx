@@ -443,12 +443,6 @@ void GLTextRenderer::Draw()
     if (m_pending.empty())
         return;
 
-    { // Diagnostic
-        static int s_diag_frame = 0;
-        if ((s_diag_frame++ % 300) == 0)
-            SYNCLOG("GLTextRenderer::Draw: %d pending text draws", (int)m_pending.size());
-    }
-
     if (m_screen_width <= 0 || m_screen_height <= 0)
         return;  // Screen size not yet set — skip rendering this frame.
 

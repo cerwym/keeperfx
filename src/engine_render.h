@@ -138,6 +138,17 @@ extern long x_init_off;
 extern long y_init_off;
 extern struct Thing *thing_being_displayed;
 
+// Orient-to-UV lookup tables used by draw_texturedquad_block() / append_frontview_quad().
+// Values are 16:16 fixed-point (0 or 0x1F0000 = 31.0); shift right 16 to get 0 or 31.
+extern long const orient_to_mapU1[4];
+extern long const orient_to_mapU2[4];
+extern long const orient_to_mapU3[4];
+extern long const orient_to_mapU4[4];
+extern long const orient_to_mapV1[4];
+extern long const orient_to_mapV2[4];
+extern long const orient_to_mapV3[4];
+extern long const orient_to_mapV4[4];
+
 extern unsigned char temp_cluedo_mode;
 /******************************************************************************/
 
@@ -213,6 +224,7 @@ void draw_3d_sprites_for_bucket(long bucket_num);
 /** Front-view equivalent of draw_3d_sprites_for_bucket().
  *  Calls draw_fastview_mapwho() instead of draw_jonty_mapwho(). */
 void draw_frontview_3d_sprites_for_bucket(long bucket_num, struct Camera *cam);
+void draw_frontview_3d_sprites_for_bucket_current(long bucket_num);
 
 /** Draw all non-spatial sprites (shadows, selector, status, text, room flags)
  *  across all buckets into the CPU staging buffer. */

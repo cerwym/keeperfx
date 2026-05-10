@@ -60,7 +60,7 @@ void RendererSettings_Reset(void)
     /* Debug */
     g_renderer_settings.wireframe             = 0;
     g_renderer_settings.show_depth            = 0;
-    g_renderer_settings.debug_gui_hitboxes    = 1;
+    g_renderer_settings.debug_gui_hitboxes    = 0;
 }
 
 #include "post_inc.h"

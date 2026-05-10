@@ -163,13 +163,14 @@ private:
     // Setup world sprite processing for a bucket (replaces global hook approach)
     void setup_world_sprite_processing(int32_t bucket_num);
 
-    // Deferred draw command (built during DrawIsometricView, executed by GPURenderNow)
+    // Deferred draw command (built during DrawIsometricView/DrawFrontView, executed by GPURenderNow)
     struct DrawCmd {
-        enum Type { CMD_TILES, CMD_SPRITES, CMD_SHADOWS, CMD_WORLDTEXT, CMD_FLAT_POLYS } type;
+        enum Type { CMD_TILES, CMD_SPRITES, CMD_SHADOWS, CMD_WORLDTEXT, CMD_FLAT_POLYS,
+                    CMD_FRONTVIEW_SPRITES } type;
         // CMD_TILES fields
         int vert_start  = 0;
         int vert_count  = 0;
-        // CMD_SPRITES field
+        // CMD_SPRITES / CMD_FRONTVIEW_SPRITES field
         int bucket_num  = 0;
         // CMD_SHADOWS field (index into m_shadow_cmds)
         int shadow_idx  = 0;

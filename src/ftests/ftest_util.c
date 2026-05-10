@@ -7,6 +7,7 @@
 #include "../game_legacy.h"
 #include "../bflib_math.h"
 #include "../keeperfx.hpp"
+#include "../kfx/engine/cameras.h"
 #include "../lvl_filesdk1.h"
 #include "../slab_data.h"
 #include "../room_util.h"
@@ -194,7 +195,7 @@ TbBool ftest_util_move_camera(long x, long y, PlayerNumber plyr_idx)
         return false;
     }
 
-    struct Camera* camera = &player->cameras[CamIV_Isometric];
+    struct Camera* camera = camera_get_slot(player->id_number, CamIV_Isometric);
     if(camera == NULL)
     {
         LbErrorLog("Could not find camera %d", CamIV_Isometric);

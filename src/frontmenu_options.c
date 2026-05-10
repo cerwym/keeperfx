@@ -263,8 +263,11 @@ void gui_video_gamma_correction(struct GuiButton *gbtn)
 
 void gui_video_renderer(struct GuiButton *gbtn)
 {
-    // Cycle between software (0) and opengl (1) — maps to RendererType values 1 and 2
-    RendererSwitch((RendererType)(video_renderer + 1));
+    // Toggle between the only two available renderers on desktop:
+    // RENDERER_SOFTWARE (1) and RENDERER_OPENGL (2)
+    RendererType current = RendererGetActiveType();
+    RendererType next = (current == RENDERER_SOFTWARE) ? RENDERER_OPENGL : RENDERER_SOFTWARE;
+    RendererSwitch(next);
 }
 
 int make_audio_slider_linear(int a)
@@ -373,8 +376,8 @@ void init_video_menu(struct GuiMenu *gmnu)
     video_textures = settings.video_textures;
     video_cluedo_mode = settings.video_cluedo_mode;
     video_gamma_correction = settings.gamma_correction;
-    // Map active renderer type (1=software, 2=opengl) to 0-based toggle index
-    video_renderer = (char)(RendererGetActiveType() - 1);
+    // Set toggle state: 0 for Software, 1 for OpenGL
+    video_renderer = (RendererGetActiveType() == RENDERER_SOFTWARE) ? 0 : 1;
 }
 
 /**

@@ -48,6 +48,7 @@
 #include "frontend.h"
 #include "ui_init.h"
 #include "frontmenu_ingame_tabs.h"
+#include "kfx/engine/cameras.h"
 #include "frontmenu_ingame_evnt.h"
 #include "frontmenu_ingame_map.h"
 #include "creature_graphics.h"
@@ -471,7 +472,7 @@ void set_engine_view(struct PlayerInfo *player, long val)
     switch ( val )
     {
     case PVM_EmptyView:
-        player->acamera = &player->cameras[CamIV_Isometric];
+        camera_set_active(player->id_number, CamIV_Isometric);
         // Allow view mode 0 only for non-local-human players
         if (!is_my_player(player))
             break;
@@ -482,7 +483,7 @@ void set_engine_view(struct PlayerInfo *player, long val)
         val = PVM_CreatureView;
         // fall through
     case PVM_CreatureView:
-        player->acamera = &player->cameras[CamIV_FirstPerson];
+        camera_set_active(player->id_number, CamIV_FirstPerson);
         sync_local_camera(player);
         if (!is_my_player(player))
             break;
@@ -493,8 +494,8 @@ void set_engine_view(struct PlayerInfo *player, long val)
         break;
     case PVM_IsoWibbleView:
     case PVM_IsoStraightView:
-        player->acamera = &player->cameras[CamIV_Isometric];
-        player->acamera->view_mode = val;
+        camera_set_active(player->id_number, CamIV_Isometric);
+        camera_get_active(player->id_number)->view_mode = val;
         sync_local_camera(player);
         if (!is_my_player(player))
             break;
@@ -504,7 +505,7 @@ void set_engine_view(struct PlayerInfo *player, long val)
         S3DSetDeadzoneRadius(1280);
         break;
     case PVM_ParchmentView:
-        player->acamera = &player->cameras[CamIV_Parchment];
+        camera_set_active(player->id_number, CamIV_Parchment);
         sync_local_camera(player);
         if (!is_my_player(player))
             break;
@@ -516,7 +517,7 @@ void set_engine_view(struct PlayerInfo *player, long val)
         // In fade states, keep the settings unchanged
         break;
     case PVM_FrontView:
-        player->acamera = &player->cameras[CamIV_FrontView];
+        camera_set_active(player->id_number, CamIV_FrontView);
         sync_local_camera(player);
         if (!is_my_player(player))
             break;
@@ -532,7 +533,7 @@ void set_engine_view(struct PlayerInfo *player, long val)
 void draw_overlay_compass(long base_x, long base_y)
 {
     struct PlayerInfo* player = get_my_player();
-    struct Camera* cam = get_local_camera(player->acamera);
+    struct Camera* cam = get_local_active_camera(player->id_number);
     unsigned short flg_mem = lbDisplay.DrawFlags;
     LbTextSetFont(winfont);
     lbDisplay.DrawFlags |= Lb_SPRITE_TRANSPAR4;
@@ -604,11 +605,11 @@ void redraw_isometric_view(void)
 {
     KFX_C_ZONE_BEGIN_COLOR(ctx, "Render/IsometricView", KFX_COLOR_RENDER_CPU);
     struct PlayerInfo* player = get_my_player();
-    if (player->acamera == NULL)
+    if (!camera_is_active(player->id_number))
         return;
     TbGraphicsWindow ewnd;
     memset(&ewnd, 0, sizeof(TbGraphicsWindow));
-    struct Camera* render_cam = get_local_camera(&player->cameras[CamIV_Isometric]);
+    struct Camera* render_cam = get_local_camera(CamIV_Isometric);
     update_explored_flags_for_power_sight(player);
     engine(player,render_cam);
     remove_explored_flags_for_power_sight(player);
@@ -621,7 +622,7 @@ void redraw_frontview(void)
     KFX_C_ZONE_BEGIN_COLOR(ctx, "Render/FrontView", KFX_COLOR_RENDER_CPU);
     SYNCDBG(6,"Starting");
     struct PlayerInfo* player = get_my_player();
-    struct Camera* render_cam = get_local_camera(&player->cameras[CamIV_FrontView]);
+    struct Camera* render_cam = get_local_camera(CamIV_FrontView);
     update_explored_flags_for_power_sight(player);
     draw_frontview_engine(render_cam);
     remove_explored_flags_for_power_sight(player);

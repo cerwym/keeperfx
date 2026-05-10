@@ -9,6 +9,7 @@
 #include "gui/ClientViewState.h"
 #include "player_data.h"    // PlayerInfo, struct Camera
 #include "game_legacy.h"    // game.map_tiles_x/y
+#include "kfx/engine/cameras.h"
 
 #include <cstring>          // memcpy
 
@@ -17,24 +18,16 @@ void ClientViewState::syncFromLegacy(const PlayerInfo* player)
     if (!player)
         return;
 
-    // Copy all four cameras from PlayerInfo.
-    // The acamera pointer inside player points into player->cameras[]; remap it
-    // to point into our local cameras[] array instead.
-    memcpy(cameras, player->cameras, sizeof(cameras));
+    // Copy all four cameras from the opaque cameras module.
+    int pi = player->id_number;
+    for (int i = 0; i < CamIV_EndList; i++)
+        cameras[i] = *camera_get_slot(pi, i);
 
-    if (player->acamera)
-    {
-        // Determine which slot acamera points to and mirror that offset.
-        ptrdiff_t idx = player->acamera - &player->cameras[0];
-        if (idx >= 0 && idx < CamIV_EndList)
-            acamera = &cameras[idx];
-        else
-            acamera = &cameras[CamIV_Isometric];
-    }
+    int active_idx = camera_get_active_idx(pi);
+    if (active_idx >= 0 && active_idx < CamIV_EndList)
+        acamera = &cameras[active_idx];
     else
-    {
         acamera = &cameras[CamIV_Isometric];
-    }
 
     dungeon_camera_zoom  = player->dungeon_camera_zoom;
     minimap_zoom         = player->minimap_zoom;

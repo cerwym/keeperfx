@@ -18,6 +18,7 @@
 /******************************************************************************/
 #include "kfx_memory.h"
 #include "pre_inc.h"
+#include "kfx/engine/cameras.h"
 #include <assert.h>
 
 #include "thing_creature.h"
@@ -240,7 +241,7 @@ TbBool control_creature_as_controller(struct PlayerInfo *player, struct Thing *t
     {
       if (!control_creature_as_passenger(player, thing))
         return false;
-      cam = player->acamera;
+      cam = camera_get_active(player->id_number);
       crconf = creature_stats_get(get_players_special_digger_model(player->id_number));
       cam->mappos.z.val += get_creature_eye_height(thing);
       return true;
@@ -258,7 +259,7 @@ TbBool control_creature_as_controller(struct PlayerInfo *player, struct Thing *t
       turn_off_roaming_menus();
     }
     set_selected_creature(player, thing);
-    cam = player->acamera;
+    cam = camera_get_active(player->id_number);
     if (cam != NULL)
       player->view_mode_restore = cam->view_mode;
     thing->alloc_flags |= TAlF_IsControlled;
@@ -312,7 +313,7 @@ TbBool control_creature_as_passenger(struct PlayerInfo *player, struct Thing *th
         turn_off_roaming_menus();
     }
     set_selected_thing(player, thing);
-    struct Camera* cam = player->acamera;
+    struct Camera* cam = camera_get_active(player->id_number);
     if (cam != NULL)
       player->view_mode_restore = cam->view_mode;
     set_player_mode(player, PVT_CreaturePasngr);
@@ -3211,7 +3212,7 @@ void prepare_to_controlled_creature_death(struct Thing* thing) {
     leave_creature_as_controller(player, thing);
     player->influenced_thing_idx = 0;
     player->influenced_thing_creation = 0;
-    set_camera_zoom(player->acamera, player->dungeon_camera_zoom);
+    set_camera_zoom(camera_get_active(player->id_number), player->dungeon_camera_zoom);
     if (is_my_player(player)) {
         turn_off_all_window_menus();
         turn_off_query_menus();
@@ -4203,7 +4204,7 @@ unsigned short find_next_annoyed_creature(PlayerNumber plyr_idx, unsigned short 
 void draw_creature_view(struct Thing *thing)
 {
   struct PlayerInfo* player = get_my_player();
-  struct Camera* render_cam = get_local_camera(&player->cameras[CamIV_FirstPerson]);
+  struct Camera* render_cam = get_local_camera(CamIV_FirstPerson);
 
   // GPU renderer path: world geometry is rendered by engine() → GPURenderNow()
   // into either the default framebuffer or the lens scene FBO (depending on

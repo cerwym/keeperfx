@@ -1615,6 +1615,31 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
             atlas_bound = false;
             KFX_GL_POP();
         }
+        else if (cmd.type == DrawCmd::CMD_FRONTVIEW_SPRITES)
+        {
+            KFX_GL_PUSH("WorldPass/FrontViewSprites");
+            glBindVertexArray(0);
+            glUseProgram(0);
+
+            RenderPassSystem::GetInstance().SetScreenSize(m_screen_w, m_screen_h);
+
+            const float sprite_z = 2.0f * (float)cmd.bucket_num / (float)(BUCKETS_COUNT - 1) - 1.0f;
+            OpenGLSpriteBackend::SetCurrentBucketZ(sprite_z);
+            m_current_sprite_z = sprite_z;
+
+            // Use the front-view specific sprite function which calls draw_fastview_mapwho()
+            // (correctly uses front-view zoom/projection) rather than draw_jonty_mapwho()
+            // (iso projection, produces wrong scale/position for front-view sprites).
+            draw_frontview_3d_sprites_for_bucket_current(cmd.bucket_num);
+            RenderPass_DrawNow();
+
+            RenderPassSystem::GetInstance().SetScreenSize(0, 0);
+
+            glUseProgram(m_shader);
+            glBindVertexArray(m_vao);
+            atlas_bound = false;
+            KFX_GL_POP();
+        }
         else if (cmd.type == DrawCmd::CMD_WORLDTEXT)
         {
             KFX_GL_PUSH("WorldPass/WorldText");
@@ -1897,13 +1922,97 @@ void GLWorldViewRenderer::DrawIsometricView()
     // guarded by cam->view_mode so it only runs for isometric/creature views (not parchment map).
 }
 
+bool GLWorldViewRenderer::append_frontview_quad(const struct BucketKindTexturedQuad* txquad)
+{
+    // Mirror draw_texturedquad_block(): build 4 PolyPoints then submit as 2 triangles.
+    // orient_to_mapU/V values are 16:16 fixed-point (0 or 0x1F0000); >> 16 = 0 or 31,
+    // matching the U >> 16 convention already used by append_triangle().
+    int orient = txquad->orient & 3;
+
+    PolyPoint a, d, b, c;
+    a.X = (txquad->texture_x)          >> 8;
+    a.Y = (txquad->texture_y)          >> 8;
+    a.U = orient_to_mapU1[orient];
+    a.V = orient_to_mapV1[orient];
+    a.S = txquad->shade_intensity0;
+
+    d.X = (txquad->texture_x + txquad->zoom_x) >> 8;
+    d.Y = (txquad->texture_y)                  >> 8;
+    d.U = orient_to_mapU2[orient];
+    d.V = orient_to_mapV2[orient];
+    d.S = txquad->shade_intensity1;
+
+    b.X = (txquad->texture_x + txquad->zoom_x) >> 8;
+    b.Y = (txquad->texture_y + txquad->zoom_y) >> 8;
+    b.U = orient_to_mapU3[orient];
+    b.V = orient_to_mapV3[orient];
+    b.S = txquad->shade_intensity2;
+
+    c.X = (txquad->texture_x)                  >> 8;
+    c.Y = (txquad->texture_y + txquad->zoom_y) >> 8;
+    c.U = orient_to_mapU4[orient];
+    c.V = orient_to_mapV4[orient];
+    c.S = txquad->shade_intensity3;
+
+    int tile_id;
+    switch (txquad->marked_mode)
+    {
+        case 0:  tile_id = TEXTURE_LAND_MARKED_LAND; break;
+        case 1:  tile_id = TEXTURE_LAND_MARKED_GOLD; break;
+        default: tile_id = (int)txquad->texture_idx; break;
+    }
+
+    // Front view uses orthographic projection — camera_z defaults to 1.0f (affine).
+    bool ok = append_triangle(tile_id, &a, &d, &b);
+    ok     &= append_triangle(tile_id, &a, &b, &c);
+    return ok;
+}
+
 void GLWorldViewRenderer::DrawFrontView(struct Camera* cam)
 {
-    // When the GPU renderer is active, front-view geometry is already captured
-    // via the bucket walk in DrawIsometricView (the engine fills the same
-    // bucket list for both iso and front views).
-    if (m_initialized)
+    KFX_ZONE("WVR::DrawFrontView");
+    if (!m_initialized)
         return;
+
+    // Walk the front-view bucket list back-to-front (painter's algorithm).
+    // Front view populates buckets with QK_TextureQuad (floor/wall/ceiling tiles)
+    // and creature/thing sprites.  All other overlay types (status flowers, gold text,
+    // room flags, slab selector) are handled by draw_nonspatial_sprites_gpu() which
+    // the caller (draw_frontview_engine) already invokes after this function.
+    for (int bi = BUCKETS_COUNT - 1; bi >= 0; bi--)
+    {
+        m_current_bucket = bi;
+        bool bucket_has_sprites = false;
+
+        for (struct BasicQ* q = buckets[bi]; q != nullptr; q = q->next)
+        {
+            switch (q->kind)
+            {
+                case QK_TextureQuad:
+                    append_frontview_quad(reinterpret_cast<const struct BucketKindTexturedQuad*>(q));
+                    break;
+
+                case QK_JontySprite:
+                case QK_JontyISOSprite:
+                    bucket_has_sprites = true;
+                    break;
+
+                default:
+                    break;
+            }
+        }
+
+        if (bucket_has_sprites)
+        {
+            gpu_flush();
+            DrawCmd cmd;
+            cmd.type       = DrawCmd::CMD_FRONTVIEW_SPRITES;
+            cmd.bucket_num = bi;
+            m_draw_cmds.push_back(cmd);
+        }
+    }
+
+    gpu_flush(); // commit any trailing tile geometry
 }
 
 /******************************************************************************/

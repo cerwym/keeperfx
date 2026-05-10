@@ -19,6 +19,7 @@
 #include "kfx_memory.h"
 #include "pre_inc.h"
 #include "creature_control.h"
+#include "kfx/engine/cameras.h"
 #include "globals.h"
 
 #include "bflib_math.h"
@@ -147,7 +148,7 @@ struct Thing *create_and_control_creature_as_controller(struct PlayerInfo *playe
         toggle_status_menu(0);
         turn_off_roaming_menus();
     }
-    const struct Camera* cam = player->acamera;
+    const struct Camera* cam = camera_get_active(player->id_number);
     set_selected_creature(player, thing);
     player->view_mode_restore = cam->view_mode;
     thing->alloc_flags |= TAlF_IsControlled;

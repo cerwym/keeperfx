@@ -72,6 +72,7 @@
 #include "room_data.h"
 #include "map_blocks.h"
 #include "local_camera.h"
+#include "kfx/engine/cameras.h"
 #include "packets.h"
 #include "console_cmd.h"
 
@@ -555,10 +556,10 @@ static short get_bookmark_inputs(void)
         if (is_key_pressed(kcode, KMod_CONTROL))
         {
             clear_key_pressed(kcode);
-            if (player->acamera != NULL)
+            if (camera_is_active(player->id_number))
             {
-                bmark->x = player->acamera->mappos.x.stl.num;
-                bmark->y = player->acamera->mappos.y.stl.num;
+                bmark->x = camera_get_active(player->id_number)->mappos.x.stl.num;
+                bmark->y = camera_get_active(player->id_number)->mappos.y.stl.num;
                 bmark->flags |= 0x01;
                 show_onscreen_msg(game_num_fps, "Bookmark %d stored", i + 1);
             }
@@ -812,7 +813,7 @@ static TbBool get_level_lost_inputs(void)
         // Position on the parchment map on which we're doing action
         int32_t map_x;
         int32_t map_y;
-        TbBool map_valid = point_to_overhead_map(get_local_camera(player->acamera), mouse_x / pixel_size, mouse_y / pixel_size, &map_x, &map_y);
+        TbBool map_valid = point_to_overhead_map(get_local_active_camera(player->id_number), mouse_x / pixel_size, mouse_y / pixel_size, &map_x, &map_y);
         if (is_game_key_pressed(Gkey_SwitchToMap, &keycode, false))
         {
             lbKeyOn[keycode] = 0;
@@ -1160,7 +1161,7 @@ static TbBool get_dungeon_control_pausable_action_inputs(void)
       // Middle mouse camera actions for IsometricView
       if (is_game_key_pressed(Gkey_SnapCamera, &val, true))
       {
-          struct Camera* cam = &player->cameras[CamIV_Isometric];
+          struct Camera* cam = camera_get_slot(player->id_number, CamIV_Isometric);
           struct Packet* pckt = get_packet(my_player_number);
           int angle = cam->rotation_angle_x;
           if (key_modifiers & KMod_CONTROL)
@@ -1248,7 +1249,7 @@ static TbBool get_dungeon_control_pausable_action_inputs(void)
       // Middle mouse camera actions for FrontView
       if (is_game_key_pressed(Gkey_SnapCamera, &val, true))
       {
-          struct Camera* cam = &player->cameras[CamIV_FrontView];
+          struct Camera* cam = camera_get_slot(player->id_number, CamIV_FrontView);
           struct Packet* pckt = get_packet(my_player_number);
           int angle = cam->rotation_angle_x;
           if (key_modifiers & KMod_CONTROL)
@@ -2011,7 +2012,7 @@ static short get_map_action_inputs(void)
     // Get map coordinates from mouse position on parchment screen
     int32_t map_x;
     int32_t map_y;
-    TbBool map_valid = point_to_overhead_map(get_local_camera(player->acamera), mouse_x / pixel_size, mouse_y / pixel_size, &map_x, &map_y);
+    TbBool map_valid = point_to_overhead_map(get_local_active_camera(player->id_number), mouse_x / pixel_size, mouse_y / pixel_size, &map_x, &map_y);
     if  (map_valid)
     {
         MapSubtlCoord stl_x = coord_subtile(map_x);
@@ -2436,7 +2437,7 @@ static void get_dungeon_control_nonaction_inputs(void)
           set_players_packet_position(pckt, pos.x.val, pos.y.val, context);
     }
   } else
-  if (screen_to_map(get_local_camera(player->acamera), my_mouse_x, my_mouse_y, &pos))
+  if (screen_to_map(get_local_active_camera(player->id_number), my_mouse_x, my_mouse_y, &pos))
   {
       set_players_packet_position(pckt, pos.x.val, pos.y.val, 0);
       pckt->additional_packet_values &= ~PCAdV_ContextMask; // reset cursor states to 0 (CSt_DefaultArrow)
@@ -2488,7 +2489,7 @@ static void get_map_nonaction_inputs(void)
     pos.y.val = 0;
     pos.z.val = 0;
     struct PlayerInfo* player = get_my_player();
-    TbBool coords_valid = screen_to_map(get_local_camera(player->acamera), GetMouseX(), GetMouseY(), &pos);
+    TbBool coords_valid = screen_to_map(get_local_active_camera(player->id_number), GetMouseX(), GetMouseY(), &pos);
     set_players_packet_position(get_packet(my_player_number), pos.x.val, pos.y.val, 0);
     struct Packet* pckt = get_packet(my_player_number);
     if (coords_valid) {
@@ -3278,7 +3279,7 @@ static void process_cheat_mode_selection_inputs(void)
                 if (is_key_pressed(KC_LALT, KMod_DONTCARE))
                 {
                     struct Coord3d pos;
-                    if (screen_to_map(get_local_camera(player->acamera), GetMouseX(), GetMouseY(), &pos))
+                    if (screen_to_map(get_local_active_camera(player->id_number), GetMouseX(), GetMouseY(), &pos))
                     {
                         MapSlabCoord slb_x = subtile_slab(pos.x.stl.num);
                         MapSlabCoord slb_y = subtile_slab(pos.y.stl.num);

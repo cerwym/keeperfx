@@ -18,6 +18,7 @@
 /******************************************************************************/
 #include "kfx_memory.h"
 #include "pre_inc.h"
+#include "kfx/engine/cameras.h"
 #include "thing_traps.h"
 
 #include "globals.h"
@@ -679,7 +680,7 @@ void activate_trap_by_slap(struct PlayerInfo *player, struct Thing* traptng)
             {
             case TrpAcT_HeadforTarget90:
             case TrpAcT_CreatureShot:
-                external_activate_trap_shot_at_angle(traptng, player->acamera->rotation_angle_x, trgtng);
+                external_activate_trap_shot_at_angle(traptng, camera_get_active(player->id_number)->rotation_angle_x, trgtng);
                 break;
             default:
                 ERRORLOG("Illegal trap activation type %d (idx=%d)", (int)trapst->activation_type, traptng->index);
