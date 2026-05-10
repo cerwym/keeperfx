@@ -19,6 +19,7 @@
 #include "kfx_memory.h"
 #include "pre_inc.h"
 #include "game_saves.h"
+#include "kfx/engine/cameras.h"
 
 #include "globals.h"
 #include "bflib_basics.h"
@@ -125,6 +126,10 @@ TbBool save_game_chunks(TbFileHandle fhandle, struct CatalogueEntry *centry)
             chunks_done |= SGF_LuaData;
         cleanup_serialized_data();
     }
+
+    // Adding camera state chunk
+    if (camera_write_chunk(fhandle))
+        chunks_done |= SGF_CameraState;
 
     if (chunks_done != SGF_SavedGame)
         return false;
@@ -282,6 +287,12 @@ int load_game_chunks(TbFileHandle fhandle, struct CatalogueEntry *centry)
                 }
             }
             break;
+        case SGC_CameraState:
+            if (camera_read_chunk(fhandle, hdr.len))
+                chunks_done |= SGF_CameraState;
+            else
+                WARNLOG("Could not read CameraState chunk");
+            break;
         default:
             WARNLOG("Unrecognized chunk, ID = %08lx", hdr.id);
             if (LbFileSeek(fhandle, hdr.len, Lb_FILE_SEEK_CURRENT) < 0)
@@ -292,6 +303,19 @@ int load_game_chunks(TbFileHandle fhandle, struct CatalogueEntry *centry)
     if ((chunks_done & SGF_SavedGame) == SGF_SavedGame)
     {
         // Update interface items
+        update_trap_tab_to_config();
+        update_room_tab_to_config();
+        return GLoad_SavedGame;
+    }
+    // Fallback: if camera chunk missing (old save), reset cameras to defaults
+    if ((chunks_done & SGF_CameraState) == 0)
+    {
+        WARNLOG("CameraState chunk missing in save file; resetting cameras to defaults");
+        for (int pi = 0; pi < PLAYERS_COUNT; pi++)
+            camera_init_player(pi);
+    }
+    if ((chunks_done & (SGF_SavedGame & ~SGF_CameraState)) == (SGF_SavedGame & ~SGF_CameraState))
+    {
         update_trap_tab_to_config();
         update_room_tab_to_config();
         return GLoad_SavedGame;
