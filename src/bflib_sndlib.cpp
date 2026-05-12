@@ -530,13 +530,23 @@ void load_sound_banks() {
 	if (!spc_fname || !LbFileExists(spc_fname)) {
 		spc_fname = get_game_file_path_fmt(FGrp_LrgSound, "speech_%s.dat", get_language_lwrstr(1));
 	}
-	g_banks[0] = load_sound_bank(snd_fname);
+	g_pending_banks[0] = decode_sound_bank(snd_fname);
 	try {
-	    g_banks[1] = load_sound_bank(spc_fname);
+	    g_pending_banks[1] = decode_sound_bank(spc_fname);
 	} catch (const std::exception & e) {
 	    WARNLOG("Speech bank failed to load, speech will be unavailable: %s", e.what());
-	    g_banks[1].clear();
+	    g_pending_banks[1].clear();
 	}
+}
+
+// Upload decoded PCM banks into OpenAL buffers. Must be called with a current context.
+std::vector<sound_sample> upload_decoded_bank(std::vector<decoded_sample> decoded) {
+	std::vector<sound_sample> result;
+	result.reserve(decoded.size());
+	for (auto & d : decoded) {
+		result.emplace_back(std::move(d));
+	}
+	return result;
 }
 
 void print_device_info() {
