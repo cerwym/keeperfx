@@ -386,7 +386,9 @@ struct SoundBankEntry { // sizeof = 16
 };
 #pragma pack()
 
-std::vector<sound_sample> load_sound_bank(const char * filename) {
+// Reads and decodes all samples from a sound bank file into raw PCM structs.
+// No OpenAL calls — safe to run on any thread before a context exists.
+std::vector<decoded_sample> decode_sound_bank(const char * filename) {
 	const int directory_index = 2; // a5 was always 1622
 	std::ifstream stream(filename, std::ios::in | std::ios::binary);
 	if (!stream.is_open()) {
@@ -418,7 +420,7 @@ if (sample_count <= 0 || sample_count > 65535) {
         " total_samples_size=" + std::to_string(directory.total_samples_size));
 }
 	stream.seekg(directory.first_sample_offset, std::ios::beg);
-	std::vector<sound_sample> buffers;
+	std::vector<decoded_sample> buffers;
 	buffers.reserve(sample_count);
 	SoundBankSample sample;
     for (int i = 0; i < sample_count; ++i) {
