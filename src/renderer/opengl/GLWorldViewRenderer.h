@@ -31,7 +31,6 @@
 #include "bflib_render.h"   // PolyPoint (needed by ShadowCmd)
 
 class ITileAtlas;
-class GLTextRenderer;
 
 /******************************************************************************/
 
@@ -94,16 +93,6 @@ public:
                                 const unsigned char* data, int src_w, int src_h,
                                 unsigned int draw_flags, const unsigned char* remap);
 
-    // Add world-space text to be rendered at the given 3D position.
-    // Text will be depth-tested and positioned correctly in the world view.
-    // @param world_x, world_y, world_z 3D world position
-    // @param text Text string to render  
-    // @param color Text color index
-    // @param scale Text scale factor (1.0 = normal size)
-    // @param bucket_num Depth bucket for sorting (should match surrounding geometry)
-    void AddWorldText(float world_x, float world_y, float world_z,
-                     const char* text, int color, float scale, int bucket_num);
-
     // Called by GLUIRenderer::Draw() (via UIRenderer_Draw) to render power-hand
     // keeper sprites after glClear() with full-screen NDC coordinates.
     // Saves m_screen_w/h and m_current_sprite_z, sets them to MyScreenWidth/Height
@@ -165,7 +154,7 @@ private:
 
     // Deferred draw command (built during DrawIsometricView/DrawFrontView, executed by GPURenderNow)
     struct DrawCmd {
-        enum Type { CMD_TILES, CMD_SPRITES, CMD_SHADOWS, CMD_WORLDTEXT, CMD_FLAT_POLYS,
+        enum Type { CMD_TILES, CMD_SPRITES, CMD_SHADOWS, CMD_FLAT_POLYS,
                     CMD_FRONTVIEW_SPRITES } type;
         // CMD_TILES fields
         int vert_start  = 0;
@@ -174,8 +163,6 @@ private:
         int bucket_num  = 0;
         // CMD_SHADOWS field (index into m_shadow_cmds)
         int shadow_idx  = 0;
-        // CMD_WORLDTEXT field (index into m_worldtext_cmds)
-        int worldtext_idx = 0;
     };
 
     // Per-shadow data recorded during DrawIsometricView, consumed by GPURenderNow.
@@ -183,22 +170,13 @@ private:
     // stays pure-GPU (no calls back into engine_render C functions).
     struct ShadowCmd {
         struct PolyPoint verts[4];      // vertex_first..fourth (screen-px coords + 16.16 UV)
-        const unsigned char* sprite_data; // resolved RLE sprite data (NULL = skip)
-        int              sprite_w;      // decoded sprite width
-        int              sprite_h;      // decoded sprite height
-        bool             x_flip;        // true when silhouette needs horizontal flip
-        float            darkness;      // 1.0 - (color_value / 32.0); used as src_alpha for multiply-blend
-        float            ndc_z;          // NDC depth of shadow's floor bucket, used for depth testing
-    };
-
-    // Per-world-text data recorded during DrawIsometricView, consumed by GPURenderNow
-    struct WorldTextCmd {
-        float world_x, world_y, world_z; // 3D world position 
-        float ndc_z;                     // Computed NDC depth for depth testing
-        const char* text;                // Text string to render (must remain valid until GPURenderNow)
-        int   bucket_num;                // Bucket number for depth sorting
-        int   color;                     // Text color index
-        float scale;                     // Text scale factor
+        unsigned short   anim_sprite;   // passed to draw_keepsprite_unscaled_in_buffer
+        short            angle;         // sprite_angle (already computed in create_shadows)
+        unsigned char    current_frame; // animation frame
+        int              tex_w;         // frame width  (FrameWidth for Rotable==0, SWidth for Rotable==2)
+        int              tex_h;         // frame height (FrameHeight for Rotable==0, SHeight for Rotable==2)
+        float            darkness;      // 1.0 - dist_sq/32.0; src_alpha for multiply-blend
+        float            ndc_z;         // NDC depth of shadow's floor bucket, used for depth testing
     };
 
     // Saved viewport state during hand sprite rendering (see BeginHandSpriteRendering)
@@ -346,11 +324,7 @@ private:
     // Deferred draw list — built during DrawIsometricView(), executed in GPURenderNow()
     std::vector<DrawCmd>      m_draw_cmds;
     std::vector<ShadowCmd>    m_shadow_cmds;
-    std::vector<WorldTextCmd> m_worldtext_cmds;
     std::vector<FlatPolyVertex> m_flatpoly_verts;  // flat-colour polygon vertices, GPU-only
-
-    // GPU text renderer for world-space floating text
-    GLTextRenderer* m_text_renderer = nullptr;
 
     bool m_initialized = false;
     // Set to true in BeginWorldPass(); reset to false at the end of GPURenderNow().

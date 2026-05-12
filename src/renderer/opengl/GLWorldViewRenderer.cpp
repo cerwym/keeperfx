@@ -12,7 +12,6 @@
 
 #include "renderer/opengl/GLTileAtlas.h"
 #include "renderer/opengl/GLShaders.h"
-#include "renderer/opengl/GLTextRenderer.h"
 #include "renderer/backends/SoftwareWorldViewRenderer.h"
 #include "renderer/ITileAtlas.h"
 #include "renderer/RendererManager.h"  // for RendererGetActive/RendererGetActiveType
@@ -121,15 +120,12 @@ GLWorldViewRenderer::GLWorldViewRenderer(ITileAtlas* atlas,
     , m_fade_tex(fade_tex)
     , m_palette_tex(palette_tex)
 {
-    m_text_renderer = new GLTextRenderer();
-    m_text_renderer->SetPaletteTexture(palette_tex);
     init_gl_resources();
 }
 
 GLWorldViewRenderer::~GLWorldViewRenderer()
 {
     free_gl_resources();
-    delete m_text_renderer;
 }
 
 /******************************************************************************/
@@ -137,8 +133,7 @@ GLWorldViewRenderer::~GLWorldViewRenderer()
 bool GLWorldViewRenderer::CompileShaders()
 {
     // init_gl_resources() is idempotent (guarded by m_initialized).
-    // It compiles all GLSL programs for world, shadow, keeper-sprite, and
-    // flat-poly passes, and also calls m_text_renderer->CompileShaders().
+    // It compiles all GLSL programs for world, shadow, keeper-sprite, and flat-poly passes.
     return init_gl_resources();
 }
 
@@ -274,20 +269,6 @@ bool GLWorldViewRenderer::init_gl_resources()
         return false;
     }
 
-    // Initialize text renderer for world-space text
-    if (m_text_renderer && !m_text_renderer->Init())
-    {
-        ERRORLOG("GLWorldViewRenderer: failed to initialise text renderer");
-        free_gl_resources();
-        return false;
-    }
-    if (m_text_renderer && !m_text_renderer->CompileShaders())
-    {
-        ERRORLOG("GLWorldViewRenderer: failed to compile text renderer shaders");
-        free_gl_resources();
-        return false;
-    }
-
     m_initialized = true;
     SYNCLOG("GLWorldViewRenderer: initialised (VBO %d verts × %zu bytes)",
             k_max_verts, sizeof(WorldVertex));
@@ -331,8 +312,6 @@ void GLWorldViewRenderer::free_gl_resources()
     if (m_flatpoly_vbo)    { glDeleteBuffers(1, &m_flatpoly_vbo);       m_flatpoly_vbo = 0; }
     if (m_flatpoly_shader) { glDeleteProgram(m_flatpoly_shader);        m_flatpoly_shader = 0; }
     if (m_tex_lightmap)    { glDeleteTextures(1, &m_tex_lightmap);      m_tex_lightmap = 0; }
-
-    if (m_text_renderer)    { m_text_renderer->Shutdown(); }
 
     m_initialized = false;
 }
@@ -1071,36 +1050,6 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
     return 1;
 }
 
-void GLWorldViewRenderer::AddWorldText(float world_x, float world_y, float world_z,
-                                      const char* text, int color, float scale, int bucket_num)
-{
-    if (!text || !m_initialized)
-        return;
-
-    // Calculate NDC depth from bucket number, biased half a bucket closer to
-    // the camera so world text always passes the depth test against same-bucket
-    // ground polygons (avoids z-fighting).
-    float z_ndc = 2.0f * ((float)bucket_num - 0.5f) / (float)(BUCKETS_COUNT - 1) - 1.0f;
-
-    WorldTextCmd cmd;
-    cmd.world_x = world_x;
-    cmd.world_y = world_y;
-    cmd.world_z = world_z;
-    cmd.ndc_z = z_ndc;
-    cmd.text = text;  // Note: caller must ensure text remains valid until GPUFlushNow()
-    cmd.bucket_num = bucket_num;
-    cmd.color = color;
-    cmd.scale = scale;
-
-    m_worldtext_cmds.push_back(cmd);
-
-    // Add a draw command to render this text at the appropriate depth
-    DrawCmd draw_cmd;
-    draw_cmd.type = DrawCmd::CMD_WORLDTEXT;
-    draw_cmd.worldtext_idx = (int)(m_worldtext_cmds.size() - 1);
-    m_draw_cmds.push_back(draw_cmd);
-}
-
 /******************************************************************************/
 
 // Simple bridge function to maintain existing sprite logic while using proper abstraction
@@ -1169,9 +1118,6 @@ void GLWorldViewRenderer::BeginWorldPass(unsigned char* framebuf, int pitch,
     {
     }
 
-    // Set screen size for text renderer
-    if (m_text_renderer)
-        m_text_renderer->SetScreenSize(w, h);
 }
 
 /******************************************************************************/
@@ -1517,26 +1463,26 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
         KFX_GL_PUSH("WorldPass/Shadows");
         assert(cmd.shadow_idx >= 0 && (size_t)cmd.shadow_idx < m_shadow_cmds.size());
         const ShadowCmd& sc = m_shadow_cmds[cmd.shadow_idx];
-        if (!sc.sprite_data) { KFX_GL_POP(); continue; }
 
-        // Decode RLE sprite into the local scratch buffer (stride=256).
-        decode_keeper_rle(s_kspr_decode_buf, sc.sprite_data,
-                          sc.sprite_w, sc.sprite_h);
+        // Rasterise the silhouette into the scratch buffer.
+        // draw_keepsprite_unscaled_in_buffer handles heap load, FrameOffsW/H
+        // placement, and x-flip — matching the software renderer exactly.
+        memset(s_kspr_decode_buf, 0, (size_t)sc.tex_h * 256);
+        draw_keepsprite_unscaled_in_buffer(sc.anim_sprite, sc.angle,
+                                           sc.current_frame, s_kspr_decode_buf);
 
         // Upload silhouette to the reusable R8 texture.
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, m_shadow_silhouette_tex);
         glPixelStorei(GL_UNPACK_ROW_LENGTH, 256);
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, sc.sprite_w, sc.sprite_h,
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, sc.tex_w, sc.tex_h,
                         GL_RED, GL_UNSIGNED_BYTE, s_kspr_decode_buf);
         glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
 
-        // u_extent: fraction of the 256-wide texture occupied by this sprite.
-        // Used only for the x-flip boundary calculation.
-        const float u_extent = (float)sc.sprite_w / 256.0f;
-
         // Build 6 float vertices: two triangles covering the quad (0,1,2)+(0,2,3).
         // U/V are 16.16 fixed-point sprite-pixel coords; normalise to [0,1] by /256.
+        // No UV x-flip adjustment: draw_keepsprite_unscaled_in_buffer already
+        // mirrors the silhouette in the buffer for angles in the flip range.
         float sv[6][4];
         const struct PolyPoint* vp = sc.verts;
         for (int t = 0; t < 6; t++)
@@ -1544,10 +1490,8 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
             const int idx[6] = { 0, 1, 2, 0, 2, 3 };
             sv[t][0] = (float)vp[idx[t]].X;
             sv[t][1] = (float)vp[idx[t]].Y;
-            float raw_u = (float)(vp[idx[t]].U >> 16) / 256.0f;
-            float raw_v = (float)(vp[idx[t]].V >> 16) / 256.0f;
-            sv[t][2] = sc.x_flip ? (u_extent - raw_u) : raw_u;
-            sv[t][3] = raw_v;
+            sv[t][2] = (float)(vp[idx[t]].U >> 16) / 256.0f;
+            sv[t][3] = (float)(vp[idx[t]].V >> 16) / 256.0f;
         }
         glBindBuffer(GL_ARRAY_BUFFER, m_shadow_vbo);
         glBufferData(GL_ARRAY_BUFFER, sizeof(sv), nullptr, GL_DYNAMIC_DRAW);
@@ -1640,35 +1584,6 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
             atlas_bound = false;
             KFX_GL_POP();
         }
-        else if (cmd.type == DrawCmd::CMD_WORLDTEXT)
-        {
-            KFX_GL_PUSH("WorldPass/WorldText");
-            assert(cmd.worldtext_idx >= 0 && (size_t)cmd.worldtext_idx < m_worldtext_cmds.size());
-            const WorldTextCmd& wt = m_worldtext_cmds[cmd.worldtext_idx];
-
-            if (m_text_renderer && wt.text)
-            {
-                // TODO: Project world position to screen coordinates
-                // For now, render at a fixed test position
-                float screen_x = 100.0f;  // Placeholder
-                float screen_y = 100.0f;  // Placeholder
-
-                glEnable(GL_DEPTH_TEST);
-                glDepthFunc(GL_LEQUAL);
-                glDepthMask(GL_FALSE);
-
-                int units_per_px = (int)(wt.scale * 16.0f);
-                m_text_renderer->DrawTextResized((int)screen_x, (int)screen_y,
-                                                units_per_px, wt.text);
-
-                glDepthMask(GL_TRUE);
-
-                glUseProgram(m_shader);
-                glBindVertexArray(m_vao);
-                atlas_bound = false;
-            }
-            KFX_GL_POP();
-        }
     }
 
     glDisable(GL_SCISSOR_TEST);
@@ -1684,7 +1599,6 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
     KFX_PLOT("WVR/VertCount",          m_vert_count);
     KFX_PLOT("WVR/DrawCmds",           (int)m_draw_cmds.size());
     KFX_PLOT("WVR/ShadowCmds",         (int)m_shadow_cmds.size());
-    KFX_PLOT("WVR/WorldTextCmds",      (int)m_worldtext_cmds.size());
     KFX_PLOT("WVR/KSprAtlasCacheSize", m_kspr_atlas_used);
     KFX_PLOT("WVR/KSprAtlasHits",      m_kspr_atlas_hits);
     KFX_PLOT("WVR/KSprAtlasMisses",    m_kspr_atlas_misses);
@@ -1692,7 +1606,6 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
     // Reset for next frame.
     m_draw_cmds.clear();
     m_shadow_cmds.clear();
-    m_worldtext_cmds.clear();
     m_flatpoly_verts.clear();
     m_vert_count     = 0;
     m_cmd_vert_start = 0;
@@ -1823,59 +1736,45 @@ void GLWorldViewRenderer::DrawIsometricView()
                 case QK_CreatureShadow:
                 {
                     auto* s = (struct BucketKindCreatureShadow*)q;
-                    // Resolve the keeper-sprite data eagerly so GPUFlushNow
-                    // never calls back into engine_render C functions.
-                    unsigned short anim = s->anim_sprite;
+                    struct KeeperSprite* kspr_arr = keepersprite_array(s->anim_sprite);
+                    if (!kspr_arr || kspr_arr->FramesCount == 0) break;
+
+                    // Resolve frame dimensions at collection time.  Heap load,
+                    // offset placement, and x-flip are all handled by
+                    // draw_keepsprite_unscaled_in_buffer at flush time.
                     short angle         = (short)s->angle;
+                    int   quarter       = abs(4 - (((angle + DEGREES_22_5) & ANGLE_MASK) >> 8));
                     unsigned char frame = s->current_frame;
+                    if (frame >= kspr_arr->FramesCount)
+                        frame = kspr_arr->FramesCount - 1;
 
-                    bool flip = ((angle & ANGLE_MASK) > 1151) && ((angle & ANGLE_MASK) < 1919);
-                    int quarter = abs(4 - (((angle + DEGREES_22_5) & ANGLE_MASK) >> 8));
-
-                    uint32_t kspr_idx = keepersprite_index(anim);
-                    struct KeeperSprite* kspr_arr = keepersprite_array(anim);
-                    if (!kspr_arr) break;
-
-                    const unsigned char* sprite_data = nullptr;
-                    int spr_w = 0, spr_h = 0;
-                    uint32_t kid;
-
+                    int tex_w, tex_h;
                     if (kspr_arr->Rotable == 0) {
-                        kid = frame + kspr_idx;
                         struct KeeperSprite* ks = &kspr_arr[frame];
-                        spr_w = ks->SWidth;
-                        spr_h = ks->SHeight;
+                        tex_w = ks->FrameWidth;
+                        tex_h = ks->FrameHeight;
                     } else if (kspr_arr->Rotable == 2) {
                         struct KeeperSprite* ks = &kspr_arr[frame + quarter * kspr_arr->FramesCount];
-                        kid = frame + quarter * ks->FramesCount + kspr_idx;
-                        spr_w = ks->SWidth;
-                        spr_h = ks->SHeight;
+                        tex_w = ks->SWidth;
+                        tex_h = ks->SHeight;
                     } else {
                         break;  // unsupported rotable type
                     }
-
-                    // Look up the resolved sprite data pointer.
-                    if (kid >= KEEPERSPRITE_ADD_OFFSET) {
-                        if (kid - KEEPERSPRITE_ADD_OFFSET < KEEPERSPRITE_ADD_NUM)
-                            sprite_data = keepersprite_add[kid - KEEPERSPRITE_ADD_OFFSET];
-                    } else if (kid < KEEPSPRITE_LENGTH && keepsprite[kid]) {
-                        sprite_data = *keepsprite[kid];
-                    }
-                    if (!sprite_data || spr_w <= 0 || spr_h <= 0) break;
+                    if (tex_w <= 0 || tex_h <= 0 || tex_w > 256 || tex_h > 256) break;
 
                     ShadowCmd sc;
-                    sc.verts[0]     = s->vertex_first;
-                    sc.verts[1]     = s->vertex_second;
-                    sc.verts[2]     = s->vertex_third;
-                    sc.verts[3]     = s->vertex_fourth;
-                    sc.sprite_data  = sprite_data;
-                    sc.sprite_w     = spr_w;
-                    sc.sprite_h     = spr_h;
-                    sc.x_flip       = flip;
+                    sc.verts[0]      = s->vertex_first;
+                    sc.verts[1]      = s->vertex_second;
+                    sc.verts[2]      = s->vertex_third;
+                    sc.verts[3]      = s->vertex_fourth;
+                    sc.anim_sprite   = s->anim_sprite;
+                    sc.angle         = angle;
+                    sc.current_frame = frame;
+                    sc.tex_w         = tex_w;
+                    sc.tex_h         = tex_h;
                     // vertex_first.S holds dist_sq (range 16..31) set by create_shadows().
-                    // color_value is a separate field that create_shadows() never populates.
-                    sc.darkness     = 1.0f - (float)s->vertex_first.S / 32.0f;
-                    sc.ndc_z        = 2.0f * (float)bi / (float)(BUCKETS_COUNT - 1) - 1.0f;
+                    sc.darkness      = 1.0f - (float)s->vertex_first.S / 32.0f;
+                    sc.ndc_z         = 2.0f * (float)bi / (float)(BUCKETS_COUNT - 1) - 1.0f;
                     DrawCmd cmd;
                     cmd.type       = DrawCmd::CMD_SHADOWS;
                     cmd.shadow_idx = (int)m_shadow_cmds.size();
