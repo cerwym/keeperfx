@@ -497,17 +497,17 @@ extern "C" void SoundBanks_StartAsyncLoad(void)
                 tracy::SetThreadName("SoundPreload");
 #endif
                 {
-                    KFX_ZONE_COLOR("SoundPreload::load_sound_bank(sound.dat)", KFX_COLOR_RENDER_CPU);
-                    g_banks[0] = load_sound_bank(s.c_str());
+                    KFX_ZONE_COLOR("SoundPreload::decode_sound_bank(sound.dat)", KFX_COLOR_RENDER_CPU);
+                    g_pending_banks[0] = decode_sound_bank(s.c_str());
                 }
                 try {
                     if (!p.empty()) {
-                        KFX_ZONE_COLOR("SoundPreload::load_sound_bank(speech)", KFX_COLOR_RENDER_CPU);
-                        g_banks[1] = load_sound_bank(p.c_str());
+                        KFX_ZONE_COLOR("SoundPreload::decode_sound_bank(speech)", KFX_COLOR_RENDER_CPU);
+                        g_pending_banks[1] = decode_sound_bank(p.c_str());
                     }
                 } catch (const std::exception& e) {
                     WARNLOG("Speech bank async preload failed: %s", e.what());
-                    g_banks[1].clear();
+                    g_pending_banks[1].clear();
                 }
             } catch (const std::exception&) {
                 g_sound_preload_exception = std::current_exception();
