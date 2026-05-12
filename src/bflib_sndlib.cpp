@@ -429,19 +429,42 @@ if (sample_count <= 0 || sample_count > 65535) {
         const uint32_t data_seek = directory.first_data_offset + sample.data_offset;
         stream.seekg(data_seek, std::ios::beg);
         try {
-            buffers.emplace_back(sample.filename, sample.sfxid, wave_file(stream, sample.data_size));
+            wave_file wav(stream, sample.data_size);
+            decoded_sample d;
+            d.name = sample.filename;
+            d.sfx_id = sample.sfxid;
+            d.samplerate = wav.samplerate();
+            const auto fmt = wav.format();
+            if (fmt == AL_FORMAT_MONO_MSADPCM_SOFT) {
+                // Needed for heart6a.wav
+                const auto & raw = wav.pcm();
+                d.pcm.resize(raw.size() * 2);
+                for (size_t j = 0; j < raw.size(); ++j) {
+                    d.pcm[(j * 2) + 0] = (raw[j] >> 4) * 2;
+                    d.pcm[(j * 2) + 1] = (raw[j] & 0x7) * 2;
+                }
+                d.format = AL_FORMAT_MONO8;
+            } else if (fmt == AL_FORMAT_STEREO_MSADPCM_SOFT) {
+                throw std::runtime_error("Format not implemented");
+            } else {
+                d.pcm = wav.pcm();
+                d.format = fmt;
+            }
+            buffers.push_back(std::move(d));
         } catch (const std::exception& ex) {
             ERRORLOG("Sample %d '%s' from '%s' failed at offset %u (data_size=%u): %s", i, sample.filename, filename,
                      data_seek, sample.data_size, ex.what());
             throw;
         }
     }
-	JUSTLOG("Loaded %d sound samples from %s", (int) buffers.size(), filename);
+	JUSTLOG("Decoded %d sound samples from %s", (int) buffers.size(), filename);
 	return buffers;
 }
 
 std::vector<openal_source> g_sources;
 std::array<std::vector<sound_sample>, 2> g_banks;
+// Filled by decode_sound_bank on the preload thread; consumed by upload_decoded_bank on the main thread.
+static std::array<std::vector<decoded_sample>, 2> g_pending_banks;
 
 // Background thread for async sound bank preloading.
 static std::thread        g_sound_preload_thread;
