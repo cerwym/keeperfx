@@ -14,6 +14,7 @@
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>
+#include <sstream>>
 #include <malloc.h>
 #include <errno.h>
 #include "bflib_crash.h"
@@ -30,6 +31,21 @@ struct TbFileFind {
 
 // TbFileInfo is defined here; it is an opaque type to all callers.
 struct TbFileInfo { FILE* fp; };
+
+void DebugPrint(const std::string& msg) {
+#ifdef UNICODE
+    // Convert UTF-8/ANSI string to wide string
+    int len = MultiByteToWideChar(CP_UTF8, 0, msg.c_str(), -1, nullptr, 0);
+    if (len > 0) {
+        std::wstring wmsg(len, L'\0');
+        MultiByteToWideChar(CP_UTF8, 0, msg.c_str(), -1, &wmsg[0], len);
+        OutputDebugStringW(wmsg.c_str());
+    }
+#else
+    OutputDebugStringA(msg.c_str());
+#endif
+}
+
 
 // ----- OS information -----
 
@@ -453,8 +469,13 @@ int PlatformWindows::FileRead(TbFileHandle handle, void* buf, unsigned long len)
 
 long PlatformWindows::FileWrite(TbFileHandle handle, const void* buf, unsigned long len)
 {
-    if (!handle) return -1;
-    return (long)fwrite(buf, 1, len, static_cast<TbFileInfo*>(handle)->fp);
+    if (!handle) {
+        return -1;
+    }
+
+    DebugPrint(std::string(static_cast<const char*>(buf), len));
+
+    long itemsWritten = fwrite(buf, 1, len, static_cast<TbFileInfo*>(handle)->fp);
 }
 
 int PlatformWindows::FileSeek(TbFileHandle handle, long offset, unsigned char origin)
