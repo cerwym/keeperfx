@@ -328,30 +328,27 @@ protected:
 	std::vector<uint8_t> m_pcm;
 };
 
+// Holds decoded PCM for one sample — no OpenAL objects; safe to fill from any thread.
+struct decoded_sample {
+	std::string name;
+	SoundSFXID sfx_id;
+	ALenum format = 0;
+	int samplerate = 0;
+	std::vector<uint8_t> pcm;
+};
+
 struct sound_sample {
 
 	std::string name;
 	SoundSFXID sfx_id;
 	openal_buffer buffer;
 
-	sound_sample(const char * _name, SoundSFXID _sfx_id, const wave_file & wav) {
-		name = _name;
-		sfx_id = _sfx_id;
-		const auto & pcm = wav.pcm();
-		const auto format = wav.format();
-		if (format == AL_FORMAT_MONO_MSADPCM_SOFT) {
-			// Needed for heart6a.wav
-			std::vector<uint8_t> converted(pcm.size() * 2);
-			for (size_t i = 0; i < pcm.size(); ++i) {
-				converted[(i * 2) + 0] = (pcm[i] >> 4) * 2;
-				converted[(i * 2) + 1] = (pcm[i] & 0x7) * 2;
-			}
-			alBufferData(buffer.id, AL_FORMAT_MONO8, converted.data(), converted.size(), wav.samplerate());
-		} else if (format == AL_FORMAT_STEREO_MSADPCM_SOFT) {
-			throw std::runtime_error("Format not implemented");
-		} else {
-			alBufferData(buffer.id, format, pcm.data(), pcm.size(), wav.samplerate());
-		}
+	// Upload pre-decoded PCM data into an OpenAL buffer.
+	// Must be called with a current OpenAL context on this thread.
+	sound_sample(decoded_sample && d) {
+		name = std::move(d.name);
+		sfx_id = d.sfx_id;
+		alBufferData(buffer.id, d.format, d.pcm.data(), (ALsizei)d.pcm.size(), d.samplerate);
 		const auto errcode = alGetError();
 		if (errcode != AL_NO_ERROR) {
 			throw openal_error("Cannot buffer sample data", errcode);
