@@ -245,7 +245,6 @@ void gui_video_rotate_mode(struct GuiButton *gbtn)
 {
     struct Packet* pckt = get_packet(my_player_number);
     set_packet_action(pckt, PckA_SwitchView, rotate_mode_to_view_mode(settings.video_rotate_mode), 0, 0, 0);
-    save_settings();
 }
 
 void gui_video_cluedo_mode(struct GuiButton *gbtn)
@@ -295,21 +294,18 @@ void gui_set_sound_volume(struct GuiButton *gbtn)
         }
     }
     settings.sound_volume = new_val;
-    save_settings();
     SetSoundMasterVolume(new_val);
 }
 
 void gui_set_music_volume(struct GuiButton *gbtn)
 {
     settings.music_volume = make_audio_slider_nonlinear(gbtn->content.lval);
-    save_settings();
     set_music_volume(settings.music_volume);
 }
 
 void gui_set_mentor_volume(struct GuiButton *gbtn)
 {
     settings.mentor_volume = make_audio_slider_nonlinear(gbtn->content.lval);
-    save_settings();
 }
 
 void gui_video_cluedo_maintain(struct GuiButton *gbtn)
