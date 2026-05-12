@@ -345,14 +345,12 @@ bool GLUIRenderer::SubmitSlabBackground(int x, int y, int w, int h)
     }
     float u1 = (float)w / (float)m_slab_dim;
     float v1 = (float)h / (float)m_slab_dim;
+    // Always submit on layer 0 (back, rendered before the staging-buffer blit).
+    // Force world-depth off so SubmitQuad doesn't redirect to layer 2.
     int saved_layer = m_current_layer;
     bool saved_world_depth = m_world_depth_active;
     bool saved_top_overlay = m_top_overlay_active;
-    // When called inside a BeginTopOverlay/EndTopOverlay scope (e.g. tooltip
-    // background), submit to layer 3 so the slab renders on top of all layer-1
-    // and layer-2 sprites.  Otherwise always use layer 0 (back, rendered before
-    // the staging-buffer blit) for sidebar panels and other background slabs.
-    m_current_layer = saved_top_overlay ? 3 : 0;
+    m_current_layer = 0;
     m_world_depth_active = false;
     m_top_overlay_active = false;
     // Opaque black backing quad — blocks world geometry from bleeding through
@@ -505,8 +503,12 @@ static void FlushFBOQuads_impl(const std::vector<FBOQuad>& quads, GLuint prog, G
     glActiveTexture(GL_TEXTURE0);
 }
 
-void GLUIRenderer::DrawFrontBase()
+void GLUIRenderer::DrawFront()
 {
+    KFX_ZONE("UIRenderer::DrawFront");
+    KFX_GPU_ZONE("UIPass::Front");
+    KFX_GL_SCOPE(front_grp, "UIPass/Front");
+
     if (m_ui_quads.empty() && m_ui_lines.empty() && !m_minimap_pending && m_fbo_quads.empty())
         return;
 
@@ -570,21 +572,6 @@ void GLUIRenderer::DrawFrontBase()
 
     // Flush slab-selector lines and other line geometry (front layer).
     FlushLines(1);
-    // GL state (blend enabled, depth test off, depthMask false) is left as-is
-    // for the caller to run any intermediate passes before DrawFrontOverlay().
-}
-
-void GLUIRenderer::DrawFrontOverlay()
-{
-    // Re-establish expected GL state — the caller may have run direct-GL passes
-    // (e.g. zoom box tile render) between DrawFrontBase() and here.
-    glViewport(0, 0, m_screen_width, m_screen_height);
-    glDisable(GL_SCISSOR_TEST);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
 
     // Flush world-depth-tagged elements (layer 2) — these are non-spatial sprites
     // (status flowers, room flags, slab selectors, floating numbers) submitted via
@@ -622,8 +609,8 @@ void GLUIRenderer::DrawFrontOverlay()
         }
     }
 
-    // Layer 3: top-overlay — tooltip slab+text, zoom-box corner frames, slab
-    // selector — drawn dead-last, depth test OFF, never obscured by world or UI.
+    // Layer 3: top-overlay — cursor-driven affordances (slab selector) drawn dead-last,
+    // depth test OFF, so they are never obscured by any world or UI element.
     FlushQuads(3);
     FlushLines(3);
 
@@ -632,16 +619,101 @@ void GLUIRenderer::DrawFrontOverlay()
     glUseProgram(0);
 }
 
-void GLUIRenderer::DrawFront()
+void GLUIRenderer::DrawFrontBase()
 {
-    KFX_ZONE("UIRenderer::DrawFront");
-    KFX_GPU_ZONE("UIPass::Front");
-    KFX_GL_SCOPE(front_grp, "UIPass/Front");
+    KFX_ZONE("UIRenderer::DrawFrontBase");
+    KFX_GL_SCOPE(front_base_grp, "UIPass/FrontBase");
 
-    DrawFrontBase();
-    DrawFrontOverlay();
+    glViewport(0, 0, m_screen_width, m_screen_height);
+    glDisable(GL_SCISSOR_TEST);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+
+    FlushFBOQuads_impl(m_fbo_quads, m_prog_fbo, m_loc_screen_fbo,
+                       m_vao, m_vbo, m_screen_width, m_screen_height,
+                       m_loc_fbo_clip_rect, m_loc_fbo_clip_radius, m_loc_fbo_clip_scrh);
+    m_fbo_quads.clear();
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    FlushQuads(1);
+
+    if (m_minimap_pending && m_minimap_texture)
+    {
+        float mx = (float)m_minimap_x;
+        float my = (float)m_minimap_y;
+        float ms = (float)m_minimap_size;
+
+        glUseProgram(m_prog_sprite);
+        glUniform2f(m_loc_screen_sprite, (float)m_screen_width, (float)m_screen_height);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, m_minimap_texture);
+        if (m_palette_texture) {
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(m_palette_texture_target, m_palette_texture);
+        }
+
+        GLUIVertex verts[6] = {
+            {mx,      my,      0.0f, 0.0f, 1,1,1,1, 0.49f, 0.0f},
+            {mx,      my + ms, 0.0f, 1.0f, 1,1,1,1, 0.49f, 0.0f},
+            {mx + ms, my,      1.0f, 0.0f, 1,1,1,1, 0.49f, 0.0f},
+            {mx + ms, my,      1.0f, 0.0f, 1,1,1,1, 0.49f, 0.0f},
+            {mx,      my + ms, 0.0f, 1.0f, 1,1,1,1, 0.49f, 0.0f},
+            {mx + ms, my + ms, 1.0f, 1.0f, 1,1,1,1, 0.49f, 0.0f},
+        };
+        glBindVertexArray(m_vao);
+        glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(verts), nullptr, GL_DYNAMIC_DRAW);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(verts), verts);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+        glBindVertexArray(0);
+        m_minimap_pending = false;
+    }
+
+    FlushLines(1);
 }
 
+void GLUIRenderer::DrawFrontOverlay()
+{
+    KFX_ZONE("UIRenderer::DrawFrontOverlay");
+    KFX_GL_SCOPE(front_ovl_grp, "UIPass/FrontOverlay");
+
+    {
+        bool has_layer2_quads = false;
+        for (const auto& q : m_ui_quads) if (q.layer == 2) { has_layer2_quads = true; break; }
+        bool has_layer2_lines = false;
+        for (const auto& l : m_ui_lines) if (l.layer == 2) { has_layer2_lines = true; break; }
+        if (has_layer2_quads || has_layer2_lines)
+        {
+            if (m_game_vp_set && m_game_vp_w > 0 && m_game_vp_h > 0)
+            {
+                glEnable(GL_SCISSOR_TEST);
+                int scissor_y = m_screen_height - m_game_vp_y - m_game_vp_h;
+                glScissor(m_game_vp_x, scissor_y, m_game_vp_w, m_game_vp_h);
+            }
+            glEnable(GL_DEPTH_TEST);
+            glDepthFunc(GL_LEQUAL);
+            glDepthMask(GL_TRUE);
+            FlushQuads(2);
+            FlushLines(2);
+            glDisable(GL_DEPTH_TEST);
+            if (m_game_vp_set)
+                glDisable(GL_SCISSOR_TEST);
+        }
+    }
+
+    FlushQuads(3);
+    FlushLines(3);
+
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+    glUseProgram(0);
+}
 
 void GLUIRenderer::BeginPiPSprites()
 {
@@ -1101,6 +1173,7 @@ void GLUIRenderer::FlushQuads(int layer)
         }
         ExpandQuadToVertices(*it);
     }
+
     flush_batch(current_pass);
 
     glBindVertexArray(0);
