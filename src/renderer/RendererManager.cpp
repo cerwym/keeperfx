@@ -59,6 +59,10 @@ extern "C" { struct TbSpriteSheet; extern struct TbSpriteSheet *button_sprites; 
 
 static IRenderer*           s_activeRenderer      = nullptr;
 static RendererType         s_activeType          = RENDERER_INVALID;
+// Set whenever the GL sprite atlas is rebuilt (RendererNotifySpritesReloaded).
+// Consumed by RendererNeedsUIReinitAfterLoad to decide whether init_gui() is
+// required after a save-game load.  Starts true so the first load always reinits.
+static bool                 s_gui_sprites_dirty   = true;
 static IWorldViewRenderer*  s_worldViewRenderer   = nullptr;
 static IMapFadePass*        s_mapFadePass         = nullptr;
 static ITextRenderer*       s_textRenderer        = nullptr;
@@ -88,6 +92,7 @@ void RendererNotifyTexturesReloaded()
 
 void RendererNotifySpritesReloaded()
 {
+    s_gui_sprites_dirty = true;
 #ifdef RENDERER_OPENGL_ENABLED
     SYNCLOG("RendererNotifySpritesReloaded: s_spriteAtlas=%p gui_panel_sprites=%p button_sprites=%p",
             (void*)s_spriteAtlas, (void*)gui_panel_sprites, (void*)button_sprites);
@@ -196,6 +201,21 @@ void RendererNotifyGameTablesReady()
         }
     }
 #endif
+}
+
+int RendererNeedsUIReinitAfterLoad(void)
+{
+    // Software renderer: always reinit — no atlas to preserve.
+    if (s_activeType != RENDERER_OPENGL)
+        return 1;
+    // OpenGL: the GPU sprite atlas persists across save loads.  Only reinit when
+    // the atlas was rebuilt (RendererNotifySpritesReloaded called — happens on
+    // resolution change, not on a plain save load at the same resolution).
+    // Consuming the flag here means one call per load cycle, which is correct.
+    if (!s_gui_sprites_dirty)
+        return 0;
+    s_gui_sprites_dirty = false;
+    return 1;
 }
 
 /** Explicitly composite m_stagingBuf (lbDisplay.WScreen) on the GL frame. */

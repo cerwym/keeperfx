@@ -269,6 +269,15 @@ void RendererNotifyLandviewFlagLoaded(void);
  *  RendererInit() runs.  Must be called exactly once during startup. */
 void RendererNotifyGameTablesReady(void);
 
+/** Returns non-zero if the UI (init_gui + init_gameplay_ui) must be reinitialised
+ *  after a save-game load.  For the software renderer this is always true.
+ *  For GPU renderers (OpenGL) this returns true only when the sprite atlas has
+ *  been rebuilt since the last reinit — i.e. after a resolution change.  On a
+ *  plain save-load at the same resolution the atlas is still valid, so the CPU
+ *  menu slot state can be carried forward and reset_gui_based_on_player_mode()
+ *  will open the right panels without a full slot wipe. */
+int RendererNeedsUIReinitAfterLoad(void);
+
 /******************************************************************************/
 /* C-callable world-view renderer wrappers (safe to call from C files)        */
 /******************************************************************************/

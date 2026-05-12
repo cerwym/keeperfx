@@ -49,6 +49,7 @@
 #include "gui_parchment.h"
 #include "gui_frontmenu.h"
 #include "ui_init.h"
+#include "kfx/save/level_session.h"
 #include "gui_msgs.h"
 #include "scrcapt.h"
 #include "vidmode.h"
@@ -1434,44 +1435,8 @@ TbBool toggle_computer_player(PlayerNumber plyr_idx)
 
 void reinit_level_after_load(void)
 {
-    struct PlayerInfo *player;
-    int i;
     SYNCDBG(6,"Starting");
-    // Reinit structures from within the game
-    player = get_my_player();
-    player->lens_palette = 0;
-    player->main_palette = engine_palette;
-    init_lookups();
-    init_navigation();
-    reinit_packets_after_load();
-    game.easter_eggs_enabled = start_params.easter_egg;
-    parchment_loaded = 0;
-    for (i=0; i < PLAYERS_COUNT; i++)
-    {
-        player = get_player(i);
-        if (player_exists(player))
-        {
-            set_engine_view(player, player->view_mode);
-            update_panel_color_player_color(player->id_number, get_dungeon(i)->color_idx);
-        }
-    }
-    start_rooms = &game.rooms[1];
-    end_rooms = &game.rooms[ROOMS_COUNT];
-    update_room_tab_to_config();
-    update_powers_tab_to_config();
-    update_trap_tab_to_config();
-    load_texture_map_file(game.texture_id, get_loaded_level_number(), get_level_fgroup(get_loaded_level_number()));
-    init_animating_texture_maps();
-    init_gui();
-    init_gameplay_ui(UIPROLE_ACTIVE_PLAYER, game.active_players_count > 1);
-    reset_gui_based_on_player_mode();
-    erstats_clear();
-    player = get_my_player();
-    reinit_tagged_blocks_for_player(player->id_number);
-    restore_computer_player_after_load();
-    sound_reinit_after_load();
-    update_panel_colors();
-    reset_postal_instance_cache();
+    LevelSession_ReinitAfterLoad();
 }
 
 /**
