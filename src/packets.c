@@ -527,10 +527,8 @@ void process_players_dungeon_control_packet_control(long plyr_idx)
     }
     process_camera_controls(cam, pckt, player, false);
     if (is_my_player(player)) {
-        TbBool settings_changed = false;
         if ((pckt->control_flags & (PCtr_ViewTiltUp | PCtr_ViewTiltDown | PCtr_ViewTiltReset)) != 0) {
             settings.isometric_tilt = cam->rotation_angle_y;
-            settings_changed = true;
         }
         if ((pckt->control_flags & (PCtr_ViewZoomIn | PCtr_ViewZoomOut)) != 0) {
             if (cam->view_mode == PVM_IsoWibbleView || cam->view_mode == PVM_IsoStraightView) {
@@ -538,10 +536,6 @@ void process_players_dungeon_control_packet_control(long plyr_idx)
             } else {
                 settings.frontview_zoom_level = cam->zoom;
             }
-            settings_changed = true;
-        }
-        if (settings_changed) {
-            save_settings();
         }
     }
     if (is_my_player(player)) {
