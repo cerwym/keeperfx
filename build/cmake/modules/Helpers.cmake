@@ -47,7 +47,22 @@ function(apply_keeperfx_link_flags TARGET)
         # MSVC: Windows subsystem, no GCC-style flags.
         # /MANIFEST:NO disables the auto-generated manifest because keeperfx_stdres.rc
         # already embeds the manifest via RT_MANIFEST, and duplicate manifests cause LNK error.
-        target_link_options(${TARGET} PRIVATE /SUBSYSTEM:WINDOWS /MANIFEST:NO)
+        # /INCREMENTAL is required for Hot Reload (Edit and Continue) in Debug builds.
+        # /INCREMENTAL:NO is required when ASan is active (/fsanitize=address is incompatible
+        # with incremental linking).
+        if(KEEPERFX_SANITIZERS)
+            target_link_options(${TARGET} PRIVATE
+                /SUBSYSTEM:WINDOWS
+                /MANIFEST:NO
+                /INCREMENTAL:NO
+            )
+        else()
+            target_link_options(${TARGET} PRIVATE
+                /SUBSYSTEM:WINDOWS
+                /MANIFEST:NO
+                $<$<CONFIG:Debug>:/INCREMENTAL>
+            )
+        endif()
         return()
     endif()
     

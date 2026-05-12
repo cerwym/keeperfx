@@ -83,6 +83,20 @@ if(NOT PLATFORM_VITA AND NOT PLATFORM_3DS AND NOT PLATFORM_SWITCH AND NOT PLATFO
 endif()
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# MSVC Hot Reload (Edit and Continue)
+# Replace CMake's default /Zi with /ZI so the VS debugger can apply code changes
+# without a full restart.  Only affects Debug; Release keeps /Zi via RelWithDebInfo.
+# Skipped when ASAN is enabled: /ZI (Edit and Continue) is incompatible with
+# /fsanitize=address — ASAN requires /Zi and /INCREMENTAL:NO.
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+if(MSVC AND NOT KEEPERFX_SANITIZERS)
+    foreach(lang C CXX)
+        string(REPLACE "/Zi" "/ZI" CMAKE_${lang}_FLAGS_DEBUG "${CMAKE_${lang}_FLAGS_DEBUG}")
+        set(CMAKE_${lang}_FLAGS_DEBUG "${CMAKE_${lang}_FLAGS_DEBUG}" CACHE STRING "" FORCE)
+    endforeach()
+endif()
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Sanitizers (AddressSanitizer + UndefinedBehaviorSanitizer)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 option(KEEPERFX_TRACY "Enable Tracy profiler instrumentation (MSVC debug builds)" OFF)
