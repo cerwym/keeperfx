@@ -515,13 +515,16 @@ void RendererSetZoomBoxClipRadius(float radius);
 /** Get the current zoom-box clip radius.  Negative = no clipping. */
 float RendererGetZoomBoxClipRadius(void);
 
-/** Register the screen-space rect of the active zoom box so that overhead
- *  map markers (creature dots, call-to-arms circles, etc.) can be culled
- *  when they fall inside the box.  Call before draw_2d_map() runs.
- *  RendererClearZoomBoxScreenRect() resets it at end-of-frame. */
+/** Register the screen-space bounding rect of the zoom box for this frame.
+ *  Call from ZoomBoxView::draw() before any draw_overhead_* submissions so
+ *  that gui_parchment can skip overhead markers that fall inside the box.
+ *  The rect uses half-open intervals: [x0,x1) x [y0,y1). */
 void RendererSetZoomBoxScreenRect(int x0, int y0, int x1, int y1);
+
+/** Clear the zoom-box screen rect at end-of-frame. */
 void RendererClearZoomBoxScreenRect(void);
-/** Returns non-zero if (x,y) lies inside the registered zoom box rect. */
+
+/** Return non-zero if (x,y) falls inside the registered zoom-box screen rect. */
 int  RendererPointInZoomBoxScreenRect(int x, int y);
 
 /** Schedule a picture-in-picture isometric render for the zoom box.

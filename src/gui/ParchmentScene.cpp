@@ -88,6 +88,7 @@ void ParchmentScene::draw(const DrawContext& ctx, const ClientViewState& view)
     int     subtile_size  = 0;
     bool    has_zoom_box  = false;
 
+    
     if (m_zoom_box)
     {
         const PlayerInfo* player = get_my_player();

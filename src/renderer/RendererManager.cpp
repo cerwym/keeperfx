@@ -291,7 +291,7 @@ float RendererGetZoomBoxClipRadius(void)
 // Screen-space rect of the active zoom box for the current frame.
 // Set by ZoomBoxView::draw() (via RendererSetZoomBoxScreenRect) before terrain
 // and things are submitted so draw_overhead_* can skip markers inside the box.
-struct { int x0, y0, x1, y1; int active; } s_zoom_box_screen_rect = {0,0,0,0,0};
+static struct { int x0, y0, x1, y1; int active; } s_zoom_box_screen_rect = {0,0,0,0,0};
 
 void RendererSetZoomBoxScreenRect(int x0, int y0, int x1, int y1)
 {
