@@ -171,6 +171,17 @@ struct WorldCommandBuffers
         shadows.Reserve(shadows_n);
         world_ui.Reserve(sprites_n / 2);
     }
+
+    void Swap(WorldCommandBuffers& other)
+    {
+        tiles.Swap(other.tiles);
+        tex_quads.Swap(other.tex_quads);
+        flat_polys.Swap(other.flat_polys);
+        sprite_buckets.Swap(other.sprite_buckets);
+        keeper_sprites.Swap(other.keeper_sprites);
+        shadows.Swap(other.shadows);
+        world_ui.Swap(other.world_ui);
+    }
 };
 
 /******************************************************************************/

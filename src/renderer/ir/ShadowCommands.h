@@ -73,6 +73,13 @@ struct ShadowCommandBuffers
         receivers.Reserve(casters_n);
         map_updates.Reserve(1);
     }
+
+    void Swap(ShadowCommandBuffers& other)
+    {
+        casters.Swap(other.casters);
+        receivers.Swap(other.receivers);
+        map_updates.Swap(other.map_updates);
+    }
 };
 
 /******************************************************************************/

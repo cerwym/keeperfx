@@ -174,6 +174,17 @@ struct DebugCommandBuffers
         lines.Reserve(things_n * 4);
         texts.Reserve(things_n);
     }
+
+    void Swap(DebugCommandBuffers& other)
+    {
+        aabbs.Swap(other.aabbs);
+        los_cones.Swap(other.los_cones);
+        hear_radii.Swap(other.hear_radii);
+        bounding_boxes.Swap(other.bounding_boxes);
+        nav_paths.Swap(other.nav_paths);
+        lines.Swap(other.lines);
+        texts.Swap(other.texts);
+    }
 };
 
 /******************************************************************************/

@@ -77,6 +77,7 @@ struct TextCommandBuffers
 
     void Reset()   { draws.Reset(); }
     void Reserve(size_t n) { draws.Reserve(n); }
+    void Swap(TextCommandBuffers& other) { draws.Swap(other.draws); }
 };
 
 /******************************************************************************/

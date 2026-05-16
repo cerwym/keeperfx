@@ -213,6 +213,20 @@ struct UICommandBuffers
         cursor_pointers.Reserve(4);
         cursor_hands.Reserve(4);
     }
+
+    void Swap(UICommandBuffers& other)
+    {
+        solid_boxes.Swap(other.solid_boxes);
+        slab_backgrounds.Swap(other.slab_backgrounds);
+        sprites.Swap(other.sprites);
+        sprites_remap.Swap(other.sprites_remap);
+        sprites_colored.Swap(other.sprites_colored);
+        slab_selectors.Swap(other.slab_selectors);
+        fbo_quads.Swap(other.fbo_quads);
+        minimaps.Swap(other.minimaps);
+        cursor_pointers.Swap(other.cursor_pointers);
+        cursor_hands.Swap(other.cursor_hands);
+    }
 };
 
 /******************************************************************************/
