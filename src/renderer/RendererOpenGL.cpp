@@ -438,6 +438,14 @@ bool RendererOpenGL::Init()
         SYNCLOG("RendererOpenGL: UI sprite atlas initialized successfully");
     }
 
+    // Pre-allocate IR command buffer backing memory for both frame sides so
+    // neither triggers a heap realloc during a live frame.
+    // Estimates: 4096 world tiles, 2048 world sprites, 512 shadows,
+    //            512 UI commands, 256 text glyphs.
+    m_render_graph.Reserve(4096, 2048, 512,  /* world_tiles, sprites, shadows */
+                           512,  256,        /* ui_cmds, text_cmds */
+                           0,    0);         /* shadow_cmds, debug_cmds */
+
     return true;
 }
 
@@ -573,6 +581,9 @@ bool RendererOpenGL::BeginFrame()
     // Idempotent: multiple RendererLockScreen calls per frame must not clear the UI queue again.
     if (m_frame_begun) return true;
     m_frame_begun = true;
+
+    // Reset IR write-side buffers for this frame so sub-renderers start clean.
+    m_render_graph.BeginFrame();
 
     // Refresh cached screen dimensions — screen mode may have changed since Init().
     if (MyScreenWidth > 0 && MyScreenHeight > 0)
@@ -734,6 +745,10 @@ void RendererOpenGL::EndFrame()
     m_rt_frame_state.screen_w  = m_screenW;
     m_rt_frame_state.screen_h  = m_screenH;
 
+    // Flip IR command buffers: atomically swap write↔read and latch the
+    // FrameState snapshot so the render thread reads from stable copies.
+    m_render_graph.Flip(m_rt_frame_state);
+
     // Signal the render thread to execute EndFrame_GL() (GL submission + swap).
     // Phase 3C: asynchronous — game thread returns immediately after signalling.
     // The wait for completion has moved to the TOP of this function.
@@ -826,7 +841,19 @@ void RendererOpenGL::EndFrame_GL()
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     SYNCDBG(0, "EndFrame_GL step 3: glClear done");
 
-    // \u2500\u2500 Lens FBO redirect
+    // ── RenderGraph dispatch ──────────────────────────────────────────────────
+    // Execute() consumes the read-side IR command buffers captured by Flip().
+    // Currently a stub — all (void) dispatchers until each sub-renderer is
+    // migrated.  As GLUIRenderer, GLWorldViewRenderer, etc. gain ExecuteXxx()
+    // methods the direct-call paths below will be replaced one by one.
+    m_render_graph.Execute(GetCapabilities(),
+                           m_world_renderer,
+                           RendererGetUIRenderer(),
+                           m_textRenderer,
+                           nullptr,  // IShadowRenderer — not yet implemented
+                           nullptr); // IDebugRenderer  — not yet implemented
+
+    // ── Lens FBO redirect
     // redirect world rendering to the lens scene FBO so GPU post-process
     // passes can operate on the result before it reaches the screen.
     m_lens_active = false;

@@ -9,6 +9,7 @@
 
 #include "IRenderer.h"
 #include "renderer/FrameState.h"
+#include "renderer/RenderGraph.h"
 #include <vector>
 #include <thread>
 #include <mutex>
@@ -372,6 +373,12 @@ private:
      *  Captured inside FlipBuffers() before the render thread is signalled,
      *  eliminating races between EndFrame_GL() and the next BeginFrame(). */
     FrameState                  m_rt_frame_state = {};
+
+    // ── Unified render graph ──────────────────────────────────────────────
+    // Owns all double-buffered IR command buffers (world, UI, text, shadow,
+    // debug).  Game thread writes via Get*Buffers(); render thread reads after
+    // Flip() via Get*BuffersRT() and Execute().
+    RenderGraph                 m_render_graph;
 
     // Heap-allocated palette upload buffer.  Using a member instead of a stack
     // buffer in upload_palette_texture() prevents a use-after-free if the NVIDIA
