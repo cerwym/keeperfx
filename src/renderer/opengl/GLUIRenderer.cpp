@@ -1068,8 +1068,11 @@ void GLUIRenderer::SubmitFBOQuad(int x, int y, int w, int h, GLuint tex_id, floa
 void GLUIRenderer::Clear()
 {
     for (int i = 0; i < 4; ++i) { m_quads[i].clear(); m_lines[i].clear(); }
-    m_fbo_quads.clear();
-    m_vertices.clear();
+    // NOTE: m_fbo_quads and m_vertices are render-thread-only temporaries.
+    // m_fbo_quads is populated by SubmitFBOQuad() on the render thread and
+    // cleared by DrawFrontBase().  m_vertices is a scratch buffer owned by
+    // flush_quads_from() / flush_lines_from().  Clearing either here from the
+    // game thread would race with the render thread's EndFrame_GL() work.
     m_minimap_pending = false;
     m_current_layer = 1;  // Reset to front layer (default) each frame
     m_game_vp_set = false;
@@ -1222,6 +1225,10 @@ void GLUIRenderer::ExecuteUIFromIR(const UICommandBuffers& cmds, const FrameStat
     }
 
     // ── Slab selectors ───────────────────────────────────────────────────────
+    // NOTE: We write DIRECTLY to m_rt_lines[] (render-thread read buffer) rather
+    // than calling SubmitLine() which writes to m_lines[] (game-thread write buffer).
+    // SubmitLine() must never be called from ExecuteUIFromIR (render thread) because
+    // m_lines[] is concurrently cleared by Clear() on the game thread.
     if (m_palette_data) {
         for (const auto& cmd : cmds.slab_selectors) {
             // Re-execute the stripey-line tessellation using the pre-computed params.
@@ -1232,6 +1239,7 @@ void GLUIRenderer::ExecuteUIFromIR(const UICommandBuffers& cmds, const FrameStat
             float ndy = dy / cmd.line_length;
             float phase = (float)cmd.game_turn;
             const struct stripey_line* sl = &colored_stripey_lines[cmd.colour];
+            const int layer_idx = IRUILayerToIndex(cmd.layer);
             constexpr int MAX_SEG = 512;
             float t = 0.0f;
             int segs = 0;
@@ -1249,7 +1257,12 @@ void GLUIRenderer::ExecuteUIFromIR(const UICommandBuffers& cmds, const FrameStat
                 float sy = (float)cmd.y1 + ndy*t;
                 float ex = (float)cmd.x1 + ndx*t_end;
                 float ey = (float)cmd.y1 + ndy*t_end;
-                SubmitLine(sx, sy, ex, ey, r, g, b, 1.0f, cmd.z_depth, cmd.thickness);
+                UILine ln;
+                ln.x1 = sx; ln.y1 = sy; ln.x2 = ex; ln.y2 = ey;
+                ln.r = r;   ln.g = g;   ln.b = b;   ln.a = 1.0f;
+                ln.z = cmd.z_depth;
+                ln.thickness = cmd.thickness;
+                m_rt_lines[layer_idx].push_back(ln);
                 t = t_end; ++segs;
             }
         }
