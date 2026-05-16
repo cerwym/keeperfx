@@ -9,6 +9,9 @@
 
 #include "IRenderer.h"
 #include <vector>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
 
 // engine_camera.h defines struct Camera, which RendererOpenGL stores by value
 // in PiPCmd.  The include chain is short (globals.h only) and the renderer
@@ -36,7 +39,6 @@ private:
     class IWorldViewRenderer* m_worldViewRenderer = nullptr;
     class IMapFadePass* m_mapFadePass = nullptr;
     class ITextRenderer* m_textRenderer = nullptr;
-    class IUIRenderer* m_uiRenderer = nullptr;
 
 public:
     RendererOpenGL();
@@ -52,6 +54,22 @@ public:
     const char* GetName() const override;
     bool     SupportsRuntimeSwitch() const override;
     bool     SupportsGPUPasses() const override { return true; }
+
+    BackendCapabilities GetCapabilities() const override {
+        BackendCapabilities c = {};
+        c.hasGPURenderPath        = 1;
+        c.wantsFullscreenViewport = 1;
+        c.hasGPUOverheadMap       = 1;
+        c.hasGPUMapFade           = 1;
+        c.hasGPUOverlay           = 1;
+        c.hasGPULandviewZoom      = 1;
+        c.hasGPUVideoFrame        = 1;
+        c.hasGPUSprites           = 1;
+        c.hasSwipeOverlay         = 1;
+        c.supportsRuntimeSwitch   = 1;
+        c.supportsGPUPasses       = 1;
+        return c;
+    }
 
     /** GPU raw-image blit — queues a frontend background image for opaque
      *  palette-decoded rendering at EndFrame() time.  No WScreen write occurs.
@@ -107,7 +125,14 @@ public:
 
     /** Discard the tile atlas so it is rebuilt next frame with fresh block_mem data.
      *  Call after load_texture_map_file() loads new level textures. */
-    void InvalidateTileAtlas();
+    void InvalidateTileAtlas(); 
+    
+    /** Schedule the fade-table GPU texture for creation on the render thread.
+     *  Must be called instead of init_fade_table_texture() once the render
+     *  thread is running (i.e. after the first EndFrame()).  The actual
+     *  glGenTextures / glTexImage2D runs in EndFrame_GL() where the context
+     *  is current, after which SetFadeTexture() is pushed to all sub-renderers. */
+    void ScheduleFadeTableInit() { m_fade_table_pending = true; }
 
     // Wired by RendererManager after GLWorldViewRenderer is created so that
     // EndFrame() can flush GPU geometry before the CPU blit overlay.
@@ -118,11 +143,9 @@ private:
     bool compile_shaders();
     void upload_palette_texture();
     bool init_tile_atlas();
-
-public:
-    /** Initialise the fade-table GPU texture from render_fade_tables.
-     *  Called by RendererNotifyGameTablesReady() after setup_stuff(). */
     bool init_fade_table_texture();
+
+
 
 private:
 
@@ -130,13 +153,6 @@ private:
     int      m_screenW        = 0;
     int      m_screenH        = 0;
     bool     m_frame_begun     = false; // true after first BeginFrame; reset by EndFrame
-
-    // Write-discard CPU buffer — returned by LockFramebuffer() so RendererLockScreen() succeeds.
-    // Content is NEVER uploaded to the GPU; this buffer exists solely to prevent null
-    // dereferences in surviving CPU drawing paths (front_network, legal screen, etc.).
-    // Any pixels written here are silently discarded.
-    uint8_t* m_discardBuf      = nullptr;
-    bool     m_discard_cleared = false;
 
     // Palette index requested by ClearScreen(); resolved to RGBA at glClear() time in EndFrame().
     uint8_t  m_clearColourIndex = 0;
@@ -156,8 +172,10 @@ private:
     int          m_uTintClipScrH  = -1; // uniform location for u_clip_screen_h (tint shader)
 
     // Whether a transparent overlay was submitted this frame via SubmitTransparentBlit().
-    // Source data is already uploaded to m_texIndex by SubmitTransparentBlit().
-    bool         m_transparent_blit_pending = false;
+    // Pixel data is stored in m_transparent_blit_buf and uploaded by the render thread
+    // in EndFrame_GL() / FlushSceneToFBO() — never from the game thread.
+    bool                  m_transparent_blit_pending = false;
+    std::vector<uint8_t>  m_transparent_blit_buf;     // GL_R8 pixel data, render-thread upload
 
     // Shared GPU resources (owned here, injected into world renderer)
     unsigned int m_texFade      = 0; // R8 256×256: render_fade_tables lighting LUT
@@ -243,14 +261,18 @@ private:
     // Queued by SubmitVideoFrame(); drawn at EndFrame() using the same shader
     // as rawblit (palette_blit_vert + rawimage_blit_frag) but with a separate
     // per-video-frame palette texture instead of the game palette.
+    // Pixel data and palette are copied into owned buffers immediately so the
+    // caller (bflib_fmvids.cpp) may free the AVFrame as soon as Submit returns.
     struct FmvBlitCmd {
-        const uint8_t* px       = nullptr;  // palette indices (AVFrame::data[0])
+        const uint8_t* px       = nullptr;  // palette indices — points into owned buffer
         int src_w = 0, src_h = 0, src_pitch = 0;
-        const uint8_t* bgra_pal = nullptr;  // 256×BGRA (AVFrame::data[1])
+        const uint8_t* bgra_pal = nullptr;  // 256×BGRA — points into owned buffer
         int dst_x = 0, dst_y = 0, dst_w = 0, dst_h = 0;
     };
     bool              m_fmv_pending        = false;
     FmvBlitCmd        m_fmv_cmd            = {};
+    std::vector<uint8_t> m_fmv_px_buf;     ///< owns m_fmv_cmd.px data (game-thread side)
+    std::vector<uint8_t> m_fmv_pal_buf;    ///< owns m_fmv_cmd.bgra_pal data (game-thread side)
     unsigned int      m_fmv_vao            = 0;
     unsigned int      m_fmv_vbo            = 0;
     unsigned int      m_fmv_index_tex      = 0;  // GL_R8 — per-frame pixel indices
@@ -262,8 +284,10 @@ private:
     // Queued by SubmitLandviewZoom(); executed at EndFrame() using a
     // fullscreen quad whose fragment shader computes zoomed UVs from
     // gl_FragCoord rather than vertex UVs, so no geometry rebuild is needed.
+    // Source pixels are copied into an owned buffer so map_screen may be written
+    // freely by the game thread after Submit returns.
     struct LandviewZoomCmd {
-        const uint8_t* src_buf       = nullptr; // map_screen (8-bit indexed)
+        const uint8_t* src_buf       = nullptr; // map_screen — points into owned buffer
         int            src_w         = 0;       // LANDVIEW_MAP_WIDTH  (1280)
         int            src_h         = 0;       // LANDVIEW_MAP_HEIGHT (960)
         float          center_map_x  = 0.f;     // zoom centre, map texels
@@ -274,6 +298,7 @@ private:
     };
     bool              m_zoom_pending       = false;
     LandviewZoomCmd   m_zoom_cmd           = {};
+    std::vector<uint8_t> m_zoom_src_buf;   ///< owns m_zoom_cmd.src_buf data (game-thread side)
     unsigned int      m_zoom_shader        = 0;  // palette_blit_vert + landview_zoom_frag
     unsigned int      m_zoom_tex           = 0;  // GL_R8 — map_screen indices (1280×960)
     int               m_zoom_tex_w         = 0;
@@ -304,6 +329,42 @@ private:
     std::vector<PiPCmd> m_pip_queue;  ///< Commands accumulated this frame.
     std::vector<PiPFBO> m_pip_fbos;   ///< Per-slot FBO resources (grown on demand).
 
+    // Phase 3C render-thread copies of per-frame command queues and scalar state.
+    // EndFrame() moves/copies these before signalling the render thread so the
+    // game thread (building the next frame concurrently) can safely modify the
+    // originals without racing EndFrame_GL().
+    std::vector<PiPCmd>         m_rt_pip_queue;
+    std::vector<OverheadMapCmd> m_rt_overhead_map_cmds;
+    bool                        m_rt_rawblit_pending  = false;
+    RawBlitCmd                  m_rt_rawblit_cmd      = {};
+    uint8_t                     m_rt_clearColourIndex = 0;
+
+    // Render-thread copies for categories previously missing from FlipBuffers().
+    // FMV: owned pixel and palette buffers so the AVFrame may be freed immediately
+    // after SubmitVideoFrame() returns on the game thread.
+    bool                        m_rt_fmv_pending  = false;
+    FmvBlitCmd                  m_rt_fmv_cmd      = {};
+    std::vector<uint8_t>        m_rt_fmv_px_buf;   ///< owns m_rt_fmv_cmd.px data
+    std::vector<uint8_t>        m_rt_fmv_pal_buf;  ///< owns m_rt_fmv_cmd.bgra_pal data
+    // Landview zoom: owned source-image buffer.
+    bool                        m_rt_zoom_pending  = false;
+    LandviewZoomCmd             m_rt_zoom_cmd      = {};
+    std::vector<uint8_t>        m_rt_zoom_src_buf; ///< owns m_rt_zoom_cmd.src_buf data
+    // Transparent blit (SubmitTransparentBlit): owned pixel buffer.
+    bool                        m_rt_transparent_blit_pending = false;
+    std::vector<uint8_t>        m_rt_transparent_blit_buf;
+    // Zoom-box tile quads and background fill rects.
+    std::vector<ZoomTileCmd>    m_rt_zoom_tile_cmds;
+    std::vector<ZoomBoxBgCmd>   m_rt_zoom_box_bg_cmds;
+    float                       m_rt_zoom_clip_rect[4] = {0,0,0,0};
+    float                       m_rt_zoom_clip_radius  = -1.0f;
+
+    // Heap-allocated palette upload buffer.  Using a member instead of a stack
+    // buffer in upload_palette_texture() prevents a use-after-free if the NVIDIA
+    // driver's Threaded Optimisation defers reading the glTexSubImage2D data past
+    // the function return and the stack frame is recycled.
+    uint8_t m_palette_upload_buf[256 * 4] = {};
+
     // ── Lens post-process pass infrastructure ─────────────────────────────
     // Scene FBO: world geometry renders here (via FlushSceneToLensFBO) when
     // lens effects are active, instead of the default framebuffer.
@@ -326,7 +387,8 @@ private:
     // by EndFrame() after GPURenderNow() while the lens FBO is still bound.
     // Entirely self-contained: own shader, VAO/VBO, no UIRenderer involvement.
     struct SwipeVertex { float x, y, u, v, r, g, b, a; };
-    std::vector<SwipeVertex>  m_swipe_verts;    // 6 verts per sprite quad
+    std::vector<SwipeVertex>  m_swipe_verts;      // game-thread write (accumulated per frame)
+    std::vector<SwipeVertex>  m_rt_swipe_verts;   // render-thread read (moved from m_swipe_verts by EndFrame)
     unsigned int              m_swipe_shader = 0;
     unsigned int              m_swipe_vao    = 0;
     unsigned int              m_swipe_vbo    = 0;
@@ -337,6 +399,35 @@ private:
 
     /** (Re-)create (or resize) FBO slot at index @p idx to at least w×h. */
     void ensure_pip_fbo(std::size_t idx, int w, int h);
+
+    // ── Render thread (Phase 3A) ───────────────────────────────────────────
+    // The dedicated GL-submission thread owns the OpenGL context for the
+    // entire session.  EndFrame() (game thread) signals work-ready, then
+    // blocks until work-done — fully synchronous in Phase 3A, establishing
+    // the thread boundary without introducing any latency.
+    std::thread             m_render_thread;
+    std::mutex              m_rt_mutex;
+    std::condition_variable m_rt_cv;
+    bool                    m_rt_work_ready  = false; // game→render: EndFrame_GL() pending
+    bool                    m_rt_work_done   = true;  // render→game: EndFrame_GL() complete (init true: first EndFrame() wait passes immediately)
+    bool                    m_rt_quit        = false; // game→render: shut down
+    bool                    m_rt_initialized = false; // render→game: context acquired
+    bool                    m_rt_active      = false; // true while render thread is running
+
+    // Set in BeginFrame() when the animated-tile sentinel changes; consumed in
+    // EndFrame_GL() on the render thread (where the GL context is current).
+    bool                    m_anim_tiles_dirty = false;
+    // Set in BeginFrame() when block_mem becomes available and the tile atlas has
+    // not yet been GPU-initialised.  Consumed in EndFrame_GL() on the render
+    // thread that owns the GL context (glGenTextures/glTexImage3D require it).
+    bool                    m_tile_atlas_init_pending = false;
+    // Set by ScheduleFadeTableInit() (called from RendererNotifyGameTablesReady).
+    // Consumed in EndFrame_GL() — the render thread creates the GL texture then
+    // pushes the ID to every sub-renderer that needs it.
+    bool                    m_fade_table_pending      = false;
+
+    void RenderThreadProc(); ///< Render thread entry point.
+    void EndFrame_GL();      ///< All GL submission work; runs on the render thread.
 
 public:
     /** Flush all pending render commands (world geometry, raw blits, overhead

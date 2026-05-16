@@ -42,6 +42,13 @@ public:
     const char* GetName() const override { return "3DS (citro3d)"; }
     bool SupportsRuntimeSwitch() const override { return false; }
 
+    BackendCapabilities GetCapabilities() const override {
+        BackendCapabilities c = {};
+        // 3DS is a software-palette path (CPU indexed → RGBA expand each frame).
+        c.supportsMovieCapture = 1;
+        return c;
+    }
+
 private:
     bool m_initialized = false;
     uint8_t* m_framebuffer = nullptr;   /**< CPU-side staging buffer (8-bit indexed) */

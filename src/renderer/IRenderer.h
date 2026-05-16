@@ -17,6 +17,7 @@
 #pragma once
 
 #include <cstdint>
+#include "BackendCapabilities.h"
 
 /******************************************************************************/
 
@@ -273,6 +274,12 @@ public:
     /** Returns true if this backend supports switching to/from it at runtime
      *  without requiring a full application restart. */
     virtual bool SupportsRuntimeSwitch() const = 0;
+
+    /** Returns a struct of capability flags for this backend.
+     *  Callers should use RendererGetCapabilities() (RendererManager.h) rather
+     *  than RendererGetActiveType() to avoid hard-coding backend identities.
+     *  The result is a trivially-copyable POD — callers may store it by value. */
+    virtual BackendCapabilities GetCapabilities() const = 0;
 
     /** Returns true if this backend can execute IPostProcessPass GPU lens effects.
      *  When true, RendererVita runs GPU passes in EndFrame() and LensManager

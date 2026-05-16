@@ -46,6 +46,13 @@ public:
     const char* GetName() const override;
     bool     SupportsRuntimeSwitch() const override;
 
+    BackendCapabilities GetCapabilities() const override {
+        BackendCapabilities c = {};
+        c.supportsRuntimeSwitch = 1;
+        c.supportsMovieCapture  = 1;
+        return c;
+    }
+
     // Sub-renderer access
     IWorldViewRenderer* GetWorldViewRenderer() override;
     IMapFadePass* GetMapFadePass() override;

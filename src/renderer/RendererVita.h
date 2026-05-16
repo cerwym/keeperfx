@@ -41,6 +41,15 @@ public:
     bool SupportsRuntimeSwitch() const override { return false; }
     bool SupportsGPUPasses() const override { return true; }
 
+    BackendCapabilities GetCapabilities() const override {
+        BackendCapabilities c = {};
+        c.hasGPURenderPath        = 1;
+        c.wantsFullscreenViewport = 1;
+        c.hasGPUSprites           = 1;
+        c.supportsGPUPasses       = 1;
+        return c;
+    }
+
 private:
     static const int k_gameW = 640;
     static const int k_gameH = 480;

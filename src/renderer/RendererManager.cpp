@@ -185,19 +185,21 @@ void RendererNotifyGameTablesReady()
         RendererOpenGL* ogl = dynamic_cast<RendererOpenGL*>(s_activeRenderer);
         if (ogl)
         {
-            ogl->init_fade_table_texture();
+            // Schedule the fade-table GL texture for creation on the render thread.
+            // init_fade_table_texture() issues glGenTextures/glTexImage2D; these
+            // must run on the thread that owns the GL context.  By the time
+            // RendererNotifyGameTablesReady() is called, the loading-screen frames
+            // have already triggered EndFrame(), so the render thread is live and
+            // owns the context.  EndFrame_GL() will call init_fade_table_texture()
+            // and push the resulting texture ID to all sub-renderers.
+            ogl->ScheduleFadeTableInit();
+            // SetPaletteSource is just a pointer copy — safe on the game thread.
             GLUIRenderer* glui = dynamic_cast<GLUIRenderer*>(RendererGetUIRenderer());
             if (glui)
-            {
-                glui->SetFadeTexture(ogl->GetFadeTex());
-                glui->SetPaletteSource(lbPalette);  // palette is fully loaded by the time game tables are ready
-            }
+                glui->SetPaletteSource(lbPalette);
             GLWorldViewRenderer* glwr = dynamic_cast<GLWorldViewRenderer*>(s_worldViewRenderer);
             if (glwr)
-            {
-                glwr->SetFadeTexture(ogl->GetFadeTex());
-                glwr->SetPaletteSource(lbPalette);  // palette is fully loaded by the time game tables are ready
-            }
+                glwr->SetPaletteSource(lbPalette);
         }
     }
 #endif
@@ -350,13 +352,18 @@ static SpriteHandle resolve_sprite_handle(const TbSprite* spr)
     if (!spr) return kInvalidSpriteHandle;
 #ifdef RENDERER_OPENGL_ENABLED
     if (s_spriteAtlas) {
+        // Zero-dimension sprites are sentinel/placeholder entries that can never
+        // be packed into the atlas.  Skip silently — not an error.
+        if (spr->SWidth == 0 || spr->SHeight == 0)
+            return kInvalidSpriteHandle;
         SpriteHandle h = s_spriteAtlas->GetHandle(spr);
         if (h == kInvalidSpriteHandle) {
             static int s_miss_count = 0;
-            if (s_miss_count < 5) {
-                SYNCLOG("resolve_sprite_handle: spr %p not in atlas (miss #%d, atlas size=%u)",
+            if (s_miss_count < 20) {
+                SYNCLOG("resolve_sprite_handle: spr %p not in atlas (miss #%d, atlas size=%u, w=%d h=%d data=%p)",
                         (void*)spr, ++s_miss_count,
-                        (unsigned)s_spriteAtlas->GetRegisteredCount());
+                        (unsigned)s_spriteAtlas->GetRegisteredCount(),
+                        (int)spr->SWidth, (int)spr->SHeight, (void*)spr->Data);
             }
         }
         return h;
@@ -781,12 +788,12 @@ RendererType RendererGetActiveType()
 
 TbBool RendererWantsFullscreenViewport()
 {
-    return (s_activeType == RENDERER_OPENGL || s_activeType == RENDERER_VITA) ? 1 : 0;
+    return (s_activeRenderer && s_activeRenderer->GetCapabilities().wantsFullscreenViewport) ? 1 : 0;
 }
 
 TbBool RendererHasGPURenderPath()
 {
-    return (s_activeType == RENDERER_OPENGL || s_activeType == RENDERER_VITA) ? 1 : 0;
+    return (s_activeRenderer && s_activeRenderer->GetCapabilities().hasGPURenderPath) ? 1 : 0;
 }
 
 /******************************************************************************/
@@ -829,10 +836,22 @@ void RendererClearScreen(unsigned char colour_index)
 /* High-level screen lifecycle (replaces LbScreen* trampolines)               */
 /******************************************************************************/
 
+// Tracks whether the screen is currently locked (RendererLockScreen called, not yet unlocked).
+// Decoupled from lbDisplay.WScreen so that GPU mode (where WScreen is always null) works correctly.
+static bool s_screen_locked = false;
+
 int RendererLockScreen(void)
 {
     if (!RendererBeginFrame())
         return 0;
+    if (RendererHasGPURenderPath()) {
+        // GPU mode: no CPU framebuffer. WScreen stays null for the entire frame.
+        lbDisplay.WScreen = NULL;
+        lbDisplay.GraphicsWindowPtr = NULL;
+        lbDisplay.GraphicsScreenWidth = RendererScreenWidth();
+        s_screen_locked = true;
+        return 1;
+    }
     int pitch = 0;
     unsigned char *pixels = RendererLockFramebuffer(&pitch);
     if (!pixels) {
@@ -844,11 +863,13 @@ int RendererLockScreen(void)
     lbDisplay.GraphicsScreenWidth = pitch;
     lbDisplay.GraphicsWindowPtr = &lbDisplay.WScreen[lbDisplay.GraphicsWindowX +
         lbDisplay.GraphicsScreenWidth * lbDisplay.GraphicsWindowY];
+    s_screen_locked = true;
     return 1;
 }
 
 void RendererUnlockScreen(void)
 {
+    s_screen_locked = false;
     lbDisplay.WScreen = NULL;
     lbDisplay.GraphicsWindowPtr = NULL;
     RendererUnlockFramebuffer();
@@ -885,7 +906,7 @@ void RendererPresentFrame(void)
 
 int RendererIsScreenLocked(void)
 {
-    return (lbDisplay.WScreen != NULL) ? 1 : 0;
+    return s_screen_locked ? 1 : 0;
 }
 
 /******************************************************************************/
@@ -1056,6 +1077,14 @@ void WorldViewRenderer_ClearKeeperSpriteAtlas(void)
 #endif
 }
 
+void RendererFlushPendingSpriteAtlas(void)
+{
+#ifdef RENDERER_OPENGL_ENABLED
+    if (s_spriteAtlas)
+        s_spriteAtlas->FlushPendingGL();
+#endif
+}
+
 /******************************************************************************/
 /* Sprite-owner tracking for the depth-fail creature outline                  */
 /******************************************************************************/
@@ -1093,6 +1122,14 @@ void CursorLayer_Clear(void)
 {
     if (s_cursorLayer)
         s_cursorLayer->Clear();
+}
+
+void CursorLayer_FlipBuffers(void)
+{
+#ifdef RENDERER_OPENGL_ENABLED
+    GLCursorLayer* gl = dynamic_cast<GLCursorLayer*>(s_cursorLayer);
+    if (gl) gl->FlipBuffers();
+#endif
 }
 
 void CursorLayer_SubmitPointerSprite(const struct TbSprite* spr, int32_t x, int32_t y, int units_per_px)
