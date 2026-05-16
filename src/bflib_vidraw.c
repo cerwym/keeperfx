@@ -90,7 +90,7 @@ long g_sprite_scale_src_h = 0;
  */
 void LbDrawHVLine(long xpos1, long ypos1, long xpos2, long ypos2, TbPixel colour)
 {
-  assert(RendererGetActiveType() != RENDERER_OPENGL && "LbDrawHVLine: CPU pixel write in GL mode");
+  assert(!RendererHasGPURenderPath() && "LbDrawHVLine: CPU pixel write in GL mode");
   long width_max = lbDisplay.GraphicsWindowWidth - 1;
   long height_max = lbDisplay.GraphicsWindowHeight - 1;
   if ( xpos1 > xpos2 )
@@ -234,7 +234,7 @@ void LbDrawHVLine(long xpos1, long ypos1, long xpos2, long ypos2, TbPixel colour
  */
 void LbDrawBoxClip(long x, long y, unsigned long width, unsigned long height, TbPixel colour)
 {
-  assert(RendererGetActiveType() != RENDERER_OPENGL && "LbDrawBoxClip: CPU pixel write in GL mode");
+  assert(!RendererHasGPURenderPath() && "LbDrawBoxClip: CPU pixel write in GL mode");
   long ypos = y;
   //Checking and clipping coordinates
   if ( y >= lbDisplay.GraphicsWindowHeight )
@@ -1865,13 +1865,13 @@ int LbTiledSpriteHeight(struct TiledSprite *bigspr)
 
 void LbDrawPixel(long x, long y, TbPixel colour)
 {
-    assert(RendererGetActiveType() != RENDERER_OPENGL && "LbDrawPixel: CPU pixel write in GL mode");
+    assert(!RendererHasGPURenderPath() && "LbDrawPixel: CPU pixel write in GL mode");
     lbDisplay.GraphicsWindowPtr[x + lbDisplay.GraphicsScreenWidth * y] = colour;
 }
 
 void LbDrawPixelClip(long x, long y, TbPixel colour)
 {
-    assert(RendererGetActiveType() != RENDERER_OPENGL && "LbDrawPixelClip: CPU pixel write in GL mode");
+    assert(!RendererHasGPURenderPath() && "LbDrawPixelClip: CPU pixel write in GL mode");
     if ( (x < 0) || (x >= lbDisplay.GraphicsWindowWidth) )
         return;
     if ( (y < 0) || (y >= lbDisplay.GraphicsWindowHeight) )
@@ -1897,7 +1897,7 @@ void LbDrawPixelClip(long x, long y, TbPixel colour)
 
 void LbDrawCircleFilled(long x, long y, long radius, TbPixel colour)
 {
-    assert(RendererGetActiveType() != RENDERER_OPENGL && "LbDrawCircleFilled: CPU pixel write in GL mode");
+    assert(!RendererHasGPURenderPath() && "LbDrawCircleFilled: CPU pixel write in GL mode");
     long r;
     long i;
     long n;
@@ -1996,7 +1996,7 @@ static inline void LbDrawPixelClipSolid(long x, long y, TbPixel colour)
 
 void LbDrawCircleOutline(long x, long y, long radius, TbPixel colour)
 {
-    assert(RendererGetActiveType() != RENDERER_OPENGL && "LbDrawCircleOutline: CPU pixel write in GL mode");
+    assert(!RendererHasGPURenderPath() && "LbDrawCircleOutline: CPU pixel write in GL mode");
     int na;
     int nb;
     int n;
@@ -2167,3 +2167,4 @@ void setup_outbuf(const int32_t *xstep, const int32_t *ystep, uchar **outbuf, in
 #ifdef __cplusplus
 }
 #endif
+

@@ -372,8 +372,8 @@ void init_video_menu(struct GuiMenu *gmnu)
     video_textures = settings.video_textures;
     video_cluedo_mode = settings.video_cluedo_mode;
     video_gamma_correction = settings.gamma_correction;
-    // Set toggle state: 0 for Software, 1 for OpenGL
-    video_renderer = (RendererGetActiveType() == RENDERER_SOFTWARE) ? 0 : 1;
+    // Set toggle state: 0 for Software, 1 for any GPU renderer
+    video_renderer = RendererHasGPURenderPath() ? 1 : 0;
 }
 
 /**

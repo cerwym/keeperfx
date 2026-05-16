@@ -1241,7 +1241,7 @@ TbResult LbSpriteDrawUsingScalingDownDataSolidLR(uchar *outbuf, int scanline, in
  */
 TbResult LbSpriteDrawUsingScalingData(long posx, long posy, const struct TbSourceBuffer * src_buf)
 {
-    assert(RendererGetActiveType() != RENDERER_OPENGL && "LbSpriteDrawUsingScalingData: CPU pixel write in GL mode");
+    assert(!RendererHasGPURenderPath() && "LbSpriteDrawUsingScalingData: CPU pixel write in GL mode");
     SYNCDBG(17,"Drawing at (%ld,%ld)",posx,posy);
     int32_t *xstep;
     int32_t *ystep;
@@ -1411,7 +1411,7 @@ TbResult LbSpriteDrawUsingScalingData(long posx, long posy, const struct TbSourc
  */
 TbResult DrawAlphaSpriteUsingScalingData(long posx, long posy, const struct TbSourceBuffer * src_buf)
 {
-    assert(RendererGetActiveType() != RENDERER_OPENGL && "DrawAlphaSpriteUsingScalingData: CPU pixel write in GL mode");
+    assert(!RendererHasGPURenderPath() && "DrawAlphaSpriteUsingScalingData: CPU pixel write in GL mode");
     SYNCDBG(17,"Drawing at (%ld,%ld)",posx,posy);
 
     // Check if alpha transparency table is available
@@ -1454,3 +1454,4 @@ TbResult DrawAlphaSpriteUsingScalingData(long posx, long posy, const struct TbSo
 #ifdef __cplusplus
 }
 #endif
+

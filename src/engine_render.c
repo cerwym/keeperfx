@@ -9363,7 +9363,7 @@ void draw_frontview_engine(struct Camera *cam)
 
     WorldViewRenderer_DrawFrontView(cam);
 
-    if (RendererGetActiveType() == RENDERER_OPENGL)
+    if (RendererHasGPURenderPath())
         draw_nonspatial_sprites_gpu();
 
     RendererLoadViewport(&grwnd);
