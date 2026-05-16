@@ -640,7 +640,12 @@ bool RendererOpenGL::BeginFrame()
         }
     }
 
-    RenderPass_BeginFrame();
+    // NOTE: RenderPass_BeginFrame() is NOT called here — it resets OpenGLSpriteBackend
+    // state (m_quads, m_remap_cache, etc.) that is exclusively written and read by the
+    // render thread during draw_3d_sprites_for_bucket() / DrawNow().  Calling it here
+    // (game thread) would race with the render thread still processing the previous
+    // frame's sprites.  It is called at the top of EndFrame_GL() instead.
+    //
     // Don't clear UI/cursor queues during palette fades — RendererPresentFrame()
     // is called in a tight loop with no draw_gui() in between.  The queues keep
     // their content so the sidebar stays visible while the palette darkens.
@@ -762,6 +767,14 @@ void RendererOpenGL::EndFrame()
 
 void RendererOpenGL::EndFrame_GL()
 {
+    // Reset OpenGLSpriteBackend state for this frame.
+    // MUST run on the render thread — not in BeginFrame() on the game thread.
+    // Rationale: draw_3d_sprites_for_bucket() (called below in gpu_execute_passes)
+    // writes to OpenGLSpriteBackend::m_quads / m_remap_cache / m_remap_row_data
+    // exclusively on this thread.  Clearing those from the game-thread BeginFrame()
+    // races with this thread still reading/writing them for the previous frame.
+    RenderPass_BeginFrame();
+
     // Deferred tile-atlas GPU init — runs on the render thread that owns the
     // GL context.  BeginFrame() (game thread) cannot call glGenTextures /
     // glTexImage3D directly because the context has already been transferred
