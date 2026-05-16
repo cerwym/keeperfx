@@ -1,4 +1,4 @@
-/******************************************************************************/
+﻿/******************************************************************************/
 // Dungeon Keeper - Renderer Abstraction Layer
 /******************************************************************************/
 /** @file RendererOpenGL.cpp
@@ -37,12 +37,11 @@
 #include "engine_render.h"   // draw_view()
 #include "engine_redraw.h"   // setup_engine_window / store_engine_window (PiP viewport)
 #include "engine_lenses.h"   // lens_mode
+#include "vidfade.h"         // g_palette_possession_tint
 
 #include <glad/glad.h>
 #include <cstring>
 #include "post_inc.h"
-
-extern "C" { extern float g_palette_possession_tint; }
 
 /******************************************************************************/
 // Fullscreen quad: two triangles covering NDC [-1,1]
@@ -730,6 +729,17 @@ void RendererOpenGL::EndFrame()
     // Double-buffer swipe overlay verts: same pattern as PiP/rawblit queues.
     m_rt_swipe_verts = std::move(m_swipe_verts);
 
+    // Snapshot all game-thread globals that EndFrame_GL() needs.
+    // Must happen here (inside the critical section, before signalling) so the
+    // render thread never reads live globals that the game thread can modify
+    // concurrently once we return from EndFrame().
+    std::memcpy(m_rt_frame_state.palette, lbPalette, sizeof(m_rt_frame_state.palette));
+    m_rt_frame_state.possession_tint = g_palette_possession_tint;
+    std::memcpy(m_rt_frame_state.screen_tint, g_screen_tint, sizeof(m_rt_frame_state.screen_tint));
+    m_rt_frame_state.lens_mode = lens_mode;
+    m_rt_frame_state.screen_w  = m_screenW;
+    m_rt_frame_state.screen_h  = m_screenH;
+
     // Signal the render thread to execute EndFrame_GL() (GL submission + swap).
     // Phase 3C: asynchronous — game thread returns immediately after signalling.
     // The wait for completion has moved to the TOP of this function.
@@ -814,9 +824,9 @@ void RendererOpenGL::EndFrame_GL()
     {
         // Resolve palette index → RGBA for the GL clear colour.
         // lbPalette entries are 6-bit (0-63); shift left 2 to get 8-bit (0-252).
-        const float r = (float)(lbPalette[m_rt_clearColourIndex * 3 + 0] << 2) / 255.0f;
-        const float g = (float)(lbPalette[m_rt_clearColourIndex * 3 + 1] << 2) / 255.0f;
-        const float b = (float)(lbPalette[m_rt_clearColourIndex * 3 + 2] << 2) / 255.0f;
+        const float r = (float)(m_rt_frame_state.palette[m_rt_clearColourIndex * 3 + 0] << 2) / 255.0f;
+        const float g = (float)(m_rt_frame_state.palette[m_rt_clearColourIndex * 3 + 1] << 2) / 255.0f;
+        const float b = (float)(m_rt_frame_state.palette[m_rt_clearColourIndex * 3 + 2] << 2) / 255.0f;
         glClearColor(r, g, b, 1.0f);
     }
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -828,7 +838,7 @@ void RendererOpenGL::EndFrame_GL()
     m_lens_active = false;
     {
         LensManager* lm = LensManager::GetInstance();
-        if (lens_mode == 2 && lm && lm->IsReady())
+        if (m_rt_frame_state.lens_mode == 2 && lm && lm->IsReady())
         {
             // Check if any effect actually provides a GPU pass
             bool has_gpu_pass = false;
@@ -897,7 +907,7 @@ void RendererOpenGL::EndFrame_GL()
         // Ensure full-screen viewport and no depth interaction.
         // UIRenderer_DrawBack() returns early (no quads) on pure-frontend frames
         // without disabling depth test, so we must guard here explicitly.
-        glViewport(0, 0, m_screenW, m_screenH);
+        glViewport(0, 0, m_rt_frame_state.screen_w, m_rt_frame_state.screen_h);
         glDisable(GL_DEPTH_TEST);
         glDepthMask(GL_FALSE);
 
@@ -923,8 +933,8 @@ void RendererOpenGL::EndFrame_GL()
 
         // Build a rect quad in NDC covering [dst_x..dst_x+dst_w] x [dst_y..dst_y+dst_h].
         // Screen-space: y increases downward; NDC: y increases upward.
-        const float sw = (float)m_screenW;
-        const float sh = (float)m_screenH;
+        const float sw = (float)m_rt_frame_state.screen_w;
+        const float sh = (float)m_rt_frame_state.screen_h;
         Vec2f ndc0 = ScreenToNDC((float)cmd.dst_x,              (float)cmd.dst_y,              sw, sh);
         Vec2f ndc1 = ScreenToNDC((float)(cmd.dst_x + cmd.dst_w), (float)(cmd.dst_y + cmd.dst_h), sw, sh);
 
@@ -970,7 +980,7 @@ void RendererOpenGL::EndFrame_GL()
     // Multiple commands allowed per frame (e.g. full map + zoom box).
     for (const OverheadMapCmd& cmd : m_rt_overhead_map_cmds)
     {
-        glViewport(0, 0, m_screenW, m_screenH);
+        glViewport(0, 0, m_rt_frame_state.screen_w, m_rt_frame_state.screen_h);
         glDisable(GL_DEPTH_TEST);
         glDepthMask(GL_FALSE);
 
@@ -1009,8 +1019,8 @@ void RendererOpenGL::EndFrame_GL()
             glBindTexture(GL_TEXTURE_2D, m_rawblit_tex);
         }
 
-        const float sw = (float)m_screenW;
-        const float sh = (float)m_screenH;
+        const float sw = (float)m_rt_frame_state.screen_w;
+        const float sh = (float)m_rt_frame_state.screen_h;
         const float x0 = (float)cmd.dst_x               / sw * 2.0f - 1.0f;
         const float x1 = (float)(cmd.dst_x + cmd.dst_w) / sw * 2.0f - 1.0f;
         const float y0 = 1.0f - (float)cmd.dst_y               / sh * 2.0f;
@@ -1120,7 +1130,7 @@ void RendererOpenGL::EndFrame_GL()
             if (ui)
                 ui->DrawPiPSprites(pw, ph);
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
-            glViewport(0, 0, m_screenW, m_screenH);
+            glViewport(0, 0, m_rt_frame_state.screen_w, m_rt_frame_state.screen_h);
 
             if (ui)
                 ui->SubmitFBOQuad(pcmd.x, pcmd.y, pw, ph, fbo.color_tex, pcmd.clip_radius);
@@ -1135,7 +1145,7 @@ void RendererOpenGL::EndFrame_GL()
     {
         const FmvBlitCmd& cmd = m_rt_fmv_cmd;
 
-        glViewport(0, 0, m_screenW, m_screenH);
+        glViewport(0, 0, m_rt_frame_state.screen_w, m_rt_frame_state.screen_h);
         glDisable(GL_DEPTH_TEST);
         glDepthMask(GL_FALSE);
 
@@ -1164,8 +1174,8 @@ void RendererOpenGL::EndFrame_GL()
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 256, 1, GL_BGRA, GL_UNSIGNED_BYTE, cmd.bgra_pal);
 
         // Build NDC rect for the pre-computed letterboxed/scaled destination.
-        const float sw = (float)m_screenW;
-        const float sh = (float)m_screenH;
+        const float sw = (float)m_rt_frame_state.screen_w;
+        const float sh = (float)m_rt_frame_state.screen_h;
         Vec2f ndc0 = ScreenToNDC((float)cmd.dst_x,              (float)cmd.dst_y,              sw, sh);
         Vec2f ndc1 = ScreenToNDC((float)(cmd.dst_x + cmd.dst_w), (float)(cmd.dst_y + cmd.dst_h), sw, sh);
         const float verts[6][4] = {
@@ -1200,7 +1210,7 @@ void RendererOpenGL::EndFrame_GL()
     {
         const LandviewZoomCmd& cmd = m_rt_zoom_cmd;
 
-        glViewport(0, 0, m_screenW, m_screenH);
+        glViewport(0, 0, m_rt_frame_state.screen_w, m_rt_frame_state.screen_h);
         glDisable(GL_DEPTH_TEST);
         glDepthMask(GL_FALSE);
 
@@ -1247,7 +1257,7 @@ void RendererOpenGL::EndFrame_GL()
         glUniform1f(m_zoom_u_scale,      cmd.scale);
         glUniform2f(m_zoom_u_inv_map_sz, 1.0f / (float)cmd.src_w,
                                          1.0f / (float)cmd.src_h);
-        glUniform1f(m_zoom_u_screen_h,   (float)m_screenH);
+        glUniform1f(m_zoom_u_screen_h,   (float)m_rt_frame_state.screen_h);
 
         glDisable(GL_BLEND);
         glDrawArrays(GL_TRIANGLES, 0, 6);
@@ -1266,13 +1276,13 @@ void RendererOpenGL::EndFrame_GL()
         if (!m_rt_transparent_blit_buf.empty())
         {
             glBindTexture(GL_TEXTURE_2D, m_texIndex);
-            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_screenW, m_screenH,
+            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_rt_frame_state.screen_w, m_rt_frame_state.screen_h,
                             GL_RED, GL_UNSIGNED_BYTE, m_rt_transparent_blit_buf.data());
             glBindTexture(GL_TEXTURE_2D, 0);
             m_rt_transparent_blit_buf.clear();
         }
 
-        glViewport(0, 0, m_screenW, m_screenH);
+        glViewport(0, 0, m_rt_frame_state.screen_w, m_rt_frame_state.screen_h);
         glDisable(GL_DEPTH_TEST);
         glDepthMask(GL_FALSE);
 
@@ -1284,7 +1294,7 @@ void RendererOpenGL::EndFrame_GL()
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         glUseProgram(m_shader);
-        glUniform1f(m_uTintFactor, g_palette_possession_tint);
+        glUniform1f(m_uTintFactor, m_rt_frame_state.possession_tint);
         glBindVertexArray(m_vao);
         glDrawArrays(GL_TRIANGLES, 0, 6);
         glBindVertexArray(0);
@@ -1321,7 +1331,7 @@ void RendererOpenGL::EndFrame_GL()
     //         is underneath (overhead map, parchment).
     if (!m_rt_zoom_box_bg_cmds.empty())
     {
-        glViewport(0, 0, m_screenW, m_screenH);
+        glViewport(0, 0, m_rt_frame_state.screen_w, m_rt_frame_state.screen_h);
         glDisable(GL_DEPTH_TEST);
         glDisable(GL_BLEND);
         glDepthMask(GL_FALSE);
@@ -1330,11 +1340,11 @@ void RendererOpenGL::EndFrame_GL()
             static const float k_black[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
             glUseProgram(m_tintProg);
             glUniform4fv(m_uTintColor, 1, k_black);
-            glUniform1f(m_uTintClipScrH, (float)m_screenH);
+            glUniform1f(m_uTintClipScrH, (float)m_rt_frame_state.screen_h);
             glBindVertexArray(m_rawblit_vao);
             glBindBuffer(GL_ARRAY_BUFFER, m_rawblit_vbo);
-            const float sw = (float)m_screenW;
-            const float sh = (float)m_screenH;
+            const float sw = (float)m_rt_frame_state.screen_w;
+            const float sh = (float)m_rt_frame_state.screen_h;
             for (const ZoomBoxBgCmd& bg : m_rt_zoom_box_bg_cmds)
             {
                 glUniform1f(m_uTintClipRadius, bg.clip_radius);
@@ -1368,7 +1378,7 @@ void RendererOpenGL::EndFrame_GL()
             glEnable(GL_SCISSOR_TEST);
             for (const ZoomBoxBgCmd& bg : m_rt_zoom_box_bg_cmds)
             {
-                int gl_y = m_screenH - (bg.y + bg.h);
+                int gl_y = m_rt_frame_state.screen_h - (bg.y + bg.h);
                 glScissor(bg.x, gl_y, bg.w, bg.h);
                 glClear(GL_COLOR_BUFFER_BIT);
             }
@@ -1385,7 +1395,7 @@ void RendererOpenGL::EndFrame_GL()
         GLuint atlas_tex = m_tile_atlas->GetAtlasTexture(0);
         if (atlas_tex)
         {
-            glViewport(0, 0, m_screenW, m_screenH);
+            glViewport(0, 0, m_rt_frame_state.screen_w, m_rt_frame_state.screen_h);
             glDisable(GL_DEPTH_TEST);
             glDepthMask(GL_FALSE);
             glEnable(GL_BLEND);
@@ -1398,14 +1408,14 @@ void RendererOpenGL::EndFrame_GL()
 
             glUseProgram(m_zoom_tile_shader);
             glUniform1f(m_uZoomClipRadius, m_rt_zoom_clip_radius);
-            glUniform1f(m_uZoomClipScrH, (float)m_screenH);
+            glUniform1f(m_uZoomClipScrH, (float)m_rt_frame_state.screen_h);
             if (m_rt_zoom_clip_radius >= 0.0f)
                 glUniform4fv(m_uZoomClipRect, 1, m_rt_zoom_clip_rect);
             glBindVertexArray(m_rawblit_vao);
             glBindBuffer(GL_ARRAY_BUFFER, m_rawblit_vbo);
 
-            const float sw = (float)m_screenW;
-            const float sh = (float)m_screenH;
+            const float sw = (float)m_rt_frame_state.screen_w;
+            const float sh = (float)m_rt_frame_state.screen_h;
 
             for (const ZoomTileCmd& c : m_rt_zoom_tile_cmds)
             {
@@ -1455,12 +1465,12 @@ void RendererOpenGL::EndFrame_GL()
     // possession/pain (red), dungeon-heart death flash (white), zoom-to-heart.
     // No-op when alpha == 0 or no tint shader compiled.
     // Rendered BEFORE the cursor so the cursor is never tinted.
-    if (g_screen_tint[3] > 0.0f && m_tintProg)
+    if (m_rt_frame_state.screen_tint[3] > 0.0f && m_tintProg)
     {
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         glUseProgram(m_tintProg);
-        glUniform4fv(m_uTintColor, 1, g_screen_tint);
+        glUniform4fv(m_uTintColor, 1, m_rt_frame_state.screen_tint);
         glUniform1f(m_uTintClipRadius, -1.0f);  // no clip for fullscreen tint
         glBindVertexArray(m_vao);
         glDrawArrays(GL_TRIANGLES, 0, 6);
@@ -1742,7 +1752,7 @@ void RendererOpenGL::FlushSwipeQuads()
 
     glUseProgram(m_swipe_shader);
     glUniform2f(glGetUniformLocation(m_swipe_shader, "u_screen_size"),
-                (float)m_screenW, (float)m_screenH);
+                (float)m_rt_frame_state.screen_w, (float)m_rt_frame_state.screen_h);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_sprite_atlas->GetTexture());
@@ -1810,7 +1820,7 @@ static unsigned int create_fbo_with_texture(unsigned int color_tex, unsigned int
 
 void RendererOpenGL::EnsureLensFBOs()
 {
-    if (m_lens_fbo_w == m_screenW && m_lens_fbo_h == m_screenH && m_lens_scene_fbo)
+    if (m_lens_fbo_w == m_rt_frame_state.screen_w && m_lens_fbo_h == m_rt_frame_state.screen_h && m_lens_scene_fbo)
         return;
 
     // Free existing
@@ -1822,8 +1832,8 @@ void RendererOpenGL::EnsureLensFBOs()
     if (m_lens_pass_fbo_b)     { glDeleteFramebuffers(1, &m_lens_pass_fbo_b);      m_lens_pass_fbo_b = 0; }
     if (m_lens_pass_tex_b)     { glDeleteTextures(1, &m_lens_pass_tex_b);          m_lens_pass_tex_b = 0; }
 
-    int w = m_screenW;
-    int h = m_screenH;
+    int w = m_rt_frame_state.screen_w;
+    int h = m_rt_frame_state.screen_h;
 
     // Scene FBO — world renders here instead of default framebuffer
     m_lens_scene_tex = create_rgba_texture(w, h, "Lens/SceneTex");
@@ -1909,14 +1919,14 @@ void RendererOpenGL::ApplyLensGPUPasses()
     {
         unsigned int dst_fbo = flip ? m_lens_pass_fbo_b : m_lens_pass_fbo_a;
         unsigned int dst_tex = flip ? m_lens_pass_tex_b : m_lens_pass_tex_a;
-        pass->Apply(src_tex, dst_fbo, m_screenW, m_screenH);
+        pass->Apply(src_tex, dst_fbo, m_rt_frame_state.screen_w, m_rt_frame_state.screen_h);
         src_tex = dst_tex;
         flip = !flip;
     }
 
     // Blit final result to default framebuffer
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glViewport(0, 0, m_screenW, m_screenH);
+    glViewport(0, 0, m_rt_frame_state.screen_w, m_rt_frame_state.screen_h);
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
     glDisable(GL_BLEND);
@@ -2063,7 +2073,7 @@ void RendererOpenGL::FlushSceneToFBO(int w, int h)
     // Caller must have bound the FBO, set viewport, and cleared already.
     // This method consumes the pending render queues into the bound target.
     // All game-side coordinates (rawblit dst, overhead map dst) are in logical
-    // screen space (m_screenW × m_screenH).  The FBO viewport matches the
+    // screen space (m_rt_frame_state.screen_w × m_rt_frame_state.screen_h).  The FBO viewport matches the
     // logical dimensions so NDC conversion uses the same coordinate system.
 
     // ── Palette ──────────────────────────────────────────────────────────
@@ -2099,8 +2109,8 @@ void RendererOpenGL::FlushSceneToFBO(int w, int h)
         glBindTexture(GL_TEXTURE_2D, m_texPalette);
 
         // Coordinates are in logical screen space.
-        const float sw = (float)m_screenW;
-        const float sh = (float)m_screenH;
+        const float sw = (float)m_rt_frame_state.screen_w;
+        const float sh = (float)m_rt_frame_state.screen_h;
         Vec2f ndc0 = ScreenToNDC((float)cmd.dst_x,               (float)cmd.dst_y,               sw, sh);
         Vec2f ndc1 = ScreenToNDC((float)(cmd.dst_x + cmd.dst_w), (float)(cmd.dst_y + cmd.dst_h), sw, sh);
 
@@ -2163,8 +2173,8 @@ void RendererOpenGL::FlushSceneToFBO(int w, int h)
             glBindTexture(GL_TEXTURE_2D, m_rawblit_tex);
         }
 
-        const float sw = (float)m_screenW;
-        const float sh = (float)m_screenH;
+        const float sw = (float)m_rt_frame_state.screen_w;
+        const float sh = (float)m_rt_frame_state.screen_h;
         const float x0 = (float)cmd.dst_x               / sw * 2.0f - 1.0f;
         const float x1 = (float)(cmd.dst_x + cmd.dst_w) / sw * 2.0f - 1.0f;
         const float y0 = 1.0f - (float)cmd.dst_y               / sh * 2.0f;
@@ -2211,7 +2221,7 @@ void RendererOpenGL::FlushSceneToFBO(int w, int h)
         if (!m_rt_transparent_blit_buf.empty())
         {
             glBindTexture(GL_TEXTURE_2D, m_texIndex);
-            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_screenW, m_screenH,
+            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_rt_frame_state.screen_w, m_rt_frame_state.screen_h,
                             GL_RED, GL_UNSIGNED_BYTE, m_rt_transparent_blit_buf.data());
             glBindTexture(GL_TEXTURE_2D, 0);
             m_rt_transparent_blit_buf.clear();
@@ -2339,16 +2349,17 @@ bool RendererOpenGL::compile_shaders()
 
 void RendererOpenGL::upload_palette_texture()
 {
-    // lbPalette is unsigned char[768] (R, G, B per entry, 6-bit values)
-    // Use m_palette_upload_buf (a member, heap-allocated) rather than a local stack
+    // Read from the per-frame snapshot — not from live lbPalette — so the render
+    // thread never races against a concurrent LbPaletteSet() on the game thread.
+    // Use m_palette_upload_buf (member, heap-allocated) rather than a local stack
     // array.  NVIDIA's Threaded Optimisation can defer reading the glTexSubImage2D
     // pixel pointer past the function return; a stack buffer would be recycled by
     // then.  The member buffer lives for the lifetime of the renderer.
     for (int i = 0; i < 256; ++i)
     {
-        m_palette_upload_buf[i * 4 + 0] = (uint8_t)(lbPalette[i * 3 + 0] << 2);
-        m_palette_upload_buf[i * 4 + 1] = (uint8_t)(lbPalette[i * 3 + 1] << 2);
-        m_palette_upload_buf[i * 4 + 2] = (uint8_t)(lbPalette[i * 3 + 2] << 2);
+        m_palette_upload_buf[i * 4 + 0] = (uint8_t)(m_rt_frame_state.palette[i * 3 + 0] << 2);
+        m_palette_upload_buf[i * 4 + 1] = (uint8_t)(m_rt_frame_state.palette[i * 3 + 1] << 2);
+        m_palette_upload_buf[i * 4 + 2] = (uint8_t)(m_rt_frame_state.palette[i * 3 + 2] << 2);
         m_palette_upload_buf[i * 4 + 3] = 255;
     }
     glActiveTexture(GL_TEXTURE1);

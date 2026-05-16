@@ -8,6 +8,7 @@
 #pragma once
 
 #include "IRenderer.h"
+#include "renderer/FrameState.h"
 #include <vector>
 #include <thread>
 #include <mutex>
@@ -366,6 +367,11 @@ private:
     std::vector<ZoomBoxBgCmd>   m_rt_zoom_box_bg_cmds;
     float                       m_rt_zoom_clip_rect[4] = {0,0,0,0};
     float                       m_rt_zoom_clip_radius  = -1.0f;
+
+    /** Snapshot of all game-thread globals consumed by EndFrame_GL().
+     *  Captured inside FlipBuffers() before the render thread is signalled,
+     *  eliminating races between EndFrame_GL() and the next BeginFrame(). */
+    FrameState                  m_rt_frame_state = {};
 
     // Heap-allocated palette upload buffer.  Using a member instead of a stack
     // buffer in upload_palette_texture() prevents a use-after-free if the NVIDIA
