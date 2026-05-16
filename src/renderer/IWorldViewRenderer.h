@@ -92,6 +92,11 @@ public:
         (void)draw_flags; (void)remap;
         return 0;
     }
+
+    /** Clear the keeper sprite atlas (called between levels).
+     *  GPU backends should flush their per-level sprite cache here.
+     *  Default: no-op. */
+    virtual void ClearKeeperSpriteAtlas() {}
 };
 
 /******************************************************************************/

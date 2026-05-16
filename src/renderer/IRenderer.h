@@ -304,6 +304,35 @@ public:
     /** Returns the UI renderer managed by this backend.
      *  Each renderer type creates the appropriate implementation internally. */
     virtual class IUIRenderer* GetUIRenderer() = 0;
+
+    // -------------------------------------------------------------------------
+    // Lifecycle notifications from the game thread
+
+    /** Called when tile/block textures are reloaded (e.g. resolution change).
+     *  GPU backends should invalidate their tile atlas here.
+     *  Default: no-op. */
+    virtual void NotifyTexturesReloaded() {}
+
+    /** Called after game tables (render_fade_tables etc.) are ready.
+     *  GPU backends schedule fade-table texture creation on the render thread.
+     *  Default: no-op. */
+    virtual void NotifyGameTablesReady() {}
+
+    // -------------------------------------------------------------------------
+    // Optional GPU-only submission methods (default: no-op)
+
+    /** Submit tile data for the zoom-box overlay (GPU path).
+     *  Software backends ignore this call. */
+    virtual void SubmitZoomBoxTiles(const uint16_t* /*tile_block_ids*/,
+                                    int /*tiles_x*/, int /*tiles_y*/,
+                                    int /*dst_x*/, int /*dst_y*/,
+                                    int /*tile_w*/, int /*tile_h*/) {}
+
+    /** Schedule a Picture-in-Picture isometric render into an FBO (GPU path).
+     *  Software backends ignore this call. */
+    virtual void SubmitPiPRender(struct Camera* /*cam*/,
+                                 int /*x*/, int /*y*/,
+                                 int /*w*/, int /*h*/) {}
 };
 
 /******************************************************************************/

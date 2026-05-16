@@ -2391,3 +2391,23 @@ void RendererOpenGL::InvalidateTileAtlas()
     // with the animated tile strip on the next BeginFrame().
     m_last_anim_sentinel = nullptr;
 }
+
+void RendererOpenGL::NotifyTexturesReloaded()
+{
+    InvalidateTileAtlas();
+}
+
+void RendererOpenGL::NotifyGameTablesReady()
+{
+    // Schedule the fade-table GL texture for creation on the render thread.
+    // init_fade_table_texture() issues glGenTextures/glTexImage2D; these must
+    // run on the thread that owns the GL context.
+    ScheduleFadeTableInit();
+
+    // Wire the palette source pointer into sub-renderers that cache it.
+    // SetPaletteSource is just a pointer copy — safe on the game thread.
+    if (auto* glui = dynamic_cast<GLUIRenderer*>(RendererGetUIRenderer()))
+        glui->SetPaletteSource(lbPalette);
+    if (auto* glwr = dynamic_cast<GLWorldViewRenderer*>(RendererGetWorldViewRenderer()))
+        glwr->SetPaletteSource(lbPalette);
+}

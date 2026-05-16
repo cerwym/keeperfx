@@ -80,14 +80,8 @@ static uint32_t             s_software_next_handle = 0;
 
 void RendererNotifyTexturesReloaded()
 {
-#ifdef RENDERER_OPENGL_ENABLED
-    if (s_activeType == RENDERER_OPENGL)
-    {
-        RendererOpenGL* ogl = dynamic_cast<RendererOpenGL*>(s_activeRenderer);
-        if (ogl)
-            ogl->InvalidateTileAtlas();
-    }
-#endif
+    if (s_activeRenderer)
+        s_activeRenderer->NotifyTexturesReloaded();
 }
 
 void RendererNotifySpritesReloaded()
@@ -179,36 +173,14 @@ void RendererNotifyLandviewFlagLoaded()
 
 void RendererNotifyGameTablesReady()
 {
-#ifdef RENDERER_OPENGL_ENABLED
-    if (s_activeType == RENDERER_OPENGL)
-    {
-        RendererOpenGL* ogl = dynamic_cast<RendererOpenGL*>(s_activeRenderer);
-        if (ogl)
-        {
-            // Schedule the fade-table GL texture for creation on the render thread.
-            // init_fade_table_texture() issues glGenTextures/glTexImage2D; these
-            // must run on the thread that owns the GL context.  By the time
-            // RendererNotifyGameTablesReady() is called, the loading-screen frames
-            // have already triggered EndFrame(), so the render thread is live and
-            // owns the context.  EndFrame_GL() will call init_fade_table_texture()
-            // and push the resulting texture ID to all sub-renderers.
-            ogl->ScheduleFadeTableInit();
-            // SetPaletteSource is just a pointer copy — safe on the game thread.
-            GLUIRenderer* glui = dynamic_cast<GLUIRenderer*>(RendererGetUIRenderer());
-            if (glui)
-                glui->SetPaletteSource(lbPalette);
-            GLWorldViewRenderer* glwr = dynamic_cast<GLWorldViewRenderer*>(s_worldViewRenderer);
-            if (glwr)
-                glwr->SetPaletteSource(lbPalette);
-        }
-    }
-#endif
+    if (s_activeRenderer)
+        s_activeRenderer->NotifyGameTablesReady();
 }
 
 int RendererNeedsUIReinitAfterLoad(void)
 {
     // Software renderer: always reinit — no atlas to preserve.
-    if (s_activeType != RENDERER_OPENGL)
+    if (!RendererHasGPURenderPath())
         return 1;
     // OpenGL: the GPU sprite atlas persists across save loads.  Only reinit when
     // the atlas was rebuilt (RendererNotifySpritesReloaded called — happens on
@@ -255,12 +227,10 @@ TbBool RendererSubmitOverheadMap(const unsigned char* tile_colors, int tiles_x, 
 void RendererSubmitZoomBoxTiles(const unsigned short* tile_block_ids, int tiles_x, int tiles_y,
                                 int dst_x, int dst_y, int tile_w, int tile_h)
 {
-#ifdef RENDERER_OPENGL_ENABLED
-    RendererOpenGL* rend = dynamic_cast<RendererOpenGL*>(RendererGetActive());
+    IRenderer* rend = RendererGetActive();
     if (rend)
         rend->SubmitZoomBoxTiles((const uint16_t*)tile_block_ids, tiles_x, tiles_y,
                                   dst_x, dst_y, tile_w, tile_h);
-#endif
 }
 
 /******************************************************************************/
@@ -318,13 +288,9 @@ int RendererPointInZoomBoxScreenRect(int x, int y)
 
 void RendererSchedulePiPRender(struct Camera* cam, int x, int y, int w, int h)
 {
-#ifdef RENDERER_OPENGL_ENABLED
-    RendererOpenGL* rend = dynamic_cast<RendererOpenGL*>(RendererGetActive());
+    IRenderer* rend = RendererGetActive();
     if (rend)
         rend->SubmitPiPRender(cam, x, y, w, h);
-#else
-    (void)cam; (void)x; (void)y; (void)w; (void)h;
-#endif
 }
 
 /** Append any newly-built custom_sprites into the live atlas.
@@ -1069,12 +1035,8 @@ int WorldViewRenderer_SubmitKeeperSprite(int32_t dst_x, int32_t dst_y, int32_t d
 
 void WorldViewRenderer_ClearKeeperSpriteAtlas(void)
 {
-#ifdef RENDERER_OPENGL_ENABLED
-    if (s_worldViewRenderer) {
-        auto* gl = dynamic_cast<GLWorldViewRenderer*>(s_worldViewRenderer);
-        if (gl) gl->ClearKeeperSpriteAtlas();
-    }
-#endif
+    if (s_worldViewRenderer)
+        s_worldViewRenderer->ClearKeeperSpriteAtlas();
 }
 
 void RendererFlushPendingSpriteAtlas(void)

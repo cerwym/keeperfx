@@ -103,12 +103,20 @@ public:
      *  @param dst_x/dst_y     Screen top-left of the zoom-box tile grid (pixels).
      *  @param tile_w/tile_h   On-screen size of each tile (pixels). */
     void SubmitZoomBoxTiles(const uint16_t* tile_block_ids, int tiles_x, int tiles_y,
-                            int dst_x, int dst_y, int tile_w, int tile_h);
+                            int dst_x, int dst_y, int tile_w, int tile_h) override;
 
     /** Schedule a picture-in-picture isometric render for draw_zoom_box (ZBM_ISOMETRIC).
      *  The camera is copied immediately; the render executes in EndFrame() after the
      *  overhead-map draw but before UIFlushFront. */
-    void SubmitPiPRender(struct Camera* cam, int x, int y, int w, int h);
+    void SubmitPiPRender(struct Camera* cam, int x, int y, int w, int h) override;
+
+    /** Called when tile/block textures are reloaded — invalidates the tile atlas
+     *  so it is rebuilt at the start of the next frame. */
+    void NotifyTexturesReloaded() override;
+
+    /** Called after game tables (render_fade_tables etc.) are ready — schedules
+     *  fade-table texture creation and palette wiring on the render thread. */
+    void NotifyGameTablesReady() override;
 
     // Sub-renderer access
     IWorldViewRenderer* GetWorldViewRenderer() override;
