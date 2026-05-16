@@ -581,21 +581,15 @@ bool RendererOpenGL::BeginFrame()
         m_screenH = (int)MyScreenHeight;
     }
 
-    // Push current screen size and palette to sub-renderers so they never need
-    // to read MyScreenWidth/MyScreenHeight or lbPalette directly.
+    // Push current screen size to sub-renderers so they never need
+    // to read MyScreenWidth/MyScreenHeight directly.
     {
         GLWorldViewRenderer* glwr = dynamic_cast<GLWorldViewRenderer*>(m_world_renderer);
         if (glwr)
-        {
             glwr->SetFullScreenSize(m_screenW, m_screenH);
-            glwr->SetPaletteSource(lbPalette);
-        }
         GLUIRenderer* glui = dynamic_cast<GLUIRenderer*>(RendererGetUIRenderer());
         if (glui)
-        {
             glui->SetScreenDimensions(m_screenW, m_screenH);
-            glui->SetPaletteSource(lbPalette);
-        }
         GLTextRenderer* glt = dynamic_cast<GLTextRenderer*>(m_textRenderer);
         if (glt)
             glt->SetScreenSize(m_screenW, m_screenH);
