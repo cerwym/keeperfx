@@ -16,6 +16,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <utility>
 #include "renderer/SpriteHandle.h"
 #include "renderer/ir/IRCommandBuffer.h"
 
@@ -29,8 +30,9 @@ enum class IRUILayer : uint8_t
 {
     Back       = 0,  /**< Sidebar background panels, solid fill boxes.    */
     Front      = 1,  /**< Panel sprites, scaled sprites, sprite overlays. */
-    Overlay    = 2,  /**< Tooltip boxes, top-layer sprite overlays.        */
-    Cursor     = 3,  /**< Mouse cursor and keeper hand sprites.            */
+    WorldDepth = 2,  /**< Creature status, gold text — depth-tested in game viewport. */
+    Overlay    = 3,  /**< Tooltip boxes, top-layer sprite overlays.        */
+    Cursor     = 4,  /**< Mouse cursor and keeper hand sprites.            */
 };
 
 /******************************************************************************/
@@ -78,6 +80,7 @@ struct IRUISpriteCmd
     int32_t      units_per_px  = 16;  /**< 16 = 100% scale. */
     SpriteHandle sprite        = kInvalidSpriteHandle;
     uint32_t     flags         = 0;   /**< kIRSpriteFlipHoriz | kIRSpriteScaled */
+    float        alpha         = 1.0f; /**< 1.0 = opaque; 0.333 = ghost transparent. */
 };
 
 /** Draw a palette-remap sprite (player colour recolour). */
@@ -89,6 +92,7 @@ struct IRUISpriteRemapCmd
     int32_t      units_per_px = 16;
     SpriteHandle sprite       = kInvalidSpriteHandle;
     int32_t      remap_row    = 0;   /**< Row into fade_tables[]. */
+    float        alpha        = 1.0f;
 };
 
 /** Draw a single-colour tinted sprite. */
@@ -100,6 +104,7 @@ struct IRUISpriteColoredCmd
     int32_t      units_per_px = 16;
     SpriteHandle sprite       = kInvalidSpriteHandle;
     uint8_t      colour_idx   = 0;   /**< Palette index for flat output. */
+    float        alpha        = 1.0f;
 };
 
 /******************************************************************************/
@@ -116,6 +121,12 @@ struct IRUISlabSelectorCmd
     int32_t   y2        = 0;
     uint8_t   colour    = 0;
     float     z_depth   = 0.0f;
+    /** Pre-computed rendering params captured at game-thread submit time. */
+    float     line_length = 0.0f; /**< Pixel length of the segment.          */
+    float     thickness   = 1.0f; /**< Line thickness in screen pixels.      */
+    float     band_width  = 1.0f; /**< Width of each colour band (pixels).   */
+    float     step        = 1.0f; /**< Colour-index advance per pixel.       */
+    uint32_t  game_turn   = 0;    /**< Animated phase (gameturn & mask).     */
 };
 
 /** FBO quad composite (Picture-in-Picture zoom box). */
@@ -172,6 +183,16 @@ struct IRUICursorKeeperHandCmd
 
 /******************************************************************************/
 
+/** Game viewport rect — snapshot captured at SetGameViewport() call time. */
+struct UIGameViewport
+{
+    int32_t x   = 0;
+    int32_t y   = 0;
+    int32_t w   = 0;
+    int32_t h   = 0;
+    bool    set = false;
+};
+
 /** Combined per-frame UI command buffers. */
 struct UICommandBuffers
 {
@@ -186,6 +207,11 @@ struct UICommandBuffers
     IRCommandBuffer<IRUICursorPointerCmd>    cursor_pointers;
     IRCommandBuffer<IRUICursorKeeperHandCmd> cursor_hands;
 
+    /** Game viewport captured at SetGameViewport() — restored by ExecuteUIFromIR(). */
+    UIGameViewport game_vp;
+    /** True when this buffer was populated via the IR path (not stale-replay). */
+    bool           ir_active = false;
+
     void Reset()
     {
         solid_boxes.Reset();
@@ -198,6 +224,8 @@ struct UICommandBuffers
         minimaps.Reset();
         cursor_pointers.Reset();
         cursor_hands.Reset();
+        game_vp   = {};
+        ir_active = false;
     }
 
     void Reserve(size_t sprites_n)
@@ -226,6 +254,8 @@ struct UICommandBuffers
         minimaps.Swap(other.minimaps);
         cursor_pointers.Swap(other.cursor_pointers);
         cursor_hands.Swap(other.cursor_hands);
+        std::swap(game_vp,   other.game_vp);
+        std::swap(ir_active, other.ir_active);
     }
 };
 

@@ -653,6 +653,10 @@ bool RendererOpenGL::BeginFrame()
     {
         UIRenderer_Clear();
         CursorLayer_Clear();
+        // Open the IR write window: all Submit*() calls this frame will append
+        // IR commands.  Closed in EndFrame() before FlipBuffers().
+        GLUIRenderer* glui = dynamic_cast<GLUIRenderer*>(RendererGetUIRenderer());
+        if (glui) glui->SetUICommandBuffers(&m_render_graph.GetUIBuffers());
     }
     return true;
 }
@@ -681,12 +685,16 @@ void RendererOpenGL::EndFrame()
         m_rt_cv.wait(init_lock, [this]{ return m_rt_initialized; });
     }
 
+    // Close the IR write window before flipping buffers so no Submit*()
+    // calls from the next frame land in this frame's command buffer.
+    GLUIRenderer* glui = dynamic_cast<GLUIRenderer*>(RendererGetUIRenderer());
+    if (glui) glui->SetUICommandBuffers(nullptr);
+
     // Flip sub-renderer command buffers so the render thread reads from stable
     // render-side copies while the game thread is free to build the next frame.
     if (m_world_renderer)
         m_world_renderer->FlipBuffers();
 
-    GLUIRenderer* glui = dynamic_cast<GLUIRenderer*>(RendererGetUIRenderer());
     if (glui) glui->FlipBuffers();
 
     // Snapshot per-frame command queues and scalar state into render-thread
@@ -917,6 +925,14 @@ void RendererOpenGL::EndFrame_GL()
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         ApplyLensGPUPasses();
         m_lens_active = false;
+    }
+
+    // Populate m_rt_quads[]/m_rt_lines[] from the read-side IR command buffers.
+    // Must run AFTER FlushPendingInit() (above) so GPU resources are ready.
+    // No-op on stale-replay (fade-cache) frames — FlipBuffers preserved the quads.
+    {
+        GLUIRenderer* glui = dynamic_cast<GLUIRenderer*>(RendererGetUIRenderer());
+        if (glui) glui->ExecuteUIFromIR(m_render_graph.GetUIBuffersRT(), m_rt_frame_state);
     }
 
     // Draw layer-0 (back) GPU UI elements — sidebar background panels.

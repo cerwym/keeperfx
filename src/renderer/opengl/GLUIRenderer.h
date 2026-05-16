@@ -19,6 +19,8 @@
 #ifdef RENDERER_OPENGL_ENABLED
 
 #include <glad/glad.h>
+#include "renderer/ir/UICommands.h"
+#include "renderer/FrameState.h"
 
 class GLSpriteAtlas;
 class GLFontAtlas;
@@ -42,7 +44,6 @@ struct UIQuad {
     float z;               // Z-depth
     float mode;            // Render mode (0=sprite, 1=font, 3=solid, 10=slab, 20=colored, 30=remap)
     uint32_t texture_id;   // Sprite sheet texture ID
-    uint8_t layer;         // 0=back (before staging blit), 1=front (after staging blit)
     int remap_row;         // Fade-table row for remap quads (mode 30); -1 = unused
 };
 
@@ -52,7 +53,6 @@ struct UILine {
     float r, g, b, a;      // Line color
     float z;               // Z-depth
     float thickness;       // Line thickness
-    uint8_t layer;         // 0=back, 1=front
 };
 
 /** Picture-in-picture FBO composite quad.  Uses the FBO colour texture directly
@@ -86,6 +86,7 @@ public:
     virtual void SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx) override;
     virtual void SubmitSolidBoxAlpha(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx, float alpha) override;
     virtual void UpdateSlabTexture(const uint8_t* data, int dim) override;
+    virtual void FlushPendingInit() override;
     virtual bool SubmitSlabBackground(int x, int y, int w, int h) override;
     virtual uint8_t* AcquireMinimapBuffer(int size) override;
     virtual void SubmitMinimap(int screen_x, int screen_y, int size) override;
@@ -124,6 +125,13 @@ public:
      *  Called by GLCursorLayer::Draw() to render the OS pointer sprite
      *  as the final draw before the buffer swap. */
     void DrawCursorSprites();
+
+    /** Submit a panel sprite into the render-thread-only cursor queue.
+     *  Must be called from the render thread only (e.g. from GLCursorLayer::Draw()).
+     *  Pushes to m_cursor_quads instead of the shared m_quads[layer], preventing
+     *  the Phase-3C data race between the render thread (cursor path) and the game
+     *  thread (UI build for the next frame) on m_quads[1]. */
+    void SubmitCursorPanelSprite(int32_t x, int32_t y, int units_per_px, SpriteHandle spr);
 
     /** Record the current queue sizes as the PiP "start of pass" snapshot.
      *  Call this immediately before the PiP draw_view() call.  Any quads
@@ -190,6 +198,28 @@ public:
      *  (real frame with fresh content). */
     void SetStaleReplay(bool replay);
 
+    /** Move game-thread quad/line state into m_rt_* copies; clear game buffers.
+     *  Must be called with the render thread idle (i.e. just before signalling it).
+     *  Called from RendererOpenGL::EndFrame(). */
+    void FlipBuffers();
+
+    // ── IR (Intermediate Representation) path ─────────────────────────────────
+
+    /** Set the IR write target for this frame.
+     *  When @p cmds is non-null all Submit*() calls append IR commands instead
+     *  of writing into m_quads[]/m_lines[]; sets cmds->ir_active = true.
+     *  Call with nullptr before FlipBuffers() to close the write window (e.g.
+     *  for the render-thread-only PiP path which must still use legacy quads). */
+    void SetUICommandBuffers(UICommandBuffers* cmds);
+
+    /** Populate m_rt_quads[]/m_rt_lines[] from the read-side IR command buffers.
+     *  Must be called from the render thread, after FlushPendingInit() so that
+     *  GPU resources (slab texture, sprite atlas) are ready.
+     *  @param cmds  Read-side UICommandBuffers (const — render thread does not write).
+     *  @param fs    FrameState snapshot for palette lookup.
+     *  No-op when cmds.ir_active is false (stale-replay / fade-cache frame). */
+    void ExecuteUIFromIR(const UICommandBuffers& cmds, const FrameState& fs);
+
 private:
     // GPU shader programs — one per rendering domain to isolate texture unit bindings.
     GLuint m_prog_sprite;          // palette-indexed atlas sprites (unit 0 = atlas R8, unit 1 = palette 1D)
@@ -216,12 +246,28 @@ private:
     GLuint m_uniform_mvp;
     GLuint m_uniform_texture;
 
-    // Rendering data
-    std::vector<UIQuad> m_ui_quads;
-    std::vector<UILine> m_ui_lines;
-    std::vector<FBOQuad> m_fbo_quads;   // PiP composite quads — drawn first in FlushFront
+    // Rendering data — per-pass quad/line queues.
+    // Index maps directly to render layer: 0=back, 1=front, 2=world-depth, 3=top-overlay.
+    std::vector<UIQuad>     m_quads[4];     // game-thread write buffer
+    std::vector<UILine>     m_lines[4];     // game-thread write buffer
+    std::vector<FBOQuad>    m_fbo_quads;    // render-thread-only (PiP composite)
     std::vector<GLUIVertex> m_vertices;
-    
+
+    // ── Double-buffer render copies ───────────────────────────────────────────
+    // FlipBuffers() moves game-thread quads/lines here before signalling the
+    // render thread.  DrawBack/DrawFrontBase/DrawFrontOverlay read exclusively
+    // from m_rt_*.  m_fbo_quads is NOT doubled: it is pushed AND read on the
+    // render thread only (SubmitFBOQuad called during the PiP loop inside EndFrame_GL).
+    // m_quads/m_lines remain in use as transient storage for PiP and cursor sprites
+    // submitted by the render thread within a single EndFrame_GL call.
+    std::vector<UIQuad>  m_rt_quads[4];
+    std::vector<UILine>  m_rt_lines[4];
+
+    // Render-thread-only cursor sprite buffer.  GLCursorLayer::Draw() pushes here
+    // via SubmitCursorPanelSprite(); DrawCursorSprites() flushes it.  Never touched
+    // by the game thread, eliminating the m_quads[1] race in Phase 3C.
+    std::vector<UIQuad>  m_cursor_quads;
+
     // Screen properties
     int m_screen_width;
     int m_screen_height;
@@ -237,16 +283,19 @@ private:
     GLuint m_fade_texture;             // R8 256×256 remap LUT — set by SetFadeTexture(), not owned
 
     // Slab background tile texture (64×64 R8, GL_REPEAT) — uploaded via UpdateSlabTexture()
-    GLuint m_slab_texture = 0;
-    int    m_slab_dim     = 0;
+    GLuint         m_slab_texture      = 0;
+    int            m_slab_dim          = 0;
+    // Pending upload latched by UpdateSlabTexture(); consumed on the render thread.
+    const uint8_t* m_slab_pending_data = nullptr;
+    int            m_slab_pending_dim  = 0;
 
-    // PiP sprite watermarks: queue sizes recorded at BeginPiPSprites() time.
-    // Quads/lines at indices [0..watermark) were submitted before the PiP draw_view
-    // (i.e. corner-frame sprites) and must survive into FlushFront() untouched.
-    // Quads at [watermark..end) were submitted during draw_view(pip_cam) (NSP sprites,
-    // room flags) and are rendered into the FBO by FlushPiPSprites(), then erased.
-    int  m_pip_quad_watermark  = 0;
-    int  m_pip_line_watermark  = 0;
+    // PiP sprite watermarks: queue sizes per layer recorded at BeginPiPSprites() time.
+    // Quads at indices [0..watermark[L]) in m_quads[L] were submitted before the PiP
+    // draw_view (corner-frame sprites) and must survive into FlushFront() untouched.
+    // Quads from [watermark[L]..end) were submitted during draw_view(pip_cam) and are
+    // rendered into the FBO by DrawPiPSprites(), then erased.
+    int  m_pip_quad_wm[4]      = {};
+    int  m_pip_line_wm[4]      = {};
     bool m_pip_capture_active  = false;
 
     // Minimap: renderer-owned CPU scratch buffer + deferred GL texture upload
@@ -258,6 +307,17 @@ private:
     int      m_minimap_y;
     int      m_minimap_size;
     bool     m_minimap_pending;
+
+    // Phase 3C render-thread shadow copies of minimap state.
+    // FlipBuffers() swaps the CPU buffer pointers and copies metadata so the
+    // render thread reads the just-completed frame while the game thread fills
+    // the next frame's buffer independently (no aliasing).
+    uint8_t* m_rt_minimap_cpu_buf  = nullptr;
+    int      m_rt_minimap_cpu_size = 0;
+    int      m_rt_minimap_x        = 0;
+    int      m_rt_minimap_y        = 0;
+    int      m_rt_minimap_size     = 0;
+    bool     m_rt_minimap_pending  = false;
     
     // Current render layer: 0=back (before staging blit), 1=front (after staging blit),
     // 2=world-depth (after GPUFlushNow, depth test ON against tile depth buffer).
@@ -276,10 +336,17 @@ private:
     int  m_game_vp_h = 0;
     bool m_game_vp_set = false;
 
+    // IR write target — set by SetUICommandBuffers(); null in stale-replay/PiP frames.
+    UICommandBuffers* m_ui_write_cmds = nullptr;
+
     // Internal methods
     void CreateVertexArrays();
-    void FlushQuads(int layer);       // Render and remove only quads matching layer
-    void FlushLines(int layer);       // Render and remove only lines matching layer
+    void FlushQuads(int layer);         // Read from m_quads[layer]  (PiP/cursor transient)
+    void FlushLines(int layer);         // Read from m_lines[layer]  (PiP/cursor transient)
+    void FlushQuads_RT(int layer);      // Read from m_rt_quads[layer] (main frame rendering)
+    void FlushLines_RT(int layer);      // Read from m_rt_lines[layer] (main frame rendering)
+    void flush_quads_from(std::vector<UIQuad>& quads); // shared impl — safe to call with either buffer
+    void flush_lines_from(std::vector<UILine>& lines); // shared impl — safe to call with either buffer
     void ExpandQuadToVertices(const UIQuad& quad);
     void ExpandLineToVertices(const UILine& line);
     void SubmitQuad(float x, float y, float w, float h, float u0, float v0, float u1, float v1, 

@@ -72,8 +72,9 @@ GLUIRenderer::GLUIRenderer()
     , m_minimap_size(0)
     , m_minimap_pending(false)
 {
-    m_ui_quads.reserve(512);
-    m_ui_lines.reserve(256);
+    m_quads[1].reserve(512);  // layer-1 (front) is the most common
+    m_quads[2].reserve(128);  // layer-2 (world-depth)
+    m_lines[1].reserve(256);
     m_vertices.reserve(3072);
     m_fbo_quads.reserve(4);
 }
@@ -94,6 +95,9 @@ void GLUIRenderer::Shutdown()
     delete[] m_minimap_cpu_buf;
     m_minimap_cpu_buf  = nullptr;
     m_minimap_cpu_size = 0;
+    delete[] m_rt_minimap_cpu_buf;
+    m_rt_minimap_cpu_buf  = nullptr;
+    m_rt_minimap_cpu_size = 0;
     if (m_minimap_texture) {
         glDeleteTextures(1, &m_minimap_texture);
         m_minimap_texture = 0;
@@ -152,6 +156,15 @@ void GLUIRenderer::SetFadeTexture(GLuint tex)
     m_fade_texture = tex;
 }
 
+/** Map current layer state to the appropriate IRUILayer enum value. */
+static IRUILayer ComputeIRLayer(int current_layer, bool world_depth, bool top_overlay)
+{
+    if (top_overlay)  return IRUILayer::Overlay;
+    if (world_depth)  return IRUILayer::WorldDepth;
+    if (current_layer == 0) return IRUILayer::Back;
+    return IRUILayer::Front;
+}
+
 void GLUIRenderer::SubmitSlabSelector(int x1, int y1, int x2, int y2, unsigned char color, float z_depth)
 {
     if (!m_palette_data) return;
@@ -168,18 +181,34 @@ void GLUIRenderer::SubmitSlabSelector(int x1, int y1, int x2, int y2, unsigned c
     thickness = thickness + (1.0f - thickness) * (1.0f - hud_scale);
     if (thickness < 1.0f) thickness = 1.0f;
 
-    // Animated marching-stripe pattern along the line.
-    // The software renderer advances the palette index per pixel:
-    //   step = LbLerp(1.0, 4.0, 1.0-hud_scale) * STRIPEY_COLORS / units_per_pixel_best
-    // This creates a color band of width (1.0/step) pixels.
-    // The starting offset shifts each game turn for the animation.
     float step = (1.0f + 3.0f * (1.0f - hud_scale)) * ((float)STRIPEY_COLORS / (float)units_per_pixel_best);
     if (step < 0.001f) step = 1.0f;
-    float band_width = 1.0f / step; // pixels per color band
-    float phase = (float)(get_gameturn() & (STRIPEY_COLORS - 1));
+    float band_width = 1.0f / step;
+
+    if (m_ui_write_cmds) {
+        IRUISlabSelectorCmd cmd;
+        cmd.layer       = ComputeIRLayer(m_current_layer, m_world_depth_active, m_top_overlay_active);
+        cmd.x1          = x1;
+        cmd.y1          = y1;
+        cmd.x2          = x2;
+        cmd.y2          = y2;
+        cmd.colour      = color;
+        cmd.z_depth     = z_depth;
+        cmd.line_length = line_length;
+        cmd.thickness   = thickness;
+        cmd.band_width  = band_width;
+        cmd.step        = step;
+        cmd.game_turn   = (uint32_t)(get_gameturn() & (STRIPEY_COLORS - 1));
+        m_ui_write_cmds->slab_selectors.Append(cmd);
+        return;
+    }
 
     float ndx = dx / line_length;
     float ndy = dy / line_length;
+
+    // Animated marching-stripe pattern along the line.
+    // The starting offset shifts each game turn for the animation.
+    float phase = (float)(get_gameturn() & (STRIPEY_COLORS - 1));
 
     const struct stripey_line* sl = &colored_stripey_lines[color];
 
@@ -223,9 +252,33 @@ static inline float UIAlphaFromDrawFlags()
     return 1.0f;
 }
 
+/** Map IRUILayer to the m_quads[] / m_rt_quads[] array index. */
+static int IRUILayerToIndex(IRUILayer layer)
+{
+    switch (layer) {
+    case IRUILayer::Back:       return 0;
+    case IRUILayer::Front:      return 1;
+    case IRUILayer::WorldDepth: return 2;
+    case IRUILayer::Overlay:    return 3;
+    default:                    return 1; // Cursor falls back to front
+    }
+}
+
 void GLUIRenderer::SubmitPanelSprite(int32_t x, int32_t y, int units_per_px, SpriteHandle spr, bool flip_horiz)
 {
     if (spr == kInvalidSpriteHandle || !m_sprite_atlas) return;
+    if (m_ui_write_cmds) {
+        IRUISpriteCmd cmd;
+        cmd.layer        = ComputeIRLayer(m_current_layer, m_world_depth_active, m_top_overlay_active);
+        cmd.x            = x;
+        cmd.y            = y;
+        cmd.units_per_px = units_per_px;
+        cmd.sprite       = spr;
+        cmd.flags        = flip_horiz ? kIRSpriteFlipHoriz : 0u;
+        cmd.alpha        = UIAlphaFromDrawFlags();
+        m_ui_write_cmds->sprites.Append(cmd);
+        return;
+    }
     SpriteUV uv;
     if (!m_sprite_atlas->GetUV(spr, uv)) return;
     // Reproduce the LbSpriteDrawResized rounding: (w * upp + 8) / 16
@@ -247,6 +300,18 @@ void GLUIRenderer::SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px
         IUIRenderer::SubmitPanelSpriteRemap(x, y, units_per_px, spr, remap_row);
         return;
     }
+    if (m_ui_write_cmds) {
+        IRUISpriteRemapCmd cmd;
+        cmd.layer        = ComputeIRLayer(m_current_layer, m_world_depth_active, m_top_overlay_active);
+        cmd.x            = x;
+        cmd.y            = y;
+        cmd.units_per_px = units_per_px;
+        cmd.sprite       = spr;
+        cmd.remap_row    = remap_row;
+        cmd.alpha        = UIAlphaFromDrawFlags();
+        m_ui_write_cmds->sprites_remap.Append(cmd);
+        return;
+    }
     SpriteUV uv;
     if (!m_sprite_atlas->GetUV(spr, uv)) return;
     float w = (float)((uv.pixel_w * units_per_px + 8) / 16);
@@ -260,15 +325,29 @@ void GLUIRenderer::SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px
     q.z = 0.5f;
     q.mode = 30.0f;
     q.texture_id = 0;
-    q.layer = static_cast<uint8_t>(m_current_layer);
     q.remap_row = remap_row;
-    m_ui_quads.push_back(q);
+    const int layer = m_top_overlay_active ? 3
+                    : m_world_depth_active ? 2
+                    : m_current_layer;
+    m_quads[layer].push_back(q);
 }
 
 void GLUIRenderer::SubmitPanelSpriteColored(int32_t x, int32_t y, int units_per_px,
                                             SpriteHandle spr, uint8_t color_idx)
 {
     if (spr == kInvalidSpriteHandle || !m_sprite_atlas || !m_palette_data) return;
+    if (m_ui_write_cmds) {
+        IRUISpriteColoredCmd cmd;
+        cmd.layer        = ComputeIRLayer(m_current_layer, m_world_depth_active, m_top_overlay_active);
+        cmd.x            = x;
+        cmd.y            = y;
+        cmd.units_per_px = units_per_px;
+        cmd.sprite       = spr;
+        cmd.colour_idx   = color_idx;
+        cmd.alpha        = UIAlphaFromDrawFlags();
+        m_ui_write_cmds->sprites_colored.Append(cmd);
+        return;
+    }
     SpriteUV uv;
     if (!m_sprite_atlas->GetUV(spr, uv)) return;
     float w = (float)((uv.pixel_w * units_per_px + 8) / 16);
@@ -285,6 +364,20 @@ void GLUIRenderer::SubmitPanelSpriteColored(int32_t x, int32_t y, int units_per_
 void GLUIRenderer::SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h, SpriteHandle spr)
 {
     if (spr == kInvalidSpriteHandle || !m_sprite_atlas) return;
+    if (m_ui_write_cmds) {
+        IRUISpriteCmd cmd;
+        cmd.layer        = ComputeIRLayer(m_current_layer, m_world_depth_active, m_top_overlay_active);
+        cmd.x            = x;
+        cmd.y            = y;
+        cmd.w            = w;
+        cmd.h            = h;
+        cmd.units_per_px = 16;
+        cmd.sprite       = spr;
+        cmd.flags        = kIRSpriteScaled;
+        cmd.alpha        = UIAlphaFromDrawFlags();
+        m_ui_write_cmds->sprites.Append(cmd);
+        return;
+    }
     SpriteUV uv;
     if (!m_sprite_atlas->GetUV(spr, uv)) return;
     SubmitQuad((float)x, (float)y, (float)w, (float)h,
@@ -295,6 +388,18 @@ void GLUIRenderer::SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h
 void GLUIRenderer::SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx)
 {
     if (!m_palette_data) return;
+    if (m_ui_write_cmds) {
+        IRUISolidBoxCmd cmd;
+        cmd.layer      = ComputeIRLayer(m_current_layer, m_world_depth_active, m_top_overlay_active);
+        cmd.x          = x;
+        cmd.y          = y;
+        cmd.w          = w;
+        cmd.h          = h;
+        cmd.colour_idx = color_idx;
+        cmd.alpha      = 1.0f;
+        m_ui_write_cmds->solid_boxes.Append(cmd);
+        return;
+    }
     float r = m_palette_data[color_idx * 3 + 0] / VGA6_MAX;
     float g = m_palette_data[color_idx * 3 + 1] / VGA6_MAX;
     float b = m_palette_data[color_idx * 3 + 2] / VGA6_MAX;
@@ -306,6 +411,18 @@ void GLUIRenderer::SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, ui
 void GLUIRenderer::SubmitSolidBoxAlpha(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx, float alpha)
 {
     if (!m_palette_data) return;
+    if (m_ui_write_cmds) {
+        IRUISolidBoxCmd cmd;
+        cmd.layer      = ComputeIRLayer(m_current_layer, m_world_depth_active, m_top_overlay_active);
+        cmd.x          = x;
+        cmd.y          = y;
+        cmd.w          = w;
+        cmd.h          = h;
+        cmd.colour_idx = color_idx;
+        cmd.alpha      = alpha;
+        m_ui_write_cmds->solid_boxes.Append(cmd);
+        return;
+    }
     float r = m_palette_data[color_idx * 3 + 0] / VGA6_MAX;
     float g = m_palette_data[color_idx * 3 + 1] / VGA6_MAX;
     float b = m_palette_data[color_idx * 3 + 2] / VGA6_MAX;
@@ -316,12 +433,30 @@ void GLUIRenderer::SubmitSolidBoxAlpha(int32_t x, int32_t y, int32_t w, int32_t 
 
 void GLUIRenderer::UpdateSlabTexture(const uint8_t* data, int dim)
 {
+    // Latch the data pointer + dim so FlushPendingInit() can do the GL work on
+    // the render thread that owns the context.  No GL calls here — this function
+    // is called from the game thread (RendererNotifySpritesReloaded) which no
+    // longer holds the GL context after the first EndFrame().
     if (!data || dim <= 0) {
         SYNCLOG("UpdateSlabTexture: REJECTED data=%p dim=%d", (const void*)data, dim);
         return;
     }
+    m_slab_pending_data = data;
+    m_slab_pending_dim  = dim;
+}
+
+void GLUIRenderer::FlushPendingInit()
+{
+    if (!m_slab_pending_data || m_slab_pending_dim <= 0)
+        return;
+
+    const uint8_t* data = m_slab_pending_data;
+    int            dim  = m_slab_pending_dim;
+    m_slab_pending_data = nullptr;
+    m_slab_pending_dim  = 0;
+
     if (m_slab_texture == 0) glGenTextures(1, &m_slab_texture);
-    SYNCLOG("UpdateSlabTexture: tex=%u dim=%d first8=[%d,%d,%d,%d,%d,%d,%d,%d]",
+    SYNCLOG("FlushPendingInit/slab: tex=%u dim=%d first8=[%d,%d,%d,%d,%d,%d,%d,%d]",
             m_slab_texture, dim,
             data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7]);
     glBindTexture(GL_TEXTURE_2D, m_slab_texture);
@@ -336,15 +471,32 @@ void GLUIRenderer::UpdateSlabTexture(const uint8_t* data, int dim)
 
 bool GLUIRenderer::SubmitSlabBackground(int x, int y, int w, int h)
 {
-    if (!m_slab_texture || m_slab_dim <= 0) {
+    // Accept a pending upload as ready: FlushPendingInit() (called at the top of
+    // EndFrame_GL, before DrawBack) will create the texture before the quad is
+    // actually drawn.  Only fall back to the CPU WScreen path when no texture
+    // exists AND no upload is pending.
+    int dim = (m_slab_dim > 0) ? m_slab_dim : m_slab_pending_dim;
+    if (dim <= 0) {
         static int s_slab_miss = 0;
         if (s_slab_miss < 5)
-            SYNCLOG("SubmitSlabBackground: SKIP tex=%u dim=%d (count=%d)", m_slab_texture, m_slab_dim, s_slab_miss);
+            SYNCLOG("SubmitSlabBackground: SKIP tex=%u dim=%d pending_dim=%d (count=%d)",
+                    m_slab_texture, m_slab_dim, m_slab_pending_dim, s_slab_miss);
         ++s_slab_miss;
         return false;
     }
-    float u1 = (float)w / (float)m_slab_dim;
-    float v1 = (float)h / (float)m_slab_dim;
+    if (m_ui_write_cmds) {
+        IRUISlabBackgroundCmd cmd;
+        // Always on Back layer regardless of current layer state.
+        cmd.layer = IRUILayer::Back;
+        cmd.x     = x;
+        cmd.y     = y;
+        cmd.w     = w;
+        cmd.h     = h;
+        m_ui_write_cmds->slab_backgrounds.Append(cmd);
+        return true;
+    }
+    float u1 = (float)w / (float)dim;
+    float v1 = (float)h / (float)dim;
     // Always submit on layer 0 (back, rendered before the staging-buffer blit).
     // Force world-depth off so SubmitQuad doesn't redirect to layer 2.
     int saved_layer = m_current_layer;
@@ -387,31 +539,8 @@ uint8_t* GLUIRenderer::AcquireMinimapBuffer(int size)
 void GLUIRenderer::SubmitMinimap(int screen_x, int screen_y, int size)
 {
     if (size <= 0 || !m_minimap_cpu_buf) return;
-
-    // Create or re-create the GL texture when size changes
-    if (size != m_minimap_tex_size)
-    {
-        if (m_minimap_texture)
-            glDeleteTextures(1, &m_minimap_texture);
-        glGenTextures(1, &m_minimap_texture);
-        glBindTexture(GL_TEXTURE_2D, m_minimap_texture);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, size, size, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
-        m_minimap_tex_size = size;
-    }
-    else
-    {
-        glBindTexture(GL_TEXTURE_2D, m_minimap_texture);
-    }
-
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, size, size, GL_RED, GL_UNSIGNED_BYTE, m_minimap_cpu_buf);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4); // restore default
-    glBindTexture(GL_TEXTURE_2D, 0);
-
+    // GL texture creation and upload are deferred to DrawFrontBase() which runs
+    // on the render thread — the GL context owner after the Phase-3A handoff.
     m_minimap_x       = screen_x;
     m_minimap_y       = screen_y;
     m_minimap_size    = size;
@@ -423,6 +552,29 @@ void GLUIRenderer::SetLayer(int layer)
     m_current_layer = layer;
 }
 
+void GLUIRenderer::FlipBuffers()
+{
+    // Move game-thread quad/line state into render-thread shadow copies.
+    // After the move, game-side containers are empty and ready for the next frame.
+    // m_fbo_quads is not moved — it is pushed AND consumed on the render thread
+    // (SubmitFBOQuad is called during the PiP loop inside EndFrame_GL).
+    for (int i = 0; i < 4; ++i) {
+        m_rt_quads[i] = std::move(m_quads[i]);
+        m_rt_lines[i] = std::move(m_lines[i]);
+    }
+
+    // Swap minimap CPU buffers so the render thread reads the just-completed
+    // frame's pixel data while the game thread fills the next frame's buffer
+    // independently — no aliasing under Phase 3C async execution.
+    std::swap(m_minimap_cpu_buf,  m_rt_minimap_cpu_buf);
+    std::swap(m_minimap_cpu_size, m_rt_minimap_cpu_size);
+    m_rt_minimap_x       = m_minimap_x;
+    m_rt_minimap_y       = m_minimap_y;
+    m_rt_minimap_size    = m_minimap_size;
+    m_rt_minimap_pending = m_minimap_pending;
+    m_minimap_pending    = false;
+}
+
 void GLUIRenderer::DrawBack()
 {
     KFX_ZONE("UIRenderer::DrawBack");
@@ -431,7 +583,7 @@ void GLUIRenderer::DrawBack()
 
     // Render only layer-0 (back) quads — the sidebar background panels that must land
     // beneath the CPU staging-buffer blit.  No hand sprites, minimap, or lines here.
-    if (m_ui_quads.empty())
+    if (m_rt_quads[0].empty())
         return;
 
     glEnable(GL_BLEND);
@@ -439,7 +591,7 @@ void GLUIRenderer::DrawBack()
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
 
-    FlushQuads(0);
+    FlushQuads_RT(0);
 
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
@@ -509,7 +661,9 @@ void GLUIRenderer::DrawFront()
     KFX_GPU_ZONE("UIPass::Front");
     KFX_GL_SCOPE(front_grp, "UIPass/Front");
 
-    if (m_ui_quads.empty() && m_ui_lines.empty() && !m_minimap_pending && m_fbo_quads.empty())
+    if (m_rt_quads[0].empty() && m_rt_quads[1].empty() && m_rt_quads[2].empty() && m_rt_quads[3].empty()
+        && m_rt_lines[0].empty() && m_rt_lines[1].empty() && m_rt_lines[2].empty() && m_rt_lines[3].empty()
+        && !m_rt_minimap_pending && m_fbo_quads.empty())
         return;
 
     // Guarantee full-screen viewport.  The PiP path leaves the viewport at
@@ -535,14 +689,41 @@ void GLUIRenderer::DrawFront()
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     // Flush all remaining (layer-1 / front) quads.
-    FlushQuads(1);
+    FlushQuads_RT(1);
 
     // Minimap: palette-indexed R8 texture — front layer.
-    if (m_minimap_pending && m_minimap_texture)
+    // SubmitMinimap() defers all GL work here (render thread owns GL context).
+    if (m_rt_minimap_pending)
     {
-        float mx = (float)m_minimap_x;
-        float my = (float)m_minimap_y;
-        float ms = (float)m_minimap_size;
+        int mm_size = m_rt_minimap_size;
+        if (mm_size != m_minimap_tex_size)
+        {
+            if (m_minimap_texture)
+                glDeleteTextures(1, &m_minimap_texture);
+            glGenTextures(1, &m_minimap_texture);
+            glBindTexture(GL_TEXTURE_2D, m_minimap_texture);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, mm_size, mm_size, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
+            m_minimap_tex_size = mm_size;
+        }
+        else
+        {
+            glBindTexture(GL_TEXTURE_2D, m_minimap_texture);
+        }
+        if (m_rt_minimap_cpu_buf)
+        {
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, mm_size, mm_size, GL_RED, GL_UNSIGNED_BYTE, m_rt_minimap_cpu_buf);
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+        }
+        glBindTexture(GL_TEXTURE_2D, 0);
+
+        float mx = (float)m_rt_minimap_x;
+        float my = (float)m_rt_minimap_y;
+        float ms = (float)m_rt_minimap_size;
 
         glUseProgram(m_prog_sprite);
         glUniform2f(m_loc_screen_sprite, (float)m_screen_width, (float)m_screen_height);
@@ -567,11 +748,11 @@ void GLUIRenderer::DrawFront()
         glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(verts), verts);
         glDrawArrays(GL_TRIANGLES, 0, 6);
         glBindVertexArray(0);
-        m_minimap_pending = false;
+        m_rt_minimap_pending = false;
     }
 
     // Flush slab-selector lines and other line geometry (front layer).
-    FlushLines(1);
+    FlushLines_RT(1);
 
     // Flush world-depth-tagged elements (layer 2) — these are non-spatial sprites
     // (status flowers, room flags, slab selectors, floating numbers) submitted via
@@ -579,11 +760,7 @@ void GLUIRenderer::DrawFront()
     // carry an NDC z matching their bucket depth, so the existing tile depth buffer
     // will correctly occlude anything behind a wall.
     {
-        bool has_layer2_quads = false;
-        for (const auto& q : m_ui_quads) if (q.layer == 2) { has_layer2_quads = true; break; }
-        bool has_layer2_lines = false;
-        for (const auto& l : m_ui_lines) if (l.layer == 2) { has_layer2_lines = true; break; }
-        if (has_layer2_quads || has_layer2_lines)
+        if (!m_rt_quads[2].empty() || !m_rt_lines[2].empty())
         {
             // Scissor-clip layer-2 sprites to the game viewport so they can't
             // bleed onto the sidebar, overhead map, or zoom box.  These UI
@@ -601,8 +778,8 @@ void GLUIRenderer::DrawFront()
                                     // fragments, so only opaque pixels write depth.
                                     // The GPU handles occlusion natively; no painter's
                                     // algorithm or mode-ordered passes needed.
-            FlushQuads(2);
-            FlushLines(2);
+            FlushQuads_RT(2);
+            FlushLines_RT(2);
             glDisable(GL_DEPTH_TEST);
             if (m_game_vp_set)
                 glDisable(GL_SCISSOR_TEST);
@@ -611,8 +788,8 @@ void GLUIRenderer::DrawFront()
 
     // Layer 3: top-overlay — cursor-driven affordances (slab selector) drawn dead-last,
     // depth test OFF, so they are never obscured by any world or UI element.
-    FlushQuads(3);
-    FlushLines(3);
+    FlushQuads_RT(3);
+    FlushLines_RT(3);
 
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
@@ -641,13 +818,40 @@ void GLUIRenderer::DrawFrontBase()
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    FlushQuads(1);
+    FlushQuads_RT(1);
 
-    if (m_minimap_pending && m_minimap_texture)
+    // SubmitMinimap() defers all GL work here (render thread owns GL context).
+    if (m_rt_minimap_pending)
     {
-        float mx = (float)m_minimap_x;
-        float my = (float)m_minimap_y;
-        float ms = (float)m_minimap_size;
+        int mm_size = m_rt_minimap_size;
+        if (mm_size != m_minimap_tex_size)
+        {
+            if (m_minimap_texture)
+                glDeleteTextures(1, &m_minimap_texture);
+            glGenTextures(1, &m_minimap_texture);
+            glBindTexture(GL_TEXTURE_2D, m_minimap_texture);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, mm_size, mm_size, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
+            m_minimap_tex_size = mm_size;
+        }
+        else
+        {
+            glBindTexture(GL_TEXTURE_2D, m_minimap_texture);
+        }
+        if (m_rt_minimap_cpu_buf)
+        {
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, mm_size, mm_size, GL_RED, GL_UNSIGNED_BYTE, m_rt_minimap_cpu_buf);
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+        }
+        glBindTexture(GL_TEXTURE_2D, 0);
+
+        float mx = (float)m_rt_minimap_x;
+        float my = (float)m_rt_minimap_y;
+        float ms = (float)m_rt_minimap_size;
 
         glUseProgram(m_prog_sprite);
         glUniform2f(m_loc_screen_sprite, (float)m_screen_width, (float)m_screen_height);
@@ -672,10 +876,10 @@ void GLUIRenderer::DrawFrontBase()
         glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(verts), verts);
         glDrawArrays(GL_TRIANGLES, 0, 6);
         glBindVertexArray(0);
-        m_minimap_pending = false;
+        m_rt_minimap_pending = false;
     }
 
-    FlushLines(1);
+    FlushLines_RT(1);
 }
 
 void GLUIRenderer::DrawFrontOverlay()
@@ -684,11 +888,7 @@ void GLUIRenderer::DrawFrontOverlay()
     KFX_GL_SCOPE(front_ovl_grp, "UIPass/FrontOverlay");
 
     {
-        bool has_layer2_quads = false;
-        for (const auto& q : m_ui_quads) if (q.layer == 2) { has_layer2_quads = true; break; }
-        bool has_layer2_lines = false;
-        for (const auto& l : m_ui_lines) if (l.layer == 2) { has_layer2_lines = true; break; }
-        if (has_layer2_quads || has_layer2_lines)
+        if (!m_rt_quads[2].empty() || !m_rt_lines[2].empty())
         {
             if (m_game_vp_set && m_game_vp_w > 0 && m_game_vp_h > 0)
             {
@@ -699,16 +899,16 @@ void GLUIRenderer::DrawFrontOverlay()
             glEnable(GL_DEPTH_TEST);
             glDepthFunc(GL_LEQUAL);
             glDepthMask(GL_TRUE);
-            FlushQuads(2);
-            FlushLines(2);
+            FlushQuads_RT(2);
+            FlushLines_RT(2);
             glDisable(GL_DEPTH_TEST);
             if (m_game_vp_set)
                 glDisable(GL_SCISSOR_TEST);
         }
     }
 
-    FlushQuads(3);
-    FlushLines(3);
+    FlushQuads_RT(3);
+    FlushLines_RT(3);
 
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
@@ -717,9 +917,11 @@ void GLUIRenderer::DrawFrontOverlay()
 
 void GLUIRenderer::BeginPiPSprites()
 {
-    m_pip_quad_watermark  = (int)m_ui_quads.size();
-    m_pip_line_watermark  = (int)m_ui_lines.size();
-    m_pip_capture_active  = true;
+    for (int i = 0; i < 4; ++i) {
+        m_pip_quad_wm[i] = (int)m_quads[i].size();
+        m_pip_line_wm[i] = (int)m_lines[i].size();
+    }
+    m_pip_capture_active = true;
 }
 
 void GLUIRenderer::DrawPiPSprites(int pip_w, int pip_h)
@@ -728,8 +930,13 @@ void GLUIRenderer::DrawPiPSprites(int pip_w, int pip_h)
         return;
     m_pip_capture_active = false;
 
-    const int nq = (int)m_ui_quads.size()   - m_pip_quad_watermark;
-    const int nl = (int)m_ui_lines.size()   - m_pip_line_watermark;
+    // Count total pip-sourced entries across layers 1 and 2 (layers 0/3 never
+    // submitted during draw_view, so their tails are expected to be zero).
+    int nq = 0, nl = 0;
+    for (int i = 0; i < 4; ++i) {
+        nq += (int)m_quads[i].size() - m_pip_quad_wm[i];
+        nl += (int)m_lines[i].size() - m_pip_line_wm[i];
+    }
 
     if (nq > 0 || nl > 0)
     {
@@ -745,47 +952,35 @@ void GLUIRenderer::DrawPiPSprites(int pip_w, int pip_h)
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         glDepthMask(GL_FALSE);
 
-        // Temporarily move pip-tail entries to the front of each vector so that
-        // FlushQuads/FlushLines (which operate on the whole vector
-        // filtered by layer) only see pip-sourced entries.
-        // We swap them into temporary vectors, flush, then restore the originals.
-        std::vector<UIQuad>      pip_quads(m_ui_quads.begin()   + m_pip_quad_watermark,  m_ui_quads.end());
-        std::vector<UILine>      pip_lines(m_ui_lines.begin()   + m_pip_line_watermark,  m_ui_lines.end());
-
-        // Erase pip tail from the main queues now — corner sprites at [0..watermark) remain.
-        m_ui_quads.erase(  m_ui_quads.begin()   + m_pip_quad_watermark,  m_ui_quads.end());
-        m_ui_lines.erase(  m_ui_lines.begin()   + m_pip_line_watermark,  m_ui_lines.end());
-
-        // Swap pip entries in as the active queues for the flush calls.
-        m_ui_quads.swap(pip_quads);
-        m_ui_lines.swap(pip_lines);
+        // For each layer, extract pip-tail into a temporary vector, swap it in as
+        // the active queue, flush, then restore the pre-PiP entries.
+        std::vector<UIQuad> pip_quads[4];
+        std::vector<UILine> pip_lines[4];
+        for (int i = 0; i < 4; ++i) {
+            pip_quads[i].assign(m_quads[i].begin() + m_pip_quad_wm[i], m_quads[i].end());
+            pip_lines[i].assign(m_lines[i].begin() + m_pip_line_wm[i], m_lines[i].end());
+            m_quads[i].erase(m_quads[i].begin() + m_pip_quad_wm[i], m_quads[i].end());
+            m_lines[i].erase(m_lines[i].begin() + m_pip_line_wm[i], m_lines[i].end());
+            m_quads[i].swap(pip_quads[i]);
+            m_lines[i].swap(pip_lines[i]);
+        }
 
         // Layer-2: creature status / gold text — depth-tested against FBO geometry.
+        if (!m_quads[2].empty() || !m_lines[2].empty())
         {
-            bool has2q = false, has2l = false;
-            for (const auto& q : m_ui_quads)    if (q.layer == 2) { has2q = true; break; }
-            for (const auto& l : m_ui_lines)    if (l.layer == 2) { has2l = true; break; }
-            if (has2q || has2l)
-            {
-                glEnable(GL_DEPTH_TEST);
-                glDepthFunc(GL_LEQUAL);
-                glDepthMask(GL_TRUE);
-                if (has2q) FlushQuads(2);
-                if (has2l) FlushLines(2);
-                glDisable(GL_DEPTH_TEST);
-            }
+            glEnable(GL_DEPTH_TEST);
+            glDepthFunc(GL_LEQUAL);
+            glDepthMask(GL_TRUE);
+            FlushQuads(2);
+            FlushLines(2);
+            glDisable(GL_DEPTH_TEST);
         }
         // Layer-1: room flags — always on top inside the zoom box.
+        if (!m_quads[1].empty() || !m_lines[1].empty())
         {
-            bool has1q = false, has1l = false;
-            for (const auto& q : m_ui_quads)    if (q.layer == 1) { has1q = true; break; }
-            for (const auto& l : m_ui_lines)    if (l.layer == 1) { has1l = true; break; }
-            if (has1q || has1l)
-            {
-                glDisable(GL_DEPTH_TEST);
-                if (has1q) FlushQuads(1);
-                if (has1l) FlushLines(1);
-            }
+            glDisable(GL_DEPTH_TEST);
+            FlushQuads(1);
+            FlushLines(1);
         }
 
         glDepthMask(GL_TRUE);
@@ -794,42 +989,63 @@ void GLUIRenderer::DrawPiPSprites(int pip_w, int pip_h)
         m_screen_width  = saved_w;
         m_screen_height = saved_h;
 
-        // Discard any remaining pip entries (layer-3 top-overlay etc.).
-        m_ui_quads.clear();
-        m_ui_lines.clear();
+        // Discard any remaining pip entries (layer-0/3 stray quads, should be empty).
+        for (int i = 0; i < 4; ++i) { m_quads[i].clear(); m_lines[i].clear(); }
 
-        // Restore the saved corner-frame entries as the active queues.
-        m_ui_quads.swap(pip_quads);
-        m_ui_lines.swap(pip_lines);
-    }
-    else
-    {
-        // No pip-sourced sprites — nothing to render into the FBO.
-        // The queues already contain only pre-PiP entries; nothing to restore.
+        // Restore the saved pre-PiP entries as the active queues.
+        for (int i = 0; i < 4; ++i) {
+            m_quads[i].swap(pip_quads[i]);
+            m_lines[i].swap(pip_lines[i]);
+        }
     }
 }
 
 void GLUIRenderer::DrawCursorSprites()
 {
-    // Draw atlas-quad sprites submitted since the last DrawFront().
-    // Called by GLCursorLayer::Draw() for the OS pointer sprite.
-    if (m_ui_quads.empty()) return;
+    // Draw atlas-quad sprites submitted via SubmitCursorPanelSprite().
+    // Uses m_cursor_quads (render-thread-only) instead of m_quads[1], preventing
+    // the Phase-3C race where the game thread concurrently pushes to m_quads[1].
+    if (m_cursor_quads.empty()) return;
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
-    FlushQuads(1);
+    flush_quads_from(m_cursor_quads);
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
     glUseProgram(0);
 }
 
+void GLUIRenderer::SubmitCursorPanelSprite(int32_t x, int32_t y, int units_per_px, SpriteHandle spr)
+{
+    // Render-thread-only path: pushes to m_cursor_quads instead of m_quads[layer].
+    // Called exclusively from GLCursorLayer::Draw() on the render thread so the
+    // game thread never touches m_cursor_quads.
+    if (spr == kInvalidSpriteHandle || !m_sprite_atlas) return;
+    SpriteUV uv;
+    if (!m_sprite_atlas->GetUV(spr, uv)) return;
+    float w = (float)((uv.pixel_w * units_per_px + 8) / 16);
+    float h = (float)((uv.pixel_h * units_per_px + 8) / 16);
+    UIQuad q;
+    q.x0 = (float)x;       q.y0 = (float)y;
+    q.x1 = (float)x + w;  q.y1 = (float)y + h;
+    q.u0 = uv.u0;          q.v0 = uv.v0;
+    q.u1 = uv.u1;          q.v1 = uv.v1;
+    q.r = 1.0f;  q.g = 1.0f;  q.b = 1.0f;
+    q.a = UIAlphaFromDrawFlags();
+    q.z = 0.5f;
+    q.mode = 0.0f;   // PASS_SPRITE
+    q.texture_id = 0;
+    q.remap_row = -1;
+    m_cursor_quads.push_back(q);
+}
+
 void GLUIRenderer::Draw()
 {
     KFX_ZONE("UIRenderer::Draw");
-    // Emit per-frame stats before drawing (capture sizes before clear).
-    KFX_PLOT("UI/Quads",      (int)m_ui_quads.size());
-    KFX_PLOT("UI/Lines",      (int)m_ui_lines.size());
+    // Emit per-frame stats before drawing (capture sizes from the render-thread copies).
+    KFX_PLOT("UI/Quads",      (int)(m_rt_quads[0].size()+m_rt_quads[1].size()+m_rt_quads[2].size()+m_rt_quads[3].size()));
+    KFX_PLOT("UI/Lines",      (int)(m_rt_lines[0].size()+m_rt_lines[1].size()+m_rt_lines[2].size()+m_rt_lines[3].size()));
     // Full draw: back layer then front layer.
     DrawBack();
     DrawFront();
@@ -851,8 +1067,7 @@ void GLUIRenderer::SubmitFBOQuad(int x, int y, int w, int h, GLuint tex_id, floa
 
 void GLUIRenderer::Clear()
 {
-    m_ui_quads.clear();
-    m_ui_lines.clear();
+    for (int i = 0; i < 4; ++i) { m_quads[i].clear(); m_lines[i].clear(); }
     m_fbo_quads.clear();
     m_vertices.clear();
     m_minimap_pending = false;
@@ -867,6 +1082,178 @@ void GLUIRenderer::SetGameViewport(int x, int y, int w, int h)
     m_game_vp_w   = w;
     m_game_vp_h   = h;
     m_game_vp_set = true;
+    if (m_ui_write_cmds) {
+        m_ui_write_cmds->game_vp = { x, y, w, h, true };
+    }
+}
+
+void GLUIRenderer::SetUICommandBuffers(UICommandBuffers* cmds)
+{
+    m_ui_write_cmds = cmds;
+    if (cmds) cmds->ir_active = true;
+}
+
+void GLUIRenderer::ExecuteUIFromIR(const UICommandBuffers& cmds, const FrameState& fs)
+{
+    // Skip if this frame was a stale-replay (fade-cache) frame — m_rt_quads[] already
+    // contain the preserved quads that FlipBuffers() moved; leave them intact.
+    if (!cmds.ir_active) return;
+
+    // Clear render-thread quad/line buffers and rebuild from IR commands.
+    for (int i = 0; i < 4; ++i) { m_rt_quads[i].clear(); m_rt_lines[i].clear(); }
+
+    // Restore game viewport if it was captured this frame.
+    if (cmds.game_vp.set) {
+        m_game_vp_x   = cmds.game_vp.x;
+        m_game_vp_y   = cmds.game_vp.y;
+        m_game_vp_w   = cmds.game_vp.w;
+        m_game_vp_h   = cmds.game_vp.h;
+        m_game_vp_set = true;
+    } else {
+        m_game_vp_set = false;
+    }
+
+    const uint8_t* pal = fs.palette; // 768-byte VGA6 palette snapshot
+
+    // ── Solid boxes ─────────────────────────────────────────────────────────
+    for (const auto& cmd : cmds.solid_boxes) {
+        const int idx = IRUILayerToIndex(cmd.layer);
+        float r = pal[cmd.colour_idx * 3 + 0] / VGA6_MAX;
+        float g = pal[cmd.colour_idx * 3 + 1] / VGA6_MAX;
+        float b = pal[cmd.colour_idx * 3 + 2] / VGA6_MAX;
+        UIQuad q;
+        q.x0 = (float)cmd.x;         q.y0 = (float)cmd.y;
+        q.x1 = (float)(cmd.x+cmd.w); q.y1 = (float)(cmd.y+cmd.h);
+        q.u0 = 0.0f; q.v0 = 0.0f; q.u1 = 1.0f; q.v1 = 1.0f;
+        q.r = r; q.g = g; q.b = b; q.a = cmd.alpha;
+        q.z = 0.5f; q.mode = 3.0f; q.texture_id = 0; q.remap_row = -1;
+        m_rt_quads[idx].push_back(q);
+    }
+
+    // ── Slab backgrounds ────────────────────────────────────────────────────
+    if (m_slab_texture > 0) {
+        for (const auto& cmd : cmds.slab_backgrounds) {
+            const int idx = IRUILayerToIndex(cmd.layer);
+            const int dim = m_slab_dim;
+            if (dim <= 0) continue;
+            float u1 = (float)cmd.w / (float)dim;
+            float v1 = (float)cmd.h / (float)dim;
+            // Opaque backing quad
+            UIQuad qbg;
+            qbg.x0=(float)cmd.x; qbg.y0=(float)cmd.y;
+            qbg.x1=(float)(cmd.x+cmd.w); qbg.y1=(float)(cmd.y+cmd.h);
+            qbg.u0=0.0f; qbg.v0=0.0f; qbg.u1=1.0f; qbg.v1=1.0f;
+            qbg.r=0.0f; qbg.g=0.0f; qbg.b=0.0f; qbg.a=1.0f;
+            qbg.z=0.48f; qbg.mode=3.0f; qbg.texture_id=0; qbg.remap_row=-1;
+            m_rt_quads[idx].push_back(qbg);
+            // Tiled slab texture
+            UIQuad qt;
+            qt.x0=(float)cmd.x; qt.y0=(float)cmd.y;
+            qt.x1=(float)(cmd.x+cmd.w); qt.y1=(float)(cmd.y+cmd.h);
+            qt.u0=0.0f; qt.v0=0.0f; qt.u1=u1; qt.v1=v1;
+            qt.r=1.0f; qt.g=1.0f; qt.b=1.0f; qt.a=1.0f;
+            qt.z=0.49f; qt.mode=10.0f; qt.texture_id=0; qt.remap_row=-1;
+            m_rt_quads[idx].push_back(qt);
+        }
+    }
+
+    // ── Panel sprites ────────────────────────────────────────────────────────
+    if (m_sprite_atlas) {
+        for (const auto& cmd : cmds.sprites) {
+            SpriteUV uv;
+            if (!m_sprite_atlas->GetUV(cmd.sprite, uv)) continue;
+            const int idx = IRUILayerToIndex(cmd.layer);
+            float w, h;
+            if (cmd.flags & kIRSpriteScaled) {
+                w = (float)cmd.w;
+                h = (float)cmd.h;
+            } else {
+                w = (float)((uv.pixel_w * cmd.units_per_px + 8) / 16);
+                h = (float)((uv.pixel_h * cmd.units_per_px + 8) / 16);
+            }
+            bool flip = (cmd.flags & kIRSpriteFlipHoriz) != 0;
+            float u0 = flip ? uv.u1 : uv.u0;
+            float u1 = flip ? uv.u0 : uv.u1;
+            UIQuad q;
+            q.x0=(float)cmd.x; q.y0=(float)cmd.y;
+            q.x1=(float)cmd.x+w; q.y1=(float)cmd.y+h;
+            q.u0=u0; q.v0=uv.v0; q.u1=u1; q.v1=uv.v1;
+            q.r=1.0f; q.g=1.0f; q.b=1.0f; q.a=cmd.alpha;
+            q.z=0.5f; q.mode=0.0f; q.texture_id=0; q.remap_row=-1;
+            m_rt_quads[idx].push_back(q);
+        }
+
+        // ── Remap sprites ────────────────────────────────────────────────────
+        if (m_fade_texture) {
+            for (const auto& cmd : cmds.sprites_remap) {
+                SpriteUV uv;
+                if (!m_sprite_atlas->GetUV(cmd.sprite, uv)) continue;
+                const int idx = IRUILayerToIndex(cmd.layer);
+                float w = (float)((uv.pixel_w * cmd.units_per_px + 8) / 16);
+                float h = (float)((uv.pixel_h * cmd.units_per_px + 8) / 16);
+                UIQuad q;
+                q.x0=(float)cmd.x; q.y0=(float)cmd.y;
+                q.x1=(float)cmd.x+w; q.y1=(float)cmd.y+h;
+                q.u0=uv.u0; q.v0=uv.v0; q.u1=uv.u1; q.v1=uv.v1;
+                q.r=1.0f; q.g=1.0f; q.b=1.0f; q.a=cmd.alpha;
+                q.z=0.5f; q.mode=30.0f; q.texture_id=0; q.remap_row=cmd.remap_row;
+                m_rt_quads[idx].push_back(q);
+            }
+        }
+
+        // ── Coloured sprites ─────────────────────────────────────────────────
+        for (const auto& cmd : cmds.sprites_colored) {
+            SpriteUV uv;
+            if (!m_sprite_atlas->GetUV(cmd.sprite, uv)) continue;
+            const int idx = IRUILayerToIndex(cmd.layer);
+            float w = (float)((uv.pixel_w * cmd.units_per_px + 8) / 16);
+            float h = (float)((uv.pixel_h * cmd.units_per_px + 8) / 16);
+            float r = pal[cmd.colour_idx * 3 + 0] / VGA6_MAX;
+            float g = pal[cmd.colour_idx * 3 + 1] / VGA6_MAX;
+            float b = pal[cmd.colour_idx * 3 + 2] / VGA6_MAX;
+            UIQuad q;
+            q.x0=(float)cmd.x; q.y0=(float)cmd.y;
+            q.x1=(float)cmd.x+w; q.y1=(float)cmd.y+h;
+            q.u0=uv.u0; q.v0=uv.v0; q.u1=uv.u1; q.v1=uv.v1;
+            q.r=r; q.g=g; q.b=b; q.a=cmd.alpha;
+            q.z=0.5f; q.mode=20.0f; q.texture_id=0; q.remap_row=-1;
+            m_rt_quads[idx].push_back(q);
+        }
+    }
+
+    // ── Slab selectors ───────────────────────────────────────────────────────
+    if (m_palette_data) {
+        for (const auto& cmd : cmds.slab_selectors) {
+            // Re-execute the stripey-line tessellation using the pre-computed params.
+            float dx = (float)(cmd.x2 - cmd.x1);
+            float dy = (float)(cmd.y2 - cmd.y1);
+            if (cmd.line_length < 0.001f) continue;
+            float ndx = dx / cmd.line_length;
+            float ndy = dy / cmd.line_length;
+            float phase = (float)cmd.game_turn;
+            const struct stripey_line* sl = &colored_stripey_lines[cmd.colour];
+            constexpr int MAX_SEG = 512;
+            float t = 0.0f;
+            int segs = 0;
+            while (t < cmd.line_length && segs < MAX_SEG) {
+                float anim_pos = phase + t * cmd.step;
+                anim_pos = std::fmod(anim_pos, (float)STRIPEY_COLORS);
+                if (anim_pos < 0.0f) anim_pos += (float)STRIPEY_COLORS;
+                int ci = std::max(0, std::min(STRIPEY_COLORS-1, (int)anim_pos));
+                float t_end = std::min(t + cmd.band_width, cmd.line_length);
+                unsigned char pi = sl->stripey_line_color_array[ci];
+                float r = m_palette_data[pi*3+0]/VGA6_MAX;
+                float g = m_palette_data[pi*3+1]/VGA6_MAX;
+                float b = m_palette_data[pi*3+2]/VGA6_MAX;
+                float sx = (float)cmd.x1 + ndx*t;
+                float sy = (float)cmd.y1 + ndy*t;
+                float ex = (float)cmd.x1 + ndx*t_end;
+                float ey = (float)cmd.y1 + ndy*t_end;
+                SubmitLine(sx, sy, ex, ey, r, g, b, 1.0f, cmd.z_depth, cmd.thickness);
+                t = t_end; ++segs;
+            }
+        }
+    }
 }
 
 // Helper: compile one shader stage. Returns 0 on failure (error already logged).
@@ -1052,10 +1439,12 @@ void GLUIRenderer::CreateVertexArrays()
 
 void GLUIRenderer::FlushQuads(int layer)
 {
-    // Partition: quads matching 'layer' first, preserving submission order.
-    auto mid = std::stable_partition(m_ui_quads.begin(), m_ui_quads.end(),
-        [layer](const UIQuad& q) { return (int)q.layer == layer; });
-    if (mid == m_ui_quads.begin()) return;  // nothing for this layer
+    flush_quads_from(m_quads[layer]);
+}
+
+void GLUIRenderer::flush_quads_from(std::vector<UIQuad>& quads)
+{
+    if (quads.empty()) return;
 
     // Reset texture unit state from whatever GPUFlushNow (or a previous pass) left
     // behind.  The world renderer leaves the tile atlas bound at unit 0 (GL_TEXTURE_2D)
@@ -1159,37 +1548,40 @@ void GLUIRenderer::FlushQuads(int layer)
 
     // Walk quads in submission order, batching consecutive same-pass quads.
     // Remap quads also break on remap_row changes (uniform must be updated).
-    PassType current_pass = classify(m_ui_quads.begin()->mode);
-    current_remap_row = m_ui_quads.begin()->remap_row;
+    PassType current_pass = classify(quads.front().mode);
+    current_remap_row = quads.front().remap_row;
     m_vertices.clear();
 
-    for (auto it = m_ui_quads.begin(); it != mid; ++it) {
-        PassType pass = classify(it->mode);
-        bool remap_row_changed = (pass == PASS_REMAP && it->remap_row != current_remap_row);
+    for (const auto& q : quads) {
+        PassType pass = classify(q.mode);
+        bool remap_row_changed = (pass == PASS_REMAP && q.remap_row != current_remap_row);
         if (pass != current_pass || remap_row_changed) {
             flush_batch(current_pass);
             current_pass = pass;
-            current_remap_row = it->remap_row;
+            current_remap_row = q.remap_row;
         }
-        ExpandQuadToVertices(*it);
+        ExpandQuadToVertices(q);
     }
 
     flush_batch(current_pass);
 
     glBindVertexArray(0);
-    m_ui_quads.erase(m_ui_quads.begin(), mid);  // Remove flushed layer-N quads                                                                                                                                                                                                            
+    quads.clear();
 }
 
 
 void GLUIRenderer::FlushLines(int layer)
 {
-    auto mid = std::stable_partition(m_ui_lines.begin(), m_ui_lines.end(),
-        [layer](const UILine& l) { return (int)l.layer == layer; });
-    if (mid == m_ui_lines.begin()) return;
+    flush_lines_from(m_lines[layer]);
+}
+
+void GLUIRenderer::flush_lines_from(std::vector<UILine>& lines)
+{
+    if (lines.empty()) return;
 
     m_vertices.clear();
-    for (auto it = m_ui_lines.begin(); it != mid; ++it)
-        ExpandLineToVertices(*it);
+    for (const auto& l : lines)
+        ExpandLineToVertices(l);
 
     if (!m_vertices.empty()) {
         glUseProgram(m_prog_solid);
@@ -1202,7 +1594,20 @@ void GLUIRenderer::FlushLines(int layer)
         glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_vertices.size());
         glBindVertexArray(0);
     }
-    m_ui_lines.erase(m_ui_lines.begin(), mid);
+    lines.clear();
+}
+
+void GLUIRenderer::FlushQuads_RT(int layer)
+{
+    // Phase 3C: operate directly on m_rt_quads so we never touch m_quads[layer],
+    // which the game thread may be concurrently writing for the next frame.
+    flush_quads_from(m_rt_quads[layer]);
+}
+
+void GLUIRenderer::FlushLines_RT(int layer)
+{
+    // Phase 3C: operate directly on m_rt_lines so we never touch m_lines[layer].
+    flush_lines_from(m_rt_lines[layer]);
 }
 
 void GLUIRenderer::ExpandQuadToVertices(const UIQuad& quad)
@@ -1260,6 +1665,9 @@ void GLUIRenderer::ExpandLineToVertices(const UILine& line)
 void GLUIRenderer::SubmitQuad(float x, float y, float w, float h, float u0, float v0, float u1, float v1, 
                              float r, float g, float b, float a, float z, float mode, uint32_t texture_id)
 {
+    const int layer = m_top_overlay_active ? 3
+                    : m_world_depth_active ? 2
+                    : m_current_layer;
     UIQuad quad;
     quad.x0 = x;
     quad.y0 = y;
@@ -1277,14 +1685,7 @@ void GLUIRenderer::SubmitQuad(float x, float y, float w, float h, float u0, floa
     quad.mode = mode;
     quad.texture_id = texture_id;
     quad.remap_row = -1;
-    if (m_top_overlay_active)
-        quad.layer = 3;
-    else if (m_world_depth_active)
-        quad.layer = 2;
-    else
-        quad.layer = static_cast<uint8_t>(m_current_layer);
-    
-    m_ui_quads.push_back(quad);
+    m_quads[layer].push_back(quad);
 }
 
 void GLUIRenderer::SetWorldDepth(float ndc_z)
@@ -1311,6 +1712,9 @@ void GLUIRenderer::ClearTopOverlay()
 void GLUIRenderer::SubmitLine(float x1, float y1, float x2, float y2, float r, float g, float b, float a, 
                              float z, float thickness)
 {
+    const int layer = m_top_overlay_active ? 3
+                    : m_world_depth_active ? 2
+                    : m_current_layer;
     UILine line;
     line.x1 = x1;
     line.y1 = y1;
@@ -1322,14 +1726,7 @@ void GLUIRenderer::SubmitLine(float x1, float y1, float x2, float y2, float r, f
     line.a = a;
     line.z = m_world_depth_active ? m_world_z : z;
     line.thickness = thickness;
-    if (m_top_overlay_active)
-        line.layer = 3;
-    else if (m_world_depth_active)
-        line.layer = 2;
-    else
-        line.layer = static_cast<uint8_t>(m_current_layer);
-    
-    m_ui_lines.push_back(line);
+    m_lines[layer].push_back(line);
 }
 
 
