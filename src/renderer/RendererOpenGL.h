@@ -10,11 +10,9 @@
 #include "IRenderer.h"
 #include "renderer/FrameState.h"
 #include "renderer/RenderGraph.h"
+#include "renderer/RenderThreadManager.h"
 #include <atomic>
 #include <vector>
-#include <thread>
-#include <mutex>
-#include <condition_variable>
 
 // engine_camera.h defines struct Camera, which RendererOpenGL stores by value
 // in PiPCmd.  The include chain is short (globals.h only) and the renderer
@@ -447,17 +445,9 @@ private:
 
     // ── Render thread (Phase 3A) ───────────────────────────────────────────
     // The dedicated GL-submission thread owns the OpenGL context for the
-    // entire session.  EndFrame() (game thread) signals work-ready, then
-    // blocks until work-done — fully synchronous in Phase 3A, establishing
-    // the thread boundary without introducing any latency.
-    std::thread             m_render_thread;
-    std::mutex              m_rt_mutex;
-    std::condition_variable m_rt_cv;
-    bool                    m_rt_work_ready  = false; // game→render: EndFrame_GL() pending
-    bool                    m_rt_work_done   = true;  // render→game: EndFrame_GL() complete (init true: first EndFrame() wait passes immediately)
-    bool                    m_rt_quit        = false; // game→render: shut down
-    bool                    m_rt_initialized = false; // render→game: context acquired
-    bool                    m_rt_active      = false; // true while render thread is running
+    // entire session.  EndFrame() (game thread) calls WaitForCompletion()
+    // at entry and Signal() at exit.  See RenderThreadManager.h for protocol.
+    RenderThreadManager     m_render_thread;
 
     // Set in BeginFrame() when the animated-tile sentinel changes; consumed in
     // EndFrame_GL() on the render thread (where the GL context is current).
@@ -474,7 +464,6 @@ private:
     // Written by game thread, read+cleared by render thread — atomic to prevent UB.
     std::atomic<bool>       m_fade_table_pending      {false};
 
-    void RenderThreadProc(); ///< Render thread entry point.
     void EndFrame_GL();      ///< All GL submission work; runs on the render thread.
 
 public:

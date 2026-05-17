@@ -452,17 +452,11 @@ bool RendererOpenGL::Init()
 void RendererOpenGL::Shutdown()
 {
     // Signal the render thread to quit and join it before any GL cleanup.
-    // The render thread releases the context on exit, allowing the main thread
-    // to re-acquire it for glDelete* calls below.
-    if (m_rt_active)
+    // The render thread releases the context on exit (cleanup_fn), allowing the
+    // main thread to re-acquire it for glDelete* calls below.
+    if (m_render_thread.IsActive())
     {
-        {
-            std::lock_guard<std::mutex> lk(m_rt_mutex);
-            m_rt_quit = true;
-        }
-        m_rt_cv.notify_one();
-        m_render_thread.join();
-        m_rt_active = false;
+        m_render_thread.Stop();
         platform_gl_acquire_context();
     }
 
@@ -528,48 +522,8 @@ void RendererOpenGL::Shutdown()
     platform_destroy_gl_context();
 }
 
-void RendererOpenGL::RenderThreadProc()
-{
-    platform_gl_acquire_context();
-
-    // Initialise Tracy GPU profiling on this thread (requires the GL context to be
-    // current).  Skip when RenderDoc is attached — see the comment in Init() for
-    // the full explanation.
-    if (!platform_is_renderdoc_present()) {
-        KFX_GPU_CTX_CREATE();
-    } else {
-        SYNCLOG("RenderDoc detected — Tracy GPU profiling disabled (render thread)");
-    }
-
-    // Signal the game thread that we have acquired the context and are ready.
-    {
-        std::lock_guard<std::mutex> lk(m_rt_mutex);
-        m_rt_initialized = true;
-    }
-    m_rt_cv.notify_one();
-
-    for (;;)
-    {
-        {
-            std::unique_lock<std::mutex> lock(m_rt_mutex);
-            m_rt_cv.wait(lock, [this]{ return m_rt_work_ready || m_rt_quit; });
-            if (m_rt_quit) { break; }
-            m_rt_work_ready = false;
-        }
-
-        EndFrame_GL();
-
-        {
-            std::lock_guard<std::mutex> lk(m_rt_mutex);
-            m_rt_work_done = true;
-        }
-        m_rt_cv.notify_one();
-    }
-
-    // Release the context so Shutdown() can re-acquire it on the main thread
-    // for glDelete* resource cleanup.
-    platform_gl_release_context();
-}
+// (RenderThreadProc has been replaced by lambdas passed to RenderThreadManager::Start()
+//  in EndFrame().  See RendererOpenGL::EndFrame() below.)
 
 void RendererOpenGL::ClearScreen(uint8_t colour_index)
 {
@@ -666,25 +620,33 @@ bool RendererOpenGL::BeginFrame()
 void RendererOpenGL::EndFrame()
 {
     // Phase 3C: wait for the PREVIOUS frame's render to complete before we
-    // flip the command buffers for the new frame.  m_rt_work_done is initialised
-    // to true so the very first call passes through immediately (no prior frame).
-    {
-        std::unique_lock<std::mutex> lock(m_rt_mutex);
-        m_rt_cv.wait(lock, [this]{ return m_rt_work_done; });
-    }
+    // flip the command buffers for the new frame.  m_work_done starts true
+    // so the very first call passes through immediately (no prior frame).
+    m_render_thread.WaitForCompletion();
 
     // Lazily start the render thread on the first EndFrame() call.
     // All sub-renderer GL initialisation (GLWorldViewRenderer, GLTextRenderer,
     // GLMapFadePass, etc.) runs on the main thread with the context current
     // between Init() and this point.  On the first EndFrame() we release the
     // context from the main thread and hand it to the render thread permanently.
-    if (!m_rt_active)
+    if (!m_render_thread.IsActive())
     {
         platform_gl_release_context();
-        m_rt_active = true;
-        m_render_thread = std::thread(&RendererOpenGL::RenderThreadProc, this);
-        std::unique_lock<std::mutex> init_lock(m_rt_mutex);
-        m_rt_cv.wait(init_lock, [this]{ return m_rt_initialized; });
+        m_render_thread.Start(
+            // init_fn: acquire GL context on the render thread, init Tracy.
+            [this]() {
+                platform_gl_acquire_context();
+                if (!platform_is_renderdoc_present()) {
+                    KFX_GPU_CTX_CREATE();
+                } else {
+                    SYNCLOG("RenderDoc detected — Tracy GPU profiling disabled (render thread)");
+                }
+            },
+            // work_fn: execute one frame of GL submission.
+            [this]() { EndFrame_GL(); },
+            // cleanup_fn: release context so Shutdown() can re-acquire it.
+            [this]() { platform_gl_release_context(); }
+        );
     }
 
     // Close the IR write window before flipping buffers so no Submit*()
@@ -791,12 +753,7 @@ void RendererOpenGL::EndFrame()
     // Signal the render thread to execute EndFrame_GL() (GL submission + swap).
     // Phase 3C: asynchronous — game thread returns immediately after signalling.
     // The wait for completion has moved to the TOP of this function.
-    {
-        std::lock_guard<std::mutex> lk(m_rt_mutex);
-        m_rt_work_done  = false;
-        m_rt_work_ready = true;
-    }
-    m_rt_cv.notify_one();
+    m_render_thread.Signal();
 
     // Reset the frame-begun flag HERE (game thread) rather than at the end of
     // EndFrame_GL() (render thread).  This eliminates the cross-thread race:
