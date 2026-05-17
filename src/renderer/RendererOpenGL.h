@@ -38,8 +38,7 @@ class GLWorldViewRenderer;
  */
 class RendererOpenGL : public IRenderer {
 private:
-    class IWorldViewRenderer* m_worldViewRenderer = nullptr;
-    class IMapFadePass* m_mapFadePass = nullptr;
+    // m_textRenderer is set by RendererManager via SetTextRenderer() after init.
     class ITextRenderer* m_textRenderer = nullptr;
 
 public:
@@ -151,6 +150,8 @@ public:
     // EndFrame() can flush GPU geometry before the CPU blit overlay.
     void SetWorldRenderer(GLWorldViewRenderer* wr) { m_world_renderer = wr; }
     GLWorldViewRenderer* GetWorldRenderer() const { return m_world_renderer; }
+
+    void SetTextRenderer(class ITextRenderer* tr) { m_textRenderer = tr; }
 
 private:
     bool compile_shaders();

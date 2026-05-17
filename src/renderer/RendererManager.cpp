@@ -446,6 +446,7 @@ static ITextRenderer* create_text_renderer(RendererType type)
             {
                 glt->SetPaletteTexture(ogl->GetPaletteTex());
                 glt->SetScreenSize(lbDisplay.PhysicalScreenWidth, lbDisplay.PhysicalScreenHeight);
+                ogl->SetTextRenderer(glt);
                 return glt;
             }
             WARNLOG("GLTextRenderer::Init() failed, falling back to software");

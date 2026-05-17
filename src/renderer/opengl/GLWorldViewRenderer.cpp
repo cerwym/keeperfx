@@ -1353,38 +1353,6 @@ void GLWorldViewRenderer::GPURenderNow()
         return;
     }
 
-    // NOTE: gpu_flush() is intentionally NOT called here.
-    // The final tile batch was already flushed by DrawIsometricView() /
-    // DrawFrontView() before FlipBuffers() ran, so m_vert_count ==
-    // m_cmd_vert_start == 0 at this point.  Calling gpu_flush() here would
-    // race with the game thread, which — because m_frame_begun is now reset
-    // to false on the game thread immediately after signalling — may already
-    // be incrementing m_vert_count for frame N+1 concurrently.
-
-    // --- Diagnostic: log key state on first 10 world-render calls WITH geometry ---
-    {
-        static int s_diag = 0;
-        if (s_diag < 10 && m_rt_vert_count > 0)
-        {
-            ++s_diag;
-            SYNCLOG("WVR/GPURenderNow[%d]: verts=%d cmds=%d "
-                    "fade_tex=%u pal_tex=%u "
-                    "darkness=%d lighting=%d "
-                    "full_h=%d vp_y=%d scr_h=%d "
-                    "first_shade=%.3f",
-                    s_diag, m_rt_vert_count, (int)m_rt_draw_cmds.size(),
-                    m_fade_tex, m_palette_tex,
-                    g_renderer_settings.darkness_mode,
-                    g_renderer_settings.lighting_mode,
-                    m_full_screen_h, m_vp_y, m_screen_h,
-                    m_rt_verts[0].shade);
-        }
-    }
-
-    SYNCDBG(7, "GPURenderNow: verts=%d cmds=%d vp=(%d,%d %dx%d)",
-            m_rt_vert_count, (int)m_rt_draw_cmds.size(),
-            m_vp_x, m_vp_y, m_screen_w, m_screen_h);
-
     if (m_rt_draw_cmds.empty())
         return;
 
@@ -1422,9 +1390,6 @@ void GLWorldViewRenderer::GPURenderToFBO(int pip_w, int pip_h)
     m_pip_vert_count     = 0;
     m_pip_cmd_vert_start = 0;
     m_pip_capture        = false;  // clear before gpu_execute_passes to avoid confusion
-
-    SYNCDBG(7, "GPURenderToFBO: cmds=%d verts=%d pip=%dx%d",
-            (int)m_rt_draw_cmds.size(), m_rt_vert_count, pip_w, pip_h);
 
     if (m_rt_draw_cmds.empty())
         return;

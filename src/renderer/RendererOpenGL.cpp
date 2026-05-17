@@ -597,7 +597,7 @@ bool RendererOpenGL::BeginFrame()
     if (m_world_renderer)          m_world_renderer->SetScreenSize(m_screenW, m_screenH);
     if (auto* ui = RendererGetUIRenderer())  ui->SetScreenSize(m_screenW, m_screenH);
     if (m_textRenderer)            m_textRenderer->SetScreenSize(m_screenW, m_screenH);
-    if (m_mapFadePass)             m_mapFadePass->SetScreenSize(m_screenW, m_screenH);
+    if (auto* mfp = RendererGetMapFadePass()) mfp->SetScreenSize(m_screenW, m_screenH);
 
     // Lazy-retry resources that depend on level data loaded after Init().
     // After the first EndFrame() the GL context lives on the render thread, so
@@ -755,7 +755,7 @@ void RendererOpenGL::EndFrame()
     // IRMapFadeCmd if a transition is active, and clears m_capture_pending.
     // Must happen before Flip()/UpdateFrameState() so the write slot is
     // populated before it transfers to the render-side.
-    if (m_mapFadePass) m_mapFadePass->FlushToRenderGraph(m_render_graph);
+    if (auto* mfp = RendererGetMapFadePass()) mfp->FlushToRenderGraph(m_render_graph);
 
     if (RendererIsFadeCachePreserved())
     {
