@@ -107,24 +107,21 @@ void RenderGraph::Execute(
 
     // -------------------------------------------------------------------------
     // Layer 2: World pass (geometry → shadows → sprites → world-UI)
-    // The world renderer consumes its own command buffers directly; the IR
-    // commands captured in GetWorldBuffersRT() are passed as a const reference.
-    // The existing GLWorldViewRenderer / SoftwareWorldViewRenderer still drive
-    // their own internal bucket walk during DrawIsometricView(); the IR path
-    // will progressively replace that.  For now, the world renderer is invoked
-    // through its existing interface — this Execute() stub wires up the
-    // infrastructure without changing render behaviour yet.
-    (void)world;   // called via existing IWorldViewRenderer path during EndFrame
+    // GLWorldViewRenderer::ExecuteWorldFromIR() is called directly from
+    // EndFrame_GL() (needed for lens-FBO wrapping); the (void) here documents
+    // that the RenderGraph tracks the world IR but doesn't dispatch it centrally.
+    (void)world;
 
     // -------------------------------------------------------------------------
     // Layer 3: UI pass (back → front → overlay → cursor)
-    // Symmetrically, GLUIRenderer still flushes via FlipBuffers/DrawBack/DrawFront.
-    // The IR path will replace those calls progressively once UICommandBuffers
-    // are populated.
+    // GLUIRenderer::ExecuteUIFromIR() is called directly from EndFrame_GL()
+    // after FlushPendingInit() so GPU resources (slab texture etc.) are ready.
     (void)ui;
 
     // -------------------------------------------------------------------------
     // Layer 4: Text pass
+    // GLTextRenderer::ExecuteTextFromIR() is called directly from EndFrame_GL()
+    // after layer-2/3 sprite draws complete.
     (void)text;
 
     // -------------------------------------------------------------------------

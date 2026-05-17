@@ -286,6 +286,35 @@ TbBool GLTextRenderer::DrawTextResized(int32_t posx, int32_t posy, int32_t units
     if (!text)
         return false;
 
+    // IR path: append to the write-side command buffer instead of the
+    // internal DeferredDraw vector.  The render thread will reconstruct
+    // DeferredDraw entries in ExecuteTextFromIR() and call Draw().
+    if (m_text_write_cmds)
+    {
+        IRTextDrawCmd cmd;
+        cmd.pos_x        = posx;
+        cmd.pos_y        = posy;
+        cmd.units_per_px = units_per_px;
+        cmd.absolute     = 0;
+        cmd.draw_colour  = lbDisplay.DrawColour;
+        cmd.draw_flags   = lbDisplay.DrawFlags;
+        cmd.justify_x    = m_justify_window.x;
+        cmd.justify_y    = m_justify_window.y;
+        cmd.justify_w    = m_justify_window.width;
+        cmd.clip_x       = m_clip_window.x;
+        cmd.clip_y       = m_clip_window.y;
+        cmd.clip_w       = m_clip_window.width;
+        cmd.clip_h       = m_clip_window.height;
+        cmd.font         = m_font;
+        cmd.dbc_font     = m_dbc_font;
+        cmd.dbc_enabled  = (uint8_t)m_dbc_enabled;
+        cmd.dbc_colour0  = m_dbc_colour0;
+        cmd.dbc_colour1  = m_dbc_colour1;
+        cmd.SetText(text);
+        m_text_write_cmds->draws.Append(cmd);
+        return true;
+    }
+
     m_pending.push_back({ posx, posy, units_per_px,
                           m_justify_window.x, m_justify_window.y, m_justify_window.width,
                           m_clip_window.x, m_clip_window.y, m_clip_window.width, m_clip_window.height,
@@ -299,6 +328,36 @@ TbBool GLTextRenderer::DrawTextResized(int32_t posx, int32_t posy, int32_t units
 TbBool GLTextRenderer::DrawTextAt(int32_t screen_x, int32_t screen_y, int32_t units_per_px, const char* text)
 {
     return DrawTextResized(screen_x, screen_y, units_per_px, text);
+}
+
+void GLTextRenderer::SetTextCommandBuffers(TextCommandBuffers* cmds)
+{
+    m_text_write_cmds = cmds;
+}
+
+void GLTextRenderer::ExecuteTextFromIR(const TextCommandBuffers& cmds)
+{
+    if (cmds.draws.Size() == 0)
+        return;
+
+    // Translate IRTextDrawCmd entries back into DeferredDraw and queue them,
+    // then run Draw() normally on the render thread.
+    m_pending.reserve(m_pending.size() + cmds.draws.Size());
+    for (const IRTextDrawCmd& c : cmds.draws)
+    {
+        m_pending.push_back({
+            c.pos_x, c.pos_y, c.units_per_px,
+            c.justify_x, c.justify_y, c.justify_w,
+            c.clip_x, c.clip_y, c.clip_w, c.clip_h,
+            c.draw_colour, c.draw_flags,
+            std::string(c.text),
+            reinterpret_cast<const struct TbSpriteSheet*>(c.font),
+            reinterpret_cast<const struct AsianFont*>(c.dbc_font),
+            c.dbc_colour0, c.dbc_colour1,
+            (TbBool)c.dbc_enabled
+        });
+    }
+    Draw();
 }
 
 int32_t GLTextRenderer::LineHeight()

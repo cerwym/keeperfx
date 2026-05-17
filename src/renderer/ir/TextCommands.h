@@ -49,6 +49,8 @@ struct IRTextDrawCmd
     const void* font        = nullptr;     /**< Pointer to TbSpriteSheet; opaque here. */
     const void* dbc_font    = nullptr;     /**< Pointer to AsianFont; null if N/A. */
     uint8_t     dbc_enabled = 0;
+    long        dbc_colour0 = 0;           /**< DBC face colour (from LbTextGetFontFaceColor). */
+    long        dbc_colour1 = 0;           /**< DBC shadow colour (currently unused). */
 
     /* Inline text storage — avoids heap allocation per command. */
     char text[kIRTextMaxLen] = {};

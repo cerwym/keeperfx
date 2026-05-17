@@ -13,9 +13,6 @@
  *     The fragment shader (world_frag.glsl) replaces the entire CPU inner
  *     loop: palette-index lookup + fade-table lighting = two texture samples.
  *
- *     Unrecognised bucket kinds fall back to SoftwareWorldViewRenderer for
- *     that primitive, maintaining visual correctness while not all QKinds
- *     are ported.
  */
 /******************************************************************************/
 #pragma once
@@ -28,6 +25,7 @@
 #include "renderer/IWorldViewRenderer.h"
 #include "renderer/WorldVertex.h"
 #include "renderer/opengl/IGLShaderCompilable.h"
+#include "renderer/ir/WorldCommands.h"
 #include "bflib_render.h"   // PolyPoint (needed by ShadowCmd)
 
 class ITileAtlas;
@@ -77,11 +75,45 @@ public:
     // after glClear() and before the CPU framebuffer blit overlay.
     void GPURenderNow();
 
-    /** Render the accumulated draw list into the currently-bound FBO.
+    /** Redirect all geometry writes to dedicated PiP-only buffers so that
+     *  the concurrent game thread's m_verts / m_draw_cmds are never touched.
+     *  Must be called on the render thread before BeginWorldPass() / draw_view()
+     *  for each PiP view.  GPURenderToFBO() ends the capture internally. */
+    void BeginPiPCapture();
+
+    /** Render the PiP geometry that was recorded after BeginPiPCapture() into
+     *  the currently-bound FBO.  Ends the PiP capture and moves the pip
+     *  command/vertex buffers into the rt_* slots for execution.
      *  The caller is responsible for binding/unbinding the FBO and clearing it.
      *  m_screen_w/h must already be set to pip_w/pip_h via a preceding
      *  BeginWorldPass(nullptr, 0, pip_w, pip_h, 0, 0) call. */
     void GPURenderToFBO(int pip_w, int pip_h);
+
+    /** Swap game-thread ↔ render-thread command buffers.
+     *  Must be called from RendererOpenGL::EndFrame() while the render thread
+     *  is idle (i.e. before signalling it with m_rt_work_ready = true).
+     *  Moves game-side data into the m_rt_* copies so the render thread reads
+     *  a stable snapshot even after the game starts the next frame. */
+    void FlipBuffers();
+
+    // ── IR (Intermediate Representation) path ─────────────────────────────────
+
+    /** Set the IR write target for this frame.
+     *  When @p cmds is non-null, SetWorldCommandBuffers activates the IR path;
+     *  actual bucket-walk recording still writes to internal m_draw_cmds etc.
+     *  (the internal double-buffer IS the world IR).  The pointer is used as a
+     *  sentinel so ExecuteWorldFromIR() can be dispatched by the render thread.
+     *  Call with nullptr to close the write window (e.g. during PiP). */
+    void SetWorldCommandBuffers(WorldCommandBuffers* cmds) { m_world_write_cmds = cmds; }
+
+    /** Replay the captured world geometry on the render thread.
+     *  The world renderer already double-buffers its command list internally
+     *  (FlipBuffers → m_rt_draw_cmds); this method simply calls GPURenderNow()
+     *  so the render graph can dispatch through the IR interface.
+     *  @param cmds  Read-side WorldCommandBuffers — not used directly yet (the
+     *               data lives in m_rt_draw_cmds); accepted for interface symmetry
+     *               with ExecuteUIFromIR / ExecuteTextFromIR. */
+    void ExecuteWorldFromIR(const WorldCommandBuffers& cmds);
 
     // IWorldViewRenderer: submit a keeper-sprite through the GPU path.
     int SubmitKeeperSprite(int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
@@ -317,19 +349,44 @@ private:
 
     // CPU-side vertex staging buffer (dynamic VBO)
     static const int k_max_verts = 65536;   // ~21000 triangles per frame
-    WorldVertex* m_verts      = nullptr;
-    int          m_vert_count = 0;
-    int          m_cmd_vert_start = 0;  // start index of current accumulating tile batch
+    WorldVertex* m_verts      = nullptr;    // game-thread write buffer
+    int          m_vert_count = 0;          // game-thread vertex count
+    int          m_cmd_vert_start = 0;      // start index of current accumulating tile batch
 
     // Deferred draw list — built during DrawIsometricView(), executed in GPURenderNow()
-    std::vector<DrawCmd>      m_draw_cmds;
-    std::vector<ShadowCmd>    m_shadow_cmds;
-    std::vector<FlatPolyVertex> m_flatpoly_verts;  // flat-colour polygon vertices, GPU-only
+    std::vector<DrawCmd>        m_draw_cmds;       // game-thread write buffer
+    std::vector<ShadowCmd>      m_shadow_cmds;     // game-thread write buffer
+    std::vector<FlatPolyVertex> m_flatpoly_verts;  // game-thread write buffer
+
+    // ── Double-buffer render copies ───────────────────────────────────────────
+    // FlipBuffers() (called from RendererOpenGL::EndFrame before signalling the
+    // render thread) std::moves the game-thread vectors here and swaps the
+    // raw vertex pointers, so the game thread can start the next frame while
+    // the render thread reads from these stable render-side copies.
+    WorldVertex* m_rt_verts       = nullptr;  // render-thread read buffer
+    int          m_rt_vert_count  = 0;
+    std::vector<DrawCmd>        m_rt_draw_cmds;
+    std::vector<ShadowCmd>      m_rt_shadow_cmds;
+    std::vector<FlatPolyVertex> m_rt_flatpoly_verts;
+
+    // ── PiP-only buffers (render-thread write, never touched by game thread) ─
+    // BeginPiPCapture() switches all geometry writes here so draw_view() called
+    // from the render thread (PiP) never races with the game thread's m_verts.
+    WorldVertex* m_pip_verts           = nullptr;
+    int          m_pip_vert_count      = 0;
+    int          m_pip_cmd_vert_start  = 0;
+    std::vector<DrawCmd>        m_pip_draw_cmds;
+    std::vector<ShadowCmd>      m_pip_shadow_cmds;
+    std::vector<FlatPolyVertex> m_pip_flatpoly_verts;
+    bool         m_pip_capture         = false;
 
     bool m_initialized = false;
     // Set to true in BeginWorldPass(); reset to false at the end of GPURenderNow().
     // Tracks whether the world renderer is actually being used this frame.
     bool m_world_pass_active = false;
+
+    // IR write target — set by SetWorldCommandBuffers(); used as sentinel.
+    WorldCommandBuffers* m_world_write_cmds = nullptr;
 };
 
 /******************************************************************************/

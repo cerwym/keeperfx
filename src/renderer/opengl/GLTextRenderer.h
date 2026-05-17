@@ -9,6 +9,7 @@
 
 #include "renderer/ITextRenderer.h"
 #include "renderer/opengl/IGLShaderCompilable.h"
+#include "renderer/ir/TextCommands.h"
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -45,6 +46,19 @@ public:
     TbBool DrawTextAt(int32_t screen_x, int32_t screen_y, int32_t units_per_px, const char* text) override;
     void   Draw() override;         // Draw non-overlay text
     void   DrawOverlay();           // Draw overlay-tagged text (tooltip text etc.) — call after layer-3 sprites
+
+    // ── IR (Intermediate Representation) path ─────────────────────────────────
+
+    /** Set the IR write target for this frame.
+     *  When @p cmds is non-null, DrawTextResized() appends IRTextDrawCmd entries
+     *  instead of DeferredDraw entries.  Sets cmds->ir_active = true.
+     *  Call with nullptr before flushing (e.g. EndFrame → before FlipBuffers). */
+    void SetTextCommandBuffers(TextCommandBuffers* cmds);
+
+    /** Populate m_pending from the read-side IR command buffers and call Draw().
+     *  Must be called from the render thread (GL context current).
+     *  No-op when there are no IR draw commands this frame. */
+    void ExecuteTextFromIR(const TextCommandBuffers& cmds);
 
     // ITextRenderer interface — Measurement
     int32_t LineHeight() override;
@@ -97,6 +111,9 @@ private:
     };
 
     std::vector<DeferredDraw>  m_pending;         // Queued draws, flushed in Flush()
+
+    // IR write target — set by SetTextCommandBuffers(); null when not in IR mode.
+    TextCommandBuffers* m_text_write_cmds = nullptr;
 
     // Per-font atlas cache: built once per unique TbSpriteSheet*, reused every frame.
     std::unordered_map<const struct TbSpriteSheet*, GLFontAtlas*> m_atlas_cache;

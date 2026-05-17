@@ -78,7 +78,7 @@ static void decode_keeper_rle(uint8_t* dst, const uint8_t* data, int w, int h)
     if (!data || w <= 0 || h <= 0) return;
 
     for (int y = 0; y < h; ++y)
-        memset(dst + y * k_kspr_decode_dim, 0, w);
+        memset(dst + y * k_kspr_decode_dim, 0, k_kspr_decode_dim);
 
     // Upper-bound on bytes we'll consume: generous worst-case for valid RLE.
     const signed char* sp     = reinterpret_cast<const signed char*>(data);
@@ -193,8 +193,10 @@ bool GLWorldViewRenderer::init_gl_resources()
     glBindVertexArray(0);
 
     // CPU staging buffer
-    m_verts = (WorldVertex*)malloc(k_max_verts * sizeof(WorldVertex));
-    if (!m_verts)
+    m_verts    = (WorldVertex*)malloc(k_max_verts * sizeof(WorldVertex));
+    m_rt_verts = (WorldVertex*)malloc(k_max_verts * sizeof(WorldVertex));
+    m_pip_verts = (WorldVertex*)malloc(k_max_verts * sizeof(WorldVertex));
+    if (!m_verts || !m_pip_verts)
     {
         ERRORLOG("GLWorldViewRenderer: failed to allocate vertex staging buffer");
         free_gl_resources();
@@ -284,8 +286,9 @@ void GLWorldViewRenderer::ClearKeeperSpriteAtlas()
 
 void GLWorldViewRenderer::free_gl_resources()
 {
-    free(m_verts);
-    m_verts = nullptr;
+    free(m_verts);    m_verts    = nullptr;
+    free(m_rt_verts); m_rt_verts = nullptr;
+    free(m_pip_verts); m_pip_verts = nullptr;
 
     if (m_vao)    { glDeleteVertexArrays(1, &m_vao);  m_vao = 0; }
     if (m_vbo)    { glDeleteBuffers(1, &m_vbo);        m_vbo = 0; }
@@ -839,9 +842,13 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
         else if (m_kspr_atlas_used < k_kspr_atlas_layers)
         {
             KFX_ZONE_COLOR("WVR::KSprAtlas::Decode+Upload", KFX_COLOR_RENDER_CPU);
-            // Decode into scratch buf; decode only actual sprite rows to avoid
-            // reading past the end of the RLE data. Remainder of the decode buffer
-            // stays zero-initialized (memset in decode_keeper_rle clears it).
+            // Clear the full scratch buffer before decoding so that rows beyond
+            // src_h (uploaded at full k_kspr_decode_dim height) are transparent
+            // (palette index 0).  Without this, a previously decoded taller sprite
+            // leaves stale pixel data in the atlas layer beyond src_h rows, which
+            // becomes visible if the same data pointer is later drawn with a
+            // larger src_h (e.g. after water_source_cutoff shrinks to zero).
+            memset(s_kspr_decode_buf, 0, sizeof(s_kspr_decode_buf));
             decode_keeper_rle(s_kspr_decode_buf, data, src_w, src_h);
             atlas_layer = m_kspr_atlas_used++;
             glActiveTexture(GL_TEXTURE0);
@@ -1090,8 +1097,11 @@ void GLWorldViewRenderer::BeginWorldPass(unsigned char* framebuf, int pitch,
     // accumulate into a single draw list so GPUFlushNow sees all geometry.
     // We DO need to reset the vertex write cursor so the new pass starts fresh
     // with its own section of the staging vertex buffer.
-    gpu_flush();                  // close any open tile batch from prior pass
-    m_cmd_vert_start = m_vert_count;  // new pass appends after prior pass verts
+    gpu_flush();  // close any open tile batch from prior pass (uses pip buffers if m_pip_capture)
+    if (m_pip_capture)
+        m_pip_cmd_vert_start = m_pip_vert_count;  // new PiP pass appends after prior pip verts
+    else
+        m_cmd_vert_start = m_vert_count;          // new pass appends after prior pass verts
 
     // Lazy initialise GL resources on first use (GL context must be current)
     if (!m_initialized)
@@ -1147,11 +1157,14 @@ bool GLWorldViewRenderer::append_triangle(int tile_id,
     const float z_ndc = 2.0f * (float)m_current_bucket / (float)(BUCKETS_COUNT - 1) - 1.0f;
     const float layer = (float)variation;
 
+    WorldVertex* const verts = m_pip_capture ? m_pip_verts : m_verts;
+    int&               vcnt  = m_pip_capture ? m_pip_vert_count : m_vert_count;
+
     const struct PolyPoint* pts[3] = { p0, p1, p2 };
     const int32_t cam_z[3] = { cam_z0, cam_z1, cam_z2 };
     for (int i = 0; i < 3; i++)
     {
-        WorldVertex* wv = &m_verts[m_vert_count + i];
+        WorldVertex* wv = &verts[vcnt + i];
         // X/Y are integer screen pixels (not 16:16 fixed-point).
         wv->x = (float)(pts[i]->X) / (float)m_screen_w * 2.0f - 1.0f;
         wv->y = 1.0f - (float)(pts[i]->Y) / (float)m_screen_h * 2.0f;
@@ -1170,7 +1183,7 @@ bool GLWorldViewRenderer::append_triangle(int tile_id,
         wv->camera_z = (cam_z[i] > 0) ? (float)cam_z[i] : 1.0f;
         wv->atlas_layer = layer;
     }
-    m_vert_count += 3;
+    vcnt += 3;
     return true;
 }
 
@@ -1213,7 +1226,10 @@ bool GLWorldViewRenderer::append_triangle_compact(
     };
 
     const float z_ndc = 2.0f * (float)m_current_bucket / (float)(BUCKETS_COUNT - 1) - 1.0f;
-    WorldVertex* v = &m_verts[m_vert_count];
+
+    WorldVertex* const verts = m_pip_capture ? m_pip_verts : m_verts;
+    int&               vcnt  = m_pip_capture ? m_pip_vert_count : m_vert_count;
+    WorldVertex* v = &verts[vcnt];
 
     // Build screen-space XY and shade via the existing macro, then overwrite
     // the UV fields with the correctly remapped atlas coordinates.
@@ -1224,13 +1240,17 @@ bool GLWorldViewRenderer::append_triangle_compact(
     compact_to_atlas(u1, v1, v[1].u, v[1].v);
     compact_to_atlas(u2, v2, v[2].u, v[2].v);
     v[0].z = z_ndc; v[1].z = z_ndc; v[2].z = z_ndc;
-    m_vert_count += 3;
+    vcnt += 3;
     return true;
 }
 
 void GLWorldViewRenderer::gpu_flush()
 {
-    if (!m_initialized || m_vert_count <= m_cmd_vert_start)
+    int& vcnt    = m_pip_capture ? m_pip_vert_count     : m_vert_count;
+    int& vstart  = m_pip_capture ? m_pip_cmd_vert_start : m_cmd_vert_start;
+    std::vector<DrawCmd>& dcmds = m_pip_capture ? m_pip_draw_cmds : m_draw_cmds;
+
+    if (!m_initialized || vcnt <= vstart)
         return;
 
     // Record the current tile batch as a deferred draw command.
@@ -1238,10 +1258,49 @@ void GLWorldViewRenderer::gpu_flush()
     // AFTER RendererOpenGL::EndFrame() calls glClear().
     DrawCmd cmd;
     cmd.type       = DrawCmd::CMD_TILES;
-    cmd.vert_start = m_cmd_vert_start;
-    cmd.vert_count = m_vert_count - m_cmd_vert_start;
-    m_draw_cmds.push_back(cmd);
-    m_cmd_vert_start = m_vert_count;
+    cmd.vert_start = vstart;
+    cmd.vert_count = vcnt - vstart;
+    dcmds.push_back(cmd);
+    vstart = vcnt;
+}
+
+void GLWorldViewRenderer::FlipBuffers()
+{
+    // Move game-thread buffers into the render-thread shadow copies.
+    // After the move, game-side containers are empty and ready for the next frame.
+    m_rt_draw_cmds      = std::move(m_draw_cmds);
+    m_rt_shadow_cmds    = std::move(m_shadow_cmds);
+    m_rt_flatpoly_verts = std::move(m_flatpoly_verts);
+
+    // Swap raw vertex staging buffers: render thread gets the filled buffer,
+    // game thread gets a clean buffer for the next frame.
+    std::swap(m_verts, m_rt_verts);
+    m_rt_vert_count  = m_vert_count;
+    m_vert_count     = 0;
+    m_cmd_vert_start = 0;
+}
+
+void GLWorldViewRenderer::ExecuteWorldFromIR(const WorldCommandBuffers& /*cmds*/)
+{
+    // The world renderer already double-buffers its command stream via FlipBuffers()
+    // into m_rt_draw_cmds / m_rt_shadow_cmds / m_rt_flatpoly_verts / m_rt_verts.
+    // GPURenderNow() reads those buffers and issues all GL calls on the render thread.
+    // This wrapper provides the IR-interface entry-point for RenderGraph::Execute()
+    // and EndFrame_GL() without changing the underlying rendering logic.
+    GPURenderNow();
+}
+
+void GLWorldViewRenderer::BeginPiPCapture()
+{
+    // Redirect all geometry writes from draw_view() (called on the render thread
+    // for each PiP view) to dedicated pip buffers, so the game thread's m_verts /
+    // m_draw_cmds / etc. are never written by the render thread concurrently.
+    m_pip_capture        = true;
+    m_pip_vert_count     = 0;
+    m_pip_cmd_vert_start = 0;
+    m_pip_draw_cmds.clear();
+    m_pip_shadow_cmds.clear();
+    m_pip_flatpoly_verts.clear();
 }
 
 void GLWorldViewRenderer::GPURenderNow()
@@ -1257,8 +1316,8 @@ void GLWorldViewRenderer::GPURenderNow()
 
     if (!m_initialized)
     {
-        m_draw_cmds.clear();
-        m_vert_count     = 0;
+        m_rt_draw_cmds.clear();
+        m_rt_vert_count  = 0;
         m_cmd_vert_start = 0;
         return;
     }
@@ -1266,11 +1325,31 @@ void GLWorldViewRenderer::GPURenderNow()
     // Flush any tile batch that hasn't been recorded yet.
     gpu_flush();
 
-    SYNCDBG(9, "GPURenderNow: verts=%d cmds=%d vp=(%d,%d %dx%d)",
-            m_vert_count, (int)m_draw_cmds.size(),
+    // --- Diagnostic: log key state on first 10 world-render calls WITH geometry ---
+    {
+        static int s_diag = 0;
+        if (s_diag < 10 && m_rt_vert_count > 0)
+        {
+            ++s_diag;
+            SYNCLOG("WVR/GPURenderNow[%d]: verts=%d cmds=%d "
+                    "fade_tex=%u pal_tex=%u "
+                    "darkness=%d lighting=%d "
+                    "full_h=%d vp_y=%d scr_h=%d "
+                    "first_shade=%.3f",
+                    s_diag, m_rt_vert_count, (int)m_rt_draw_cmds.size(),
+                    m_fade_tex, m_palette_tex,
+                    g_renderer_settings.darkness_mode,
+                    g_renderer_settings.lighting_mode,
+                    m_full_screen_h, m_vp_y, m_screen_h,
+                    m_rt_verts[0].shade);
+        }
+    }
+
+    SYNCDBG(7, "GPURenderNow: verts=%d cmds=%d vp=(%d,%d %dx%d)",
+            m_rt_vert_count, (int)m_rt_draw_cmds.size(),
             m_vp_x, m_vp_y, m_screen_w, m_screen_h);
 
-    if (m_draw_cmds.empty())
+    if (m_rt_draw_cmds.empty())
         return;
 
     const int vp_y_gl = m_full_screen_h - m_vp_y - m_screen_h;
@@ -1286,18 +1365,32 @@ void GLWorldViewRenderer::GPURenderToFBO(int pip_w, int pip_h)
     // set by the preceding BeginWorldPass(nullptr, 0, pip_w, pip_h, 0, 0).
     if (!m_initialized)
     {
-        m_draw_cmds.clear();
-        m_vert_count     = 0;
-        m_cmd_vert_start = 0;
+        m_pip_draw_cmds.clear();
+        m_pip_vert_count     = 0;
+        m_pip_cmd_vert_start = 0;
+        m_pip_capture        = false;
         return;
     }
 
+    // Close any open PiP tile batch (gpu_flush uses m_pip_* when m_pip_capture=true).
     gpu_flush();
 
-    SYNCDBG(7, "GPURenderToFBO: cmds=%d verts=%d pip=%dx%d",
-            (int)m_draw_cmds.size(), m_vert_count, pip_w, pip_h);
+    // BeginPiPCapture() redirected draw_view() writes to the m_pip_* buffers so
+    // the game thread's m_verts / m_draw_cmds are never touched.
+    // Move pip geometry into the rt_* slots that gpu_execute_passes() reads.
+    m_rt_draw_cmds      = std::move(m_pip_draw_cmds);
+    m_rt_shadow_cmds    = std::move(m_pip_shadow_cmds);
+    m_rt_flatpoly_verts = std::move(m_pip_flatpoly_verts);
+    std::swap(m_pip_verts, m_rt_verts);
+    m_rt_vert_count      = m_pip_vert_count;
+    m_pip_vert_count     = 0;
+    m_pip_cmd_vert_start = 0;
+    m_pip_capture        = false;  // clear before gpu_execute_passes to avoid confusion
 
-    if (m_draw_cmds.empty())
+    SYNCDBG(7, "GPURenderToFBO: cmds=%d verts=%d pip=%dx%d",
+            (int)m_rt_draw_cmds.size(), m_rt_vert_count, pip_w, pip_h);
+
+    if (m_rt_draw_cmds.empty())
         return;
 
     // FBO is pip_w × pip_h — fill it entirely.
@@ -1308,8 +1401,8 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
 {
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
     glBufferSubData(GL_ARRAY_BUFFER, 0,
-                    (GLsizeiptr)(m_vert_count * sizeof(WorldVertex)),
-                    m_verts);
+                    (GLsizeiptr)(m_rt_vert_count * sizeof(WorldVertex)),
+                    m_rt_verts);
 
     // Execute all draw commands in submission order, interleaving tile batches
     // and 3D sprite flushes to maintain the painter's-algorithm depth order.
@@ -1384,7 +1477,7 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
     // before any blended pass reads it.  Shadows are explicitly excluded here —
     // mixing them with tile batches was causing flickering because tile batches
     // drawn after a shadow command would overdraw the darkened pixels.
-    for (const auto& cmd : m_draw_cmds)
+    for (const auto& cmd : m_rt_draw_cmds)
     {
         if (cmd.type == DrawCmd::CMD_TILES)
         {
@@ -1426,14 +1519,14 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
             KFX_GL_PUSH("WorldPass/FlatPoly");
             // Flat-colour polygons: all vertices already converted to screen-px + linear RGB.
             // Upload the entire flat-poly buffer once on first encounter, draw sub-range.
-            if (!m_flatpoly_verts.empty())
+            if (!m_rt_flatpoly_verts.empty())
             {
                 if (!flatpoly_uploaded)
                 {
                     glBindBuffer(GL_ARRAY_BUFFER, m_flatpoly_vbo);
                     glBufferData(GL_ARRAY_BUFFER,
-                                 (GLsizeiptr)(m_flatpoly_verts.size() * sizeof(FlatPolyVertex)),
-                                 m_flatpoly_verts.data(), GL_STREAM_DRAW);
+                                 (GLsizeiptr)(m_rt_flatpoly_verts.size() * sizeof(FlatPolyVertex)),
+                                 m_rt_flatpoly_verts.data(), GL_STREAM_DRAW);
                     flatpoly_uploaded = true;
                 }
                 glUseProgram(m_flatpoly_shader);
@@ -1456,13 +1549,13 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
     // Depth testing is ENABLED (GL_LEQUAL, no depth write) so that columns and
     // walls correctly occlude shadows — the floor z-values written in pass 1
     // pass the test, while column face z-values are closer and fail it.
-    for (const auto& cmd : m_draw_cmds)
+    for (const auto& cmd : m_rt_draw_cmds)
     {
         if (cmd.type != DrawCmd::CMD_SHADOWS) continue;
 
         KFX_GL_PUSH("WorldPass/Shadows");
-        assert(cmd.shadow_idx >= 0 && (size_t)cmd.shadow_idx < m_shadow_cmds.size());
-        const ShadowCmd& sc = m_shadow_cmds[cmd.shadow_idx];
+        assert(cmd.shadow_idx >= 0 && (size_t)cmd.shadow_idx < m_rt_shadow_cmds.size());
+        const ShadowCmd& sc = m_rt_shadow_cmds[cmd.shadow_idx];
 
         // Rasterise the silhouette into the scratch buffer.
         // draw_keepsprite_unscaled_in_buffer handles heap load, FrameOffsW/H
@@ -1534,7 +1627,7 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
     glEnable(GL_SCISSOR_TEST);
     glScissor(vp_x, vp_y_gl, m_screen_w, m_screen_h);
 
-    for (const auto& cmd : m_draw_cmds)
+    for (const auto& cmd : m_rt_draw_cmds)
     {
         if (cmd.type == DrawCmd::CMD_SPRITES)
         {
@@ -1596,18 +1689,18 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
     glViewport(0, 0, m_full_screen_w, m_full_screen_h);
 
     // Emit per-frame statistics as Tracy plots.
-    KFX_PLOT("WVR/VertCount",          m_vert_count);
-    KFX_PLOT("WVR/DrawCmds",           (int)m_draw_cmds.size());
-    KFX_PLOT("WVR/ShadowCmds",         (int)m_shadow_cmds.size());
+    KFX_PLOT("WVR/VertCount",          m_rt_vert_count);
+    KFX_PLOT("WVR/DrawCmds",           (int)m_rt_draw_cmds.size());
+    KFX_PLOT("WVR/ShadowCmds",         (int)m_rt_shadow_cmds.size());
     KFX_PLOT("WVR/KSprAtlasCacheSize", m_kspr_atlas_used);
     KFX_PLOT("WVR/KSprAtlasHits",      m_kspr_atlas_hits);
     KFX_PLOT("WVR/KSprAtlasMisses",    m_kspr_atlas_misses);
 
-    // Reset for next frame.
-    m_draw_cmds.clear();
-    m_shadow_cmds.clear();
-    m_flatpoly_verts.clear();
-    m_vert_count     = 0;
+    // Reset render-side buffers for the next frame.
+    m_rt_draw_cmds.clear();
+    m_rt_shadow_cmds.clear();
+    m_rt_flatpoly_verts.clear();
+    m_rt_vert_count  = 0;
     m_cmd_vert_start = 0;
 }
 
@@ -1620,6 +1713,12 @@ void GLWorldViewRenderer::DrawIsometricView()
         SYNCLOG("GLWorldViewRenderer asked to draw ISO and wasnt initialized, returning...");
         return;
     }
+
+    // Use pip-specific command/shadow/flatpoly lists when capturing for PiP,
+    // otherwise use the normal game-thread write buffers.
+    std::vector<DrawCmd>&        draw_cmds   = m_pip_capture ? m_pip_draw_cmds      : m_draw_cmds;
+    std::vector<ShadowCmd>&      shadow_cmds = m_pip_capture ? m_pip_shadow_cmds    : m_shadow_cmds;
+    std::vector<FlatPolyVertex>& fpverts     = m_pip_capture ? m_pip_flatpoly_verts : m_flatpoly_verts;
 
     // Walk the depth-sorted bucket list back-to-front (painter's algorithm).
     // For each bucket:
@@ -1640,7 +1739,7 @@ void GLWorldViewRenderer::DrawIsometricView()
         const float z_ndc = 2.0f * (float)bi / (float)(BUCKETS_COUNT - 1) - 1.0f;
         bool bucket_has_3d_sprites = false;
         bool bucket_has_flat_polys = false;
-        const int flatpoly_vert_start = (int)m_flatpoly_verts.size();
+        const int flatpoly_vert_start = (int)fpverts.size();
 
         struct BasicQ* q = buckets[bi];
         while (q != nullptr)
@@ -1777,9 +1876,9 @@ void GLWorldViewRenderer::DrawIsometricView()
                     sc.ndc_z         = 2.0f * (float)bi / (float)(BUCKETS_COUNT - 1) - 1.0f;
                     DrawCmd cmd;
                     cmd.type       = DrawCmd::CMD_SHADOWS;
-                    cmd.shadow_idx = (int)m_shadow_cmds.size();
-                    m_shadow_cmds.push_back(sc);
-                    m_draw_cmds.push_back(cmd);
+                    cmd.shadow_idx = (int)shadow_cmds.size();
+                    shadow_cmds.push_back(sc);
+                    draw_cmds.push_back(cmd);
                     break;
                 }
 
@@ -1800,7 +1899,7 @@ void GLWorldViewRenderer::DrawIsometricView()
             DrawCmd cmd;
             cmd.type       = DrawCmd::CMD_SPRITES;
             cmd.bucket_num = bi;
-            m_draw_cmds.push_back(cmd);
+            draw_cmds.push_back(cmd);
         }
 
         // Flat-colour polygons: GPU triangle draw via flat-poly shader.
@@ -1811,8 +1910,8 @@ void GLWorldViewRenderer::DrawIsometricView()
             DrawCmd cmd;
             cmd.type       = DrawCmd::CMD_FLAT_POLYS;
             cmd.vert_start = flatpoly_vert_start;
-            cmd.vert_count = (int)m_flatpoly_verts.size() - flatpoly_vert_start;
-            m_draw_cmds.push_back(cmd);
+            cmd.vert_count = (int)fpverts.size() - flatpoly_vert_start;
+            draw_cmds.push_back(cmd);
         }
     }
 
@@ -1873,6 +1972,8 @@ void GLWorldViewRenderer::DrawFrontView(struct Camera* cam)
     if (!m_initialized)
         return;
 
+    std::vector<DrawCmd>& draw_cmds = m_pip_capture ? m_pip_draw_cmds : m_draw_cmds;
+
     // Walk the front-view bucket list back-to-front (painter's algorithm).
     // Front view populates buckets with QK_TextureQuad (floor/wall/ceiling tiles)
     // and creature/thing sprites.  All other overlay types (status flowers, gold text,
@@ -1907,7 +2008,7 @@ void GLWorldViewRenderer::DrawFrontView(struct Camera* cam)
             DrawCmd cmd;
             cmd.type       = DrawCmd::CMD_FRONTVIEW_SPRITES;
             cmd.bucket_num = bi;
-            m_draw_cmds.push_back(cmd);
+            draw_cmds.push_back(cmd);
         }
     }
 

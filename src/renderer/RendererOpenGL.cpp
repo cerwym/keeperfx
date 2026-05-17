@@ -657,6 +657,13 @@ bool RendererOpenGL::BeginFrame()
         // IR commands.  Closed in EndFrame() before FlipBuffers().
         GLUIRenderer* glui = dynamic_cast<GLUIRenderer*>(RendererGetUIRenderer());
         if (glui) glui->SetUICommandBuffers(&m_render_graph.GetUIBuffers());
+
+        // Open the world IR write window (sentinel; internal state still drives execution).
+        if (m_world_renderer) m_world_renderer->SetWorldCommandBuffers(&m_render_graph.GetWorldBuffers());
+
+        // Open the text IR write window.
+        GLTextRenderer* glt = dynamic_cast<GLTextRenderer*>(m_textRenderer);
+        if (glt) glt->SetTextCommandBuffers(&m_render_graph.GetTextBuffers());
     }
     return true;
 }
@@ -689,6 +696,11 @@ void RendererOpenGL::EndFrame()
     // calls from the next frame land in this frame's command buffer.
     GLUIRenderer* glui = dynamic_cast<GLUIRenderer*>(RendererGetUIRenderer());
     if (glui) glui->SetUICommandBuffers(nullptr);
+    if (m_world_renderer) m_world_renderer->SetWorldCommandBuffers(nullptr);
+    {
+        GLTextRenderer* glt = dynamic_cast<GLTextRenderer*>(m_textRenderer);
+        if (glt) glt->SetTextCommandBuffers(nullptr);
+    }
 
     // Flip sub-renderer command buffers so the render thread reads from stable
     // render-side copies while the game thread is free to build the next frame.
@@ -910,7 +922,7 @@ void RendererOpenGL::EndFrame_GL()
     // When m_lens_active, output goes to m_lens_scene_fbo instead of default FB.
     if (m_world_renderer)
     {
-        m_world_renderer->GPURenderNow();
+        m_world_renderer->ExecuteWorldFromIR(m_render_graph.GetWorldBuffersRT());
     }
 
     // Draw swipe-overlay quads while the lens FBO is still bound,
@@ -1501,7 +1513,13 @@ void RendererOpenGL::EndFrame_GL()
         UIRenderer_DrawFront();  // fallback for non-GL UI renderers
 
     // Text on top of all sprites (sidebar labels, event messages, tooltips).
-    TextRenderer_Draw();
+    {
+        GLTextRenderer* glt = dynamic_cast<GLTextRenderer*>(m_textRenderer);
+        if (glt)
+            glt->ExecuteTextFromIR(m_render_graph.GetTextBuffersRT());
+        else
+            TextRenderer_Draw();  // fallback for non-GL text renderers
+    }
 
     // ── Final overlay passes: screen tint + cursor ──────────────────────────
     // Ensure depth test is OFF and depth mask is ON before the 2D overlay
