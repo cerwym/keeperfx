@@ -56,6 +56,15 @@ void platform_destroy_gl_context(void);
  *  @param sdl_window  The SDL_Window to swap. */
 void platform_swap_gl_buffers(void *sdl_window);
 
+/** Release the active GL context from the calling thread.
+ *  Called on the main thread in Init() to hand the context to the render thread. */
+void platform_gl_release_context(void);
+
+/** Make the active GL context current on the calling thread.
+ *  Called on the render thread to acquire the context after Init() releases it,
+ *  and again on the main thread in Shutdown() for GL resource cleanup. */
+void platform_gl_acquire_context(void);
+
 /** Returns non-zero if RenderDoc is injected into this process.
  *  When true, Tracy GPU timer-query profiling must be disabled to prevent
  *  RenderDoc's per-frame GL state serialisation from corrupting Tracy's

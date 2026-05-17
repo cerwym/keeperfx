@@ -250,6 +250,16 @@ extern "C" void platform_swap_gl_buffers(void *sdl_window)
     SDL_GL_SwapWindow(static_cast<SDL_Window*>(sdl_window));
 }
 
+extern "C" void platform_gl_release_context(void)
+{
+    SDL_GL_MakeCurrent(s_glWindow, nullptr);
+}
+
+extern "C" void platform_gl_acquire_context(void)
+{
+    SDL_GL_MakeCurrent(s_glWindow, s_glContext);
+}
+
 extern "C" int platform_is_renderdoc_present(void)
 {
 #ifdef _WIN32
