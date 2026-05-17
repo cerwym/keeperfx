@@ -10,6 +10,7 @@
 #include "IRenderer.h"
 #include "renderer/FrameState.h"
 #include "renderer/RenderGraph.h"
+#include <atomic>
 #include <vector>
 #include <thread>
 #include <mutex>
@@ -232,7 +233,9 @@ private:
     bool              m_rawblit_pending  = false;
     RawBlitCmd        m_rawblit_cmd      = {};
     std::vector<uint8_t> m_rawblit_px_buf;  ///< owns m_rawblit_cmd.src_buf data (game-thread side)
-    bool              m_rawblit_cached   = false;  // last rawblit retained for palette-fade re-renders
+    // Written by BlitRaw8GPU() (game thread); read by EndFrame_GL() (render thread).
+    // Atomic to prevent data-race UB — no memory ordering needed beyond atomicity.
+    std::atomic<bool> m_rawblit_cached   {false};  // last rawblit retained for palette-fade re-renders
     RawBlitCmd        m_rawblit_cached_cmd = {};
     unsigned int      m_rawblit_shader        = 0;  // palette_blit_vert + rawimage_blit_frag
     unsigned int      m_overhead_map_shader   = 0;  // palette_blit_vert + overhead_map_frag (RG8 ghost-table)
@@ -458,15 +461,18 @@ private:
 
     // Set in BeginFrame() when the animated-tile sentinel changes; consumed in
     // EndFrame_GL() on the render thread (where the GL context is current).
-    bool                    m_anim_tiles_dirty = false;
+    // Written by game thread, read+cleared by render thread — atomic to prevent UB.
+    std::atomic<bool>       m_anim_tiles_dirty {false};
     // Set in BeginFrame() when block_mem becomes available and the tile atlas has
     // not yet been GPU-initialised.  Consumed in EndFrame_GL() on the render
     // thread that owns the GL context (glGenTextures/glTexImage3D require it).
-    bool                    m_tile_atlas_init_pending = false;
+    // Written by game thread, read+cleared by render thread — atomic to prevent UB.
+    std::atomic<bool>       m_tile_atlas_init_pending {false};
     // Set by ScheduleFadeTableInit() (called from RendererNotifyGameTablesReady).
     // Consumed in EndFrame_GL() — the render thread creates the GL texture then
     // pushes the ID to every sub-renderer that needs it.
-    bool                    m_fade_table_pending      = false;
+    // Written by game thread, read+cleared by render thread — atomic to prevent UB.
+    std::atomic<bool>       m_fade_table_pending      {false};
 
     void RenderThreadProc(); ///< Render thread entry point.
     void EndFrame_GL();      ///< All GL submission work; runs on the render thread.
