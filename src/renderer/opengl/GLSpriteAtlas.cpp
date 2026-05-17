@@ -21,35 +21,31 @@
 
 bool GLSpriteAtlas::Init()
 {
+    // CPU-only: reset pixel buffer and packer state.  GL texture creation is
+    // deferred to FlushPendingGL() so it can run on the render thread that
+    // owns the GL context after the first EndFrame().
     m_pixels.assign((size_t)k_atlas_w * k_atlas_h, 0u);
 
-    glGenTextures(1, &m_texture);
-    KFX_GL_LABEL(GL_TEXTURE, m_texture, "SpriteAtlas/Tex");
-    glBindTexture(GL_TEXTURE_2D, m_texture);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, k_atlas_w, k_atlas_h, 0,
-                 GL_RED, GL_UNSIGNED_BYTE, m_pixels.data());
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    m_cursor_x   = 0;
-    m_shelf_y    = 0;
-    m_shelf_h    = 0;
+    m_cursor_x    = 0;
+    m_shelf_y     = 0;
+    m_shelf_h     = 0;
     m_dirty_y_min = k_atlas_h;
     m_dirty_y_max = -1;
+    m_gl_init_needed = true;  // signal FlushPendingGL() to create the GL texture
 
-    SYNCLOG("GLSpriteAtlas: initialised %dx%d R8 texture", k_atlas_w, k_atlas_h);
+    SYNCLOG("GLSpriteAtlas: CPU init done — GL texture deferred to render thread");
     return true;
 }
 
 void GLSpriteAtlas::Free()
 {
+    // Save the old texture ID so FlushPendingGL() can delete it on the render
+    // thread.  Calling glDeleteTextures here would fail without a GL context.
     if (m_texture) {
-        glDeleteTextures(1, &m_texture);
+        m_old_texture = m_texture;
         m_texture = 0;
     }
+    m_gl_init_needed = false;
     m_pixels.clear();
     m_sprite_to_handle.clear();
     m_handle_uvs.clear();
@@ -175,7 +171,40 @@ void GLSpriteAtlas::flush_dirty()
 }
 
 /******************************************************************************/
+void GLSpriteAtlas::FlushPendingGL()
+{
+    // Delete the previous texture that was freed on the game thread.
+    if (m_old_texture) {
+        glDeleteTextures(1, &m_old_texture);
+        m_old_texture = 0;
+    }
 
+    if (m_gl_init_needed && !m_pixels.empty())
+    {
+        // Full (re)create: all sheets have already been packed into m_pixels by
+        // AddSheet() on the game thread.  Upload the whole buffer in one call.
+        glGenTextures(1, &m_texture);
+        KFX_GL_LABEL(GL_TEXTURE, m_texture, "SpriteAtlas/Tex");
+        glBindTexture(GL_TEXTURE_2D, m_texture);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, k_atlas_w, k_atlas_h, 0,
+                     GL_RED, GL_UNSIGNED_BYTE, m_pixels.data());
+        glBindTexture(GL_TEXTURE_2D, 0);
+        m_gl_init_needed = false;
+        m_dirty_y_min = k_atlas_h;  // full upload done, reset dirty range
+        m_dirty_y_max = -1;
+        SYNCLOG("GLSpriteAtlas: initialised %dx%d R8 texture (tex=%u)", k_atlas_w, k_atlas_h, m_texture);
+    }
+    else
+    {
+        // Incremental: flush any sub-regions dirtied by AddSheet() calls
+        // that ran after the last full init (e.g. pointer/frontend sprites).
+        flush_dirty();
+    }
+}
 void GLSpriteAtlas::AddSheet(const struct TbSpriteSheet* sheet)
 {
     if (!sheet) return;
@@ -195,8 +224,10 @@ void GLSpriteAtlas::AddSheet(const struct TbSpriteSheet* sheet)
             ++packed;
         }
     }
-    flush_dirty();
-    SYNCLOG("GLSpriteAtlas::AddSheet: packed %d/%ld sprites from sheet %p (total handles: %d)", 
+    // Do NOT call flush_dirty() here — AddSheet() may be called from the game
+    // thread (without a GL context) during level load.  FlushPendingGL() will
+    // do the actual upload (glTexImage2D or glTexSubImage2D) on the render thread.
+    SYNCLOG("GLSpriteAtlas::AddSheet: packed %d/%ld sprites from sheet %p (total handles: %d)",
            packed, n, sheet, (int)m_handle_uvs.size());
 }
 

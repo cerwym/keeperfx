@@ -69,12 +69,20 @@ public:
     GLuint GetTexture() const { return m_texture; }
     size_t GetRegisteredCount() const { return m_sprite_to_handle.size(); }
 
+    /** Perform all deferred GL work: delete old texture (if any), create the
+     *  new GL texture and upload the pixel buffer packed by AddSheet() calls.
+     *  Must be called from the thread that owns the GL context (render thread).
+     *  Also flushes any dirty sub-regions for sprites added after the last init. */
+    void FlushPendingGL();
+
 private:
     bool pack_sprite(const struct TbSprite* spr, SpriteUV& out);
     void decode_rle(uint8_t* dst, int dst_stride, const struct TbSprite* spr);
     void flush_dirty();
 
-    GLuint               m_texture = 0;
+    GLuint               m_texture     = 0;
+    GLuint               m_old_texture = 0;  // saved in Free(); deleted in FlushPendingGL()
+    bool                 m_gl_init_needed = false; // set by Init(); cleared by FlushPendingGL()
     std::vector<uint8_t> m_pixels;           // CPU copy, k_atlas_w × k_atlas_h
 
     // Shelf packer state
