@@ -20,6 +20,7 @@
 #include "renderer/opengl/GLUIRenderer.h"
 #include "renderer/opengl/GLTextRenderer.h"
 #include "renderer/opengl/GLMapFadePass.h"
+#include "renderer/backends/SoftwareTextRenderer.h"
 #include "renderer/opengl/GLShaders.h"
 #include "renderer/opengl/GLLensPass.h"
 #include "kfx/profiling/KfxProfiling.h"
@@ -585,18 +586,18 @@ bool RendererOpenGL::BeginFrame()
     m_render_graph.BeginFrame();
 
     // Refresh cached screen dimensions — screen mode may have changed since Init().
+    // These are game-thread-only values; the render thread reads from m_rt_frame_state.
     if (MyScreenWidth > 0 && MyScreenHeight > 0)
     {
         m_screenW = (int)MyScreenWidth;
         m_screenH = (int)MyScreenHeight;
     }
 
-    // Push current screen size to sub-renderers so they never need
-    // to read MyScreenWidth/MyScreenHeight directly.
-    if (m_world_renderer)          m_world_renderer->SetScreenSize(m_screenW, m_screenH);
-    if (auto* ui = RendererGetUIRenderer())  ui->SetScreenSize(m_screenW, m_screenH);
-    if (m_textRenderer)            m_textRenderer->SetScreenSize(m_screenW, m_screenH);
-    if (auto* mfp = RendererGetMapFadePass()) mfp->SetScreenSize(m_screenW, m_screenH);
+    // NOTE: sub-renderer SetScreenSize() is NOT called here (game thread).
+    // Pushing dimensions from BeginFrame races the render thread reading them in
+    // EndFrame_GL().  Screen size is snapshotted into m_rt_frame_state.screen_w/h
+    // in FlipBuffers() and pushed to sub-renderers at the start of EndFrame_GL()
+    // where the render thread has exclusive access.
 
     // Lazy-retry resources that depend on level data loaded after Init().
     // After the first EndFrame() the GL context lives on the render thread, so
@@ -866,6 +867,18 @@ void RendererOpenGL::EndFrame_GL()
     // 1 KB CPU expand + glTexSubImage2D is negligible compared to other frame work.
     upload_palette_texture();
     SYNCDBG(0, "EndFrame_GL step 2: palette upload done");
+
+    // Push snapshotted screen dimensions to all sub-renderers (render thread only —
+    // eliminates the BeginFrame race where the game thread wrote these while the
+    // render thread was still reading them for the previous frame's draw calls).
+    {
+        const int sw = m_rt_frame_state.screen_w;
+        const int sh = m_rt_frame_state.screen_h;
+        if (m_world_renderer)   m_world_renderer->SetScreenSize(sw, sh);
+        if (m_gl_ui_renderer)   m_gl_ui_renderer->SetScreenDimensions(sw, sh);
+        if (m_textRenderer)     m_textRenderer->SetScreenSize(sw, sh);
+        if (m_gl_mapfade)       m_gl_mapfade->SetScreenSize(sw, sh);
+    }
 
     // Restore depth mask before clearing — GPURenderNow() ends with
     // glDepthMask(GL_FALSE) to protect against accidental depth writes during
@@ -2432,6 +2445,78 @@ bool RendererOpenGL::compile_shaders()
         }
     }
 
+    return true;
+}
+
+IWorldViewRenderer* RendererOpenGL::CreateGLWorldViewRenderer()
+{
+    auto* glwr = new GLWorldViewRenderer(m_tile_atlas, m_texFade, m_texPalette);
+    glwr->SetPaletteSource(lbPalette);
+    SetWorldRenderer(glwr);
+    return glwr;
+}
+
+IMapFadePass* RendererOpenGL::CreateGLMapFadePass()
+{
+    auto* glmf = new GLMapFadePass();
+    glmf->SetScreenSize(lbDisplay.PhysicalScreenWidth, lbDisplay.PhysicalScreenHeight);
+    SetGLMapFadePass(glmf);
+    return glmf;
+}
+
+ITextRenderer* RendererOpenGL::CreateGLTextRenderer()
+{
+    auto* glt = new GLTextRenderer();
+    if (!glt->Init())
+    {
+        WARNLOG("GLTextRenderer::Init() failed, falling back to software");
+        delete glt;
+        return new SoftwareTextRenderer();
+    }
+    glt->SetPaletteTexture(m_texPalette);
+    glt->SetScreenSize(lbDisplay.PhysicalScreenWidth, lbDisplay.PhysicalScreenHeight);
+    SetTextRenderer(glt);
+    return glt;
+}
+
+IUIRenderer* RendererOpenGL::CreateGLUIRenderer()
+{
+    auto* glui = new GLUIRenderer();
+    if (!glui->Init())
+    {
+        WARNLOG("GLUIRenderer::Init() failed, falling back to software");
+        delete glui;
+        return nullptr;
+    }
+    glui->SetSpriteAtlas(m_sprite_atlas);
+    glui->SetFontAtlas(m_font_atlas);
+    glui->SetPaletteTexture(m_texPalette, GL_TEXTURE_2D);
+    glui->SetPaletteSource(lbPalette);
+    glui->SetScreenDimensions(lbDisplay.PhysicalScreenWidth, lbDisplay.PhysicalScreenHeight);
+    SetGLUIRenderer(glui);
+    return glui;
+}
+
+bool RendererOpenGL::CompileSubRendererShaders()
+{
+    // All four GL sub-renderers implement IGLShaderCompilable via multiple
+    // inheritance.  Typed pointers avoid dynamic_cast — each pointer is null
+    // only if the sub-renderer fell back to a software implementation.
+    IGLShaderCompilable* compilables[] = {
+        m_world_renderer,     // GLWorldViewRenderer* — always set in GL path
+        m_gl_mapfade,         // GLMapFadePass*       — always set in GL path
+        m_textRenderer,       // GLTextRenderer*      — null if Init() failed
+        m_gl_ui_renderer,     // GLUIRenderer*        — null if Init() failed
+    };
+    for (IGLShaderCompilable* c : compilables)
+    {
+        if (!c) continue;
+        if (!c->CompileShaders())
+        {
+            ERRORLOG("RendererOpenGL: %s::CompileShaders() failed", c->RendererName());
+            return false;
+        }
+    }
     return true;
 }
 

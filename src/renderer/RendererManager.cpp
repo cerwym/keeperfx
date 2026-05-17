@@ -18,14 +18,10 @@
 #include "renderer/backends/SoftwareUIRenderer.h"
 #ifdef RENDERER_OPENGL_ENABLED
 #  include "renderer/RendererOpenGL.h"
-#  include "renderer/opengl/GLTileAtlas.h"
 #  include "renderer/opengl/GLSpriteAtlas.h"
 #  include "renderer/opengl/GLWorldViewRenderer.h"
-#  include "renderer/opengl/GLMapFadePass.h"
-#  include "renderer/opengl/GLTextRenderer.h"
 #  include "renderer/opengl/GLUIRenderer.h"
 #  include "renderer/opengl/GLCursorLayer.h"
-#  include "renderer/opengl/IGLShaderCompilable.h"
 #endif
 #ifdef PLATFORM_VITA
 #  include "renderer/RendererVita.h"
@@ -397,19 +393,8 @@ static IWorldViewRenderer* create_world_view_renderer(RendererType type)
 #ifdef RENDERER_OPENGL_ENABLED
     if (type == RENDERER_OPENGL)
     {
-        // s_activeRenderer was just set to a RendererOpenGL by RendererInit();
-        // static_cast is safe here — we're inside the RENDERER_OPENGL branch.
         RendererOpenGL* ogl = static_cast<RendererOpenGL*>(s_activeRenderer);
-        if (ogl)
-        {
-            auto* glwr = new GLWorldViewRenderer(
-                ogl->GetTileAtlas(),
-                (GLuint)ogl->GetFadeTex(),
-                (GLuint)ogl->GetPaletteTex());
-            glwr->SetPaletteSource(lbPalette);  // address is always valid; contents may be zeroed until LbPaletteSet
-            ogl->SetWorldRenderer(glwr);
-            return glwr;
-        }
+        if (ogl) return ogl->CreateGLWorldViewRenderer();
         WARNLOG("RendererManager: GLWorldViewRenderer requested but no RendererOpenGL active");
     }
 #endif
@@ -423,9 +408,8 @@ static IMapFadePass* create_map_fade_pass(RendererType type)
 #ifdef RENDERER_OPENGL_ENABLED
     if (type == RENDERER_OPENGL)
     {
-        auto* glmf = new GLMapFadePass();
-        glmf->SetScreenSize(lbDisplay.PhysicalScreenWidth, lbDisplay.PhysicalScreenHeight);
-        return glmf;
+        RendererOpenGL* ogl = static_cast<RendererOpenGL*>(s_activeRenderer);
+        if (ogl) return ogl->CreateGLMapFadePass();
     }
 #endif
     (void)type;
@@ -439,19 +423,7 @@ static ITextRenderer* create_text_renderer(RendererType type)
     if (type == RENDERER_OPENGL)
     {
         RendererOpenGL* ogl = static_cast<RendererOpenGL*>(s_activeRenderer);
-        if (ogl)
-        {
-            auto* glt = new GLTextRenderer();
-            if (glt->Init())
-            {
-                glt->SetPaletteTexture(ogl->GetPaletteTex());
-                glt->SetScreenSize(lbDisplay.PhysicalScreenWidth, lbDisplay.PhysicalScreenHeight);
-                ogl->SetTextRenderer(glt);
-                return glt;
-            }
-            WARNLOG("GLTextRenderer::Init() failed, falling back to software");
-            delete glt;
-        }
+        if (ogl) return ogl->CreateGLTextRenderer();
     }
 #endif
     (void)type;
@@ -491,27 +463,19 @@ static IUIRenderer* create_ui_renderer(RendererType type)
         RendererOpenGL* ogl = static_cast<RendererOpenGL*>(s_activeRenderer);
         if (ogl)
         {
-            auto* glui = new GLUIRenderer();
-            if (!glui->Init())
+            IUIRenderer* glui = ogl->CreateGLUIRenderer();
+            if (glui)
             {
-                WARNLOG("GLUIRenderer::Init() failed, falling back to software");
-                delete glui;
-                return new SoftwareUIRenderer();
+                // Register initial sprite sheets into the atlas (GL-mode path).
+                s_spriteAtlas = ogl->GetSpriteAtlas();
+                if (s_spriteAtlas) {
+                    if (gui_panel_sprites) s_spriteAtlas->AddSheet(gui_panel_sprites);
+                    if (button_sprites)    s_spriteAtlas->AddSheet(button_sprites);
+                }
+                s_softwareUIRenderer = nullptr;
+                return glui;
             }
-            glui->SetSpriteAtlas(ogl->GetSpriteAtlas());
-            glui->SetFontAtlas(ogl->GetFontAtlas());
-            glui->SetPaletteTexture(ogl->GetPaletteTex(), GL_TEXTURE_2D);
-            glui->SetPaletteSource(lbPalette);  // address is always valid; contents may be zeroed until LbPaletteSet
-            // Fade texture set later by RendererNotifyGameTablesReady() after
-            // render_fade_tables is loaded in setup_stuff().
-            glui->SetScreenDimensions(lbDisplay.PhysicalScreenWidth, lbDisplay.PhysicalScreenHeight);
-            s_spriteAtlas = ogl->GetSpriteAtlas();
-            if (s_spriteAtlas) {
-                if (gui_panel_sprites) s_spriteAtlas->AddSheet(gui_panel_sprites);
-                if (button_sprites)    s_spriteAtlas->AddSheet(button_sprites);
-            }
-            s_softwareUIRenderer = nullptr;
-            return glui;
+            // CreateGLUIRenderer returned nullptr — fall through to software
         }
         WARNLOG("RendererManager: GLUIRenderer requested but no RendererOpenGL active");
     }
@@ -590,28 +554,13 @@ int RendererInit(RendererType type)
     SYNCLOG("CursorLayer initialised: %s", s_cursorLayer->GetName());
 
 #ifdef RENDERER_OPENGL_ENABLED
-    // Compile all GLSL programs in a single bootstrapper pass so that:
-    //   (a) error handling is uniform across all sub-renderers, and
-    //   (b) adding a new sub-renderer only requires implementing IGLShaderCompilable.
-    // Lens-pass subclasses are managed by LensManager and compile their own
-    // shaders via Init() when each effect activates — they are not listed here.
     if (type == RENDERER_OPENGL)
     {
-        IGLShaderCompilable* compilables[] = {
-            dynamic_cast<IGLShaderCompilable*>(s_worldViewRenderer),
-            dynamic_cast<IGLShaderCompilable*>(s_mapFadePass),
-            dynamic_cast<IGLShaderCompilable*>(s_textRenderer),
-            dynamic_cast<IGLShaderCompilable*>(s_uiRenderer),
-        };
-        for (IGLShaderCompilable* c : compilables)
+        RendererOpenGL* ogl = static_cast<RendererOpenGL*>(s_activeRenderer);
+        if (!ogl->CompileSubRendererShaders())
         {
-            if (!c) continue;
-            if (!c->CompileShaders())
-            {
-                ERRORLOG("RendererInit: %s::CompileShaders() failed", c->RendererName());
-                RendererShutdown();
-                return false;
-            }
+            RendererShutdown();
+            return false;
         }
     }
 #endif
@@ -780,6 +729,14 @@ TbBool RendererWantsFullscreenViewport()
 TbBool RendererHasGPURenderPath()
 {
     return (s_activeRenderer && s_activeRenderer->GetCapabilities().hasGPURenderPath) ? 1 : 0;
+}
+
+struct BackendCapabilities RendererGetCapabilities()
+{
+    if (s_activeRenderer)
+        return s_activeRenderer->GetCapabilities();
+    struct BackendCapabilities empty = {};
+    return empty;
 }
 
 /******************************************************************************/
@@ -1197,24 +1154,6 @@ TbBool RendererSubmitLandviewZoom(const unsigned char* src_buf, int src_w, int s
     return rend->SubmitLandviewZoom(src_buf, src_w, src_h,
                                     center_map_x, center_map_y,
                                     screen_cx, screen_cy, scale) ? true : false;
-}
-
-/******************************************************************************/
-/* C-callable UI renderer wrappers (stubs only — canonical wrappers live in   */
-/* RendererBridge_UI.cpp)                                                     */
-/******************************************************************************/
-
-void UIRenderer_DrawHandSprites(void)
-{
-    // Legacy stub — kept so existing callers compile until fully purged.
-    // Real draw now happens via CursorLayer_Draw().
-}
-
-void UIRenderer_SubmitKeeperSprite(short x, short y, unsigned short kspr_base,
-                                   short kspr_angle, unsigned char sprgroup, int32_t scale)
-{
-    // Legacy stub — calls route to CursorLayer_SubmitKeeperHandSprite now.
-    CursorLayer_SubmitKeeperHandSprite(x, y, kspr_base, kspr_angle, sprgroup, scale);
 }
 
 void RendererApplySettings(const RendererSettings* s)

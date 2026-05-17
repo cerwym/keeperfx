@@ -145,7 +145,7 @@ TbBool movie_record_stop(void)
 
 TbBool movie_record_frame(void)
 {
-    if (RendererHasGPURenderPath()) return true;
+    if (!RendererGetCapabilities().supportsMovieCapture) return true;
     short lock_mem = RendererIsScreenLocked();
     if (!lock_mem)
     {

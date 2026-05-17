@@ -24,6 +24,9 @@ class GLTileAtlas;
 class GLSpriteAtlas;
 class GLFontAtlas;
 class GLWorldViewRenderer;
+class GLMapFadePass;
+class GLUIRenderer;
+class GLTextRenderer;
 
 /******************************************************************************/
 
@@ -38,8 +41,12 @@ class GLWorldViewRenderer;
  */
 class RendererOpenGL : public IRenderer {
 private:
-    // m_textRenderer is set by RendererManager via SetTextRenderer() after init.
-    class ITextRenderer* m_textRenderer = nullptr;
+    // Typed GL sub-renderer pointers — set by RendererManager factory functions
+    // after each sub-renderer is created.  Null if the sub-renderer fell back to
+    // software (e.g. GLTextRenderer::Init() failure).
+    GLTextRenderer*      m_textRenderer    = nullptr;
+    GLMapFadePass*       m_gl_mapfade      = nullptr;
+    GLUIRenderer*        m_gl_ui_renderer  = nullptr;
 
 public:
     RendererOpenGL();
@@ -125,15 +132,8 @@ public:
     ITextRenderer* GetTextRenderer() override;
     IUIRenderer* GetUIRenderer() override;
 
-    // GL resource accessors used by RendererManager factory functions to wire
-    // sub-renderers at creation time.  All callers are inside
-    // #ifdef RENDERER_OPENGL_ENABLED + if (type == RENDERER_OPENGL) blocks so
-    // they are unreachable from non-GL code paths.
-    GLTileAtlas*  GetTileAtlas()  const { return m_tile_atlas; }
+    // Sprite-atlas accessor — kept for RendererManager's sprite-handle registry.
     GLSpriteAtlas* GetSpriteAtlas() const { return m_sprite_atlas; }
-    GLFontAtlas*  GetFontAtlas()  const { return m_font_atlas; }
-    unsigned int  GetFadeTex()    const { return m_texFade; }
-    unsigned int  GetPaletteTex() const { return m_texPalette; }
 
     /** Discard the tile atlas so it is rebuilt next frame with fresh block_mem data.
      *  Call after load_texture_map_file() loads new level textures. */
@@ -146,12 +146,27 @@ public:
      *  is current, after which SetFadeTexture() is pushed to all sub-renderers. */
     void ScheduleFadeTableInit() { m_fade_table_pending = true; }
 
-    // Wired by RendererManager after GLWorldViewRenderer is created so that
-    // EndFrame() can flush GPU geometry before the CPU blit overlay.
+    // Sub-renderer setters — called by RendererManager factories after creation.
     void SetWorldRenderer(GLWorldViewRenderer* wr) { m_world_renderer = wr; }
     GLWorldViewRenderer* GetWorldRenderer() const { return m_world_renderer; }
 
-    void SetTextRenderer(class ITextRenderer* tr) { m_textRenderer = tr; }
+    void SetTextRenderer(GLTextRenderer* tr)   { m_textRenderer = tr; }
+    void SetGLMapFadePass(GLMapFadePass* mfp)  { m_gl_mapfade = mfp; }
+    void SetGLUIRenderer(GLUIRenderer* ui)     { m_gl_ui_renderer = ui; }
+
+    // Sub-renderer factory methods — create and wire each GL sub-renderer using
+    // this backend's own GPU resources.  Called by RendererManager factories so
+    // that no GL resource handles need to be exposed as public accessors.
+    IWorldViewRenderer* CreateGLWorldViewRenderer();
+    IMapFadePass*       CreateGLMapFadePass();
+    ITextRenderer*      CreateGLTextRenderer();
+    /** Returns null on failure (caller should fall back to SoftwareUIRenderer). */
+    IUIRenderer*        CreateGLUIRenderer();
+
+    /** Compile GLSL programs for all GL sub-renderers.
+     *  Called once by RendererManager::RendererInit() after all sub-renderers
+     *  are wired up.  Returns false (and logs) if any compilation fails. */
+    bool CompileSubRendererShaders();
 
 private:
     bool compile_shaders();
@@ -199,6 +214,7 @@ private:
 
     // Not owned — set by RendererManager after world renderer creation
     GLWorldViewRenderer* m_world_renderer = nullptr;
+    // m_textRenderer, m_gl_mapfade, m_gl_ui_renderer declared in class head (private)
 
     // Sentinel for skipping redundant animated-tile atlas rebuilds.
     // block_ptrs[TEXTURE_BLOCKS_STAT_COUNT_A] changes exactly when

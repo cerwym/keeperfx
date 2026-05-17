@@ -16,6 +16,7 @@
 
 #include "bflib_video.h"          /* TbPixel */
 #include "renderer/RendererSettings.h" /* RendererSettings, g_renderer_settings */
+#include "renderer/BackendCapabilities.h" /* struct BackendCapabilities */
 #include <stdint.h>                /* int32_t */
 
 /* IRenderer.h and RendererType are only visible in C++ translation units */
@@ -70,6 +71,12 @@ TbBool RendererWantsFullscreenViewport(void);
  *  Use this instead of RendererGetActiveType() == RENDERER_OPENGL to avoid
  *  hard-coding backend checks.  True for GL and Vita; false for software. */
 TbBool RendererHasGPURenderPath(void);
+
+/** Returns a snapshot of the active backend's capability flags.
+ *  Use specific fields (e.g. .supportsMovieCapture) instead of adding new
+ *  boolean wrapper functions.  Returns an all-zero struct when no backend is
+ *  active. */
+struct BackendCapabilities RendererGetCapabilities(void);
 
 /******************************************************************************/
 /* C-callable framebuffer / frame wrappers (safe to call from bflib_video.c) */
