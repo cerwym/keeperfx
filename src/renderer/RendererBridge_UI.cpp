@@ -13,6 +13,7 @@
 
 #include "bflib_basics.h"
 #include "bflib_sprite.h"       // TbSprite
+#include "bflib_render.h"       // render_fade_tables
 #include "gui_draw.h"           // get_panel_sprite, gui_slab, GUI_SLAB_DIMENSION, TiledSprite
 #include "config_spritecolors.h" // get_player_colored_icon_idx
 #include "custom_sprites.h"     // get_button_sprite_for_player, get_button_sprite
@@ -281,4 +282,66 @@ unsigned char* UIRenderer_QueryPanelSpriteMask(int32_t spridx, int* out_w, int* 
     SpriteHandle h = RendererResolveSprite(spr);
     if (h == kInvalidSpriteHandle) return nullptr;
     return (unsigned char*)ui->QuerySpriteMask(h, out_w, out_h, out_stride);
+}
+
+// ── Raw sprite submission (used by LbSpriteDraw intercept path) ───────────────
+// These wrappers accept raw TbSprite* directly (no sprite-index lookup) and
+// resolve via RendererResolveSprite.  They route through the same IUIRenderer
+// Submit* API as the panel-sprite wrappers so the IR / double-buffer machinery
+// handles them transparently.
+//
+// When m_ui_write_cmds is set (game thread), submissions go to the IR write
+// buffer.  When it is null (render thread world-pass), submissions go directly
+// to m_quads[layer] for the current draw call.
+
+TbResult UIRenderer_SubmitRawSprite(long x, long y, const struct TbSprite* spr,
+                                     unsigned int /*draw_flags*/)
+{
+    IUIRenderer* ui = RendererGetUIRenderer();
+    if (!ui || !spr) return Lb_FAIL;
+    SpriteHandle h = RendererResolveSprite(spr);
+    if (h == kInvalidSpriteHandle) return Lb_FAIL;  // atlas miss → caller falls through to SW
+    ui->SubmitPanelSprite((int32_t)x, (int32_t)y, 16, h);
+    return Lb_OK;
+}
+
+TbResult UIRenderer_SubmitRawSpriteOneColour(long x, long y, const struct TbSprite* spr,
+                                              unsigned char colour,
+                                              unsigned int /*draw_flags*/)
+{
+    IUIRenderer* ui = RendererGetUIRenderer();
+    if (!ui || !spr) return Lb_FAIL;
+    SpriteHandle h = RendererResolveSprite(spr);
+    if (h == kInvalidSpriteHandle) return Lb_FAIL;
+    ui->SubmitPanelSpriteColored((int32_t)x, (int32_t)y, 16, h, colour);
+    return Lb_OK;
+}
+
+TbResult UIRenderer_SubmitRawSpriteRemap(long x, long y, const struct TbSprite* spr,
+                                          const unsigned char* cmap,
+                                          unsigned int /*draw_flags*/)
+{
+    IUIRenderer* ui = RendererGetUIRenderer();
+    if (!ui || !spr || !cmap) return Lb_FAIL;
+    SpriteHandle h = RendererResolveSprite(spr);
+    if (h == kInvalidSpriteHandle) return Lb_FAIL;
+    // Compute the remap row from the pointer offset into render_fade_tables.
+    // All creature/player colour remaps use rows within that table.
+    int remap_row = 0;
+    if (render_fade_tables && cmap >= render_fade_tables)
+        remap_row = (int)((cmap - render_fade_tables) / 256);
+    ui->SubmitPanelSpriteRemap((int32_t)x, (int32_t)y, 16, h, remap_row);
+    return Lb_OK;
+}
+
+void UIRenderer_DrawWorldSprites(void)
+{
+    IUIRenderer* ui = RendererGetUIRenderer();
+    if (ui) ui->DrawWorldSprites();
+}
+
+void UIRenderer_SetScreenSize(int w, int h)
+{
+    IUIRenderer* ui = RendererGetUIRenderer();
+    if (ui) ui->SetScreenSize(w, h);
 }

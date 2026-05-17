@@ -1016,6 +1016,23 @@ void GLUIRenderer::DrawCursorSprites()
     glUseProgram(0);
 }
 
+void GLUIRenderer::DrawWorldSprites()
+{
+    // Flush any world-depth sprites (layer 2) submitted via SetWorldDepth() since
+    // the last call.  Called from the render thread once per CMD_SPRITES bucket,
+    // after draw_3d_sprites_for_bucket() has pushed all sprite quads for that depth.
+    // Depth test is already active (set up by GLWorldViewRenderer geometry pass);
+    // enable blend here since the geometry pass disables it after the shadow sub-pass.
+    if (m_quads[2].empty() && m_lines[2].empty()) return;
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    flush_quads_from(m_quads[2]);
+    flush_lines_from(m_lines[2]);
+    m_quads[2].clear();
+    m_lines[2].clear();
+    glDisable(GL_BLEND);
+}
+
 void GLUIRenderer::SubmitCursorPanelSprite(int32_t x, int32_t y, int units_per_px, SpriteHandle spr)
 {
     // Render-thread-only path: pushes to m_cursor_quads instead of m_quads[layer].
@@ -1073,7 +1090,14 @@ void GLUIRenderer::Clear()
     // cleared by DrawFrontBase().  m_vertices is a scratch buffer owned by
     // flush_quads_from() / flush_lines_from().  Clearing either here from the
     // game thread would race with the render thread's EndFrame_GL() work.
-    m_minimap_pending = false;
+    //
+    // m_minimap_pending is intentionally NOT reset here. Its lifecycle:
+    //   - Set to true: SubmitMinimap() on the game thread.
+    //   - Set to false: FlipBuffers() on the game thread, after copying to m_rt_minimap_pending.
+    // Clear() is called both from BeginFrame() (game thread) AND from the post-swap
+    // path in EndFrame_GL() (render thread).  Resetting m_minimap_pending in the
+    // render-thread call races with the game thread that may have just set it via
+    // SubmitMinimap() — causing the minimap to disappear every other frame.
     m_current_layer = 1;  // Reset to front layer (default) each frame
     m_game_vp_set = false;
 }

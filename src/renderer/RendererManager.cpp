@@ -616,17 +616,24 @@ int RendererInit(RendererType type)
     }
 #endif
 
-    // Wire sprite intercept backend: Vita uses GPU batch; OpenGL uses software
-    // (software backend exercises the full intercept path for testing on desktop).
+    // Wire the LbSpriteDraw intercept for GPU sprite submission.
+    // Vita: route through VitaGPUBackend (IBackend path).
+    // OpenGL: route through UIRenderer (IR path) — no IBackend needed.
 #if defined(PLATFORM_VITA)
     if (type == RENDERER_VITA)
         RenderPass_Initialize(1); // BACKEND_GPU_VITA
 #elif defined(RENDERER_OPENGL_ENABLED)
     if (type == RENDERER_OPENGL)
-        RenderPass_Initialize(3); // BACKEND_OPENGL
+        g_render_pass_active = 1; // UIRenderer handles sprites directly
 #endif
     if (g_render_pass_active)
-        SYNCLOG("SpriteBackend initialised: %s", RenderPass_GetBackendName());
+    {
+#if defined(RENDERER_OPENGL_ENABLED)
+        SYNCLOG("Sprite intercept active: UIRenderer (IR)");
+#else
+        SYNCLOG("Sprite intercept active: %s", RenderPass_GetBackendName());
+#endif
+    }
 
     return true;
 }
@@ -685,7 +692,11 @@ int RendererSwitch(RendererType type)
 
 void RendererShutdown()
 {
+#if !defined(RENDERER_OPENGL_ENABLED)
+    // Vita/software only: UIRenderer handles the OpenGL sprite path.
     RenderPass_Shutdown();
+#endif
+    g_render_pass_active = 0;
     if (s_cursorLayer)
     {
         delete s_cursorLayer;

@@ -65,7 +65,6 @@ public:
         BACKEND_AUTO,           // Auto-select based on platform
         BACKEND_GPU_VITA,       // Vita GPU (VitaGL + GXM)
         BACKEND_SOFTWARE,       // CPU immediate rendering
-        BACKEND_OPENGL          // Desktop OpenGL batched sprites
     };
     
     // Initializes the render system with the specified backend

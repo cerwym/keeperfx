@@ -32,7 +32,6 @@
 #include "bflib_vidraw.h"   // vec_window_width/height (PiP projection override), LbSpriteDrawResized
 #include "bflib_sprite.h"   // TbSpriteSheet, get_sprite
 #include "platform.h"       // platform_create_gl_context / swap / destroy
-#include "renderer/RenderPass_C.h"
 #include "engine_textures.h" // update_animating_texture_maps()
 #include "engine_render.h"   // draw_view()
 #include "engine_redraw.h"   // setup_engine_window / store_engine_window (PiP viewport)
@@ -810,14 +809,6 @@ void RendererOpenGL::EndFrame()
 
 void RendererOpenGL::EndFrame_GL()
 {
-    // Reset OpenGLSpriteBackend state for this frame.
-    // MUST run on the render thread — not in BeginFrame() on the game thread.
-    // Rationale: draw_3d_sprites_for_bucket() (called below in gpu_execute_passes)
-    // writes to OpenGLSpriteBackend::m_quads / m_remap_cache / m_remap_row_data
-    // exclusively on this thread.  Clearing those from the game-thread BeginFrame()
-    // races with this thread still reading/writing them for the previous frame.
-    RenderPass_BeginFrame();
-
     // Deferred tile-atlas GPU init — runs on the render thread that owns the
     // GL context.  BeginFrame() (game thread) cannot call glGenTextures /
     // glTexImage3D directly because the context has already been transferred
@@ -1578,9 +1569,6 @@ void RendererOpenGL::EndFrame_GL()
     SYNCDBG(0, "EndFrame_GL step 5: before cursor draw");
     if (auto* cursor = RendererGetCursorLayer())
         cursor->ExecuteCursorFromIR(m_render_graph.GetUIBuffersRT());
-    SYNCDBG(0, "EndFrame_GL step 6: before RenderPass_EndFrame");
-
-    RenderPass_EndFrame();
     platform_swap_gl_buffers(lbWindow);
 
     // Clear per-frame queues AFTER the swap — not in BeginFrame().

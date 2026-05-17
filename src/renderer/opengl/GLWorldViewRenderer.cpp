@@ -25,9 +25,9 @@
 #include "bflib_render.h"      // PolyPoint, render_fade_tables
 #include "bflib_vidraw.h"      // vec_window_width, vec_window_height
 #include "bflib_basics.h"      // ERRORLOG / SYNCLOG / WARNLOG
-#include "renderer/RenderPass_C.h" // RenderPass_DrawNow()
-#include "renderer/RenderPass.h"    // RenderPassSystem::SetScreenSize()
-#include "renderer/backends/OpenGLSpriteBackend.h" // SetCurrentBucketZ()
+#include "renderer/opengl/GLUIRenderer.h"
+#include "renderer/RendererManager.h"  // UIRenderer_BeginWorldDepth/EndWorldDepth/DrawWorldSprites/SetScreenSize
+// OpenGLSpriteBackend removed — bucket z is now set via UIRenderer_BeginWorldDepth()
 #include "creature_graphics.h" // KeeperSprite structure
 #include "bflib_sprite.h"      // TbSprite structure
 #include "player_data.h"       // get_player_color_idx(), player_room_colours[]
@@ -1069,9 +1069,8 @@ void GLWorldViewRenderer::setup_world_sprite_processing(int32_t bucket_num)
     // so sprites always pass the depth test against same-bucket ground polygons
     // (avoids z-fighting between coplanar sprites and tiles).
     const float sprite_z = 2.0f * ((float)bucket_num - 0.5f) / (float)(BUCKETS_COUNT - 1) - 1.0f;
-    OpenGLSpriteBackend::SetCurrentBucketZ(sprite_z);
-
-    // Store the depth for keeper sprite rendering
+    // Depth is set via UIRenderer_BeginWorldDepth() before draw_3d_sprites_for_bucket().
+    // Store here so keeper-sprite (KSprite) passes can sample the same z value.
     m_current_sprite_z = sprite_z;
 }
 
@@ -1636,17 +1635,16 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
             glBindVertexArray(0);
             glUseProgram(0);
 
-            RenderPassSystem::GetInstance().SetScreenSize(m_screen_w, m_screen_h);
+            UIRenderer_SetScreenSize(m_screen_w, m_screen_h);
 
             const float sprite_z = 2.0f * (float)cmd.bucket_num / (float)(BUCKETS_COUNT - 1) - 1.0f;
-            OpenGLSpriteBackend::SetCurrentBucketZ(sprite_z);
+            UIRenderer_BeginWorldDepth(sprite_z);
             m_current_sprite_z = sprite_z;
 
             setup_world_sprite_processing(cmd.bucket_num);
             draw_3d_sprites_for_bucket(cmd.bucket_num);
-            RenderPass_DrawNow();
-
-            RenderPassSystem::GetInstance().SetScreenSize(0, 0);
+            UIRenderer_DrawWorldSprites();
+            UIRenderer_EndWorldDepth();
 
             glUseProgram(m_shader);
             glBindVertexArray(m_vao);
@@ -1659,19 +1657,18 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
             glBindVertexArray(0);
             glUseProgram(0);
 
-            RenderPassSystem::GetInstance().SetScreenSize(m_screen_w, m_screen_h);
+            UIRenderer_SetScreenSize(m_screen_w, m_screen_h);
 
             const float sprite_z = 2.0f * (float)cmd.bucket_num / (float)(BUCKETS_COUNT - 1) - 1.0f;
-            OpenGLSpriteBackend::SetCurrentBucketZ(sprite_z);
+            UIRenderer_BeginWorldDepth(sprite_z);
             m_current_sprite_z = sprite_z;
 
             // Use the front-view specific sprite function which calls draw_fastview_mapwho()
             // (correctly uses front-view zoom/projection) rather than draw_jonty_mapwho()
             // (iso projection, produces wrong scale/position for front-view sprites).
             draw_frontview_3d_sprites_for_bucket_current(cmd.bucket_num);
-            RenderPass_DrawNow();
-
-            RenderPassSystem::GetInstance().SetScreenSize(0, 0);
+            UIRenderer_DrawWorldSprites();
+            UIRenderer_EndWorldDepth();
 
             glUseProgram(m_shader);
             glBindVertexArray(m_vao);
@@ -1679,6 +1676,12 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
             KFX_GL_POP();
         }
     }
+
+    // Restore UIRenderer screen dimensions to full screen after the game-viewport
+    // sprite pass — DrawFrontBase/Overlay (called after GPURenderNow) use this value
+    // for the u_screen_size shader uniform.  Leaving it as the game viewport size (or
+    // zero) would produce division-by-zero in the vertex shader for all UI elements.
+    UIRenderer_SetScreenSize(m_full_screen_w, m_full_screen_h);
 
     glDisable(GL_SCISSOR_TEST);
 

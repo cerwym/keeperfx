@@ -58,7 +58,6 @@
 #include "gui_draw.h"
 #include "engine_render.h"
 #include "renderer/RendererManager.h"
-#include "renderer/RenderPass_C.h"
 #include "engine_arrays.h"
 #include "sounds.h"
 #include "game_legacy.h"
@@ -1221,7 +1220,7 @@ void draw_mini_things_in_hand(long x, long y)
                         long circ_y = scrpos_y + scale_ui_value(ownshift_y);
                         long circ_r = ps_units_per_px / 16;
                         TbPixel circ_c = player_path_colours[flash_color];
-                        if (g_render_pass_active)
+                        if (RendererHasGPURenderPath())
                         {
                             // GPU: approximate filled circle as a box (radius is 1-2px)
                             int32_t d = circ_r * 2 + 1;
@@ -1244,7 +1243,7 @@ void draw_mini_things_in_hand(long x, long y)
                         ScreenCoord coord_y = scrpos_y + scale_ui_value(ownshift_y);
                         ScreenCoord draw_y;
                         ScreenCoord draw_x;
-                        if (g_render_pass_active)
+                        if (RendererHasGPURenderPath())
                         {
                             // GPU: emit 1×1 solid boxes for each pixel (same pattern as gui_parchment.c)
                             for (int p = 0; p < (n*n); p++)

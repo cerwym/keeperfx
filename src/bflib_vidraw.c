@@ -34,7 +34,7 @@
 #include "bflib_sprite.h"
 #include "bflib_mouse.h"
 #include "bflib_render.h"
-#include "renderer/RenderPass_C.h"
+#include "renderer/RenderPass_C.h"  // g_render_pass_active (also set for UIRenderer path)
 #include "renderer/RendererManager.h"
 #include "post_inc.h"
 
@@ -1036,9 +1036,14 @@ TbResult LbSpriteDraw(long x, long y, const struct TbSprite *spr)
     SYNCDBG(19,"At (%ld,%ld)",x,y);
     if (g_render_pass_active && !lb_in_sprite_submit) {
         lb_in_sprite_submit = 1;
+#ifdef RENDERER_OPENGL_ENABLED
+        ret = UIRenderer_SubmitRawSprite(x, y, spr, lbDisplay.DrawFlags);
+#else
         ret = RenderPass_SubmitSprite(x, y, spr, lbDisplay.DrawFlags);
+#endif
         lb_in_sprite_submit = 0;
-        return ret;
+        if (ret == Lb_OK) return ret;
+        // Atlas miss or no renderer: fall through to software path.
     }
     ret = LbSpriteDrawPrepare(&spd, x, y, spr);
     if (ret != Lb_SUCCESS)
@@ -1330,9 +1335,13 @@ TbResult LbSpriteDrawOneColour(long x, long y, const struct TbSprite *spr, const
     SYNCDBG(19,"At (%ld,%ld)",x,y);
     if (g_render_pass_active && !lb_in_sprite_submit) {
         lb_in_sprite_submit = 1;
+#ifdef RENDERER_OPENGL_ENABLED
+        ret = UIRenderer_SubmitRawSpriteOneColour(x, y, spr, colour, lbDisplay.DrawFlags);
+#else
         ret = RenderPass_SubmitSpriteOneColour(x, y, spr, colour, lbDisplay.DrawFlags);
+#endif
         lb_in_sprite_submit = 0;
-        return ret;
+        if (ret == Lb_OK) return ret;
     }
     ret = LbSpriteDrawPrepare(&spd, x, y, spr);
     if (ret != Lb_SUCCESS)
@@ -1642,9 +1651,13 @@ int LbSpriteDrawScaledRemap(long xpos, long ypos, const struct TbSprite *sprite,
       return 1;
     if (g_render_pass_active && !lb_in_sprite_submit) {
         lb_in_sprite_submit = 1;
+#ifdef RENDERER_OPENGL_ENABLED
+        TbResult ret = UIRenderer_SubmitRawSpriteRemap(xpos, ypos, sprite, cmap, lbDisplay.DrawFlags);
+#else
         TbResult ret = RenderPass_SubmitSpriteRemap(xpos, ypos, sprite, cmap, lbDisplay.DrawFlags);
+#endif
         lb_in_sprite_submit = 0;
-        return ret;
+        if (ret == Lb_OK) return ret;
     }
     if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLNSHADOW) != 0)
         lbSpriteReMapPtr = lbDisplay.FadeTable + ((lbDisplay.FadeStep & 0x3F) << 8);

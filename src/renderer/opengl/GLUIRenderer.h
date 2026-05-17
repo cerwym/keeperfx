@@ -121,6 +121,8 @@ public:
     virtual const char* GetName() const override { return "OPENGL_UI"; }
     const char* RendererName() const override { return "GLUIRenderer"; }
 
+    void DrawWorldSprites() override;
+
     /** Compile all GLSL programs owned by this renderer.
      *  Called by the bootstrapper in RendererManager::RendererInit(). */
     bool CompileShaders() override;

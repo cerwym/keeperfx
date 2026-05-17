@@ -303,6 +303,12 @@ public:
      *  @param fs    FrameState snapshot for palette lookup. */
     virtual void PopulateFromIR(const UICommandBuffers& /*cmds*/, const FrameState& /*fs*/) {}
 
+    /** Flush any world-depth sprites (layer 2) submitted via SetWorldDepth() since
+     *  the last call.  Called from the render thread during the world bucket walk,
+     *  once per bucket after draw_3d_sprites_for_bucket().
+     *  GPU: flushes m_quads[2] to the GPU and clears it.  CPU default: no-op. */
+    virtual void DrawWorldSprites() {}
+
 protected:
     /** Sprite handle → raw TbSprite* map, used by CPU default implementations. */
     std::unordered_map<SpriteHandle, const struct TbSprite*> m_handle_to_sprite;

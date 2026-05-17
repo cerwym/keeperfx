@@ -702,6 +702,33 @@ void UIRenderer_Clear(void);
  *  out_stride receives the row byte stride ((w+7)/8). */
 unsigned char* UIRenderer_QueryPanelSpriteMask(int32_t spridx, int* out_w, int* out_h, int* out_stride);
 
+// ── Raw sprite submission (intercept path from LbSpriteDraw) ─────────────────
+// Called from bflib_vidraw.c when g_render_pass_active is set.
+// Returns Lb_OK on success; Lb_FAIL on atlas miss so the caller can fall
+// through to the CPU blitter.
+
+/** Submit a raw TbSprite at (x,y) — equivalent to LbSpriteDraw.
+ *  Returns Lb_FAIL on atlas miss; the caller should then run the SW path. */
+TbResult UIRenderer_SubmitRawSprite(long x, long y, const struct TbSprite* spr,
+                                     unsigned int draw_flags);
+
+/** Submit a raw one-colour sprite — equivalent to LbSpriteDrawOneColour. */
+TbResult UIRenderer_SubmitRawSpriteOneColour(long x, long y, const struct TbSprite* spr,
+                                              unsigned char colour, unsigned int draw_flags);
+
+/** Submit a raw remap sprite — equivalent to LbSpriteDrawScaledRemap.
+ *  cmap must point within render_fade_tables; the row is computed from the offset. */
+TbResult UIRenderer_SubmitRawSpriteRemap(long x, long y, const struct TbSprite* spr,
+                                          const unsigned char* cmap, unsigned int draw_flags);
+
+/** Flush any world-depth sprites (layer 2) to the GPU.
+ *  Called from GLWorldViewRenderer once per CMD_SPRITES bucket. */
+void UIRenderer_DrawWorldSprites(void);
+
+/** Temporarily override the screen dimensions used for NDC conversion.
+ *  Call UIRenderer_SetScreenSize(0,0) to restore the default. */
+void UIRenderer_SetScreenSize(int w, int h);
+
 /** Apply a complete RendererSettings snapshot to the active renderer.
  *  Also copies *s into g_renderer_settings so subsequent reads are consistent.
  *  Safe to call from C translation units. */

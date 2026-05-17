@@ -70,9 +70,6 @@
 #include "platform/PlatformManager.h"
 #include "renderer/RendererManager.h"
 #include "renderer/RendererSettings.h"
-#ifdef __cplusplus
-#include "renderer/RenderPass.h"  // RenderPassSystem (C++ only)
-#endif
 #include "kfx/profiling/KfxProfilingC.h"
 #include "post_inc.h"
 

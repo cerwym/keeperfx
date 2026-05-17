@@ -4,9 +4,6 @@
 #if defined(__VITA__)
 #include "backends/VitaGPUBackend.h"
 #endif
-#ifdef RENDERER_OPENGL_ENABLED
-#include "backends/OpenGLSpriteBackend.h"
-#endif
 #include "RenderPassProfiler.h"
 #include "bflib_basics.h"
 #include <cstdio>
@@ -60,15 +57,6 @@ bool RenderPassSystem::Initialize(BackendType backend)
             m_backend = new SoftwareBackend();
             break;
             
-        case BACKEND_OPENGL:
-#ifdef RENDERER_OPENGL_ENABLED
-            m_backend = new OpenGLSpriteBackend();
-            break;
-#else
-            ERRORLOG("RenderPassSystem: OPENGL backend not available in this build");
-            return false;
-#endif
-
         case BACKEND_AUTO:
 #if defined(__VITA__)
             m_backend = new VitaGPUBackend();
@@ -93,17 +81,6 @@ bool RenderPassSystem::Initialize(BackendType backend)
         VitaGPUBackend* gpu_backend = dynamic_cast<VitaGPUBackend*>(m_backend);
         if (gpu_backend && !gpu_backend->Initialize()) {
             ERRORLOG("RenderPassSystem: GPU backend initialization failed");
-            delete m_backend;
-            m_backend = nullptr;
-            return false;
-        }
-    }
-#endif
-#ifdef RENDERER_OPENGL_ENABLED
-    if (backend == BACKEND_OPENGL) {
-        OpenGLSpriteBackend* gl_backend = dynamic_cast<OpenGLSpriteBackend*>(m_backend);
-        if (gl_backend && !gl_backend->Initialize()) {
-            ERRORLOG("RenderPassSystem: OpenGL sprite backend initialization failed");
             delete m_backend;
             m_backend = nullptr;
             return false;
@@ -253,7 +230,6 @@ TbBool RenderPass_Initialize(int backend_type)
         case 0: bt = RenderPassSystem::BACKEND_AUTO; break;
         case 1: bt = RenderPassSystem::BACKEND_GPU_VITA; break;
         case 2: bt = RenderPassSystem::BACKEND_SOFTWARE; break;
-        case 3: bt = RenderPassSystem::BACKEND_OPENGL; break;
         default:
             return 0; // FALSE
     }
