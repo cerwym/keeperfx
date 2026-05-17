@@ -16,8 +16,7 @@
 #include "renderer/RendererManager.h"     // RendererGetActive, WorldViewRenderer_BeginWorldPass
 #include "renderer/RenderGraph.h"         // SetMapFadeCmd / ClearMapFadeCmd
 #include "renderer/ir/UICommands.h"       // IRMapFadeCmd
-#include "renderer/opengl/GLWorldViewRenderer.h" // BeginWorldPass
-#include "engine_redraw.h"    // redraw_isometric_view, redraw_frontview, map_fade_in/out, setup/store_engine_window
+#include "engine_redraw.h"    // setup_engine_window
 #include "engine_render.h"    // EngineRenderState, engine_save/restore_render_state, draw_view
 #include "gui_parchment.h"    // load_parchment_file, redraw_minimal_overhead_view
 #include "player_data.h"      // get_my_player, view_mode_restore
@@ -163,7 +162,6 @@ bool GLMapFadePass::CaptureAndUploadFrames()
         return false;
     }
 
-    struct PlayerInfo* player = get_my_player();
     const int w = m_screen_w;
     const int h = m_screen_h;
     if (w < 1 || h < 1)
@@ -175,14 +173,6 @@ bool GLMapFadePass::CaptureAndUploadFrames()
     m_tex_w = w;
     m_tex_h = h;
 
-    // ── Create temporary FBO + depth renderbuffer ────────────────────────
-    GLuint fbo = 0, depth_rb = 0;
-    glGenFramebuffers(1, &fbo);
-    glGenRenderbuffers(1, &depth_rb);
-    glBindRenderbuffer(GL_RENDERBUFFER, depth_rb);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, w, h);
-    glBindRenderbuffer(GL_RENDERBUFFER, 0);
-
     // Resize both snapshot textures to the window resolution.
     for (int i = 0; i < 2; ++i)
     {
@@ -192,38 +182,43 @@ bool GLMapFadePass::CaptureAndUploadFrames()
     }
     glBindTexture(GL_TEXTURE_2D, 0);
 
-    // ── Capture 3D world view → m_tex[1] ────────────────────────────────
-    // Follow the PiP pattern: save engine state, set up engine window for
-    // the FBO dimensions, call BeginWorldPass, render, flush to FBO, restore.
-    // The GL renderer uses a fullscreen viewport (0,0,w,h) — the sidebar
-    // paints on top — so the captured view always matches the live view.
+    // ── Capture 3D world view → m_tex[1] via glBlitFramebuffer ──────────
+    // The dungeon geometry was already rendered to the default framebuffer
+    // by ExecuteWorldFromIR() before CaptureAndUploadFrames is called.
+    // We blit the current default FB content into m_tex[1] directly, which
+    // avoids re-running draw_view() on the render thread (unsafe — races with
+    // the game thread building the next frame).
     {
-        // Save engine projection/window state and set up for FBO dimensions.
-        struct EngineRenderState saved_state;
-        engine_save_render_state(&saved_state);
+        GLuint blit_fbo = 0;
+        glGenFramebuffers(1, &blit_fbo);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, blit_fbo);
+        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                               GL_TEXTURE_2D, m_tex[1], 0);
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, 0); // default framebuffer
+        glBlitFramebuffer(0, 0, w, h, 0, 0, w, h,
+                          GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+        glDeleteFramebuffers(1, &blit_fbo);
+    }
 
-        setup_engine_window(0, 0, w, h);
+    // ── Capture parchment overhead view → m_tex[0] ──────────────────────
+    // The parchment rawblit + overhead map were submitted to the pending
+    // command queues by StepFadeIn()/StepFadeOut() on the game thread.
+    // Render them into a temporary FBO attached to m_tex[0].
+    // FlushSceneToFBO() consumes and clears m_rt_rawblit_pending and
+    // m_rt_overhead_map_cmds so the main EndFrame_GL pass will skip them.
+    {
+        GLuint fbo = 0, depth_rb = 0;
+        glGenFramebuffers(1, &fbo);
+        glGenRenderbuffers(1, &depth_rb);
+        glBindRenderbuffer(GL_RENDERBUFFER, depth_rb);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, w, h);
+        glBindRenderbuffer(GL_RENDERBUFFER, 0);
 
-        // Tell the world renderer about the FBO target dimensions.
-        // BeginWorldPass also sets vec_window_width/height from w,h.
-        gl_rend->GetWorldRenderer()->BeginWorldPass(nullptr, 0, w, h, 0, 0);
-
-        // Re-render the 3D view using the appropriate camera.
-        struct Camera* cam;
-        if (player->view_mode_restore == PVM_IsoWibbleView ||
-            player->view_mode_restore == PVM_IsoStraightView)
-            cam = get_local_camera(CamIV_Isometric);
-        else
-            cam = get_local_camera(CamIV_FrontView);
-        draw_view(cam, 0);
-
-        // Restore engine projection/window state.
-        engine_restore_render_state(&saved_state);
-
-        // Flush world geometry into the FBO.
         glBindFramebuffer(GL_FRAMEBUFFER, fbo);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                               GL_TEXTURE_2D, m_tex[1], 0);
+                               GL_TEXTURE_2D, m_tex[0], 0);
         glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
                                   GL_RENDERBUFFER, depth_rb);
         glViewport(0, 0, w, h);
@@ -234,32 +229,11 @@ bool GLMapFadePass::CaptureAndUploadFrames()
         gl_rend->FlushSceneToFBO(w, h);
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glDeleteRenderbuffers(1, &depth_rb);
+        glDeleteFramebuffers(1, &fbo);
     }
 
-    // ── Capture parchment overhead view → m_tex[0] ──────────────────────
-    {
-        // Queue parchment background + overhead map via the normal game path.
-        load_parchment_file();
-        redraw_minimal_overhead_view();
-
-        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                               GL_TEXTURE_2D, m_tex[0], 0);
-        glViewport(0, 0, w, h);
-        glClearColor(0, 0, 0, 1);
-        glDepthMask(GL_TRUE);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-        gl_rend->FlushSceneToFBO(w, h);
-
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    }
-
-    // ── Cleanup ──────────────────────────────────────────────────────────
-    glDeleteRenderbuffers(1, &depth_rb);
-    glDeleteFramebuffers(1, &fbo);
     glViewport(0, 0, w, h);
-
     return true;
 }
 
@@ -275,9 +249,26 @@ int32_t GLMapFadePass::StepFadeIn(int32_t step)
     }
 
     // Arm capture on the first call (step == 0).
-    // The actual GL work is deferred to ExecuteFromIR() on the render thread.
+    // Submit dungeon + parchment render data NOW on the game thread so the
+    // render thread has world geometry in the write buffers when it runs
+    // ExecuteWorldFromIR(), and has rawblit/overhead queued for parchment capture.
     if (step == 0)
     {
+        struct PlayerInfo* player = get_my_player();
+        struct EngineRenderState saved_state;
+        engine_save_render_state(&saved_state);
+        setup_engine_window(0, 0, m_screen_w, m_screen_h);
+        WorldViewRenderer_BeginWorldPass(nullptr, 0, m_screen_w, m_screen_h, 0, 0);
+        struct Camera* cam;
+        if (player->view_mode_restore == PVM_IsoWibbleView ||
+            player->view_mode_restore == PVM_IsoStraightView)
+            cam = get_local_camera(CamIV_Isometric);
+        else
+            cam = get_local_camera(CamIV_FrontView);
+        draw_view(cam, 0);
+        engine_restore_render_state(&saved_state);
+        load_parchment_file();
+        redraw_minimal_overhead_view();
         m_capture_pending = true;
         m_active = true;
     }
@@ -310,9 +301,25 @@ int32_t GLMapFadePass::StepFadeOut(int32_t step)
     }
 
     // Arm capture on the first call (step == 32).
-    // Same deferred-capture logic as StepFadeIn.
+    // Same game-thread data submission as StepFadeIn: submit dungeon + parchment
+    // render data so the render thread has everything it needs for capture.
     if (step == 32)
     {
+        struct PlayerInfo* player = get_my_player();
+        struct EngineRenderState saved_state;
+        engine_save_render_state(&saved_state);
+        setup_engine_window(0, 0, m_screen_w, m_screen_h);
+        WorldViewRenderer_BeginWorldPass(nullptr, 0, m_screen_w, m_screen_h, 0, 0);
+        struct Camera* cam;
+        if (player->view_mode_restore == PVM_IsoWibbleView ||
+            player->view_mode_restore == PVM_IsoStraightView)
+            cam = get_local_camera(CamIV_Isometric);
+        else
+            cam = get_local_camera(CamIV_FrontView);
+        draw_view(cam, 0);
+        engine_restore_render_state(&saved_state);
+        load_parchment_file();
+        redraw_minimal_overhead_view();
         m_capture_pending = true;
         m_active = true;
     }

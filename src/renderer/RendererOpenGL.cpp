@@ -962,6 +962,22 @@ void RendererOpenGL::EndFrame_GL()
         m_lens_active = false;
     }
 
+    // Map-fade GPU compose pass — active during PVM_ParchFadeIn / ParchFadeOut.
+    // Must run HERE — after ExecuteWorldFromIR() (so the dungeon view is already
+    // on the default framebuffer for glBlitFramebuffer capture) but BEFORE the
+    // rawblit/overhead map draws (so those queues are still available for the
+    // parchment FBO capture inside CaptureAndUploadFrames).
+    // IRMapFadeCmd is written by GLMapFadePass::FlushToRenderGraph() on the
+    // game thread and transferred to the render-side by Flip()/UpdateFrameState().
+    {
+        const auto& map_fade_cmd = m_render_graph.GetMapFadeCmdRT();
+        if (map_fade_cmd)
+        {
+            IMapFadePass* mfp = RendererGetMapFadePass();
+            if (mfp) mfp->ExecuteFromIR(*map_fade_cmd);
+        }
+    }
+
     // m_rt_quads[]/m_rt_lines[] have been populated by Execute() above via
     // ui->PopulateFromIR().  DrawBack()/DrawFront() below issue the actual draws.
 
@@ -1383,18 +1399,6 @@ void RendererOpenGL::EndFrame_GL()
         glDepthMask(GL_TRUE);
         glActiveTexture(GL_TEXTURE0);
         m_rt_transparent_blit_pending = false;
-    }
-
-    // Map-fade GPU compose pass — active during PVM_ParchFadeIn / ParchFadeOut.
-    // IRMapFadeCmd is written by GLMapFadePass::FlushToRenderGraph() on the
-    // game thread and transferred to the render-side by Flip()/UpdateFrameState().
-    {
-        const auto& map_fade_cmd = m_render_graph.GetMapFadeCmdRT();
-        if (map_fade_cmd)
-        {
-            IMapFadePass* mfp = RendererGetMapFadePass();
-            if (mfp) mfp->ExecuteFromIR(*map_fade_cmd);
-        }
     }
 
     // Draw layer-1 (front) GPU UI elements first.
