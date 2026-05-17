@@ -42,6 +42,7 @@
 #include <cstdint>
 
 struct TbSprite;
+struct UICommandBuffers; // forward declaration — full type needed only by implementations
 
 #ifdef __cplusplus
 
@@ -75,6 +76,17 @@ public:
      *  Called from EndFrame() before signalling the render thread.
      *  CPU default: no-op. */
     virtual void FlipBuffers() {}
+
+    /** Open the IR write window for this frame (game thread).
+     *  When @p cmds is non-null, Submit* calls emit into @p cmds->cursor_pointers
+     *  and @p cmds->cursor_hands instead of internal queues.
+     *  Call with nullptr to close the window before FlipBuffers(). */
+    virtual void SetCursorWriteBuffers(UICommandBuffers* cmds) {}
+
+    /** Execute cursor draws from the read-side IR buffers (render thread).
+     *  Called from EndFrame_GL() after all other passes, replacing Draw().
+     *  Default: forwards to Draw() for backward compatibility. */
+    virtual void ExecuteCursorFromIR(const UICommandBuffers& cmds) { Draw(); }
 
     virtual const char* GetName() const = 0;
 };

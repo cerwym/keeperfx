@@ -24,6 +24,8 @@
 #  include "IWorldViewRenderer.h"
 #  include "IMapFadePass.h"
 #  include "ITextRenderer.h"
+#  include "IUIRenderer.h"
+#  include "ICursorLayer.h"
 #else
 /* In C translation units, RendererType is an opaque int */
 typedef int RendererType;
@@ -310,6 +312,12 @@ int WorldViewRenderer_SubmitKeeperSprite(int32_t dst_x, int32_t dst_y, int32_t d
  *  from the previous level are not reused. */
 void WorldViewRenderer_ClearKeeperSpriteAtlas(void);
 
+/** Flush any pending GL work on the global sprite atlas (GLSpriteAtlas).
+ *  Must be called from the render thread (the thread that owns the GL context).
+ *  Handles deferred glGenTextures/glTexImage2D (after RendererNotifySpritesReloaded)
+ *  and deferred glDeleteTextures (after GLSpriteAtlas::Free()). */
+void RendererFlushPendingSpriteAtlas(void);
+
 /** Set the game-entity context for the next keeper-sprite draw.
  *  Called by draw_jonty_mapwho() before dispatching each sprite so that
  *  render_keepersprite_gpu() can colour the depth-fail outline correctly.
@@ -572,6 +580,11 @@ void CursorLayer_Draw(void);
  *  Call from BeginFrame() before any submit calls. */
 void CursorLayer_Clear(void);
 
+/** Move game-thread cursor lists into render-thread copies.
+ *  Must be called (with the render thread idle) from EndFrame() before
+ *  signalling the render thread — mirrors GLUIRenderer::FlipBuffers(). */
+void CursorLayer_FlipBuffers(void);
+
 /** Submit the OS pointer sprite for deferred rendering at end-of-frame.
  *  Replaces the old LbI_PointerHandler::OnEndSwap() path. */
 void CursorLayer_SubmitPointerSprite(const struct TbSprite* spr, int32_t x, int32_t y, int units_per_px);
@@ -733,4 +746,6 @@ IMapFadePass* RendererGetMapFadePass();
 ITextRenderer* RendererGetTextRenderer();
 /* C++ only: direct access to the active IUIRenderer* */
 IUIRenderer* RendererGetUIRenderer();
+/* C++ only: direct access to the active ICursorLayer* */
+ICursorLayer* RendererGetCursorLayer();
 #endif

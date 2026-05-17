@@ -750,6 +750,11 @@ IUIRenderer* RendererGetUIRenderer()
     return s_uiRenderer;
 }
 
+ICursorLayer* RendererGetCursorLayer()
+{
+    return s_cursorLayer;
+}
+
 RendererType RendererGetActiveType()
 {
     return s_activeType;

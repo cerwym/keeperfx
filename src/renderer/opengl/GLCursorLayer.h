@@ -10,6 +10,7 @@
 #ifdef RENDERER_OPENGL_ENABLED
 
 #include "renderer/ICursorLayer.h"
+#include "renderer/ir/UICommands.h"
 #include "renderer/SpriteHandle.h"
 #include <vector>
 
@@ -18,24 +19,6 @@ class GLWorldViewRenderer;
 class GLSpriteAtlas;
 class GLUIRenderer;
 typedef unsigned int GLuint;
-
-/** Deferred keeper-hand sprite, captured at SubmitKeeperHandSprite() time. */
-struct PendingKeeperSprite {
-    short          x, y;
-    unsigned short kspr_base;
-    short          angle;
-    unsigned char  sprgroup;
-    int32_t           scale;
-    unsigned int   draw_flags;    // lbDisplay.DrawFlags at submit time
-    unsigned char  draw_alpha;    // EngineSpriteDrawUsingAlpha at submit time
-};
-
-/** Deferred OS pointer sprite, captured at SubmitPointerSprite() time. */
-struct PendingPointerSprite {
-    const TbSprite* spr;
-    int32_t            x, y;
-    int             units_per_px;
-};
 
 class GLCursorLayer : public ICursorLayer {
 public:
@@ -65,29 +48,32 @@ public:
                                         unsigned char sprgroup,
                                         int32_t scale) override;
 
-    virtual void Draw() override;
-    virtual void Clear() override;
+    /** No-op: cursor data now lives in UICommandBuffers and is flushed via
+     *  ExecuteCursorFromIR().  Draw() is retained for the ICursorLayer default
+     *  implementation only; it does nothing in GL mode. */
+    virtual void Draw() override {}
+    virtual void Clear() override {}
     virtual const char* GetName() const override { return "GL_CURSOR"; }
 
-    /** Move game-thread pending lists into render-thread rt_ copies.
-     *  Must be called (with the render thread idle) from EndFrame() before
-     *  signalling the render thread.  Clears the game-thread lists so the
-     *  game can start submitting the next frame immediately. */
-    void FlipBuffers() override;
+    /** No-op: UICommandBuffers::flip (via RenderGraph::Flip) handles double-
+     *  buffering for cursor IR data. */
+    void FlipBuffers() override {}
+
+    /** Open / close the IR write window.
+     *  @p cmds != nullptr: Submit* calls emit into the write-side UICommandBuffers.
+     *  @p cmds == nullptr: submit calls become no-ops (window closed). */
+    void SetCursorWriteBuffers(UICommandBuffers* cmds) override { m_write_cmds = cmds; }
+
+    /** Execute cursor draws from the render-thread read-side UICommandBuffers.
+     *  Reads cmds.cursor_pointers (atlas quad path) and cmds.cursor_hands
+     *  (keeper-sprite path).  Called from EndFrame_GL() after all other passes. */
+    void ExecuteCursorFromIR(const UICommandBuffers& cmds) override;
 
 private:
-    GLWorldViewRenderer*              m_wvr    = nullptr;
-    GLSpriteAtlas*                    m_atlas  = nullptr;
-    GLUIRenderer*                     m_glui   = nullptr;
-
-    // Game-thread write buffers (SubmitPointerSprite / SubmitKeeperHandSprite).
-    std::vector<PendingPointerSprite> m_pointers;
-    std::vector<PendingKeeperSprite>  m_keepers;
-
-    // Render-thread read buffers (populated by FlipBuffers()).  Draw() reads
-    // from these so the game thread can freely modify the game-side lists.
-    std::vector<PendingPointerSprite> m_rt_pointers;
-    std::vector<PendingKeeperSprite>  m_rt_keepers;
+    GLWorldViewRenderer* m_wvr        = nullptr;
+    GLSpriteAtlas*       m_atlas      = nullptr;
+    GLUIRenderer*        m_glui       = nullptr;
+    UICommandBuffers*    m_write_cmds = nullptr;  /**< Game-thread write target; null when closed. */
 };
 
 #endif // RENDERER_OPENGL_ENABLED

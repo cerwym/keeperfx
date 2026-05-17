@@ -644,6 +644,10 @@ bool RendererOpenGL::BeginFrame()
         auto* ui = RendererGetUIRenderer();
         if (ui) ui->SetUICommandBuffers(&m_render_graph.GetUIBuffers());
 
+        // Open the cursor IR write window.
+        auto* cursor = RendererGetCursorLayer();
+        if (cursor) cursor->SetCursorWriteBuffers(&m_render_graph.GetUIBuffers());
+
         // Open the world IR write window (sentinel; internal state still drives execution).
         if (m_world_renderer) m_world_renderer->SetWorldCommandBuffers(&m_render_graph.GetWorldBuffers());
 
@@ -681,6 +685,7 @@ void RendererOpenGL::EndFrame()
     // calls from the next frame land in this frame's command buffer.
     auto* ui_close = RendererGetUIRenderer();
     if (ui_close) ui_close->SetUICommandBuffers(nullptr);
+    if (auto* cursor_close = RendererGetCursorLayer()) cursor_close->SetCursorWriteBuffers(nullptr);
     if (m_world_renderer) m_world_renderer->SetWorldCommandBuffers(nullptr);
     if (m_textRenderer) m_textRenderer->SetTextCommandBuffers(nullptr);
 
@@ -733,9 +738,9 @@ void RendererOpenGL::EndFrame()
               std::begin(m_rt_zoom_clip_rect));
     m_rt_zoom_clip_radius = m_zoom_clip_radius;
 
-    // Double-buffer cursor sprites: move game-thread lists into render-thread
-    // copies so GLCursorLayer::Draw() (render thread) never reads from the
-    // same vectors that the game thread is concurrently filling for the next frame.
+    // Cursor data now flows through UICommandBuffers (IR path); the old
+    // double-buffer FlipBuffers() is a no-op.  RenderGraph::Flip() (below)
+    // atomically swaps the cursor IR channels along with all other UI commands.
     CursorLayer_FlipBuffers();
 
     // Double-buffer swipe overlay verts: same pattern as PiP/rawblit queues.
@@ -1526,8 +1531,11 @@ void RendererOpenGL::EndFrame_GL()
 
     // Cursor drawn last — after the screen-tint overlay — so it is always on
     // top of every other rendered layer including possession/death-flash tints.
+    // Reads from the read-side UICommandBuffers (cursor_pointers / cursor_hands)
+    // swapped in by RenderGraph::Flip().
     SYNCDBG(0, "EndFrame_GL step 5: before cursor draw");
-    CursorLayer_Draw();
+    if (auto* cursor = RendererGetCursorLayer())
+        cursor->ExecuteCursorFromIR(m_render_graph.GetUIBuffersRT());
     SYNCDBG(0, "EndFrame_GL step 6: before RenderPass_EndFrame");
 
     RenderPass_EndFrame();

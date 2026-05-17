@@ -189,8 +189,7 @@ public:
 
     /** Move game-thread quad/line state into m_rt_* copies; clear game buffers.
      *  Must be called with the render thread idle (i.e. just before signalling it).
-     *  Called from RendererOpenGL::EndFrame(). */
-    void FlipBuffers();
+     *  Called from RendererOpenGL::EndFrame(). Already declared as override above. */
 
     // ── IR (Intermediate Representation) path ─────────────────────────────────
 
