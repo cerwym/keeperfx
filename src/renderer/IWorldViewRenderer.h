@@ -98,6 +98,18 @@ public:
      *  Default: no-op. */
     virtual void ClearKeeperSpriteAtlas() {}
 
+    /** Notify the renderer of the current OS-window dimensions.
+     *  Called from RendererOpenGL::BeginFrame_GL() whenever the screen size
+     *  changes.  GPU backends use this to update projection matrices and
+     *  viewport dimensions.  Default: no-op. */
+    virtual void SetScreenSize(int /*w*/, int /*h*/) {}
+
+    /** Supply the active 256-colour VGA palette (768 bytes: R,G,B × 256).
+     *  Called by RendererSetPaletteForRenderers() on the game thread.
+     *  Only a pointer copy — safe to call without holding the GL context.
+     *  Default: no-op. */
+    virtual void SetPaletteSource(const uint8_t* /*palette*/) {}
+
     // ── IR (Intermediate Representation) dispatch ──────────────────────────────
 
     /** Execute GPU world rendering from the read-side IR command buffer.

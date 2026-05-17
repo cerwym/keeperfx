@@ -53,12 +53,12 @@ public:
      *  When @p cmds is non-null, DrawTextResized() appends IRTextDrawCmd entries
      *  instead of DeferredDraw entries.  Sets cmds->ir_active = true.
      *  Call with nullptr before flushing (e.g. EndFrame → before FlipBuffers). */
-    void SetTextCommandBuffers(TextCommandBuffers* cmds);
+    void SetTextCommandBuffers(TextCommandBuffers* cmds) override;
 
     /** Populate m_pending from the read-side IR command buffers and call Draw().
      *  Must be called from the render thread (GL context current).
      *  No-op when there are no IR draw commands this frame. */
-    void ExecuteTextFromIR(const TextCommandBuffers& cmds);
+    void ExecuteTextFromIR(const TextCommandBuffers& cmds) override;
 
     // ITextRenderer interface — Measurement
     int32_t LineHeight() override;
@@ -88,7 +88,7 @@ public:
     /** Set screen dimensions for NDC conversion.
      *  @param width Screen width in pixels
      *  @param height Screen height in pixels */
-    void SetScreenSize(int width, int height);
+    void SetScreenSize(int width, int height) override;
 
     /** Compile and link text rendering shaders, and cache uniform locations.
      *  Called by the bootstrapper in RendererManager::RendererInit().

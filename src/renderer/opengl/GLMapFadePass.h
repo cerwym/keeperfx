@@ -78,7 +78,7 @@ public:
     /** Notify of current OS-window dimensions so CaptureAndUploadFrames()
      *  does not need to read MyScreenWidth/Height directly.
      *  Called by RendererOpenGL::BeginFrame(). */
-    void SetScreenSize(int w, int h) { m_screen_w = w; m_screen_h = h; }
+    void SetScreenSize(int w, int h) override { m_screen_w = w; m_screen_h = h; }
 
 private:
     void Shutdown();
@@ -98,6 +98,7 @@ private:
     bool m_initialized = false;
     bool m_active      = false; ///< true while a transition is in progress
     bool m_deactivate_after_render = false; ///< deactivate after next compose pass
+    bool m_capture_pending = false; ///< capture deferred to render thread (set by StepFadeIn/Out on game thread)
     float m_step       = 0.f;   ///< step recorded for RenderGPUComposePass() (interpolated)
     int  m_tex_w       = 0;
     int  m_tex_h       = 0;

@@ -50,6 +50,11 @@ public:
 
     virtual const char* GetName() const = 0;
 
+    /** Notify the pass of the current OS-window dimensions.
+     *  GPU backends update render target sizes here.
+     *  Default: no-op. */
+    virtual void SetScreenSize(int /*w*/, int /*h*/) {}
+
     /** Returns true when this pass wants to render a fullscreen wipe quad at
      *  EndFrame() time (after the staging palette blit).  The software
      *  implementation always returns false — it writes directly to WScreen.

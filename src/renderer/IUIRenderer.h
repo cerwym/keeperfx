@@ -199,6 +199,45 @@ public:
      *  CPU default: calls Draw(). */
     virtual void DrawFront() { Draw(); }
 
+    /** Draw layer-1 front elements excluding the top-overlay (layer-2/3).
+     *  GPU backends split DrawFront() into two calls so that zoom-box tiles
+     *  and other intermediate passes can be composited between them.
+     *  EndFrame_GL() calls DrawFrontBase() first, then DrawFrontOverlay().
+     *  CPU default: calls DrawFront() (combines both phases). */
+    virtual void DrawFrontBase() { DrawFront(); }
+
+    /** Draw layer-2/3 top-overlay elements (tooltip, zoom-box corner frames).
+     *  Must be called after DrawFrontBase().  GPU default: no-op. */
+    virtual void DrawFrontOverlay() {}
+
+    /** Flip game-thread command lists to render-thread read copies.
+     *  Called from EndFrame() on the game thread before signalling the
+     *  render thread.  CPU default: no-op. */
+    virtual void FlipBuffers() {}
+
+    /** Picture-in-Picture support: mark the start of PiP sprite capture.
+     *  All UI quads submitted between BeginPiPSprites() and DrawPiPSprites()
+     *  are routed into the PiP FBO rather than the main frame.
+     *  CPU default: no-op (PiP is GPU-only). */
+    virtual void BeginPiPSprites() {}
+
+    /** Flush PiP sprites into the currently-bound PiP FBO.
+     *  @param pip_w  PiP framebuffer width in pixels.
+     *  @param pip_h  PiP framebuffer height in pixels.
+     *  CPU default: no-op. */
+    virtual void DrawPiPSprites(int /*pip_w*/, int /*pip_h*/) {}
+
+    /** Submit an FBO colour-attachment texture as a picture-in-picture quad.
+     *  @param x            Screen X (top-left corner, pixels).
+     *  @param y            Screen Y (top-left corner, pixels).
+     *  @param w            Quad width in pixels.
+     *  @param h            Quad height in pixels.
+     *  @param tex_id       GPU texture handle (uint32_t == GLuint on all platforms).
+     *  @param clip_radius  Clip-circle radius in NDC space; < 0 = no clip.
+     *  CPU default: no-op. */
+    virtual void SubmitFBOQuad(int /*x*/, int /*y*/, int /*w*/, int /*h*/,
+                               uint32_t /*tex_id*/, float /*clip_radius*/ = -1.0f) {}
+
     /** Draw all queued elements.  CPU default: no-op. */
     virtual void Draw();
 
@@ -222,6 +261,33 @@ public:
      *  @param out_h      Receives the sprite's native pixel height.
      *  @param out_stride Receives the row stride in bytes ((w+7)/8). */
     virtual uint8_t* QuerySpriteMask(SpriteHandle /*h*/, int* /*out_w*/, int* /*out_h*/, int* /*out_stride*/) { return nullptr; }
+
+    /** Notify the renderer of the current OS-window dimensions.
+     *  Called from RendererOpenGL::BeginFrame_GL() on each frame.
+     *  GPU backends update projection matrices and viewport state here.
+     *  Default: no-op. */
+    virtual void SetScreenSize(int /*w*/, int /*h*/) {}
+
+    /** Supply the active 256-colour VGA palette (768 bytes: R,G,B × 256).
+     *  Called by RendererSetPaletteForRenderers() on the game thread.
+     *  Only a pointer copy — safe to call without holding the GL context.
+     *  Default: no-op. */
+    virtual void SetPaletteSource(const uint8_t* /*palette*/) {}
+
+    /** Supply the fade-table GPU texture (256×256 R8 remap LUT).
+     *  Called once on the render thread after the fade texture is created.
+     *  GPU backends bind this as a lookup table for the fade/silhouette pass.
+     *  Using uint32_t instead of GLuint to avoid pulling GL headers into this
+     *  backend-agnostic interface (GLuint == uint32_t on all supported platforms).
+     *  Default: no-op. */
+    virtual void SetFadeTexture(uint32_t /*tex*/) {}
+
+    /** Open the IR write window for this frame.
+     *  Called from RendererOpenGL::BeginFrame_GL() once per non-fade-cache frame.
+     *  GPU backends store the pointer and append IR commands to it during Submit*().
+     *  Pass nullptr to close the window (e.g. in stale-replay / PiP frames).
+     *  Default: no-op (software renderer never uses IR). */
+    virtual void SetUICommandBuffers(UICommandBuffers* /*cmds*/) {}
 
     // ── IR (Intermediate Representation) dispatch ──────────────────────────────
 

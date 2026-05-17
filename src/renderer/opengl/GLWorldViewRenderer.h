@@ -63,13 +63,9 @@ public:
     bool CompileShaders() override;
     /** Notify of the full OS-window dimensions (not the world viewport).
      *  Called by RendererOpenGL::BeginFrame() so that BeginHandSpriteRendering()
-     *  and gpu_execute_passes() do not need to read MyScreenWidth/Height directly. */
-    void SetFullScreenSize(int w, int h) { m_full_screen_w = w; m_full_screen_h = h; }
-
-    /** Supply the active 256-colour VGA palette (768 bytes: R,G,B × 256).
-     *  Called by RendererOpenGL::BeginFrame().  Eliminates the direct lbPalette read
-     *  so this renderer file no longer needs to include bflib_video.h for palette data. */
-    void SetPaletteSource(const uint8_t* palette) { m_palette_data = palette; }
+     *  and gpu_execute_passes() do not need to read MyScreenWidth/Height directly.
+     *  Overrides IWorldViewRenderer::SetScreenSize(). */
+    void SetScreenSize(int w, int h) override { m_full_screen_w = w; m_full_screen_h = h; }
 
     // Called by RendererOpenGL::EndFrame() to issue the accumulated draw list
     // after glClear() and before the CPU framebuffer blit overlay.
@@ -120,6 +116,12 @@ public:
      *  interface) because it must be wrapped inside the lens-FBO bracket.  This
      *  override exists for interface completeness and future backends. */
     void ExecuteFromIR(const WorldCommandBuffers& cmds) override { ExecuteWorldFromIR(cmds); }
+
+    /** Supply the active 256-colour VGA palette (768 bytes: R,G,B × 256).
+     *  Called by RendererSetPaletteForRenderers() on the game thread.
+     *  Pointer copy only — safe without GL context.
+     *  Overrides IWorldViewRenderer::SetPaletteSource(). */
+    void SetPaletteSource(const uint8_t* palette) override { m_palette_data = palette; }
 
     // IWorldViewRenderer: submit a keeper-sprite through the GPU path.
     int SubmitKeeperSprite(int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,

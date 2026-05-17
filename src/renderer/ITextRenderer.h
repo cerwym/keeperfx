@@ -27,6 +27,9 @@
 
 struct TbSpriteSheet;
 struct AsianFont;
+// Forward-declare IR type so SetTextCommandBuffers can appear on this interface
+// without pulling TextCommands.h into every translation unit.
+struct TextCommandBuffers;
 
 #ifdef __cplusplus
 /******************************************************************************/
@@ -126,6 +129,23 @@ public:
     /**************************************************************************/
 
     virtual const char* GetName() const = 0;
+
+    /** Notify the renderer of the current OS-window dimensions.
+     *  GPU backends update their projection transform here.
+     *  Default: no-op. */
+    virtual void SetScreenSize(int /*w*/, int /*h*/) {}
+
+    /** Open the IR write window for this frame.
+     *  GPU backends store the pointer and append text IR commands to it.
+     *  Pass nullptr to close the window.
+     *  Default: no-op. */
+    virtual void SetTextCommandBuffers(TextCommandBuffers* /*cmds*/) {}
+
+    /** Execute text rendering from read-side IR command buffers.
+     *  Called by EndFrame_GL() on the render thread after DrawFrontOverlay().
+     *  GPU backends translate IR text commands and flush draws.
+     *  Default: calls Draw() so software/stub backends still render. */
+    virtual void ExecuteTextFromIR(const TextCommandBuffers& /*cmds*/) { Draw(); }
 
 protected:
     /** Shared paragraph layout engine.

@@ -151,7 +151,7 @@ bool GLUIRenderer::SetPaletteTexture(GLuint palette_texture_id, GLenum target)
     return true;
 }
 
-void GLUIRenderer::SetFadeTexture(GLuint tex)
+void GLUIRenderer::SetFadeTexture(uint32_t tex)
 {
     m_fade_texture = tex;
 }
@@ -1051,7 +1051,7 @@ void GLUIRenderer::Draw()
     DrawFront();
 }
 
-void GLUIRenderer::SubmitFBOQuad(int x, int y, int w, int h, GLuint tex_id, float clip_radius)
+void GLUIRenderer::SubmitFBOQuad(int x, int y, int w, int h, uint32_t tex_id, float clip_radius)
 {
     FBOQuad q;
     q.x0     = (float)x;

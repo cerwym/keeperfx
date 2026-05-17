@@ -594,20 +594,10 @@ bool RendererOpenGL::BeginFrame()
 
     // Push current screen size to sub-renderers so they never need
     // to read MyScreenWidth/MyScreenHeight directly.
-    {
-        GLWorldViewRenderer* glwr = dynamic_cast<GLWorldViewRenderer*>(m_world_renderer);
-        if (glwr)
-            glwr->SetFullScreenSize(m_screenW, m_screenH);
-        GLUIRenderer* glui = dynamic_cast<GLUIRenderer*>(RendererGetUIRenderer());
-        if (glui)
-            glui->SetScreenDimensions(m_screenW, m_screenH);
-        GLTextRenderer* glt = dynamic_cast<GLTextRenderer*>(m_textRenderer);
-        if (glt)
-            glt->SetScreenSize(m_screenW, m_screenH);
-        GLMapFadePass* glmf = dynamic_cast<GLMapFadePass*>(m_mapFadePass);
-        if (glmf)
-            glmf->SetScreenSize(m_screenW, m_screenH);
-    }
+    if (m_world_renderer)          m_world_renderer->SetScreenSize(m_screenW, m_screenH);
+    if (auto* ui = RendererGetUIRenderer())  ui->SetScreenSize(m_screenW, m_screenH);
+    if (m_textRenderer)            m_textRenderer->SetScreenSize(m_screenW, m_screenH);
+    if (m_mapFadePass)             m_mapFadePass->SetScreenSize(m_screenW, m_screenH);
 
     // Lazy-retry resources that depend on level data loaded after Init().
     // After the first EndFrame() the GL context lives on the render thread, so
@@ -617,12 +607,8 @@ bool RendererOpenGL::BeginFrame()
     if (m_tile_atlas && !m_tile_atlas->IsInitialized())
         m_tile_atlas_init_pending = true;
 
-    if (m_tile_atlas && m_tile_atlas->IsInitialized())
-    {
-        GLWorldViewRenderer* glwr = dynamic_cast<GLWorldViewRenderer*>(m_world_renderer);
-        if (glwr)
-            glwr->TryEarlyInit();
-    }
+    if (m_tile_atlas && m_tile_atlas->IsInitialized() && m_world_renderer)
+        m_world_renderer->TryEarlyInit();
 
     // Re-upload the animated tile atlas rows only when the game-logic tick has
     // actually advanced the animation (update_animating_texture_maps() called from
@@ -655,15 +641,14 @@ bool RendererOpenGL::BeginFrame()
         CursorLayer_Clear();
         // Open the IR write window: all Submit*() calls this frame will append
         // IR commands.  Closed in EndFrame() before FlipBuffers().
-        GLUIRenderer* glui = dynamic_cast<GLUIRenderer*>(RendererGetUIRenderer());
-        if (glui) glui->SetUICommandBuffers(&m_render_graph.GetUIBuffers());
+        auto* ui = RendererGetUIRenderer();
+        if (ui) ui->SetUICommandBuffers(&m_render_graph.GetUIBuffers());
 
         // Open the world IR write window (sentinel; internal state still drives execution).
         if (m_world_renderer) m_world_renderer->SetWorldCommandBuffers(&m_render_graph.GetWorldBuffers());
 
         // Open the text IR write window.
-        GLTextRenderer* glt = dynamic_cast<GLTextRenderer*>(m_textRenderer);
-        if (glt) glt->SetTextCommandBuffers(&m_render_graph.GetTextBuffers());
+        if (m_textRenderer) m_textRenderer->SetTextCommandBuffers(&m_render_graph.GetTextBuffers());
     }
     return true;
 }
@@ -694,20 +679,17 @@ void RendererOpenGL::EndFrame()
 
     // Close the IR write window before flipping buffers so no Submit*()
     // calls from the next frame land in this frame's command buffer.
-    GLUIRenderer* glui = dynamic_cast<GLUIRenderer*>(RendererGetUIRenderer());
-    if (glui) glui->SetUICommandBuffers(nullptr);
+    auto* ui_close = RendererGetUIRenderer();
+    if (ui_close) ui_close->SetUICommandBuffers(nullptr);
     if (m_world_renderer) m_world_renderer->SetWorldCommandBuffers(nullptr);
-    {
-        GLTextRenderer* glt = dynamic_cast<GLTextRenderer*>(m_textRenderer);
-        if (glt) glt->SetTextCommandBuffers(nullptr);
-    }
+    if (m_textRenderer) m_textRenderer->SetTextCommandBuffers(nullptr);
 
     // Flip sub-renderer command buffers so the render thread reads from stable
     // render-side copies while the game thread is free to build the next frame.
     if (m_world_renderer)
         m_world_renderer->FlipBuffers();
 
-    if (glui) glui->FlipBuffers();
+    if (ui_close) ui_close->FlipBuffers();
 
     // Snapshot per-frame command queues and scalar state into render-thread
     // copies before signalling.  The game thread returns from EndFrame()
@@ -820,10 +802,9 @@ void RendererOpenGL::EndFrame_GL()
         m_fade_table_pending = false;
         if (init_fade_table_texture())
         {
-            GLWorldViewRenderer* glwr = dynamic_cast<GLWorldViewRenderer*>(m_world_renderer);
-            if (glwr) glwr->SetFadeTexture(m_texFade);
-            GLUIRenderer* glui = dynamic_cast<GLUIRenderer*>(RendererGetUIRenderer());
-            if (glui) glui->SetFadeTexture(m_texFade);
+            if (m_world_renderer) m_world_renderer->SetFadeTexture(m_texFade);
+            auto* ui = RendererGetUIRenderer();
+            if (ui) ui->SetFadeTexture(m_texFade);
             SYNCLOG("EndFrame_GL: fade-table texture created (tex=%u)", m_texFade);
         }
     }
@@ -1125,7 +1106,7 @@ void RendererOpenGL::EndFrame_GL()
     // demand) then submitted to GLUIRenderer for compositing.  Queue cleared.
     if (m_world_renderer && !m_rt_pip_queue.empty())
     {
-        GLUIRenderer* ui = dynamic_cast<GLUIRenderer*>(RendererGetUIRenderer());
+        IUIRenderer* ui = RendererGetUIRenderer();
 
         for (std::size_t qi = 0; qi < m_rt_pip_queue.size(); ++qi)
         {
@@ -1376,9 +1357,10 @@ void RendererOpenGL::EndFrame_GL()
     // Draw layer-1 (front) GPU UI elements first.
     // Layer-1 flush: FBO quads (PiP), atlas sprites, minimap — everything except
     // layer-2/3 (world-depth overlays, top-overlay tooltip/zoom-box corners).
-    GLUIRenderer* ui_gl = dynamic_cast<GLUIRenderer*>(RendererGetUIRenderer());
-    if (ui_gl)
-        ui_gl->DrawFrontBase();
+    {
+        IUIRenderer* ui = RendererGetUIRenderer();
+        if (ui) ui->DrawFrontBase();
+    }
 
     // ── Zoom-box tile quads (ZBM_OVERHEAD with actual tile textures) ───────
     // Drawn AFTER layer-1 sprites so the tile render lands on top of all
@@ -1503,19 +1485,18 @@ void RendererOpenGL::EndFrame_GL()
     m_rt_zoom_tile_cmds.clear();
 
     // Layer-2/3 overlay: world-depth sprites and top-overlay (tooltip, corner frames).
-    if (ui_gl)
-        ui_gl->DrawFrontOverlay();
-    else
-        UIRenderer_DrawFront();  // fallback for non-GL UI renderers
+    // Software UIRenderer: DrawFrontBase() (above) already drew everything, so
+    // DrawFrontOverlay() is a no-op on the base interface.
+    {
+        IUIRenderer* ui = RendererGetUIRenderer();
+        if (ui) ui->DrawFrontOverlay();
+    }
 
     // Text on top of all sprites (sidebar labels, event messages, tooltips).
-    {
-        GLTextRenderer* glt = dynamic_cast<GLTextRenderer*>(m_textRenderer);
-        if (glt)
-            glt->ExecuteTextFromIR(m_render_graph.GetTextBuffersRT());
-        else
-            TextRenderer_Draw();  // fallback for non-GL text renderers
-    }
+    // Software ITextRenderer: ExecuteTextFromIR() default calls Draw() so the
+    // fallback path is handled automatically without a cast or else branch.
+    if (m_textRenderer)
+        m_textRenderer->ExecuteTextFromIR(m_render_graph.GetTextBuffersRT());
 
     // ── Final overlay passes: screen tint + cursor ──────────────────────────
     // Ensure depth test is OFF and depth mask is ON before the 2D overlay
@@ -2484,8 +2465,8 @@ void RendererOpenGL::NotifyGameTablesReady()
 
     // Wire the palette source pointer into sub-renderers that cache it.
     // SetPaletteSource is just a pointer copy — safe on the game thread.
-    if (auto* glui = dynamic_cast<GLUIRenderer*>(RendererGetUIRenderer()))
-        glui->SetPaletteSource(lbPalette);
-    if (auto* glwr = dynamic_cast<GLWorldViewRenderer*>(RendererGetWorldViewRenderer()))
-        glwr->SetPaletteSource(lbPalette);
+    if (auto* ui = RendererGetUIRenderer())
+        ui->SetPaletteSource(lbPalette);
+    if (auto* wr = RendererGetWorldViewRenderer())
+        wr->SetPaletteSource(lbPalette);
 }

@@ -92,10 +92,12 @@ public:
     virtual void SubmitMinimap(int screen_x, int screen_y, int size) override;
 
     /** Submit an RGBA8 FBO colour texture as a picture-in-picture quad.
-     *  Rendered during DrawFront() before atlas-sprite layer-1 quads so that
-     *  decorative frame sprites appear on top of the isometric content.  Not
-     *  part of IUIRenderer — called directly from RendererOpenGL::EndFrame(). */
-    void SubmitFBOQuad(int x, int y, int w, int h, GLuint tex_id, float clip_radius = -1.0f);
+     *  IUIRenderer override — uses uint32_t for tex_id to avoid GL header in base. */
+    void SubmitFBOQuad(int x, int y, int w, int h, uint32_t tex_id, float clip_radius = -1.0f) override;
+    /** IUIRenderer override: mark start of PiP sprite capture. */
+    void BeginPiPSprites() override;
+    /** IUIRenderer override: flush PiP sprites into the bound FBO. */
+    void DrawPiPSprites(int pip_w, int pip_h) override;
     virtual void SetLayer(int layer) override;
     virtual void SetWorldDepth(float ndc_z) override;
     virtual void ClearWorldDepth() override;
@@ -104,14 +106,16 @@ public:
     virtual void ClearTopOverlay() override;
     virtual void DrawBack() override;
     virtual void DrawFront() override;
-    /** Layer-1 portion of DrawFront: FBOQuads + layer-1 sprites + minimap +
-     *  layer-1 lines.  Does NOT flush layer-2/3 or restore GL state.
+    /** IUIRenderer override: layer-1 portion of DrawFront: FBOQuads + layer-1 sprites
+     *  + minimap + layer-1 lines.  Does NOT flush layer-2/3 or restore GL state.
      *  Must be followed by DrawFrontOverlay(). */
-    void DrawFrontBase();
-    /** Layer-2/3 portion of DrawFront: depth-tested layer-2, top-overlay layer-3,
-     *  and GL state cleanup.  Call after DrawFrontBase() (and any intermediate
-     *  direct-GL passes that must draw between layer-1 and layer-3). */
-    void DrawFrontOverlay();
+    void DrawFrontBase() override;
+    /** IUIRenderer override: layer-2/3 portion of DrawFront: depth-tested layer-2,
+     *  top-overlay layer-3, and GL state cleanup.  Call after DrawFrontBase() (and
+     *  any intermediate direct-GL passes between layer-1 and layer-3). */
+    void DrawFrontOverlay() override;
+    /** IUIRenderer override: flip game-thread command lists to render-thread copies. */
+    void FlipBuffers() override;
     virtual void Draw() override;
     virtual void Clear() override;
     virtual const char* GetName() const override { return "OPENGL_UI"; }
@@ -133,24 +137,6 @@ public:
      *  thread (UI build for the next frame) on m_quads[1]. */
     void SubmitCursorPanelSprite(int32_t x, int32_t y, int units_per_px, SpriteHandle spr);
 
-    /** Record the current queue sizes as the PiP "start of pass" snapshot.
-     *  Call this immediately before the PiP draw_view() call.  Any quads
-     *  submitted after this point (up until FlushPiPSprites()) are treated
-     *  as PiP-sourced and will be routed into the FBO rather than the main
-     *  frame. */
-    void BeginPiPSprites();
-
-    /** Draw all UIRenderer quads queued since BeginPiPSprites() into the
-     *  currently-bound PiP FBO (call while the FBO is still bound), then
-     *  remove them from the queue so DrawFront() never sees them at
-     *  full-screen coordinates.
-     *  - Layer-2 quads (creature status/gold text): rendered with GL_LEQUAL
-     *    depth test so they occlude correctly behind walls.
-     *  - Layer-1 quads (room flags, slab selector): rendered without depth
-     *    test so they always appear on top inside the zoom box.
-     *  Uses pip_w x pip_h for NDC conversion. */
-    void DrawPiPSprites(int pip_w, int pip_h);
-
     /** Initialize OpenGL resources.
      *  @return true if successful */
     bool Init();
@@ -162,6 +148,9 @@ public:
      *  @param width Screen width in pixels
      *  @param height Screen height in pixels */
     void SetScreenDimensions(int width, int height);
+
+    /** IUIRenderer override: delegates to SetScreenDimensions(). */
+    void SetScreenSize(int w, int h) override { SetScreenDimensions(w, h); }
 
     /** Set sprite atlas for UI element textures.
      *  @param atlas Sprite atlas containing UI textures
@@ -179,7 +168,7 @@ public:
     /** Supply the active 256-colour VGA palette (768 bytes: R,G,B × 256).
      *  Called by RendererOpenGL::BeginFrame().  Eliminates the direct lbPalette
      *  read from submission methods. */
-    void SetPaletteSource(const uint8_t* palette) { m_palette_data = palette; }
+    void SetPaletteSource(const uint8_t* palette) override { m_palette_data = palette; }
 
     /** Set palette texture for color lookups.
      *  @param palette_texture_id OpenGL texture ID for 256-color palette
@@ -187,8 +176,8 @@ public:
     bool SetPaletteTexture(GLuint palette_texture_id, GLenum target = GL_TEXTURE_2D);
 
     /** Set the fade-table texture for player-colour remap draws.
-     *  @param tex GL_TEXTURE_2D, R8, 256×256 — owned by RendererOpenGL */
-    void SetFadeTexture(GLuint tex);
+     *  IUIRenderer override: tex is GLuint (uint32_t) — GL context must be current. */
+    void SetFadeTexture(uint32_t tex) override;
 
         /** Called once per frame by EndFrame(), before DrawBack().
      *  When replay=true and the queues are empty, restores the last real frame's
@@ -210,7 +199,7 @@ public:
      *  of writing into m_quads[]/m_lines[]; sets cmds->ir_active = true.
      *  Call with nullptr before FlipBuffers() to close the write window (e.g.
      *  for the render-thread-only PiP path which must still use legacy quads). */
-    void SetUICommandBuffers(UICommandBuffers* cmds);
+    void SetUICommandBuffers(UICommandBuffers* cmds) override;
 
     /** Populate m_rt_quads[]/m_rt_lines[] from the read-side IR command buffers.
      *  Must be called from the render thread, after FlushPendingInit() so that
