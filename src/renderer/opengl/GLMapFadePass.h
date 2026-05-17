@@ -45,13 +45,13 @@ public:
     // ── IMapFadePass ─────────────────────────────────────────────────────────
 
     /** Render one fade-in frame (parchment → 3D world).
-     *  Captures both views on step == 0.  Records the current step so
-     *  RenderGPUComposePass() can draw the wipe at EndFrame() time.
-     *  Falls back to map_fade_in() if Init() or capture failed. */
+     *  Captures both views on step == 0.  Records the current step and sets
+     *  m_capture_pending so FlushToRenderGraph() can emit the IR command.
+     *  Falls back to map_fade_in() if Init() failed. */
     int32_t StepFadeIn(int32_t step) override;
 
     /** Render one fade-out frame (3D world → parchment).
-     *  Captures both views on step == 32.  Same GPU/fallback logic as above. */
+     *  Captures both views on step == 32.  Same logic as StepFadeIn above. */
     int32_t StepFadeOut(int32_t step) override;
 
     const char* GetName() const override { return "OPENGL"; }
@@ -64,16 +64,19 @@ public:
      *  Called by the bootstrapper in RendererManager::RendererInit(). */
     bool CompileShaders() override;
 
-    // ── GPU compose hook ─────────────────────────────────────────────────────
+    // ── IR interface ─────────────────────────────────────────────────────────
 
-    /** Returns true while a transition is active and frames were captured. */
-    bool HasGPUComposePass() const override { return m_active; }
+    /** Push an IRMapFadeCmd to the graph's write slot if a transition is active.
+     *  Handles the terminal-frame snap when view_mode has left ParchFade mode.
+     *  Called by RendererOpenGL::EndFrame() on the game thread before Flip(). */
+    void FlushToRenderGraph(RenderGraph& graph) override;
+
+    /** Execute the map-fade wipe composite on the render thread.
+     *  Captures frames if cmd.capture_pending, then draws the wipe quad.
+     *  Called by RendererOpenGL::EndFrame_GL() after the staging palette blit. */
+    void ExecuteFromIR(const IRMapFadeCmd& cmd) override;
 
     bool SupportsNativeResolution() const override { return m_initialized; }
-
-    /** Renders the wipe quad using the step stored by the last Step* call.
-     *  Called by RendererOpenGL::EndFrame() after the staging palette blit. */
-    void RenderGPUComposePass() override;
 
     /** Notify of current OS-window dimensions so CaptureAndUploadFrames()
      *  does not need to read MyScreenWidth/Height directly.
@@ -83,7 +86,6 @@ public:
 private:
     void Shutdown();
     bool CaptureAndUploadFrames();
-    void MarkDone();
 
     // GL resources
     GLuint m_tex[2]      = {};  // [0]=parchment, [1]=3D world — GL_RGBA8 native res
@@ -96,12 +98,14 @@ private:
     GLint  m_loc_world     = -1;
 
     bool m_initialized = false;
-    bool m_active      = false; ///< true while a transition is in progress
-    bool m_deactivate_after_render = false; ///< deactivate after next compose pass
-    bool m_capture_pending = false; ///< capture deferred to render thread (set by StepFadeIn/Out on game thread)
-    float m_step       = 0.f;   ///< step recorded for RenderGPUComposePass() (interpolated)
-    int  m_tex_w       = 0;
-    int  m_tex_h       = 0;
+
+    // Game-thread-only state — written by StepFadeIn/Out, read by FlushToRenderGraph().
+    // Must not be accessed from the render thread.
+    bool  m_active          = false; ///< true while a transition is in progress
+    bool  m_capture_pending = false; ///< frame capture deferred to render thread
+    float m_step            = 0.f;   ///< current interpolated step value
+    int   m_tex_w           = 0;
+    int   m_tex_h           = 0;
 
     // Full OS-window dimensions — set by SetScreenSize(), eliminates MyScreenWidth/Height reads.
     int  m_screen_w    = 0;

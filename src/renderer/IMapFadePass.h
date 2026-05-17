@@ -30,6 +30,11 @@
 
 #include <stdint.h>
 
+// Forward declarations — avoid pulling in RenderGraph and UICommands headers
+// into software/vita backends that don't use them.
+class RenderGraph;
+struct IRMapFadeCmd;
+
 /******************************************************************************/
 
 class IMapFadePass {
@@ -55,16 +60,23 @@ public:
      *  Default: no-op. */
     virtual void SetScreenSize(int /*w*/, int /*h*/) {}
 
-    /** Returns true when this pass wants to render a fullscreen wipe quad at
-     *  EndFrame() time (after the staging palette blit).  The software
-     *  implementation always returns false — it writes directly to WScreen.
-     *  GLMapFadePass returns true after CaptureAndUploadFrames() succeeds. */
-    virtual bool HasGPUComposePass() const { return false; }
+    /** Called by RendererOpenGL::EndFrame() (game thread) after the FrameState
+     *  snapshot and before the RenderGraph flip.
+     *
+     *  GPU implementations push an IRMapFadeCmd to the graph's write slot so
+     *  the render thread can composite the wipe quad via ExecuteFromIR().
+     *  When no transition is active the implementation calls ClearMapFadeCmd().
+     *
+     *  Software implementations leave this as a no-op — they write directly
+     *  to WScreen inside StepFadeIn/StepFadeOut. */
+    virtual void FlushToRenderGraph(RenderGraph& /*graph*/) {}
 
-    /** Called by RendererOpenGL::EndFrame() when HasGPUComposePass() is true.
-     *  Renders the wipe quad using the pending step value set during the most
-     *  recent StepFadeIn / StepFadeOut call.  No-op by default. */
-    virtual void RenderGPUComposePass() {}
+    /** Called by RendererOpenGL::EndFrame_GL() (render thread) when the
+     *  RenderGraph has a map-fade command for this frame.
+     *
+     *  GPU implementations capture both views (if cmd.capture_pending) and
+     *  draw the wipe quad.  Software implementations leave this as a no-op. */
+    virtual void ExecuteFromIR(const IRMapFadeCmd& /*cmd*/) {}
 
     /** Returns true when this pass can run the transition at any resolution,
      *  not just the original 320×200.  Software returns false; GPU returns true. */

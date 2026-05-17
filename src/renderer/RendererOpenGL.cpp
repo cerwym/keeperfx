@@ -744,6 +744,13 @@ void RendererOpenGL::EndFrame()
     m_rt_frame_state.screen_w  = m_screenW;
     m_rt_frame_state.screen_h  = m_screenH;
 
+    // Flush the map-fade IR command to the render graph write slot.
+    // FlushToRenderGraph() checks view_mode (game thread safe), emits an
+    // IRMapFadeCmd if a transition is active, and clears m_capture_pending.
+    // Must happen before Flip()/UpdateFrameState() so the write slot is
+    // populated before it transfers to the render-side.
+    if (m_mapFadePass) m_mapFadePass->FlushToRenderGraph(m_render_graph);
+
     if (RendererIsFadeCachePreserved())
     {
         // Palette-fade loop: BeginFrame skipped opening the IR write windows,
@@ -1373,13 +1380,15 @@ void RendererOpenGL::EndFrame_GL()
     }
 
     // Map-fade GPU compose pass — active during PVM_ParchFadeIn / ParchFadeOut.
-    // GLMapFadePass::StepFadeIn/Out() records the current step without writing
-    // to WScreen; this hook renders the native-resolution wipe quad on top of
-    // the (empty) staging blit.  No-op for SoftwareMapFadePass.
+    // IRMapFadeCmd is written by GLMapFadePass::FlushToRenderGraph() on the
+    // game thread and transferred to the render-side by Flip()/UpdateFrameState().
     {
-        IMapFadePass* mfp = RendererGetMapFadePass();
-        if (mfp && mfp->HasGPUComposePass())
-            mfp->RenderGPUComposePass();
+        const auto& map_fade_cmd = m_render_graph.GetMapFadeCmdRT();
+        if (map_fade_cmd)
+        {
+            IMapFadePass* mfp = RendererGetMapFadePass();
+            if (mfp) mfp->ExecuteFromIR(*map_fade_cmd);
+        }
     }
 
     // Draw layer-1 (front) GPU UI elements first.

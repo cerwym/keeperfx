@@ -74,6 +74,7 @@ void RenderGraph::Reserve(
 void RenderGraph::BeginFrame()
 {
     m_write.Reset();
+    m_write_map_fade = std::nullopt;
 }
 
 void RenderGraph::Flip(const FrameState& fs)
@@ -83,6 +84,10 @@ void RenderGraph::Flip(const FrameState& fs)
 
     // Capture FrameState snapshot from game-thread globals.
     m_read_fs = fs;
+
+    // Transfer map-fade command to render-side.
+    m_read_map_fade  = m_write_map_fade;
+    m_write_map_fade = std::nullopt;
 
     // Reset the (now-old read-side, now-write-side) buffers so the game
     // thread can start writing frame N+1 immediately.
@@ -95,6 +100,10 @@ void RenderGraph::UpdateFrameState(const FrameState& fs)
     // Used during palette-fade loops where the same UI geometry must be
     // re-rendered each fade step with an updated palette.
     m_read_fs = fs;
+
+    // Transfer the map-fade command even during preserve frames — the step
+    // value changes each game tick and the render thread needs the latest value.
+    m_read_map_fade = m_write_map_fade;
 }
 
 void RenderGraph::Execute(

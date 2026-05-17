@@ -27,6 +27,7 @@
 /******************************************************************************/
 #pragma once
 
+#include <optional>
 #include "renderer/FrameState.h"
 #include "renderer/BackendCapabilities.h"
 #include "renderer/ir/WorldCommands.h"
@@ -75,6 +76,13 @@ public:
     ShadowCommandBuffers& GetShadowBuffers() { return m_write.shadow; }
     DebugCommandBuffers&  GetDebugBuffers()  { return m_write.debug;  }
 
+    /** Record a map-fade composite command for this frame (game thread).
+     *  Transferred to the render-side by Flip() / UpdateFrameState(). */
+    void SetMapFadeCmd(const IRMapFadeCmd& cmd) { m_write_map_fade = cmd; }
+
+    /** Clear any pending map-fade command for this frame (game thread). */
+    void ClearMapFadeCmd() { m_write_map_fade = std::nullopt; }
+
     // =========================================================================
     // Frame lifecycle (game thread)
 
@@ -118,6 +126,10 @@ public:
     const ShadowCommandBuffers& GetShadowBuffersRT() const { return m_read.shadow; }
     const DebugCommandBuffers&  GetDebugBuffersRT()  const { return m_read.debug;  }
     const FrameState&           GetFrameStateRT()    const { return m_read_fs;     }
+
+    /** Read the map-fade command for this frame (render thread).
+     *  Returns nullopt when no map-fade transition is active. */
+    const std::optional<IRMapFadeCmd>& GetMapFadeCmdRT() const { return m_read_map_fade; }
 
     // =========================================================================
     // Render-thread execution
@@ -168,6 +180,10 @@ private:
     FrameBuffers m_write;     /**< Written by game thread.  */
     FrameBuffers m_read;      /**< Read by render thread.   */
     FrameState   m_read_fs;   /**< Snapshot captured at Flip(). */
+
+    /** Map-fade composite command, transferred each frame by Flip()/UpdateFrameState(). */
+    std::optional<IRMapFadeCmd> m_write_map_fade;
+    std::optional<IRMapFadeCmd> m_read_map_fade;
 };
 
 /******************************************************************************/

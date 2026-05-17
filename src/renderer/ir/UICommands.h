@@ -153,6 +153,13 @@ struct IRUIMinimapCmd
     const uint8_t* pixels    = nullptr;
 };
 
+/** Fullscreen map-fade transition wipe composite. */
+struct IRMapFadeCmd
+{
+    float step            = 0.f;   ///< Interpolated wipe step [0.0..32.0].
+    bool  capture_pending = false; ///< Render thread must re-capture both views before compositing.
+};
+
 /******************************************************************************/
 // Cursor layer
 /******************************************************************************/

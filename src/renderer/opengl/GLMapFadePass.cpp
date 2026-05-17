@@ -14,6 +14,8 @@
 #include "renderer/opengl/GLShaders.h"
 #include "renderer/RendererOpenGL.h"      // FlushSceneToFBO
 #include "renderer/RendererManager.h"     // RendererGetActive, WorldViewRenderer_BeginWorldPass
+#include "renderer/RenderGraph.h"         // SetMapFadeCmd / ClearMapFadeCmd
+#include "renderer/ir/UICommands.h"       // IRMapFadeCmd
 #include "renderer/opengl/GLWorldViewRenderer.h" // BeginWorldPass
 #include "engine_redraw.h"    // redraw_isometric_view, redraw_frontview, map_fade_in/out, setup/store_engine_window
 #include "engine_render.h"    // EngineRenderState, engine_save/restore_render_state, draw_view
@@ -261,13 +263,6 @@ bool GLMapFadePass::CaptureAndUploadFrames()
     return true;
 }
 
-void GLMapFadePass::MarkDone()
-{
-    m_active          = false;
-    m_step            = 0.f;
-    m_capture_pending = false;
-}
-
 /******************************************************************************/
 
 int32_t GLMapFadePass::StepFadeIn(int32_t step)
@@ -279,14 +274,10 @@ int32_t GLMapFadePass::StepFadeIn(int32_t step)
         return (next > 32) ? 32 : next;
     }
 
-    // Capture on the first call (step == 0).
-    // Deferred to the render thread: CaptureAndUploadFrames() makes GL calls and
-    // must not run on the game thread (GL context lives on the render thread after
-    // the first EndFrame).  Set m_capture_pending here; RenderGPUComposePass()
-    // will perform the actual capture when called from EndFrame_GL().
+    // Arm capture on the first call (step == 0).
+    // The actual GL work is deferred to ExecuteFromIR() on the render thread.
     if (step == 0)
     {
-        m_deactivate_after_render = false;
         m_capture_pending = true;
         m_active = true;
     }
@@ -318,12 +309,10 @@ int32_t GLMapFadePass::StepFadeOut(int32_t step)
         return (next < 0) ? 0 : next;
     }
 
-    // Capture on the first call (step == 32).
-    // Same deferred-capture logic as StepFadeIn: set m_capture_pending and let
-    // RenderGPUComposePass() (render thread) call CaptureAndUploadFrames().
+    // Arm capture on the first call (step == 32).
+    // Same deferred-capture logic as StepFadeIn.
     if (step == 32)
     {
-        m_deactivate_after_render = false;
         m_capture_pending = true;
         m_active = true;
     }
@@ -347,62 +336,50 @@ int32_t GLMapFadePass::StepFadeOut(int32_t step)
 
 /******************************************************************************/
 
-void GLMapFadePass::RenderGPUComposePass()
+void GLMapFadePass::FlushToRenderGraph(RenderGraph& graph)
 {
-    if (!m_active || !m_prog || !m_vao)
+    if (!m_active)
+    {
+        graph.ClearMapFadeCmd();
+        return;
+    }
+
+    // If the game has already ended the transition (view_mode left ParchFade
+    // mode), snap to the terminal step and emit one final frame so the
+    // compose output seamlessly matches the live view.  m_active becomes false
+    // so subsequent EndFrame() calls clear the map-fade cmd automatically.
+    struct PlayerInfo* player = get_my_player();
+    if (player->view_mode != PVM_ParchFadeIn && player->view_mode != PVM_ParchFadeOut)
+    {
+        m_step   = (m_step <= 16.f) ? 0.f : 32.f;
+        m_active = false;
+    }
+
+    // Transfer the pending-capture flag to the IR command and clear it here
+    // so the render thread receives it exactly once.
+    graph.SetMapFadeCmd(IRMapFadeCmd{m_step, m_capture_pending});
+    m_capture_pending = false;
+}
+
+void GLMapFadePass::ExecuteFromIR(const IRMapFadeCmd& cmd)
+{
+    if (!m_prog || !m_vao)
         return;
 
-    // Deferred capture: CaptureAndUploadFrames() makes GL calls and must run on
-    // the render thread that owns the GL context.  StepFadeIn/Out set
-    // m_capture_pending on the game thread; we consume it here.
-    if (m_capture_pending)
+    if (cmd.capture_pending)
     {
-        m_capture_pending = false;
         if (!CaptureAndUploadFrames())
         {
-            WARNLOG("GLMapFadePass: capture failed in RenderGPUComposePass, disabling");
-            m_active = false;
+            WARNLOG("GLMapFadePass: capture failed in ExecuteFromIR, skipping");
             return;
         }
     }
 
-    // Safety: if the game has already ended the transition (the end callback
-    // restored view_mode before we finished stepping), render one final frame
-    // at the terminal step value (step=0 for fade-out = 100% world, step=32
-    // for fade-in = 100% parchment) so the compose output seamlessly matches
-    // the live view.  Deactivate after this frame via m_deactivate_after_render.
-    {
-        struct PlayerInfo* player = get_my_player();
-        if (player->view_mode != PVM_ParchFadeIn &&
-            player->view_mode != PVM_ParchFadeOut)
-        {
-            if (!m_deactivate_after_render)
-            {
-                // First frame after instance ended: snap to terminal step
-                // and mark for deactivation after this render.
-                // Fade-out ends at step=0 (100% world), fade-in at step=32 (100% parchment).
-                // We can tell which by looking at m_step: if it was decreasing
-                // toward 0 it was a fade-out; if increasing toward 32, fade-in.
-                m_step = (m_step <= 16.f) ? 0.f : 32.f;
-                m_deactivate_after_render = true;
-            }
-            else
-            {
-                // Already rendered the terminal frame last pass — deactivate now.
-                m_active = false;
-                m_deactivate_after_render = false;
-                return;
-            }
-        }
-    }
-
-    // The compose quad covers the entire screen.  The world viewport is
-    // already fullscreen in GL mode, so no explicit glViewport override needed.
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_BLEND);
 
     glUseProgram(m_prog);
-    glUniform1f(m_loc_step, m_step);
+    glUniform1f(m_loc_step, cmd.step);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_tex[0]);  // parchment
@@ -415,14 +392,6 @@ void GLMapFadePass::RenderGPUComposePass()
 
     glUseProgram(0);
     glActiveTexture(GL_TEXTURE0);
-
-    // Deactivate after rendering the final step so the compose pass
-    // actually draws the last transition frame before going inactive.
-    if (m_deactivate_after_render)
-    {
-        m_active = false;
-        m_deactivate_after_render = false;
-    }
 }
 
 /******************************************************************************/
