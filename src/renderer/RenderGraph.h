@@ -97,6 +97,18 @@ public:
      */
     void Flip(const FrameState& fs);
 
+    /**
+     * Update only the read-side FrameState without swapping IR buffers.
+     *
+     * Used during palette-fade loops (RendererIsFadeCachePreserved() == true)
+     * where the IR content from the previous real frame must be preserved so
+     * the render thread can re-draw the same UI geometry with an updated
+     * palette.  Flip() is skipped; only m_read_fs is updated.
+     *
+     * @param fs  Updated FrameState (palette, tints) captured this fade step.
+     */
+    void UpdateFrameState(const FrameState& fs);
+
     // =========================================================================
     // Render-thread read accessors (valid after Flip(), before next Flip())
 

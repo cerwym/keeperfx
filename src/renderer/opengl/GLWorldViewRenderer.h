@@ -20,6 +20,7 @@
 #ifdef RENDERER_OPENGL_ENABLED
 
 #include <glad/glad.h>
+#include <atomic>
 #include <vector>
 #include <unordered_map>
 #include "renderer/IWorldViewRenderer.h"
@@ -376,6 +377,20 @@ private:
     std::vector<DrawCmd>        m_rt_draw_cmds;
     std::vector<ShadowCmd>      m_rt_shadow_cmds;
     std::vector<FlatPolyVertex> m_rt_flatpoly_verts;
+
+    // ── poly_pool safety fence ───────────────────────────────────────────────
+    // CMD_SPRITES / CMD_FRONTVIEW_SPRITES dispatch on the render thread reads
+    // from bucket linked-lists allocated in poly_pool.  With the async pipeline
+    // (m_frame_begun reset early), the game thread can reach DrawIsometricView
+    // for frame N+1 — resetting poly_pool — while the render thread is still
+    // traversing frame N's sprite entries.
+    //
+    // Protocol:
+    //   FlipBuffers()   (game thread) : stores false if sprite cmds exist.
+    //   GPURenderNow()  (render thread): stores true on every exit path.
+    //   BeginWorldPass()(game thread) : spins until true before building
+    //                                   new poly_pool data (non-PiP only).
+    std::atomic<bool> m_rt_sprites_done{true};
 
     // ── PiP-only buffers (render-thread write, never touched by game thread) ─
     // BeginPiPCapture() switches all geometry writes here so draw_view() called

@@ -89,6 +89,14 @@ void RenderGraph::Flip(const FrameState& fs)
     m_write.Reset();
 }
 
+void RenderGraph::UpdateFrameState(const FrameState& fs)
+{
+    // Update only the FrameState on the read side.  IR buffers are unchanged.
+    // Used during palette-fade loops where the same UI geometry must be
+    // re-rendered each fade step with an updated palette.
+    m_read_fs = fs;
+}
+
 void RenderGraph::Execute(
     const BackendCapabilities& caps,
     IWorldViewRenderer*  world,

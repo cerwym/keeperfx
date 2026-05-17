@@ -37,6 +37,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
+#include <thread>
 #include "kfx/profiling/KfxProfiling.h"
 #include "platform.h"
 #include "post_inc.h"
@@ -1080,6 +1081,17 @@ void GLWorldViewRenderer::BeginWorldPass(unsigned char* framebuf, int pitch,
                                           int w, int h, int vp_x, int vp_y)
 {
     KFX_ZONE("WVR::BeginWorldPass");
+
+    // Wait for the render thread to finish processing sprite commands from the
+    // previous frame before the game thread builds new poly_pool/bucket data.
+    // PiP captures (m_pip_capture==true) run on the render thread itself and
+    // never touch the main poly_pool — skip the wait for those.
+    if (!m_pip_capture)
+    {
+        while (!m_rt_sprites_done.load(std::memory_order_acquire))
+            std::this_thread::yield();
+    }
+
     m_screen_w        = w;
     m_screen_h        = h;
     m_vp_x            = vp_x;
@@ -1278,6 +1290,18 @@ void GLWorldViewRenderer::FlipBuffers()
     m_rt_vert_count  = m_vert_count;
     m_vert_count     = 0;
     m_cmd_vert_start = 0;
+
+    // If this frame contains sprite commands the render thread will traverse
+    // poly_pool bucket linked-lists.  Clear the fence so BeginWorldPass on the
+    // game thread waits before overwriting poly_pool with new bucket data.
+    for (const auto& c : m_rt_draw_cmds)
+    {
+        if (c.type == DrawCmd::CMD_SPRITES || c.type == DrawCmd::CMD_FRONTVIEW_SPRITES)
+        {
+            m_rt_sprites_done.store(false, std::memory_order_release);
+            break;
+        }
+    }
 }
 
 void GLWorldViewRenderer::ExecuteWorldFromIR(const WorldCommandBuffers& /*cmds*/)
@@ -1309,6 +1333,13 @@ void GLWorldViewRenderer::GPURenderNow()
     KFX_GPU_ZONE("Frame::WorldPass");
     KFX_GL_SCOPE(world_pass_dbg, "WorldPass");
 
+    // RAII: release the poly_pool fence on every exit path so BeginWorldPass
+    // on the game thread is never permanently blocked.
+    struct SpriteDoneGuard {
+        std::atomic<bool>& flag;
+        ~SpriteDoneGuard() { flag.store(true, std::memory_order_release); }
+    } sprites_done_guard_{m_rt_sprites_done};
+
     // Reset the per-frame active flag immediately — before any early returns.
     // This ensures m_world_pass_active is false on frames where no
     // BeginWorldPass was issued (e.g. main menu).
@@ -1322,8 +1353,13 @@ void GLWorldViewRenderer::GPURenderNow()
         return;
     }
 
-    // Flush any tile batch that hasn't been recorded yet.
-    gpu_flush();
+    // NOTE: gpu_flush() is intentionally NOT called here.
+    // The final tile batch was already flushed by DrawIsometricView() /
+    // DrawFrontView() before FlipBuffers() ran, so m_vert_count ==
+    // m_cmd_vert_start == 0 at this point.  Calling gpu_flush() here would
+    // race with the game thread, which — because m_frame_begun is now reset
+    // to false on the game thread immediately after signalling — may already
+    // be incrementing m_vert_count for frame N+1 concurrently.
 
     // --- Diagnostic: log key state on first 10 world-render calls WITH geometry ---
     {
@@ -1914,6 +1950,13 @@ void GLWorldViewRenderer::DrawIsometricView()
             draw_cmds.push_back(cmd);
         }
     }
+
+    // Commit any trailing tile geometry that was not closed by a sprite or
+    // flat-poly interrupt in the last bucket.  Mirrors the identical call in
+    // DrawFrontView() (line ~2015).  This MUST happen before FlipBuffers() so
+    // that the game-thread m_draw_cmds contains all CMD_TILES entries and
+    // m_vert_count == m_cmd_vert_start (no open batch) at flip time.
+    gpu_flush();
 
     // draw_nonspatial_sprites_gpu() is intentionally NOT called here.
     // It is called from engine_render.c immediately after WorldViewRenderer_DrawIsometricView(),

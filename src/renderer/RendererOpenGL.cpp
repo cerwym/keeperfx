@@ -689,13 +689,6 @@ void RendererOpenGL::EndFrame()
     if (m_world_renderer) m_world_renderer->SetWorldCommandBuffers(nullptr);
     if (m_textRenderer) m_textRenderer->SetTextCommandBuffers(nullptr);
 
-    // Flip sub-renderer command buffers so the render thread reads from stable
-    // render-side copies while the game thread is free to build the next frame.
-    if (m_world_renderer)
-        m_world_renderer->FlipBuffers();
-
-    if (ui_close) ui_close->FlipBuffers();
-
     // Snapshot per-frame command queues and scalar state into render-thread
     // copies before signalling.  The game thread returns from EndFrame()
     // immediately and may call SubmitPiPRender(), BlitRaw8GPU(), etc. for the
@@ -738,18 +731,12 @@ void RendererOpenGL::EndFrame()
               std::begin(m_rt_zoom_clip_rect));
     m_rt_zoom_clip_radius = m_zoom_clip_radius;
 
-    // Cursor data now flows through UICommandBuffers (IR path); the old
-    // double-buffer FlipBuffers() is a no-op.  RenderGraph::Flip() (below)
-    // atomically swaps the cursor IR channels along with all other UI commands.
-    CursorLayer_FlipBuffers();
-
     // Double-buffer swipe overlay verts: same pattern as PiP/rawblit queues.
     m_rt_swipe_verts = std::move(m_swipe_verts);
 
     // Snapshot all game-thread globals that EndFrame_GL() needs.
-    // Must happen here (inside the critical section, before signalling) so the
-    // render thread never reads live globals that the game thread can modify
-    // concurrently once we return from EndFrame().
+    // Must happen here (before signalling) so the render thread never reads live
+    // globals that the game thread can modify concurrently once we return.
     std::memcpy(m_rt_frame_state.palette, lbPalette, sizeof(m_rt_frame_state.palette));
     m_rt_frame_state.possession_tint = g_palette_possession_tint;
     std::memcpy(m_rt_frame_state.screen_tint, g_screen_tint, sizeof(m_rt_frame_state.screen_tint));
@@ -757,9 +744,36 @@ void RendererOpenGL::EndFrame()
     m_rt_frame_state.screen_w  = m_screenW;
     m_rt_frame_state.screen_h  = m_screenH;
 
-    // Flip IR command buffers: atomically swap write↔read and latch the
-    // FrameState snapshot so the render thread reads from stable copies.
-    m_render_graph.Flip(m_rt_frame_state);
+    if (RendererIsFadeCachePreserved())
+    {
+        // Palette-fade loop: BeginFrame skipped opening the IR write windows,
+        // so no new UI IR was submitted this frame.  Preserve the render
+        // thread's read-side IR unchanged so it re-draws the same UI/world
+        // geometry as the last real frame.  Only update the FrameState so that
+        // palette darkening is visible via upload_palette_texture() and
+        // PopulateFromIR()'s palette lookups.
+        // Note: non-IR rt_ snapshots (pip, rawblit, zoom, etc.) were moved
+        // above and will be empty during fades — EndFrame_GL() handles that.
+        m_render_graph.UpdateFrameState(m_rt_frame_state);
+    }
+    else
+    {
+        // Normal frame: flip sub-renderer command buffers so the render thread
+        // reads from stable render-side copies while the game thread builds N+1.
+        if (m_world_renderer)
+            m_world_renderer->FlipBuffers();
+
+        if (ui_close) ui_close->FlipBuffers();
+
+        // Cursor data flows through UICommandBuffers (IR path); FlipBuffers is
+        // a no-op here.  RenderGraph::Flip() below atomically swaps the cursor
+        // IR channels along with all other UI commands.
+        CursorLayer_FlipBuffers();
+
+        // Flip IR command buffers: atomically swap write↔read and latch the
+        // FrameState snapshot so the render thread reads from stable copies.
+        m_render_graph.Flip(m_rt_frame_state);
+    }
 
     // Signal the render thread to execute EndFrame_GL() (GL submission + swap).
     // Phase 3C: asynchronous — game thread returns immediately after signalling.
@@ -770,6 +784,15 @@ void RendererOpenGL::EndFrame()
         m_rt_work_ready = true;
     }
     m_rt_cv.notify_one();
+
+    // Reset the frame-begun flag HERE (game thread) rather than at the end of
+    // EndFrame_GL() (render thread).  This eliminates the cross-thread race:
+    // EndFrame_GL runs concurrently with the game thread building frame N+1,
+    // and if the game's next BeginFrame() fired before the render thread reached
+    // the old "m_frame_begun = false" line the idempotency guard would fire,
+    // leaving IR write-windows unopened for frame N+1 → blank frame → flicker.
+    // With this placement m_frame_begun becomes game-thread-only state.
+    m_frame_begun = false;
 }
 
 void RendererOpenGL::EndFrame_GL()
@@ -1559,7 +1582,9 @@ void RendererOpenGL::EndFrame_GL()
     // Mark the end of this rendered frame in Tracy's timeline.
     KFX_FRAMEMARK();
 
-    m_frame_begun = false; // allow BeginFrame to run fully on the next frame
+    // m_frame_begun is reset on the GAME THREAD at the end of EndFrame(), not
+    // here.  Moving it to the game thread eliminates the race where BeginFrame
+    // for frame N+1 could fire before this point and see m_frame_begun=true.
 }
 
 uint8_t* RendererOpenGL::LockFramebuffer(int* out_pitch)
