@@ -263,8 +263,9 @@ bool GLMapFadePass::CaptureAndUploadFrames()
 
 void GLMapFadePass::MarkDone()
 {
-    m_active = false;
-    m_step   = 0.f;
+    m_active          = false;
+    m_step            = 0.f;
+    m_capture_pending = false;
 }
 
 /******************************************************************************/
@@ -279,16 +280,14 @@ int32_t GLMapFadePass::StepFadeIn(int32_t step)
     }
 
     // Capture on the first call (step == 0).
+    // Deferred to the render thread: CaptureAndUploadFrames() makes GL calls and
+    // must not run on the game thread (GL context lives on the render thread after
+    // the first EndFrame).  Set m_capture_pending here; RenderGPUComposePass()
+    // will perform the actual capture when called from EndFrame_GL().
     if (step == 0)
     {
         m_deactivate_after_render = false;
-        if (!CaptureAndUploadFrames())
-        {
-            WARNLOG("GLMapFadePass: capture failed on fade-in, skipping fade");
-            m_active = false;
-            int32_t next = step + 4;
-            return (next > 32) ? 32 : next;
-        }
+        m_capture_pending = true;
         m_active = true;
     }
 
@@ -320,16 +319,12 @@ int32_t GLMapFadePass::StepFadeOut(int32_t step)
     }
 
     // Capture on the first call (step == 32).
+    // Same deferred-capture logic as StepFadeIn: set m_capture_pending and let
+    // RenderGPUComposePass() (render thread) call CaptureAndUploadFrames().
     if (step == 32)
     {
         m_deactivate_after_render = false;
-        if (!CaptureAndUploadFrames())
-        {
-            WARNLOG("GLMapFadePass: capture failed on fade-out, skipping fade");
-            m_active = false;
-            int32_t next = step - 4;
-            return (next < 0) ? 0 : next;
-        }
+        m_capture_pending = true;
         m_active = true;
     }
 
@@ -356,6 +351,20 @@ void GLMapFadePass::RenderGPUComposePass()
 {
     if (!m_active || !m_prog || !m_vao)
         return;
+
+    // Deferred capture: CaptureAndUploadFrames() makes GL calls and must run on
+    // the render thread that owns the GL context.  StepFadeIn/Out set
+    // m_capture_pending on the game thread; we consume it here.
+    if (m_capture_pending)
+    {
+        m_capture_pending = false;
+        if (!CaptureAndUploadFrames())
+        {
+            WARNLOG("GLMapFadePass: capture failed in RenderGPUComposePass, disabling");
+            m_active = false;
+            return;
+        }
+    }
 
     // Safety: if the game has already ended the transition (the end callback
     // restored view_mode before we finished stepping), render one final frame
