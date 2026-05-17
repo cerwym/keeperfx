@@ -650,10 +650,16 @@ bool RendererOpenGL::BeginFrame()
 
         // Open the world IR write window (sentinel; internal state still drives execution).
         if (m_world_renderer) m_world_renderer->SetWorldCommandBuffers(&m_render_graph.GetWorldBuffers());
-
-        // Open the text IR write window.
-        if (m_textRenderer) m_textRenderer->SetTextCommandBuffers(&m_render_graph.GetTextBuffers());
     }
+
+    // Text write window is always opened — text commands are freshly submitted
+    // every frame.  During fade-preserve frames the submitted text goes to the
+    // write buffer (safe), and UpdateFrameState() leaves the read-side text IR
+    // unchanged so the render thread re-displays the preserved sidebar text.
+    // Without this, any LbTextDrawResized() call during a fade-preserve frame
+    // would append to m_pending on the game thread while the render thread
+    // concurrently reads m_pending in ExecuteTextFromIR() — a data race.
+    if (m_textRenderer) m_textRenderer->SetTextCommandBuffers(&m_render_graph.GetTextBuffers());
     return true;
 }
 

@@ -44,8 +44,7 @@ public:
     // ITextRenderer interface — Drawing
     TbBool DrawTextResized(int32_t posx, int32_t posy, int32_t units_per_px, const char* text) override;
     TbBool DrawTextAt(int32_t screen_x, int32_t screen_y, int32_t units_per_px, const char* text) override;
-    void   Draw() override;         // Draw non-overlay text
-    void   DrawOverlay();           // Draw overlay-tagged text (tooltip text etc.) — call after layer-3 sprites
+    void   Draw() override;         // Flush all queued text draws
 
     // ── IR (Intermediate Representation) path ─────────────────────────────────
 

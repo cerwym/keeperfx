@@ -337,25 +337,28 @@ void GLTextRenderer::SetTextCommandBuffers(TextCommandBuffers* cmds)
 
 void GLTextRenderer::ExecuteTextFromIR(const TextCommandBuffers& cmds)
 {
-    if (cmds.draws.Size() == 0)
-        return;
-
-    // Translate IRTextDrawCmd entries back into DeferredDraw and queue them,
-    // then run Draw() normally on the render thread.
-    m_pending.reserve(m_pending.size() + cmds.draws.Size());
-    for (const IRTextDrawCmd& c : cmds.draws)
+    // Translate IRTextDrawCmd entries into DeferredDraw entries.
+    // Draw() is always called regardless — it flushes both IR-translated items
+    // and any fallback content that arrived via m_pending before the write
+    // window opened.  The old early-return (Size()==0 → return) was removed
+    // because an empty IR buffer does not mean m_pending is empty.
+    if (cmds.draws.Size() > 0)
     {
-        m_pending.push_back({
-            c.pos_x, c.pos_y, c.units_per_px,
-            c.justify_x, c.justify_y, c.justify_w,
-            c.clip_x, c.clip_y, c.clip_w, c.clip_h,
-            c.draw_colour, c.draw_flags,
-            std::string(c.text),
-            reinterpret_cast<const struct TbSpriteSheet*>(c.font),
-            reinterpret_cast<const struct AsianFont*>(c.dbc_font),
-            c.dbc_colour0, c.dbc_colour1,
-            (TbBool)c.dbc_enabled
-        });
+        m_pending.reserve(m_pending.size() + cmds.draws.Size());
+        for (const IRTextDrawCmd& c : cmds.draws)
+        {
+            m_pending.push_back({
+                c.pos_x, c.pos_y, c.units_per_px,
+                c.justify_x, c.justify_y, c.justify_w,
+                c.clip_x, c.clip_y, c.clip_w, c.clip_h,
+                c.draw_colour, c.draw_flags,
+                std::string(c.text),
+                reinterpret_cast<const struct TbSpriteSheet*>(c.font),
+                reinterpret_cast<const struct AsianFont*>(c.dbc_font),
+                c.dbc_colour0, c.dbc_colour1,
+                (TbBool)c.dbc_enabled
+            });
+        }
     }
     Draw();
 }
