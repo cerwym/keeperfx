@@ -69,12 +69,25 @@ public:
     virtual void Clear() override;
     virtual const char* GetName() const override { return "GL_CURSOR"; }
 
+    /** Move game-thread pending lists into render-thread rt_ copies.
+     *  Must be called (with the render thread idle) from EndFrame() before
+     *  signalling the render thread.  Clears the game-thread lists so the
+     *  game can start submitting the next frame immediately. */
+    void FlipBuffers() override;
+
 private:
     GLWorldViewRenderer*              m_wvr    = nullptr;
     GLSpriteAtlas*                    m_atlas  = nullptr;
     GLUIRenderer*                     m_glui   = nullptr;
+
+    // Game-thread write buffers (SubmitPointerSprite / SubmitKeeperHandSprite).
     std::vector<PendingPointerSprite> m_pointers;
     std::vector<PendingKeeperSprite>  m_keepers;
+
+    // Render-thread read buffers (populated by FlipBuffers()).  Draw() reads
+    // from these so the game thread can freely modify the game-side lists.
+    std::vector<PendingPointerSprite> m_rt_pointers;
+    std::vector<PendingKeeperSprite>  m_rt_keepers;
 };
 
 #endif // RENDERER_OPENGL_ENABLED

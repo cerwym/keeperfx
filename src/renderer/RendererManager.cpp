@@ -397,8 +397,9 @@ static IWorldViewRenderer* create_world_view_renderer(RendererType type)
 #ifdef RENDERER_OPENGL_ENABLED
     if (type == RENDERER_OPENGL)
     {
-        // Inject shared GPU resources from the already-initialised RendererOpenGL
-        RendererOpenGL* ogl = dynamic_cast<RendererOpenGL*>(s_activeRenderer);
+        // s_activeRenderer was just set to a RendererOpenGL by RendererInit();
+        // static_cast is safe here — we're inside the RENDERER_OPENGL branch.
+        RendererOpenGL* ogl = static_cast<RendererOpenGL*>(s_activeRenderer);
         if (ogl)
         {
             auto* glwr = new GLWorldViewRenderer(
@@ -437,7 +438,7 @@ static ITextRenderer* create_text_renderer(RendererType type)
 #ifdef RENDERER_OPENGL_ENABLED
     if (type == RENDERER_OPENGL)
     {
-        RendererOpenGL* ogl = dynamic_cast<RendererOpenGL*>(s_activeRenderer);
+        RendererOpenGL* ogl = static_cast<RendererOpenGL*>(s_activeRenderer);
         if (ogl)
         {
             auto* glt = new GLTextRenderer();
@@ -462,13 +463,15 @@ static ICursorLayer* create_cursor_layer(RendererType type)
 #ifdef RENDERER_OPENGL_ENABLED
     if (type == RENDERER_OPENGL)
     {
-        RendererOpenGL* ogl = dynamic_cast<RendererOpenGL*>(s_activeRenderer);
+        RendererOpenGL* ogl = static_cast<RendererOpenGL*>(s_activeRenderer);
         if (ogl)
         {
             auto* glcur = new GLCursorLayer();
-            glcur->SetWorldViewRenderer(dynamic_cast<GLWorldViewRenderer*>(s_worldViewRenderer));
+            // s_worldViewRenderer and s_uiRenderer were just created by their own
+            // factory functions inside the same RENDERER_OPENGL branch — static_cast safe.
+            glcur->SetWorldViewRenderer(static_cast<GLWorldViewRenderer*>(s_worldViewRenderer));
             glcur->SetSpriteAtlas(s_spriteAtlas);
-            glcur->SetGLUIRenderer(dynamic_cast<GLUIRenderer*>(s_uiRenderer));
+            glcur->SetGLUIRenderer(static_cast<GLUIRenderer*>(s_uiRenderer));
             return glcur;
         }
     }
@@ -484,7 +487,7 @@ static IUIRenderer* create_ui_renderer(RendererType type)
 #ifdef RENDERER_OPENGL_ENABLED
     if (type == RENDERER_OPENGL)
     {
-        RendererOpenGL* ogl = dynamic_cast<RendererOpenGL*>(s_activeRenderer);
+        RendererOpenGL* ogl = static_cast<RendererOpenGL*>(s_activeRenderer);
         if (ogl)
         {
             auto* glui = new GLUIRenderer();
@@ -1088,10 +1091,8 @@ void CursorLayer_Clear(void)
 
 void CursorLayer_FlipBuffers(void)
 {
-#ifdef RENDERER_OPENGL_ENABLED
-    GLCursorLayer* gl = dynamic_cast<GLCursorLayer*>(s_cursorLayer);
-    if (gl) gl->FlipBuffers();
-#endif
+    if (s_cursorLayer)
+        s_cursorLayer->FlipBuffers();
 }
 
 void CursorLayer_SubmitPointerSprite(const struct TbSprite* spr, int32_t x, int32_t y, int units_per_px)

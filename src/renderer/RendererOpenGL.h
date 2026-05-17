@@ -126,7 +126,10 @@ public:
     ITextRenderer* GetTextRenderer() override;
     IUIRenderer* GetUIRenderer() override;
 
-    // Legacy accessors for internal resource sharing - TODO: Remove these
+    // GL resource accessors used by RendererManager factory functions to wire
+    // sub-renderers at creation time.  All callers are inside
+    // #ifdef RENDERER_OPENGL_ENABLED + if (type == RENDERER_OPENGL) blocks so
+    // they are unreachable from non-GL code paths.
     GLTileAtlas*  GetTileAtlas()  const { return m_tile_atlas; }
     GLSpriteAtlas* GetSpriteAtlas() const { return m_sprite_atlas; }
     GLFontAtlas*  GetFontAtlas()  const { return m_font_atlas; }

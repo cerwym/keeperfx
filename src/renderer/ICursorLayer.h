@@ -71,6 +71,11 @@ public:
     /** Clear queued state.  Called at the start of each frame (BeginFrame). */
     virtual void Clear() = 0;
 
+    /** Flip game-thread command lists to render-thread copies.
+     *  Called from EndFrame() before signalling the render thread.
+     *  CPU default: no-op. */
+    virtual void FlipBuffers() {}
+
     virtual const char* GetName() const = 0;
 };
 
