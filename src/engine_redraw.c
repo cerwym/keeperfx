@@ -400,6 +400,7 @@ int get_place_door_pointer_graphics(ThingModel drmodel) {
 // Hardware path would replace with render-to-texture; both captures would be GPU framebuffers.
 void prepare_map_fade_buffers(unsigned char *fade_src, unsigned char *fade_dest, int scanline, int height)
 {
+    if (RendererHasGPURenderPath()) return;
     struct PlayerInfo* player = get_my_player();
     // render the 3D screen
     if (player->view_mode_restore == PVM_IsoWibbleView || player->view_mode_restore == PVM_IsoStraightView)
@@ -433,6 +434,7 @@ void prepare_map_fade_buffers(unsigned char *fade_src, unsigned char *fade_dest,
 long map_fade_in(long palette_fade_step)
 {
     SYNCDBG(6,"Starting");
+    if (RendererHasGPURenderPath()) return (8 - get_my_player()->instance_remain_turns) * 4;
     if (palette_fade_step == 0)
     {
         map_fade_ghost_table = poly_pool;
@@ -449,6 +451,7 @@ long map_fade_in(long palette_fade_step)
 long map_fade_out(long palette_fade_step)
 {
     SYNCDBG(6,"Starting");
+    if (RendererHasGPURenderPath()) return get_my_player()->instance_remain_turns * 4;
     if (palette_fade_step == 32)
     {
         map_fade_ghost_table = poly_pool;

@@ -158,6 +158,7 @@ void copy_to_screen_pxdblw(unsigned char *srcbuf, unsigned char *dstbuf, long wi
 
 void copy_to_screen(const AVFrame & frame, const int flags)
 {
+	if (RendererHasGPURenderPath()) return;
 	const auto src_pitch = frame.linesize[0];
 	auto srcbuf = frame.data[0];
 	long screen_buffer_center_offset;
@@ -218,6 +219,7 @@ void copy_to_screen(const AVFrame & frame, const int flags)
 
 void copy_to_screen_scaled(const AVFrame & frame, const int flags)
 {
+	if (RendererHasGPURenderPath()) return;
 	const auto src_pitch = frame.linesize[0];
 	const auto src_buf = frame.data[0];
 	const auto dst_buf = &lbDisplay.WScreen[0];

@@ -1324,10 +1324,12 @@ void panel_map_draw_slabs(long x, long y, long units_per_px, long zoom)
 {
     PanelMapX = scale_value_for_resolution_with_upp(x,units_per_px);
     PanelMapY = scale_value_for_resolution_with_upp(y,units_per_px);
+    // auto_gen_tables sets MapDiagonalLength; acquire the GPU buffer afterwards so
+    // AcquireMinimapBuffer receives the correct (non-zero) size on the very first frame.
+    auto_gen_tables(units_per_px);
     // In GPU mode, acquire a renderer-owned pixel buffer for this frame.
     // In software mode, AcquireMinimapBuffer returns NULL and pixels go directly to WScreen.
     s_minimap_pixels = UIRenderer_AcquireMinimapBuffer(MapDiagonalLength);
-    auto_gen_tables(units_per_px);
     update_panel_colors();
     struct PlayerInfo *player = get_my_player();
     struct Camera *cam = get_local_active_camera(player->id_number);

@@ -1171,6 +1171,7 @@ TbBool fronttestfont_draw(void)
   long x;
   long y;
   SYNCDBG(9,"Starting");
+  if (RendererHasGPURenderPath()) return false;
   for (y=0; y < RendererScreenHeight(); y++)
     for (x=0; x < RendererScreenWidth(); x++)
     {
