@@ -1150,6 +1150,7 @@ void RendererOpenGL::EndFrame_GL()
             if (ui)
                 ui->BeginPiPSprites();
 
+            m_world_renderer->BeginPiPCapture();
             m_world_renderer->BeginWorldPass(nullptr, 0, pw, ph, 0, 0);
 
             // Save projection globals so main-view mouse→world unprojection is unaffected.
@@ -1588,8 +1589,10 @@ bool RendererOpenGL::BlitRaw8GPU(int dst_width, int dst_height, int dst_x, int d
                  (const void*)src_buf, src_width, src_height);
         return false;
     }
-    // Queue — executed in EndFrame() after UIRenderer_DrawBack().
-    m_rawblit_cmd            = { src_buf, src_width, src_height,
+    // Copy pixel data into an owned buffer so the caller may free its buffer as
+    // soon as this function returns — before the render thread reads.
+    m_rawblit_px_buf.assign(src_buf, src_buf + (size_t)src_width * src_height);
+    m_rawblit_cmd            = { m_rawblit_px_buf.data(), src_width, src_height,
                                  dst_x, dst_y, dst_width, dst_height };
     m_rawblit_pending        = true;
     m_rawblit_cached         = true;

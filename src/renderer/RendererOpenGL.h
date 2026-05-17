@@ -211,6 +211,7 @@ private:
     };
     bool              m_rawblit_pending  = false;
     RawBlitCmd        m_rawblit_cmd      = {};
+    std::vector<uint8_t> m_rawblit_px_buf;  ///< owns m_rawblit_cmd.src_buf data (game-thread side)
     bool              m_rawblit_cached   = false;  // last rawblit retained for palette-fade re-renders
     RawBlitCmd        m_rawblit_cached_cmd = {};
     unsigned int      m_rawblit_shader        = 0;  // palette_blit_vert + rawimage_blit_frag
