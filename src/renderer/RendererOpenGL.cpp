@@ -875,10 +875,11 @@ void RendererOpenGL::EndFrame_GL()
     SYNCDBG(0, "EndFrame_GL step 3: glClear done");
 
     // ── RenderGraph dispatch ──────────────────────────────────────────────────
-    // Execute() consumes the read-side IR command buffers captured by Flip().
-    // Currently a stub — all (void) dispatchers until each sub-renderer is
-    // migrated.  As GLUIRenderer, GLWorldViewRenderer, etc. gain ExecuteXxx()
-    // methods the direct-call paths below will be replaced one by one.
+    // Execute() performs the first real dispatch step:
+    //   • UI: calls ui->PopulateFromIR() to fill m_rt_quads[]/m_rt_lines[] from
+    //     the IR snapshot.  No GL draws here; DrawBack/DrawFront below issue them.
+    //   • World + Text: dispatched explicitly below (ordering constraints require
+    //     world inside the lens-FBO bracket; text after DrawFrontOverlay).
     m_render_graph.Execute(GetCapabilities(),
                            m_world_renderer,
                            RendererGetUIRenderer(),
@@ -939,13 +940,8 @@ void RendererOpenGL::EndFrame_GL()
         m_lens_active = false;
     }
 
-    // Populate m_rt_quads[]/m_rt_lines[] from the read-side IR command buffers.
-    // Must run AFTER FlushPendingInit() (above) so GPU resources are ready.
-    // No-op on stale-replay (fade-cache) frames — FlipBuffers preserved the quads.
-    {
-        GLUIRenderer* glui = dynamic_cast<GLUIRenderer*>(RendererGetUIRenderer());
-        if (glui) glui->ExecuteUIFromIR(m_render_graph.GetUIBuffersRT(), m_rt_frame_state);
-    }
+    // m_rt_quads[]/m_rt_lines[] have been populated by Execute() above via
+    // ui->PopulateFromIR().  DrawBack()/DrawFront() below issue the actual draws.
 
     // Draw layer-0 (back) GPU UI elements — sidebar background panels.
     UIRenderer_DrawBack();

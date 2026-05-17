@@ -102,26 +102,32 @@ void RenderGraph::Execute(
     // Shadow commands are currently embedded in the world geometry stream
     // (IRWorldShadowCmd in WorldCommandBuffers).  The dedicated IShadowRenderer
     // path is reserved for future shadow-map / shadow-volume implementations.
-    // When IShadowRenderer exists and the backend supports it, dispatch here.
     (void)shadow;  // not yet implemented
 
     // -------------------------------------------------------------------------
     // Layer 2: World pass (geometry → shadows → sprites → world-UI)
     // GLWorldViewRenderer::ExecuteWorldFromIR() is called directly from
-    // EndFrame_GL() (needed for lens-FBO wrapping); the (void) here documents
-    // that the RenderGraph tracks the world IR but doesn't dispatch it centrally.
+    // EndFrame_GL() inside the lens-FBO bracket so that the lens post-process
+    // pass can operate on the world output.  Execute() documents the world IR
+    // is owned by the graph but does not dispatch it here to preserve the
+    // required FBO ordering.  IWorldViewRenderer::ExecuteFromIR() exists on
+    // the interface for future backends that don't use a lens FBO.
     (void)world;
 
     // -------------------------------------------------------------------------
-    // Layer 3: UI pass (back → front → overlay → cursor)
-    // GLUIRenderer::ExecuteUIFromIR() is called directly from EndFrame_GL()
-    // after FlushPendingInit() so GPU resources (slab texture etc.) are ready.
-    (void)ui;
+    // Layer 3: UI pass — populate render-thread quad/line buffers from IR.
+    // PopulateFromIR() only fills the GPU geometry queues (m_rt_quads[] etc.);
+    // it issues no GL draw calls.  DrawBack() / DrawFront() in EndFrame_GL()
+    // then issue the actual draws in their required order relative to the
+    // rawblit, FMV, PiP, and zoom-box passes.
+    if (ui)
+        ui->PopulateFromIR(m_read.ui, m_read_fs);
 
     // -------------------------------------------------------------------------
     // Layer 4: Text pass
-    // GLTextRenderer::ExecuteTextFromIR() is called directly from EndFrame_GL()
-    // after layer-2/3 sprite draws complete.
+    // GLTextRenderer::ExecuteTextFromIR() translates IR commands to deferred
+    // draws AND flushes them in one call.  It must run after DrawFrontOverlay()
+    // so text sits above all sprite layers.  EndFrame_GL() calls it directly.
     (void)text;
 
     // -------------------------------------------------------------------------
@@ -131,11 +137,6 @@ void RenderGraph::Execute(
         // TODO: dispatch DebugCommandBuffers to IDebugRenderer when implemented.
         (void)debug;
     }
-
-    // NOTE: This Execute() is intentionally minimal for the initial wiring.
-    // Subsequent tasks will replace the (void) stubs with real dispatch as
-    // each logical renderer is migrated to consume from its IR command buffer
-    // rather than calling the backend API directly.
 }
 
 /******************************************************************************/

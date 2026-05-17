@@ -24,6 +24,11 @@
 
 struct TbSprite;
 
+// Forward-declare IR types so PopulateFromIR can appear on this interface
+// without pulling UICommands.h / FrameState.h into every consumer.
+struct UICommandBuffers;
+struct FrameState;
+
 #ifdef __cplusplus
 
 /******************************************************************************/
@@ -122,9 +127,19 @@ public:
 
     /**
      * Upload the 64×64 palette-indexed gui_slab tile to the GPU.
-     * No-op in CPU mode. Call whenever gui_slab data changes.
+     * In GPU mode the data is latched here and the actual GL upload is deferred to
+     * FlushPendingInit(), which must be called from the render-thread context.
+     * No-op in CPU mode.
      */
     virtual void UpdateSlabTexture(const uint8_t* data, int dim) {}
+
+    /**
+     * Perform any pending GPU-side initialisations (texture creates / uploads) that
+     * were deferred because they must run on the thread that owns the GL context.
+     * Called from RendererOpenGL::EndFrame_GL() before the first draw call.
+     * No-op in CPU mode.
+     */
+    virtual void FlushPendingInit() {}
 
     /**
      * Submit a tiled slab-background quad for the given screen rect.
@@ -207,6 +222,20 @@ public:
      *  @param out_h      Receives the sprite's native pixel height.
      *  @param out_stride Receives the row stride in bytes ((w+7)/8). */
     virtual uint8_t* QuerySpriteMask(SpriteHandle /*h*/, int* /*out_w*/, int* /*out_h*/, int* /*out_stride*/) { return nullptr; }
+
+    // ── IR (Intermediate Representation) dispatch ──────────────────────────────
+
+    /** Populate the render-thread quad/line buffers from the read-side IR command
+     *  buffer captured by RenderGraph::Flip().
+     *
+     *  Called by RenderGraph::Execute() on the render thread, before DrawBack().
+     *  GPU backends override this to translate IR commands into their internal
+     *  geometry queues (e.g. m_rt_quads[]).  The base no-op is correct for the
+     *  software renderer — it never uses IR.
+     *
+     *  @param cmds  Read-side UICommandBuffers (const — render thread never writes).
+     *  @param fs    FrameState snapshot for palette lookup. */
+    virtual void PopulateFromIR(const UICommandBuffers& /*cmds*/, const FrameState& /*fs*/) {}
 
 protected:
     /** Sprite handle → raw TbSprite* map, used by CPU default implementations. */

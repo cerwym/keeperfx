@@ -97,6 +97,21 @@ public:
      *  GPU backends should flush their per-level sprite cache here.
      *  Default: no-op. */
     virtual void ClearKeeperSpriteAtlas() {}
+
+    // ── IR (Intermediate Representation) dispatch ──────────────────────────────
+
+    /** Execute GPU world rendering from the read-side IR command buffer.
+     *
+     *  Called from RendererOpenGL::EndFrame_GL() inside the lens-FBO bracket
+     *  (not from RenderGraph::Execute()) because the output FBO must be bound
+     *  before the world is drawn and unbound afterwards for post-processing.
+     *
+     *  GPU backends override this to submit world geometry to the GPU.
+     *  The base no-op is correct for software renderers.
+     *
+     *  Forward-declared WorldCommandBuffers so IWorldViewRenderer.h does not
+     *  pull in the full WorldCommands.h include chain. */
+    virtual void ExecuteFromIR(const struct WorldCommandBuffers& /*cmds*/) {}
 };
 
 /******************************************************************************/

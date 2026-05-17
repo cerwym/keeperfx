@@ -1269,6 +1269,11 @@ void GLUIRenderer::ExecuteUIFromIR(const UICommandBuffers& cmds, const FrameStat
     }
 }
 
+void GLUIRenderer::PopulateFromIR(const UICommandBuffers& cmds, const FrameState& fs)
+{
+    ExecuteUIFromIR(cmds, fs);
+}
+
 // Helper: compile one shader stage. Returns 0 on failure (error already logged).
 static GLuint CompileStage(GLenum type, const char* src, const char* label)
 {

@@ -220,6 +220,10 @@ public:
      *  No-op when cmds.ir_active is false (stale-replay / fade-cache frame). */
     void ExecuteUIFromIR(const UICommandBuffers& cmds, const FrameState& fs);
 
+    /** IUIRenderer override: delegates to ExecuteUIFromIR().
+     *  Called by RenderGraph::Execute() on the render thread. */
+    void PopulateFromIR(const UICommandBuffers& cmds, const FrameState& fs) override;
+
 private:
     // GPU shader programs — one per rendering domain to isolate texture unit bindings.
     GLuint m_prog_sprite;          // palette-indexed atlas sprites (unit 0 = atlas R8, unit 1 = palette 1D)
