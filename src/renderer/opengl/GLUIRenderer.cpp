@@ -266,7 +266,14 @@ static int IRUILayerToIndex(IRUILayer layer)
 
 void GLUIRenderer::SubmitPanelSprite(int32_t x, int32_t y, int units_per_px, SpriteHandle spr, bool flip_horiz)
 {
-    if (spr == kInvalidSpriteHandle || !m_sprite_atlas) return;
+    if (spr == kInvalidSpriteHandle) {
+        static int s_inv = 0; if (s_inv++ < 10) WARNLOG("SubmitPanelSprite: kInvalidSpriteHandle at (%d,%d)", x, y);
+        return;
+    }
+    if (!m_sprite_atlas) {
+        static int s_atl = 0; if (s_atl++ < 5) ERRORLOG("SubmitPanelSprite: no sprite atlas");
+        return;
+    }
     if (m_ui_write_cmds) {
         IRUISpriteCmd cmd;
         cmd.layer        = ComputeIRLayer(m_current_layer, m_world_depth_active, m_top_overlay_active);
@@ -276,12 +283,15 @@ void GLUIRenderer::SubmitPanelSprite(int32_t x, int32_t y, int units_per_px, Spr
         cmd.sprite       = spr;
         cmd.flags        = flip_horiz ? kIRSpriteFlipHoriz : 0u;
         cmd.alpha        = UIAlphaFromDrawFlags();
+        cmd.ndc_z        = m_world_depth_active ? m_world_z : 0.5f;
         m_ui_write_cmds->sprites.Append(cmd);
         return;
     }
     SpriteUV uv;
-    if (!m_sprite_atlas->GetUV(spr, uv)) return;
-    // Reproduce the LbSpriteDrawResized rounding: (w * upp + 8) / 16
+    if (!m_sprite_atlas->GetUV(spr, uv)) {
+        static int s_uv = 0; if (s_uv++ < 20) WARNLOG("SubmitPanelSprite: sprite handle %u not in atlas at (%d,%d)", spr, x, y);
+        return;
+    }
     float w = (float)((uv.pixel_w * units_per_px + 8) / 16);
     float h = (float)((uv.pixel_h * units_per_px + 8) / 16);
     float u0 = flip_horiz ? uv.u1 : uv.u0;
@@ -295,9 +305,14 @@ void GLUIRenderer::SubmitPanelSprite(int32_t x, int32_t y, int units_per_px, Spr
 void GLUIRenderer::SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px,
                                           SpriteHandle spr, int remap_row)
 {
-    if (spr == kInvalidSpriteHandle || !m_sprite_atlas || !m_fade_texture) {
-        // Fallback: no fade texture or atlas — let base class handle it via CPU path
-        IUIRenderer::SubmitPanelSpriteRemap(x, y, units_per_px, spr, remap_row);
+    if (spr == kInvalidSpriteHandle) {
+        static int s_inv = 0; if (s_inv++ < 10) WARNLOG("SubmitPanelSpriteRemap: kInvalidSpriteHandle at (%d,%d)", x, y);
+        return;
+    }
+    if (!m_sprite_atlas || !m_fade_texture) {
+        static int s_res = 0; if (s_res++ < 5)
+            ERRORLOG("SubmitPanelSpriteRemap: GL resources not ready (atlas=%p, fade_tex=%u) — NOT falling back to CPU",
+                     (void*)m_sprite_atlas, m_fade_texture);
         return;
     }
     if (m_ui_write_cmds) {
@@ -309,11 +324,15 @@ void GLUIRenderer::SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px
         cmd.sprite       = spr;
         cmd.remap_row    = remap_row;
         cmd.alpha        = UIAlphaFromDrawFlags();
+        cmd.ndc_z        = m_world_depth_active ? m_world_z : 0.5f;
         m_ui_write_cmds->sprites_remap.Append(cmd);
         return;
     }
     SpriteUV uv;
-    if (!m_sprite_atlas->GetUV(spr, uv)) return;
+    if (!m_sprite_atlas->GetUV(spr, uv)) {
+        static int s_uv = 0; if (s_uv++ < 20) WARNLOG("SubmitPanelSpriteRemap: sprite handle %u not in atlas at (%d,%d)", spr, x, y);
+        return;
+    }
     float w = (float)((uv.pixel_w * units_per_px + 8) / 16);
     float h = (float)((uv.pixel_h * units_per_px + 8) / 16);
     UIQuad q;
@@ -335,7 +354,15 @@ void GLUIRenderer::SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px
 void GLUIRenderer::SubmitPanelSpriteColored(int32_t x, int32_t y, int units_per_px,
                                             SpriteHandle spr, uint8_t color_idx)
 {
-    if (spr == kInvalidSpriteHandle || !m_sprite_atlas || !m_palette_data) return;
+    if (spr == kInvalidSpriteHandle) {
+        static int s_inv = 0; if (s_inv++ < 10) WARNLOG("SubmitPanelSpriteColored: kInvalidSpriteHandle at (%d,%d)", x, y);
+        return;
+    }
+    if (!m_sprite_atlas || !m_palette_data) {
+        static int s_res = 0; if (s_res++ < 5)
+            ERRORLOG("SubmitPanelSpriteColored: GL resources not ready (atlas=%p, palette=%p)", (void*)m_sprite_atlas, (void*)m_palette_data);
+        return;
+    }
     if (m_ui_write_cmds) {
         IRUISpriteColoredCmd cmd;
         cmd.layer        = ComputeIRLayer(m_current_layer, m_world_depth_active, m_top_overlay_active);
@@ -345,11 +372,15 @@ void GLUIRenderer::SubmitPanelSpriteColored(int32_t x, int32_t y, int units_per_
         cmd.sprite       = spr;
         cmd.colour_idx   = color_idx;
         cmd.alpha        = UIAlphaFromDrawFlags();
+        cmd.ndc_z        = m_world_depth_active ? m_world_z : 0.5f;
         m_ui_write_cmds->sprites_colored.Append(cmd);
         return;
     }
     SpriteUV uv;
-    if (!m_sprite_atlas->GetUV(spr, uv)) return;
+    if (!m_sprite_atlas->GetUV(spr, uv)) {
+        static int s_uv = 0; if (s_uv++ < 20) WARNLOG("SubmitPanelSpriteColored: sprite handle %u not in atlas at (%d,%d)", spr, x, y);
+        return;
+    }
     float w = (float)((uv.pixel_w * units_per_px + 8) / 16);
     float h = (float)((uv.pixel_h * units_per_px + 8) / 16);
     float r = m_palette_data[color_idx * 3 + 0] / VGA6_MAX;
@@ -363,7 +394,14 @@ void GLUIRenderer::SubmitPanelSpriteColored(int32_t x, int32_t y, int units_per_
 
 void GLUIRenderer::SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h, SpriteHandle spr)
 {
-    if (spr == kInvalidSpriteHandle || !m_sprite_atlas) return;
+    if (spr == kInvalidSpriteHandle) {
+        static int s_inv = 0; if (s_inv++ < 10) WARNLOG("SubmitScaledSprite: kInvalidSpriteHandle at (%d,%d)", x, y);
+        return;
+    }
+    if (!m_sprite_atlas) {
+        static int s_atl = 0; if (s_atl++ < 5) ERRORLOG("SubmitScaledSprite: no sprite atlas");
+        return;
+    }
     if (m_ui_write_cmds) {
         IRUISpriteCmd cmd;
         cmd.layer        = ComputeIRLayer(m_current_layer, m_world_depth_active, m_top_overlay_active);
@@ -375,11 +413,15 @@ void GLUIRenderer::SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h
         cmd.sprite       = spr;
         cmd.flags        = kIRSpriteScaled;
         cmd.alpha        = UIAlphaFromDrawFlags();
+        cmd.ndc_z        = m_world_depth_active ? m_world_z : 0.5f;
         m_ui_write_cmds->sprites.Append(cmd);
         return;
     }
     SpriteUV uv;
-    if (!m_sprite_atlas->GetUV(spr, uv)) return;
+    if (!m_sprite_atlas->GetUV(spr, uv)) {
+        static int s_uv = 0; if (s_uv++ < 20) WARNLOG("SubmitScaledSprite: sprite handle %u not in atlas at (%d,%d)", spr, x, y);
+        return;
+    }
     SubmitQuad((float)x, (float)y, (float)w, (float)h,
                uv.u0, uv.v0, uv.u1, uv.v1,
                1.0f, 1.0f, 1.0f, UIAlphaFromDrawFlags(), 0.5f, 0.0f);
@@ -387,7 +429,10 @@ void GLUIRenderer::SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h
 
 void GLUIRenderer::SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx)
 {
-    if (!m_palette_data) return;
+    if (!m_palette_data) {
+        static int s_pal = 0; if (s_pal++ < 5) ERRORLOG("SubmitSolidBox: no palette data");
+        return;
+    }
     if (m_ui_write_cmds) {
         IRUISolidBoxCmd cmd;
         cmd.layer      = ComputeIRLayer(m_current_layer, m_world_depth_active, m_top_overlay_active);
@@ -410,7 +455,10 @@ void GLUIRenderer::SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, ui
 
 void GLUIRenderer::SubmitSolidBoxAlpha(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx, float alpha)
 {
-    if (!m_palette_data) return;
+    if (!m_palette_data) {
+        static int s_pal = 0; if (s_pal++ < 5) ERRORLOG("SubmitSolidBoxAlpha: no palette data");
+        return;
+    }
     if (m_ui_write_cmds) {
         IRUISolidBoxCmd cmd;
         cmd.layer      = ComputeIRLayer(m_current_layer, m_world_depth_active, m_top_overlay_active);
@@ -590,7 +638,10 @@ void GLUIRenderer::DrawBack()
     // Render only layer-0 (back) quads — the sidebar background panels that must land
     // beneath the CPU staging-buffer blit.  No hand sprites, minimap, or lines here.
     if (m_rt_quads[0].empty())
+    {
+        glDisable(GL_BLEND);  // world pass may have left blend enabled; ensure clean state
         return;
+    }
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -764,6 +815,8 @@ void GLUIRenderer::DrawFront()
         glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(verts), verts);
         glDrawArrays(GL_TRIANGLES, 0, 6);
         glBindVertexArray(0);
+        // Restore active unit: palette bind above may have left it on GL_TEXTURE1.
+        glActiveTexture(GL_TEXTURE0);
     }
 
     // Flush slab-selector lines and other line geometry (front layer).
@@ -900,15 +953,21 @@ void GLUIRenderer::DrawFrontBase()
         glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(verts), verts);
         glDrawArrays(GL_TRIANGLES, 0, 6);
         glBindVertexArray(0);
+        // Restore active unit: palette bind above may have left it on GL_TEXTURE1.
+        glActiveTexture(GL_TEXTURE0);
     }
 
     FlushLines_RT(1);
+    glDisable(GL_BLEND);  // DrawFrontOverlay may not always follow; close blend explicitly
 }
 
 void GLUIRenderer::DrawFrontOverlay()
 {
     KFX_ZONE("UIRenderer::DrawFrontOverlay");
     KFX_GL_SCOPE(front_ovl_grp, "UIPass/FrontOverlay");
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     {
         if (!m_rt_quads[2].empty() || !m_rt_lines[2].empty())
@@ -1061,9 +1120,19 @@ void GLUIRenderer::SubmitCursorPanelSprite(int32_t x, int32_t y, int units_per_p
     // Render-thread-only path: pushes to m_cursor_quads instead of m_quads[layer].
     // Called exclusively from GLCursorLayer::Draw() on the render thread so the
     // game thread never touches m_cursor_quads.
-    if (spr == kInvalidSpriteHandle || !m_sprite_atlas) return;
+    if (spr == kInvalidSpriteHandle) {
+        static int s_inv = 0; if (s_inv++ < 10) WARNLOG("SubmitCursorPanelSprite: kInvalidSpriteHandle at (%d,%d)", x, y);
+        return;
+    }
+    if (!m_sprite_atlas) {
+        static int s_atl = 0; if (s_atl++ < 5) ERRORLOG("SubmitCursorPanelSprite: no sprite atlas");
+        return;
+    }
     SpriteUV uv;
-    if (!m_sprite_atlas->GetUV(spr, uv)) return;
+    if (!m_sprite_atlas->GetUV(spr, uv)) {
+        static int s_uv = 0; if (s_uv++ < 20) WARNLOG("SubmitCursorPanelSprite: sprite handle %u not in atlas at (%d,%d)", spr, x, y);
+        return;
+    }
     float w = (float)((uv.pixel_w * units_per_px + 8) / 16);
     float h = (float)((uv.pixel_h * units_per_px + 8) / 16);
     UIQuad q;
@@ -1229,7 +1298,7 @@ void GLUIRenderer::ExecuteUIFromIR(const UICommandBuffers& cmds, const FrameStat
             q.x1=(float)cmd.x+w; q.y1=(float)cmd.y+h;
             q.u0=u0; q.v0=uv.v0; q.u1=u1; q.v1=uv.v1;
             q.r=1.0f; q.g=1.0f; q.b=1.0f; q.a=cmd.alpha;
-            q.z=0.5f; q.mode=0.0f; q.texture_id=0; q.remap_row=-1;
+            q.z=cmd.ndc_z; q.mode=0.0f; q.texture_id=0; q.remap_row=-1;
             m_rt_quads[idx].push_back(q);
         }
 
@@ -1246,7 +1315,7 @@ void GLUIRenderer::ExecuteUIFromIR(const UICommandBuffers& cmds, const FrameStat
                 q.x1=(float)cmd.x+w; q.y1=(float)cmd.y+h;
                 q.u0=uv.u0; q.v0=uv.v0; q.u1=uv.u1; q.v1=uv.v1;
                 q.r=1.0f; q.g=1.0f; q.b=1.0f; q.a=cmd.alpha;
-                q.z=0.5f; q.mode=30.0f; q.texture_id=0; q.remap_row=cmd.remap_row;
+                q.z=cmd.ndc_z; q.mode=30.0f; q.texture_id=0; q.remap_row=cmd.remap_row;
                 m_rt_quads[idx].push_back(q);
             }
         }
@@ -1266,7 +1335,7 @@ void GLUIRenderer::ExecuteUIFromIR(const UICommandBuffers& cmds, const FrameStat
             q.x1=(float)cmd.x+w; q.y1=(float)cmd.y+h;
             q.u0=uv.u0; q.v0=uv.v0; q.u1=uv.u1; q.v1=uv.v1;
             q.r=r; q.g=g; q.b=b; q.a=cmd.alpha;
-            q.z=0.5f; q.mode=20.0f; q.texture_id=0; q.remap_row=-1;
+            q.z=cmd.ndc_z; q.mode=20.0f; q.texture_id=0; q.remap_row=-1;
             m_rt_quads[idx].push_back(q);
         }
     }
@@ -1629,6 +1698,16 @@ void GLUIRenderer::flush_quads_from(std::vector<UIQuad>& quads)
     }
 
     flush_batch(current_pass);
+
+    // Restore texture-unit state to a known baseline.
+    // PASS_REMAP binds m_fade_texture on unit 2; PASS_SPRITE/SLAB/REMAP bind
+    // m_palette_texture on unit 1.  Leave all units unbound and unit 0 active
+    // so the caller's texture state is not corrupted.
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE0);
 
     glBindVertexArray(0);
     quads.clear();

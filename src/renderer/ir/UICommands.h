@@ -81,6 +81,7 @@ struct IRUISpriteCmd
     SpriteHandle sprite        = kInvalidSpriteHandle;
     uint32_t     flags         = 0;   /**< kIRSpriteFlipHoriz | kIRSpriteScaled */
     float        alpha         = 1.0f; /**< 1.0 = opaque; 0.333 = ghost transparent. */
+    float        ndc_z         = 0.5f; /**< NDC depth for WorldDepth layer; ignored for other layers. */
 };
 
 /** Draw a palette-remap sprite (player colour recolour). */
@@ -93,6 +94,7 @@ struct IRUISpriteRemapCmd
     SpriteHandle sprite       = kInvalidSpriteHandle;
     int32_t      remap_row    = 0;   /**< Row into fade_tables[]. */
     float        alpha        = 1.0f;
+    float        ndc_z        = 0.5f; /**< NDC depth for WorldDepth layer; ignored for other layers. */
 };
 
 /** Draw a single-colour tinted sprite. */
@@ -105,6 +107,7 @@ struct IRUISpriteColoredCmd
     SpriteHandle sprite       = kInvalidSpriteHandle;
     uint8_t      colour_idx   = 0;   /**< Palette index for flat output. */
     float        alpha        = 1.0f;
+    float        ndc_z        = 0.5f; /**< NDC depth for WorldDepth layer; ignored for other layers. */
 };
 
 /******************************************************************************/
