@@ -60,7 +60,6 @@ public:
     void     UnlockFramebuffer() override;
     const char* GetName() const override;
     bool     SupportsRuntimeSwitch() const override;
-    bool     SupportsGPUPasses() const override { return true; }
 
     BackendCapabilities GetCapabilities() const override {
         BackendCapabilities c = {};
@@ -191,6 +190,8 @@ private:
     unsigned int m_shader       = 0;
     unsigned int m_tintProg     = 0;  // fullscreen screen-tint overlay shader
     unsigned int m_texIndex     = 0; // GL_R8 screenW×screenH: transparent overlay texture
+    int          m_texIndex_w   = 0; // current allocated width  (0 = not yet allocated)
+    int          m_texIndex_h   = 0; // current allocated height
     unsigned int m_texPalette   = 0; // RGBA8 256×1 GL_TEXTURE_2D palette
     uint8_t      m_last_palette[768] = {}; // snapshot for dirty-flag upload
     int          m_uTintFactor  = -1; // uniform location for u_tint_factor

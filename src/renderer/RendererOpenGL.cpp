@@ -136,6 +136,8 @@ bool RendererOpenGL::Init()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, m_screenW, m_screenH, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
+    m_texIndex_w = m_screenW;
+    m_texIndex_h = m_screenH;
 
     // Palette texture (256×1 RGBA8 — shared across all subsystems)
     glGenTextures(1, &m_texPalette);
@@ -1334,8 +1336,20 @@ void RendererOpenGL::EndFrame_GL()
         if (!m_rt_transparent_blit_buf.empty())
         {
             glBindTexture(GL_TEXTURE_2D, m_texIndex);
-            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_rt_frame_state.screen_w, m_rt_frame_state.screen_h,
-                            GL_RED, GL_UNSIGNED_BYTE, m_rt_transparent_blit_buf.data());
+            const int tbw = m_rt_frame_state.screen_w;
+            const int tbh = m_rt_frame_state.screen_h;
+            if (tbw != m_texIndex_w || tbh != m_texIndex_h)
+            {
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, tbw, tbh, 0, GL_RED, GL_UNSIGNED_BYTE,
+                             m_rt_transparent_blit_buf.data());
+                m_texIndex_w = tbw;
+                m_texIndex_h = tbh;
+            }
+            else
+            {
+                glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, tbw, tbh,
+                                GL_RED, GL_UNSIGNED_BYTE, m_rt_transparent_blit_buf.data());
+            }
             glBindTexture(GL_TEXTURE_2D, 0);
             m_rt_transparent_blit_buf.clear();
         }
@@ -2279,8 +2293,20 @@ void RendererOpenGL::FlushSceneToFBO(int w, int h)
         if (!m_rt_transparent_blit_buf.empty())
         {
             glBindTexture(GL_TEXTURE_2D, m_texIndex);
-            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_rt_frame_state.screen_w, m_rt_frame_state.screen_h,
-                            GL_RED, GL_UNSIGNED_BYTE, m_rt_transparent_blit_buf.data());
+            const int tbw = m_rt_frame_state.screen_w;
+            const int tbh = m_rt_frame_state.screen_h;
+            if (tbw != m_texIndex_w || tbh != m_texIndex_h)
+            {
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, tbw, tbh, 0, GL_RED, GL_UNSIGNED_BYTE,
+                             m_rt_transparent_blit_buf.data());
+                m_texIndex_w = tbw;
+                m_texIndex_h = tbh;
+            }
+            else
+            {
+                glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, tbw, tbh,
+                                GL_RED, GL_UNSIGNED_BYTE, m_rt_transparent_blit_buf.data());
+            }
             glBindTexture(GL_TEXTURE_2D, 0);
             m_rt_transparent_blit_buf.clear();
         }

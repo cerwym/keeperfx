@@ -538,6 +538,10 @@ uint8_t* GLUIRenderer::AcquireMinimapBuffer(int size)
 
 void GLUIRenderer::SubmitMinimap(int screen_x, int screen_y, int size)
 {
+    // Mark that the minimap draw path was exercised this frame, even if the data
+    // is not yet valid.  This lets the render thread distinguish "temporarily
+    // invalid data" from "draw path was never entered" (e.g. parchment map open).
+    m_minimap_submitted = true;
     if (size <= 0 || !m_minimap_cpu_buf) return;
     // GL texture creation and upload are deferred to DrawFrontBase() which runs
     // on the render thread — the GL context owner after the Phase-3A handoff.
@@ -568,11 +572,13 @@ void GLUIRenderer::FlipBuffers()
     // independently — no aliasing under Phase 3C async execution.
     std::swap(m_minimap_cpu_buf,  m_rt_minimap_cpu_buf);
     std::swap(m_minimap_cpu_size, m_rt_minimap_cpu_size);
-    m_rt_minimap_x       = m_minimap_x;
-    m_rt_minimap_y       = m_minimap_y;
-    m_rt_minimap_size    = m_minimap_size;
-    m_rt_minimap_pending = m_minimap_pending;
-    m_minimap_pending    = false;
+    m_rt_minimap_x         = m_minimap_x;
+    m_rt_minimap_y         = m_minimap_y;
+    m_rt_minimap_size      = m_minimap_size;
+    m_rt_minimap_pending   = m_minimap_pending;
+    m_rt_minimap_submitted = m_minimap_submitted;
+    m_minimap_pending      = false;
+    m_minimap_submitted    = false;
 }
 
 void GLUIRenderer::DrawBack()
@@ -663,7 +669,8 @@ void GLUIRenderer::DrawFront()
 
     if (m_rt_quads[0].empty() && m_rt_quads[1].empty() && m_rt_quads[2].empty() && m_rt_quads[3].empty()
         && m_rt_lines[0].empty() && m_rt_lines[1].empty() && m_rt_lines[2].empty() && m_rt_lines[3].empty()
-        && !m_rt_minimap_pending && m_fbo_quads.empty())
+        && !m_rt_minimap_pending && !(m_rt_minimap_submitted && m_minimap_texture != 0 && m_rt_minimap_size > 0)
+        && m_fbo_quads.empty())
         return;
 
     // Guarantee full-screen viewport.  The PiP path leaves the viewport at
@@ -693,33 +700,42 @@ void GLUIRenderer::DrawFront()
 
     // Minimap: palette-indexed R8 texture — front layer.
     // SubmitMinimap() defers all GL work here (render thread owns GL context).
-    if (m_rt_minimap_pending)
+    // When m_rt_minimap_pending is true, upload fresh pixels then draw.
+    // When it is false but a texture already exists, redraw with the cached
+    // texture to prevent flickering on frames where pixel submission was skipped.
+    // m_rt_minimap_submitted gates all of this: if SubmitMinimap() was not called
+    // this frame the minimap draw path was not active (e.g. parchment map open).
+    if (m_rt_minimap_submitted && (m_rt_minimap_pending || (m_minimap_texture != 0 && m_rt_minimap_size > 0)))
     {
-        int mm_size = m_rt_minimap_size;
-        if (mm_size != m_minimap_tex_size)
+        if (m_rt_minimap_pending)
         {
-            if (m_minimap_texture)
-                glDeleteTextures(1, &m_minimap_texture);
-            glGenTextures(1, &m_minimap_texture);
-            glBindTexture(GL_TEXTURE_2D, m_minimap_texture);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, mm_size, mm_size, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
-            m_minimap_tex_size = mm_size;
+            int mm_size = m_rt_minimap_size;
+            if (mm_size != m_minimap_tex_size)
+            {
+                if (m_minimap_texture)
+                    glDeleteTextures(1, &m_minimap_texture);
+                glGenTextures(1, &m_minimap_texture);
+                glBindTexture(GL_TEXTURE_2D, m_minimap_texture);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, mm_size, mm_size, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
+                m_minimap_tex_size = mm_size;
+            }
+            else
+            {
+                glBindTexture(GL_TEXTURE_2D, m_minimap_texture);
+            }
+            if (m_rt_minimap_cpu_buf)
+            {
+                glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+                glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, mm_size, mm_size, GL_RED, GL_UNSIGNED_BYTE, m_rt_minimap_cpu_buf);
+                glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+            }
+            glBindTexture(GL_TEXTURE_2D, 0);
+            m_rt_minimap_pending = false;
         }
-        else
-        {
-            glBindTexture(GL_TEXTURE_2D, m_minimap_texture);
-        }
-        if (m_rt_minimap_cpu_buf)
-        {
-            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, mm_size, mm_size, GL_RED, GL_UNSIGNED_BYTE, m_rt_minimap_cpu_buf);
-            glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-        }
-        glBindTexture(GL_TEXTURE_2D, 0);
 
         float mx = (float)m_rt_minimap_x;
         float my = (float)m_rt_minimap_y;
@@ -748,7 +764,6 @@ void GLUIRenderer::DrawFront()
         glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(verts), verts);
         glDrawArrays(GL_TRIANGLES, 0, 6);
         glBindVertexArray(0);
-        m_rt_minimap_pending = false;
     }
 
     // Flush slab-selector lines and other line geometry (front layer).
@@ -821,33 +836,42 @@ void GLUIRenderer::DrawFrontBase()
     FlushQuads_RT(1);
 
     // SubmitMinimap() defers all GL work here (render thread owns GL context).
-    if (m_rt_minimap_pending)
+    // When m_rt_minimap_pending is true, upload fresh pixels then draw.
+    // When it is false but a texture already exists, redraw with the cached
+    // texture to prevent flickering on frames where pixel submission was skipped.
+    // m_rt_minimap_submitted gates all of this: if SubmitMinimap() was not called
+    // this frame the minimap draw path was not active (e.g. parchment map open).
+    if (m_rt_minimap_submitted && (m_rt_minimap_pending || (m_minimap_texture != 0 && m_rt_minimap_size > 0)))
     {
-        int mm_size = m_rt_minimap_size;
-        if (mm_size != m_minimap_tex_size)
+        if (m_rt_minimap_pending)
         {
-            if (m_minimap_texture)
-                glDeleteTextures(1, &m_minimap_texture);
-            glGenTextures(1, &m_minimap_texture);
-            glBindTexture(GL_TEXTURE_2D, m_minimap_texture);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, mm_size, mm_size, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
-            m_minimap_tex_size = mm_size;
+            int mm_size = m_rt_minimap_size;
+            if (mm_size != m_minimap_tex_size)
+            {
+                if (m_minimap_texture)
+                    glDeleteTextures(1, &m_minimap_texture);
+                glGenTextures(1, &m_minimap_texture);
+                glBindTexture(GL_TEXTURE_2D, m_minimap_texture);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, mm_size, mm_size, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
+                m_minimap_tex_size = mm_size;
+            }
+            else
+            {
+                glBindTexture(GL_TEXTURE_2D, m_minimap_texture);
+            }
+            if (m_rt_minimap_cpu_buf)
+            {
+                glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+                glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, mm_size, mm_size, GL_RED, GL_UNSIGNED_BYTE, m_rt_minimap_cpu_buf);
+                glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+            }
+            glBindTexture(GL_TEXTURE_2D, 0);
+            m_rt_minimap_pending = false;
         }
-        else
-        {
-            glBindTexture(GL_TEXTURE_2D, m_minimap_texture);
-        }
-        if (m_rt_minimap_cpu_buf)
-        {
-            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, mm_size, mm_size, GL_RED, GL_UNSIGNED_BYTE, m_rt_minimap_cpu_buf);
-            glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-        }
-        glBindTexture(GL_TEXTURE_2D, 0);
 
         float mx = (float)m_rt_minimap_x;
         float my = (float)m_rt_minimap_y;
@@ -876,7 +900,6 @@ void GLUIRenderer::DrawFrontBase()
         glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(verts), verts);
         glDrawArrays(GL_TRIANGLES, 0, 6);
         glBindVertexArray(0);
-        m_rt_minimap_pending = false;
     }
 
     FlushLines_RT(1);

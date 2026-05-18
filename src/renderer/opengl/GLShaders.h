@@ -576,20 +576,6 @@ void main()
 }
 )glsl";
 
-// Palette lens: colour shift via channel manipulation.
-constexpr const char* LENS_PALETTE_FRAGMENT_SHADER = R"glsl(
-#version 330 core
-in  vec2 v_uv;
-out vec4 fragColor;
-uniform sampler2D u_texture;
-uniform vec3 u_color_shift;   // per-channel multiplier
-void main()
-{
-    vec4 scene = texture(u_texture, v_uv);
-    fragColor = vec4(scene.rgb * u_color_shift, scene.a);
-}
-)glsl";
-
 // Overlay lens: composites an overlay texture with alpha blending.
 constexpr const char* LENS_OVERLAY_FRAGMENT_SHADER = R"glsl(
 #version 330 core

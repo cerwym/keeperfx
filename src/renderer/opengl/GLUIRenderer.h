@@ -301,6 +301,11 @@ private:
     int      m_minimap_y;
     int      m_minimap_size;
     bool     m_minimap_pending;
+    // True if SubmitMinimap() was called at least once this frame (even if size=0
+    // or buffer unavailable).  Cleared by FlipBuffers().  Allows the render thread
+    // to distinguish "minimap intentionally submitted but temporarily invalid" from
+    // "minimap draw path was not executed at all" (e.g. parchment map open).
+    bool     m_minimap_submitted   = false;
 
     // Phase 3C render-thread shadow copies of minimap state.
     // FlipBuffers() swaps the CPU buffer pointers and copies metadata so the
@@ -312,6 +317,7 @@ private:
     int      m_rt_minimap_y        = 0;
     int      m_rt_minimap_size     = 0;
     bool     m_rt_minimap_pending  = false;
+    bool     m_rt_minimap_submitted = false;
     
     // Current render layer: 0=back (before staging blit), 1=front (after staging blit),
     // 2=world-depth (after GPUFlushNow, depth test ON against tile depth buffer).
