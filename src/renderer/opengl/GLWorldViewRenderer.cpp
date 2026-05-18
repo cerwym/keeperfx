@@ -1320,8 +1320,8 @@ void GLWorldViewRenderer::setup_world_sprite_processing(int32_t bucket_num)
     //  biased half a bucket closer to the camera, so sprites always pass the depth test against same-bucket ground polygons
     // (avoids z-fighting between coplanar sprites and tiles).
     const float sprite_z = 2.0f * ((float)bucket_num - 0.5f) / (float)(BUCKETS_COUNT - 1) - 1.0f;
-    // Depth is set via UIRenderer_BeginWorldDepth() before draw_3d_sprites_for_bucket().
-    // Store here so keeper-sprite (KSprite) passes can sample the same z value.
+    // Stored here so that keeper-sprite (KSprite) render passes and UIRenderer
+    // (JontySprites) both receive the same biased z via UIRenderer_BeginWorldDepth().
     m_current_sprite_z = sprite_z;
 }
 
