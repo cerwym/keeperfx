@@ -439,16 +439,6 @@ TbResult LbScreenInitialize(void)
         LbRegisterStandardVideoModes();
         LbRegisterModernVideoModes(); // register modern and flexible custom modes
     }
-    // SDL_Init(VIDEO|JOYSTICK) was already called by VideoInit() on all platforms.
-    // On platforms that own the display (Vita: vitaGL/GXM), skip SDL video init
-    // entirely; on others (desktop, 3DS, Switch) it is performed here.
-    if (!PlatformManager_OwnsDisplay()) {
-        if (SDL_Init(SDL_INIT_VIDEO|SDL_INIT_JOYSTICK) < 0) {
-            ERRORLOG("SDL init: %s",SDL_GetError());
-            return Lb_FAIL;
-        }
-        atexit(SDL_Quit);
-    }
     return Lb_SUCCESS;
 }
 
