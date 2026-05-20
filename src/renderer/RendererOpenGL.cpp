@@ -459,6 +459,18 @@ bool RendererOpenGL::Init()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glBindTexture(GL_TEXTURE_2D, 0);
 
+    // 1×1 black R8 fallback — bound to sampler units that lack a real texture,
+    // ensuring all samplers reference a complete texture object at all times.
+    {
+        glGenTextures(1, &m_tex_null);
+        glBindTexture(GL_TEXTURE_2D, m_tex_null);
+        const uint8_t null_px = 0;
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, 1, 1, 0, GL_RED, GL_UNSIGNED_BYTE, &null_px);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+
     // Sprite atlas for UI panel sprites (gui_panel_sprites, button_sprites).
     // Sheets are added in create_ui_renderer() after this returns.
     m_sprite_atlas = new GLSpriteAtlas();
@@ -534,6 +546,7 @@ void RendererOpenGL::Shutdown()
     if (m_texIndex)   { glDeleteTextures(1, &m_texIndex);   m_texIndex = 0; }
     if (m_texPalette) { glDeleteTextures(1, &m_texPalette); m_texPalette = 0; }
     if (m_texFade)    { glDeleteTextures(1, &m_texFade);    m_texFade = 0; }
+    if (m_tex_null)   { glDeleteTextures(1, &m_tex_null);   m_tex_null = 0; }
     if (m_rawblit_shader)       { glDeleteProgram(m_rawblit_shader);            m_rawblit_shader = 0; }
     if (m_overhead_map_shader)  { glDeleteProgram(m_overhead_map_shader);       m_overhead_map_shader = 0; }
     if (m_zoom_tile_shader)     { glDeleteProgram(m_zoom_tile_shader);          m_zoom_tile_shader = 0; }
@@ -719,6 +732,8 @@ void RendererOpenGL::EndFrame()
     m_rt_overhead_map_cmds   = std::move(m_overhead_map_cmds);
     m_rt_rawblit_pending     = m_rawblit_pending;
     m_rt_rawblit_cmd         = m_rawblit_cmd;
+    m_rt_rawblit_cached      = m_rawblit_cached.load(std::memory_order_relaxed);
+    m_rt_rawblit_cached_cmd  = m_rawblit_cached_cmd;
     m_rawblit_pending        = false;
     m_rt_clearColourIndex    = m_clearColourIndex;
     m_clearColourIndex       = 0;
@@ -785,9 +800,12 @@ void RendererOpenGL::EndFrame()
                 wui.cursor_pointers.Size(), wui.cursor_hands.Size());
     }
 
+    const bool has_ui_commands    = m_render_graph.GetWriteUIBuffers().HasAnyCommands();
+    const bool has_world_commands = m_world_renderer && m_world_renderer->HasPendingCommands();
+    const bool has_map_fade_cmd   = m_render_graph.HasWriteMapFadeCmd();
+
     if (RendererIsFadeCachePreserved() ||
-        (!m_render_graph.GetWriteUIBuffers().HasAnyCommands() &&
-         !m_render_graph.HasWriteMapFadeCmd()))
+        (!has_ui_commands && !has_world_commands && !has_map_fade_cmd))
     {
         // Palette-fade loop OR a spurious second present with no UI submissions
         // and no map-fade transition: preserve the render thread's read-side IR
@@ -1021,8 +1039,8 @@ void RendererOpenGL::EndFrame_GL()
     // Re-issue the last frontend rawblit with the freshly-uploaded (darkened) palette
     // so the fade is visible in GPU mode.  Only kicks in when nothing new was queued
     // AND the fade-cache preserve flag is active (set by ProperFadePalette).
-    if (!m_rt_rawblit_pending && m_rawblit_cached && RendererIsFadeCachePreserved())
-        m_rt_rawblit_pending = true, m_rt_rawblit_cmd = m_rawblit_cached_cmd;
+    if (!m_rt_rawblit_pending && m_rt_rawblit_cached && RendererIsFadeCachePreserved())
+        m_rt_rawblit_pending = true, m_rt_rawblit_cmd = m_rt_rawblit_cached_cmd;
 
     if (m_rt_rawblit_pending)
     {
@@ -1131,11 +1149,11 @@ void RendererOpenGL::EndFrame_GL()
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, m_texPalette);
 
-        // Unit 2: fade/ghost table
-        if (m_texFade) {
-            glActiveTexture(GL_TEXTURE2);
-            glBindTexture(GL_TEXTURE_2D, m_texFade);
-        }
+        // Unit 2: fade/ghost table — always bind a valid texture; fall back to
+        // m_tex_null (1×1 zero) if the fade table is not yet loaded so the ghost
+        // sampler never reads from an incomplete texture unit.
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, m_texFade ? m_texFade : m_tex_null);
 
         // Unit 3: parchment background (reuse rawblit tex — contains the last
         // uploaded parchment image which is still valid on the GPU)

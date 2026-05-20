@@ -208,6 +208,7 @@ private:
 
     // Shared GPU resources (owned here, injected into world renderer)
     unsigned int m_texFade      = 0; // R8 256×256: render_fade_tables lighting LUT
+    unsigned int m_tex_null     = 0; // 1×1 R8 zero — bound to sampler units lacking a real texture
     GLTileAtlas* m_tile_atlas   = nullptr;
     GLSpriteAtlas* m_sprite_atlas = nullptr;  // UI sprite atlas
     GLFontAtlas* m_font_atlas   = nullptr;    // UI font atlas
@@ -236,6 +237,8 @@ private:
     // Atomic to prevent data-race UB — no memory ordering needed beyond atomicity.
     std::atomic<bool> m_rawblit_cached   {false};  // last rawblit retained for palette-fade re-renders
     RawBlitCmd        m_rawblit_cached_cmd = {};
+    bool              m_rt_rawblit_cached  = false;
+    RawBlitCmd        m_rt_rawblit_cached_cmd = {};
     unsigned int      m_rawblit_shader        = 0;  // palette_blit_vert + rawimage_blit_frag
     unsigned int      m_overhead_map_shader   = 0;  // palette_blit_vert + overhead_map_frag (RG8 ghost-table)
     int               m_omap_loc_map_rect   = -1;

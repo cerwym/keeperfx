@@ -87,30 +87,19 @@ void RendererNotifySpritesReloaded()
     SYNCLOG("RendererNotifySpritesReloaded: s_spriteAtlas=%p gui_panel_sprites=%p button_sprites=%p",
             (void*)s_spriteAtlas, (void*)gui_panel_sprites, (void*)button_sprites);
     if (s_spriteAtlas) {
-        s_spriteAtlas->Free();
-        if (s_spriteAtlas->Init()) {
-            if (gui_panel_sprites) {
-                int32_t n = num_sprites(gui_panel_sprites);
-                s_spriteAtlas->AddSheet(gui_panel_sprites);
-                SYNCLOG("RendererNotifySpritesReloaded: added gui_panel_sprites (%d sprites)", n);
-            } else {
-                SYNCLOG("RendererNotifySpritesReloaded: gui_panel_sprites is NULL - no panel sprites added!");
-            }
-            if (button_sprites) {
-                int32_t n = num_sprites(button_sprites);
-                s_spriteAtlas->AddSheet(button_sprites);
-                SYNCLOG("RendererNotifySpritesReloaded: added button_sprites (%d sprites)", n);
-            } else {
-                SYNCLOG("RendererNotifySpritesReloaded: button_sprites is NULL");
-            }
-            if (custom_sprites && num_sprites(custom_sprites) > 0) {
-                int32_t n = num_sprites(custom_sprites);
-                s_spriteAtlas->AddSheet(custom_sprites);
-                SYNCLOG("RendererNotifySpritesReloaded: added custom_sprites (%d sprites)", n);
-            }
-        } else {
-            ERRORLOG("RendererNotifySpritesReloaded: GLSpriteAtlas::Init() FAILED");
-        }
+        // Collect all sheets before calling Rebuild() so the entire
+        // Free→Init→AddSheet sequence is atomic under one exclusive lock.
+        // The render thread must never see the atlas in a partially-rebuilt state.
+        const TbSpriteSheet* sheets[3] = {};
+        const char*          names[3]  = {};
+        int count = 0;
+        if (gui_panel_sprites) { sheets[count] = gui_panel_sprites; names[count++] = "gui_panel_sprites"; }
+        if (button_sprites)    { sheets[count] = button_sprites;    names[count++] = "button_sprites";    }
+        if (custom_sprites && num_sprites(custom_sprites) > 0)
+            { sheets[count] = custom_sprites; names[count++] = "custom_sprites"; }
+        s_spriteAtlas->Rebuild(sheets, names, count);
+        for (int i = 0; i < count; ++i)
+            SYNCLOG("RendererNotifySpritesReloaded: added '%s' (%d sprites)", names[i], (int)num_sprites(sheets[i]));
     } else {
         SYNCLOG("RendererNotifySpritesReloaded: s_spriteAtlas is NULL (GL not active or not yet initialised)");
     }
@@ -125,7 +114,7 @@ void RendererNotifyPointerSpritesLoaded()
 #ifdef RENDERER_OPENGL_ENABLED
     if (s_spriteAtlas && pointer_sprites && num_sprites(pointer_sprites) > 0) {
         int32_t before = (int32_t)s_spriteAtlas->GetRegisteredCount();
-        s_spriteAtlas->AddSheet(pointer_sprites);
+        s_spriteAtlas->AddSheet(pointer_sprites, "pointer_sprites");
         int32_t after  = (int32_t)s_spriteAtlas->GetRegisteredCount();
         SYNCLOG("RendererNotifyPointerSpritesLoaded: pointer_sprites=%p added %d new sprites (total %d)",
                 (void*)pointer_sprites, after - before, after);
@@ -139,7 +128,7 @@ void RendererNotifyFrontendSpritesLoaded()
 #ifdef RENDERER_OPENGL_ENABLED
     if (s_spriteAtlas && frontend_sprite && num_sprites(frontend_sprite) > 0) {
         int32_t before = (int32_t)s_spriteAtlas->GetRegisteredCount();
-        s_spriteAtlas->AddSheet(frontend_sprite);
+        s_spriteAtlas->AddSheet(frontend_sprite, "frontend_sprite");
         int32_t after  = (int32_t)s_spriteAtlas->GetRegisteredCount();
         SYNCLOG("RendererNotifyFrontendSpritesLoaded: frontend_sprite=%p added %d new sprites (total %d)",
                 (void*)frontend_sprite, after - before, after);
@@ -156,7 +145,7 @@ void RendererNotifyLandviewFlagLoaded()
 #ifdef RENDERER_OPENGL_ENABLED
     if (s_spriteAtlas && map_flag && num_sprites(map_flag) > 0) {
         int32_t before = (int32_t)s_spriteAtlas->GetRegisteredCount();
-        s_spriteAtlas->AddSheet(map_flag);
+        s_spriteAtlas->AddSheet(map_flag, "map_flag");
         int32_t after  = (int32_t)s_spriteAtlas->GetRegisteredCount();
         SYNCLOG("RendererNotifyLandviewFlagLoaded: map_flag=%p added %d new sprites (total %d)",
                 (void*)map_flag, after - before, after);
@@ -296,7 +285,7 @@ void RendererNotifyCustomSpritesReloaded()
 #ifdef RENDERER_OPENGL_ENABLED
     if (s_spriteAtlas && custom_sprites && num_sprites(custom_sprites) > 0) {
         int32_t before = (int32_t)s_spriteAtlas->GetRegisteredCount();
-        s_spriteAtlas->AddSheet(custom_sprites);
+        s_spriteAtlas->AddSheet(custom_sprites, "custom_sprites");
         int32_t after  = (int32_t)s_spriteAtlas->GetRegisteredCount();
         SYNCLOG("RendererNotifyCustomSpritesReloaded: custom_sprites=%p added %d new sprites (total %d)",
                 (void*)custom_sprites, after - before, after);
@@ -469,8 +458,8 @@ static IUIRenderer* create_ui_renderer(RendererType type)
                 // Register initial sprite sheets into the atlas (GL-mode path).
                 s_spriteAtlas = ogl->GetSpriteAtlas();
                 if (s_spriteAtlas) {
-                    if (gui_panel_sprites) s_spriteAtlas->AddSheet(gui_panel_sprites);
-                    if (button_sprites)    s_spriteAtlas->AddSheet(button_sprites);
+                    if (gui_panel_sprites) s_spriteAtlas->AddSheet(gui_panel_sprites, "gui_panel_sprites");
+                    if (button_sprites)    s_spriteAtlas->AddSheet(button_sprites,    "button_sprites");
                 }
                 s_softwareUIRenderer = nullptr;
                 return glui;
@@ -827,23 +816,30 @@ void RendererPresentFrame(void)
     // is a no-op on the normal path where LockScreen was already called.
     RendererBeginFrame();
     TbResult ret = LbMouseOnBeginSwap();
-    if (ret == Lb_SUCCESS) {
-#if defined(VITA_PERF_LOG)
-        {
-            static TbClockMSec _ef_accum = 0;
-            static int    _ef_cnt   = 0;
-            TbClockMSec _ef_t0 = LbTimerClock();
-            RendererEndFrame();
-            _ef_accum += LbTimerClock() - _ef_t0;
-            if (++_ef_cnt >= 60) {
-                JUSTLOG("[perf] EndFrame   avg %d ms/frame (60-frame window)", (int)(_ef_accum / 60));
-                _ef_accum = 0; _ef_cnt = 0;
-            }
-        }
-#else
-        RendererEndFrame();
-#endif
+    if (ret != Lb_SUCCESS) {
+        // Mouse swap failed — log once so it's detectable, but do not skip rendering.
+        // In the GL renderer the cursor is drawn by GLCursorLayer (hardware sprites)
+        // and does not depend on the software pointer-swap protocol; dropping the
+        // entire frame here would cause a visible stutter.
+        static int s_warn = 0;
+        if (s_warn++ < 5)
+            WARNLOG("RendererPresentFrame: LbMouseOnBeginSwap failed (ret=%d), rendering continued", (int)ret);
     }
+#if defined(VITA_PERF_LOG)
+    {
+        static TbClockMSec _ef_accum = 0;
+        static int    _ef_cnt   = 0;
+        TbClockMSec _ef_t0 = LbTimerClock();
+        RendererEndFrame();
+        _ef_accum += LbTimerClock() - _ef_t0;
+        if (++_ef_cnt >= 60) {
+            JUSTLOG("[perf] EndFrame   avg %d ms/frame (60-frame window)", (int)(_ef_accum / 60));
+            _ef_accum = 0; _ef_cnt = 0;
+        }
+    }
+#else
+    RendererEndFrame();
+#endif
     LbMouseOnEndSwap();
 }
 
@@ -1014,6 +1010,12 @@ void WorldViewRenderer_ClearKeeperSpriteAtlas(void)
 {
     if (s_worldViewRenderer)
         s_worldViewRenderer->ClearKeeperSpriteAtlas();
+}
+
+void WorldViewRenderer_PreloadKeeperSpriteAtlas(void)
+{
+    if (s_worldViewRenderer)
+        s_worldViewRenderer->PreloadKeeperSpriteAtlas();
 }
 
 void RendererFlushPendingSpriteAtlas(void)

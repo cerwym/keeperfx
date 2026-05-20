@@ -181,16 +181,26 @@ extern "C" int platform_create_gl_context(void *sdl_window)
 
     // Context attributes — SDL2 uses these in its internal call to
     // wglCreateContextAttribsARB (Windows) or the platform equivalent.
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE,   24);
-    SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE,  8);
-    SDL_GL_SetAttribute(SDL_GL_RED_SIZE,   10);
-    SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 10);
-    SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE,  10);
-    SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE,  2);
+    if (SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3) != 0)
+        LbWarnLog("platform_create_gl_context: SDL_GL_SetAttribute(MAJOR_VERSION,3) failed: %s\n", SDL_GetError());
+    if (SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3) != 0)
+        LbWarnLog("platform_create_gl_context: SDL_GL_SetAttribute(MINOR_VERSION,3) failed: %s\n", SDL_GetError());
+    if (SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE) != 0)
+        LbWarnLog("platform_create_gl_context: SDL_GL_SetAttribute(PROFILE_CORE) failed: %s\n", SDL_GetError());
+    if (SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1) != 0)
+        LbWarnLog("platform_create_gl_context: SDL_GL_SetAttribute(DOUBLEBUFFER,1) failed: %s\n", SDL_GetError());
+    if (SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE,   24) != 0)
+        LbWarnLog("platform_create_gl_context: SDL_GL_SetAttribute(DEPTH_SIZE,24) failed: %s\n", SDL_GetError());
+    if (SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE,  8) != 0)
+        LbWarnLog("platform_create_gl_context: SDL_GL_SetAttribute(STENCIL_SIZE,8) failed: %s\n", SDL_GetError());
+    if (SDL_GL_SetAttribute(SDL_GL_RED_SIZE,   10) != 0)
+        LbWarnLog("platform_create_gl_context: SDL_GL_SetAttribute(RED_SIZE,10) failed: %s\n", SDL_GetError());
+    if (SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 10) != 0)
+        LbWarnLog("platform_create_gl_context: SDL_GL_SetAttribute(GREEN_SIZE,10) failed: %s\n", SDL_GetError());
+    if (SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE,  10) != 0)
+        LbWarnLog("platform_create_gl_context: SDL_GL_SetAttribute(BLUE_SIZE,10) failed: %s\n", SDL_GetError());
+    if (SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE,  2) != 0)
+        LbWarnLog("platform_create_gl_context: SDL_GL_SetAttribute(ALPHA_SIZE,2) failed: %s\n", SDL_GetError());
 
     log_sdl_display_info(window, "before GL context creation");
 #ifdef _WIN32
@@ -208,7 +218,13 @@ extern "C" int platform_create_gl_context(void *sdl_window)
         return 0;
     }
 
-    SDL_GL_MakeCurrent(window, s_glContext);
+    if (SDL_GL_MakeCurrent(window, s_glContext) != 0)
+    {
+        LbWarnLog("platform_create_gl_context: SDL_GL_MakeCurrent failed: %s\n", SDL_GetError());
+        SDL_GL_DeleteContext(s_glContext);
+        s_glContext = nullptr;
+        return 0;
+    }
 
     // Enable VSync to prevent tearing and flickering during camera movements
     // -1 = adaptive vsync (tear-free when possible, allow tearing when needed)
@@ -252,12 +268,14 @@ extern "C" void platform_swap_gl_buffers(void *sdl_window)
 
 extern "C" void platform_gl_release_context(void)
 {
-    SDL_GL_MakeCurrent(s_glWindow, nullptr);
+    if (SDL_GL_MakeCurrent(s_glWindow, nullptr) != 0)
+        LbWarnLog("platform_gl_release_context: SDL_GL_MakeCurrent(null) failed: %s\n", SDL_GetError());
 }
 
 extern "C" void platform_gl_acquire_context(void)
 {
-    SDL_GL_MakeCurrent(s_glWindow, s_glContext);
+    if (SDL_GL_MakeCurrent(s_glWindow, s_glContext) != 0)
+        LbWarnLog("platform_gl_acquire_context: SDL_GL_MakeCurrent failed: %s\n", SDL_GetError());
 }
 
 extern "C" int platform_is_renderdoc_present(void)

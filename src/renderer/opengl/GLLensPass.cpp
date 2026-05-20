@@ -231,6 +231,19 @@ bool GLOverlayPass::CompileShaders()
         glUniform1i(loc, 1);
         glUseProgram(0);
     }
+    // 1×1 transparent RGBA8 fallback — ensures unit 1 always has a complete
+    // texture bound even when no overlay image has been uploaded.
+    if (!m_null_overlay_tex)
+    {
+        glGenTextures(1, &m_null_overlay_tex);
+        glBindTexture(GL_TEXTURE_2D, m_null_overlay_tex);
+        const uint8_t null_px[4] = {0, 0, 0, 0};
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1, 1, 0,
+                     GL_RGBA, GL_UNSIGNED_BYTE, null_px);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
     return true;
 }
 
@@ -242,11 +255,11 @@ bool GLOverlayPass::Init()
 void GLOverlayPass::Apply(unsigned int src_tex, unsigned int dst_fbo, int w, int h)
 {
     BindPass(src_tex, dst_fbo, w, h);
-    if (m_overlay_tex)
-    {
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, m_overlay_tex);
-    }
+    // Always bind a valid texture to unit 1 — use the uploaded overlay when
+    // available, otherwise the 1×1 transparent fallback so the sampler is never
+    // left pointing at an unbound or stale texture unit.
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, m_overlay_tex ? m_overlay_tex : m_null_overlay_tex);
     if (m_loc_overlay_alpha >= 0) glUniform1f(m_loc_overlay_alpha, m_alpha);
     DrawPass();
     glActiveTexture(GL_TEXTURE0);
@@ -254,7 +267,8 @@ void GLOverlayPass::Apply(unsigned int src_tex, unsigned int dst_fbo, int w, int
 
 void GLOverlayPass::Free()
 {
-    if (m_overlay_tex) { glDeleteTextures(1, &m_overlay_tex); m_overlay_tex = 0; }
+    if (m_null_overlay_tex) { glDeleteTextures(1, &m_null_overlay_tex); m_null_overlay_tex = 0; }
+    if (m_overlay_tex)      { glDeleteTextures(1, &m_overlay_tex);      m_overlay_tex = 0; }
     GLLensPassBase::Free();
 }
 

@@ -111,6 +111,7 @@ public:
 private:
     int          m_loc_overlay_alpha = -1;
     unsigned int m_overlay_tex       = 0;
+    unsigned int m_null_overlay_tex  = 0; // 1×1 transparent fallback for when no overlay is loaded
     int          m_overlay_w         = 0;
     int          m_overlay_h         = 0;
     float        m_alpha             = 1.0f;

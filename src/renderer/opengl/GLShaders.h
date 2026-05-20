@@ -107,16 +107,17 @@ constexpr const char* KSPR_ARRAY_FRAGMENT_SHADER = R"glsl(
 #version 330 core
 in vec2 v_uv;
 uniform sampler2DArray u_sprite;   // GL_R8 texture array, one layer per unique sprite
-uniform sampler2D      u_palette;  // GL_RGBA8 colour table (256x1)
+uniform sampler2D      u_clut;     // GL_RGBA8 256xN CLUT — row 0=identity, rows 1..N-1=remaps
 uniform float          u_alpha;    // 1.0=solid, 0.5=transpar4, 0.25=transpar8
 uniform float          u_layer;    // layer index in the sprite array
+uniform float          u_clut_v;   // V texcoord selecting the CLUT row
 out vec4 fragColor;
 void main()
 {
     float idx = texture(u_sprite, vec3(v_uv, u_layer)).r;
     if (idx < (0.5 / 255.0)) discard;
-    vec4 color = texture(u_palette, vec2(idx, 0.5));
-    fragColor = vec4(color.rgb, u_alpha);
+    vec4 color = texture(u_clut, vec2(idx, u_clut_v));
+    fragColor = vec4(color.rgb, color.a * u_alpha);
 }
 )glsl";
 
@@ -186,6 +187,38 @@ void main()
     float idx = texture(u_sprite, vec3(v_uv, u_layer)).r;
     if (idx < (0.5 / 255.0)) discard;
     fragColor = u_outline_color;
+}
+)glsl";
+
+// Array-atlas variant of the glow shader — additive sprites cached in atlas.
+constexpr const char* KSPR_ARRAY_GLOW_FRAGMENT_SHADER = R"glsl(
+#version 330 core
+in vec2 v_uv;
+uniform sampler2DArray u_sprite;
+uniform float          u_layer;
+out vec4 fragColor;
+
+const vec3 k_glow_step[8] = vec3[8](
+    vec3(16.0, 16.0, 16.0) / 255.0,
+    vec3(24.0, 16.0,  0.0) / 255.0,
+    vec3(24.0,  4.0,  4.0) / 255.0,
+    vec3( 8.0,  8.0, 24.0) / 255.0,
+    vec3( 8.0, 24.0,  8.0) / 255.0,
+    vec3(12.0,  0.0, 12.0) / 255.0,
+    vec3( 0.0,  0.0,  0.0) / 255.0,
+    vec3(24.0, 12.0,  4.0) / 255.0
+);
+
+void main()
+{
+    int px = int(texture(u_sprite, vec3(v_uv, u_layer)).r * 255.0 + 0.5);
+    if (px < 1 || px > 64) discard;
+    int code   = px - 1;
+    int family = code / 8;
+    int row    = code % 8;
+    if (row == 0 || family == 6) discard;
+    vec3 glow = clamp(k_glow_step[family] * float(row), 0.0, 1.0);
+    fragColor = vec4(glow, 1.0);
 }
 )glsl";
 
@@ -387,33 +420,6 @@ void main()
         return;
     }
 
-    // --- Sample palette index from atlas (always needed) ---
-    float pal_idx;  // raw palette index [0,1] from R8 atlas
-    vec4  col;      // decoded RGBA colour
-
-    if (u_tile_filter == 1) {
-        // Palette-correct bilinear: sample 4 neighbours, decode each, then lerp.
-        vec2 tex_size = vec2(textureSize(u_tile_atlas, 0).xy);
-        vec2 px   = v_uv * tex_size - 0.5;
-        vec2 f    = fract(px);
-        vec2 base = (floor(px) + 0.5) / tex_size;
-        vec2 st   = 1.0 / tex_size;
-        float layer = v_layer;
-        float idx00 = texture(u_tile_atlas, vec3(base, layer)).r;
-        float idx10 = texture(u_tile_atlas, vec3(base + vec2(st.x, 0.0), layer)).r;
-        float idx01 = texture(u_tile_atlas, vec3(base + vec2(0.0, st.y), layer)).r;
-        float idx11 = texture(u_tile_atlas, vec3(base + st, layer)).r;
-        vec4 c00 = texture(u_palette, vec2(idx00, 0.5));
-        vec4 c10 = texture(u_palette, vec2(idx10, 0.5));
-        vec4 c01 = texture(u_palette, vec2(idx01, 0.5));
-        vec4 c11 = texture(u_palette, vec2(idx11, 0.5));
-        col = mix(mix(c00, c10, f.x), mix(c01, c11, f.x), f.y);
-        pal_idx = idx00;  // centre texel for fade-table lookup
-    } else {
-        pal_idx = texture(u_tile_atlas, vec3(v_uv, v_layer)).r;
-        col = texture(u_palette, vec2(pal_idx, 0.5));
-    }
-
     // --- Compute raw shade (fade table row) ---
     // v_shade = (S>>16) / 32.0 where S = shade_intensity<<8.
     // This directly maps to fade table rows: 0.0 = row 0 (black),
@@ -428,16 +434,83 @@ void main()
         raw_shade = mix(raw_shade, 1.0, u_fullbright);
     }
 
-    // --- Palette fade-table lookup (shared by PALETTE and FOG modes) ---
+    // Pre-compute fade_v for palette-mode darkness so bilinear path can use it
+    // per-neighbour without repeating the arithmetic.
+    // Only valid when u_darkness_mode != 0 (avoids unit-3 access before load).
+    float fade_v = 0.0;
+    if (u_darkness_mode != 0)
+    {
+        float fade_row = raw_shade * 32.0;
+        fade_v = (clamp(fade_row, 0.0, 63.0) + 0.5) / 256.0;
+    }
+
+    // --- Sample palette index from atlas (always needed) ---
+    float pal_idx;  // raw palette index [0,1] from R8 atlas (nearest or non-bilinear)
+    vec4  col;      // decoded RGBA colour (after palette lookup + optional shading)
+
+    if (u_tile_filter == 1) {
+        // Palette-correct bilinear: sample 4 neighbours, decode each, then lerp.
+        vec2 tex_size = vec2(textureSize(u_tile_atlas, 0).xy);
+        vec2 px   = v_uv * tex_size - 0.5;
+        vec2 f    = fract(px);
+        vec2 base = (floor(px) + 0.5) / tex_size;
+        vec2 st   = 1.0 / tex_size;
+        float layer = v_layer;
+        float idx00 = texture(u_tile_atlas, vec3(base, layer)).r;
+        float idx10 = texture(u_tile_atlas, vec3(base + vec2(st.x, 0.0), layer)).r;
+        float idx01 = texture(u_tile_atlas, vec3(base + vec2(0.0, st.y), layer)).r;
+        float idx11 = texture(u_tile_atlas, vec3(base + st, layer)).r;
+
+        if (u_darkness_mode != 0) {
+            // Palette-mode darkness: shade each neighbour through the fade table
+            // independently before blending.  This prevents shading discontinuities
+            // at tile boundaries (the "crawling" artifact seen when idx00 alone was
+            // used for the LUT, snapping to a new palette row on each texel crossing).
+            float r00 = texture(u_fade_table, vec2(idx00, fade_v)).r;
+            float r10 = texture(u_fade_table, vec2(idx10, fade_v)).r;
+            float r01 = texture(u_fade_table, vec2(idx01, fade_v)).r;
+            float r11 = texture(u_fade_table, vec2(idx11, fade_v)).r;
+            vec4 c00 = texture(u_palette, vec2(r00, 0.5));
+            vec4 c10 = texture(u_palette, vec2(r10, 0.5));
+            vec4 c01 = texture(u_palette, vec2(r01, 0.5));
+            vec4 c11 = texture(u_palette, vec2(r11, 0.5));
+            col = mix(mix(c00, c10, f.x), mix(c01, c11, f.x), f.y);
+        } else {
+            vec4 c00 = texture(u_palette, vec2(idx00, 0.5));
+            vec4 c10 = texture(u_palette, vec2(idx10, 0.5));
+            vec4 c01 = texture(u_palette, vec2(idx01, 0.5));
+            vec4 c11 = texture(u_palette, vec2(idx11, 0.5));
+            col = mix(mix(c00, c10, f.x), mix(c01, c11, f.x), f.y);
+        }
+        pal_idx = idx00;  // kept for LINEAR shade multiply below
+    } else {
+        pal_idx = texture(u_tile_atlas, vec3(v_uv, v_layer)).r;
+        col = texture(u_palette, vec2(pal_idx, 0.5));
+    }
+
+    // --- Palette fade-table lookup (PALETTE and FOG modes, nearest path only) ---
+    // In the bilinear path (u_tile_filter == 1) each neighbour is already shaded
+    // above, so col already contains the fully shaded and blended colour.
+    // In the nearest path we do the LUT lookup here.
+    // Only sampled when darkness_mode != LINEAR: avoids reading unit 3 when the
+    // fade-table texture may not yet be loaded, which would produce undefined colours.
     // Replicates the software renderer's pixmap.fade_tables[] exactly:
     //   fade_tables[row * 256 + palette_index] → remapped palette index.
     // Row 0 = fully dark, row 32 = full brightness (identity).
     // The texture is 256 wide × 256 tall; first 64 rows are fade data.
-    float fade_row = raw_shade * 32.0;
-    float fade_v   = (clamp(fade_row, 0.0, 63.0) + 0.5) / 256.0;
-    float fade_u   = pal_idx;
-    float remapped = texture(u_fade_table, vec2(fade_u, fade_v)).r;
-    vec3 pal_color = texture(u_palette, vec2(remapped, 0.5)).rgb;
+    float remapped = pal_idx;      // fallback for LINEAR mode: identity remap
+    vec3 pal_color = col.rgb;      // fallback for LINEAR mode: direct colour
+    if (u_darkness_mode != 0 && u_tile_filter != 1)
+    {
+        remapped   = texture(u_fade_table, vec2(pal_idx, fade_v)).r;
+        pal_color  = texture(u_palette,    vec2(remapped, 0.5)).rgb;
+    }
+    else if (u_darkness_mode != 0)
+    {
+        // Bilinear path: col already contains the blended shaded colour.
+        // pal_color mirrors col for the fog/overlay code below.
+        pal_color = col.rgb;
+    }
 
     // --- Apply darkness mode ---
     if (u_darkness_mode == 1)
@@ -973,8 +1046,8 @@ void main()
     float samp_wy = 1.0 - uv_wy;
 
     // Fade factors matching fade_tbl rows: x0base=a6<<8 (parch), y0base=(32-a6)<<8 (world).
-    float f_parch = ww  / 32.0;   // parchment: 0→1 (a6/32)
-    float f_world = wp  / 32.0;   // 3D world:  1→0 ((32-a6)/32)
+    float f_parch = wp  / 32.0;   // parchment: 1→0 ((32-a6)/32) — dims as step increases
+    float f_world = ww  / 32.0;   // 3D world:  0→1 (a6/32)      — brightens as step increases
 
     vec3 c_parch = texture(u_parchment, vec2(uv_px, samp_py)).rgb * f_parch;
     vec3 c_world = texture(u_world,     vec2(uv_wx, samp_wy)).rgb * f_world;

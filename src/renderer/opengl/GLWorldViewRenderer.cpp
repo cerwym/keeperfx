@@ -221,6 +221,7 @@ bool GLWorldViewRenderer::init_gl_resources()
     m_loc_fog_density   = glGetUniformLocation(m_shader, "u_fog_density");
     m_loc_lightmap      = glGetUniformLocation(m_shader, "u_lightmap");
     m_loc_missing_tile  = glGetUniformLocation(m_shader, "u_missing_tile");
+    m_loc_tile_filter   = glGetUniformLocation(m_shader, "u_tile_filter");
     glUniform1f(m_loc_fullbright,    0.0f);
     glUniform1f(m_loc_ambient,       0.0f);
     glUniform1f(m_loc_shade_scale,   1.0f);
@@ -233,6 +234,7 @@ bool GLWorldViewRenderer::init_gl_resources()
     glUniform1f(m_loc_fog_density,   0.4f);
     glUniform1i(m_loc_lightmap,      2);  // GL_TEXTURE2
     glUniform1f(m_loc_missing_tile,  0.0f);
+    glUniform1i(m_loc_tile_filter,   0);   // default: nearest
     m_tile_filter_applied = -1;  // force apply on first flush
     glUseProgram(0);
 
@@ -368,19 +370,19 @@ void GLWorldViewRenderer::execute_preload_atlas()
 
 void GLWorldViewRenderer::ensure_clut_valid()
 {
-    if (!m_palette_data || !m_kspr_clut_tex) return;
-    if (memcmp(m_palette_data, m_kspr_clut_palette_snap, 768) == 0) return;
+    if (!m_kspr_clut_tex) return;
+    if (memcmp(m_rt_palette, m_kspr_clut_palette_snap, sizeof(m_rt_palette)) == 0) return;
 
-    memcpy(m_kspr_clut_palette_snap, m_palette_data, 768);
+    memcpy(m_kspr_clut_palette_snap, m_rt_palette, sizeof(m_rt_palette));
 
     // Rebuild identity CLUT row 0: palette[i] for all i.
     // DK palette is 6-bit (0-63); shift left 2 to get 8-bit (0-252).
     // Index 0 = transparent (alpha 0); all others opaque.
     uint8_t row[256 * 4];
     for (int i = 0; i < 256; i++) {
-        row[i*4+0] = (uint8_t)(m_palette_data[i*3+0] << 2);
-        row[i*4+1] = (uint8_t)(m_palette_data[i*3+1] << 2);
-        row[i*4+2] = (uint8_t)(m_palette_data[i*3+2] << 2);
+        row[i*4+0] = (uint8_t)(m_rt_palette[i*3+0] << 2);
+        row[i*4+1] = (uint8_t)(m_rt_palette[i*3+1] << 2);
+        row[i*4+2] = (uint8_t)(m_rt_palette[i*3+2] << 2);
         row[i*4+3] = (i == 0) ? 0 : 255;
     }
     glActiveTexture(GL_TEXTURE1);
@@ -936,14 +938,14 @@ bool GLWorldViewRenderer::init_flatpoly_shader()
 void GLWorldViewRenderer::BeginHandSpriteRendering()
 {
     // Save current viewport params used by render_keepersprite_gpu()
-    m_saved_screen_w  = m_screen_w;
-    m_saved_screen_h  = m_screen_h;
+    m_saved_screen_w  = m_draw_screen_w;
+    m_saved_screen_h  = m_draw_screen_h;
     m_saved_sprite_z  = m_current_sprite_z;
 
     // Hand sprites are at mouse position in full-screen pixel coordinates.
     // Override viewport to full screen so the kspr shader converts them correctly.
-    m_screen_w = m_full_screen_w;
-    m_screen_h = m_full_screen_h;
+    m_draw_screen_w = m_full_screen_w;
+    m_draw_screen_h = m_full_screen_h;
 
     // z = -1.0 maps to depth 0.0 (near plane); always passes GL_LEQUAL against
     // any world geometry that was written at depth >= 0.0.
@@ -960,8 +962,8 @@ void GLWorldViewRenderer::BeginHandSpriteRendering()
 
 void GLWorldViewRenderer::EndHandSpriteRendering()
 {
-    m_screen_w         = m_saved_screen_w;
-    m_screen_h         = m_saved_screen_h;
+    m_draw_screen_w    = m_saved_screen_w;
+    m_draw_screen_h    = m_saved_screen_h;
     m_current_sprite_z = m_saved_sprite_z;
 
     // Restore depth mask so the next frame's glClear(GL_DEPTH_BUFFER_BIT) writes
@@ -1068,7 +1070,7 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
     // Row 0 = identity (non-remapped sprites).
     // Rows 1..k_clut_rows-1 = per-remap CLUTs built lazily from current palette.
     float clut_v = 0.5f / (float)k_clut_rows;  // row 0 centre
-    if (atlas_layer >= 0 && use_remap && m_kspr_clut_tex && m_palette_data)
+    if (atlas_layer >= 0 && use_remap && m_kspr_clut_tex)
     {
         auto clut_it = m_kspr_clut_map.find(remap);
         if (clut_it != m_kspr_clut_map.end())
@@ -1081,9 +1083,9 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
             uint8_t row_data[256 * 4];
             for (int ci = 0; ci < 256; ci++) {
                 int ri = remap[ci];
-                row_data[ci*4+0] = (uint8_t)(m_palette_data[ri*3+0] << 2);
-                row_data[ci*4+1] = (uint8_t)(m_palette_data[ri*3+1] << 2);
-                row_data[ci*4+2] = (uint8_t)(m_palette_data[ri*3+2] << 2);
+                row_data[ci*4+0] = (uint8_t)(m_rt_palette[ri*3+0] << 2);
+                row_data[ci*4+1] = (uint8_t)(m_rt_palette[ri*3+1] << 2);
+                row_data[ci*4+2] = (uint8_t)(m_rt_palette[ri*3+2] << 2);
                 row_data[ci*4+3] = (ci == 0) ? 0 : 255;
             }
             glActiveTexture(GL_TEXTURE1);
@@ -1145,12 +1147,12 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
         if (owner >= 0)
         {
             unsigned char color_idx = get_player_color_idx((PlayerNumber)owner);
-            if (color_idx < 9 && m_palette_data)
+            if (color_idx < 9)
             {
                 uint8_t pal_idx = player_room_colours[color_idx];
-                oc_r = (float)((int)m_palette_data[pal_idx * 3 + 0] << 2) / 255.0f;
-                oc_g = (float)((int)m_palette_data[pal_idx * 3 + 1] << 2) / 255.0f;
-                oc_b = (float)((int)m_palette_data[pal_idx * 3 + 2] << 2) / 255.0f;
+                oc_r = (float)((int)m_rt_palette[pal_idx * 3 + 0] << 2) / 255.0f;
+                oc_g = (float)((int)m_rt_palette[pal_idx * 3 + 1] << 2) / 255.0f;
+                oc_b = (float)((int)m_rt_palette[pal_idx * 3 + 2] << 2) / 255.0f;
             }
         }
         const float oc_a = g_renderer_settings.creature_outline_alpha;
@@ -1167,7 +1169,7 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
         {
             // Atlas path: texture already cached in m_kspr_sprite_array.
             glUseProgram(m_kspr_atlas_outline_shader);
-            glUniform2f(m_kspr_atlas_outline_loc_viewport, (float)m_screen_w, (float)m_screen_h);
+            glUniform2f(m_kspr_atlas_outline_loc_viewport, (float)m_draw_screen_w, (float)m_draw_screen_h);
             glUniform1f(m_kspr_atlas_outline_loc_z_ndc,    outline_z);
             glUniform1f(m_kspr_atlas_outline_loc_layer,    (float)atlas_layer);
             glUniform4f(m_kspr_atlas_outline_loc_color,    oc_r, oc_g, oc_b, oc_a);
@@ -1196,7 +1198,7 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
             glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
 
             glUseProgram(m_kspr_outline_shader);
-            glUniform2f(m_kspr_outline_loc_viewport, (float)m_screen_w, (float)m_screen_h);
+            glUniform2f(m_kspr_outline_loc_viewport, (float)m_draw_screen_w, (float)m_draw_screen_h);
             glUniform1f(m_kspr_outline_loc_z_ndc,    outline_z);
             glUniform4f(m_kspr_outline_loc_color,    oc_r, oc_g, oc_b, oc_a);
             glDrawArrays(GL_TRIANGLES, 0, 6);
@@ -1209,7 +1211,7 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
         if (additive && m_kspr_atlas_glow_shader) {
             // Additive glow via atlas: no CLUT needed, glow math in shader.
             glUseProgram(m_kspr_atlas_glow_shader);
-            glUniform2f(m_kspr_atlas_glow_loc_viewport, (float)m_screen_w, (float)m_screen_h);
+            glUniform2f(m_kspr_atlas_glow_loc_viewport, (float)m_draw_screen_w, (float)m_draw_screen_h);
             glUniform1f(m_kspr_atlas_glow_loc_z_ndc, m_current_sprite_z);
             glUniform1f(m_kspr_atlas_glow_loc_layer, (float)atlas_layer);
             glActiveTexture(GL_TEXTURE0);
@@ -1218,7 +1220,7 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
         } else {
             // Normal or remapped sprite via atlas + CLUT.
             glUseProgram(m_kspr_atlas_shader);
-            glUniform2f(m_kspr_atlas_loc_viewport, (float)m_screen_w, (float)m_screen_h);
+            glUniform2f(m_kspr_atlas_loc_viewport, (float)m_draw_screen_w, (float)m_draw_screen_h);
             glUniform1f(m_kspr_atlas_loc_alpha, alpha);
             glUniform1f(m_kspr_atlas_loc_z_ndc, m_current_sprite_z);
             glUniform1f(m_kspr_atlas_loc_layer, (float)atlas_layer);
@@ -1274,7 +1276,7 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
     {
         // Pure additive blend: adds glow RGB delta to framebuffer contents.
         glUseProgram(m_kspr_glow_shader);
-        glUniform2f(m_kspr_glow_loc_viewport, (float)m_screen_w, (float)m_screen_h);
+        glUniform2f(m_kspr_glow_loc_viewport, (float)m_draw_screen_w, (float)m_draw_screen_h);
         glUniform1f(m_kspr_glow_loc_z_ndc,    m_current_sprite_z);
 
         glActiveTexture(GL_TEXTURE0);
@@ -1285,7 +1287,7 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
     else
     {
         glUseProgram(m_kspr_shader);
-        glUniform2f(m_kspr_loc_viewport, (float)m_screen_w, (float)m_screen_h);
+        glUniform2f(m_kspr_loc_viewport, (float)m_draw_screen_w, (float)m_draw_screen_h);
         glUniform1f(m_kspr_loc_alpha,    alpha);
         glUniform1f(m_kspr_loc_z_ndc,    m_current_sprite_z);
 
@@ -1533,6 +1535,14 @@ void GLWorldViewRenderer::FlipBuffers()
     m_rt_draw_cmds      = std::move(m_draw_cmds);
     m_rt_shadow_cmds    = std::move(m_shadow_cmds);
     m_rt_flatpoly_verts = std::move(m_flatpoly_verts);
+    m_rt_screen_w       = m_screen_w;
+    m_rt_screen_h       = m_screen_h;
+    m_rt_vp_x           = m_vp_x;
+    m_rt_vp_y           = m_vp_y;
+    if (m_palette_data)
+        memcpy(m_rt_palette, m_palette_data, sizeof(m_rt_palette));
+    else
+        memset(m_rt_palette, 0, sizeof(m_rt_palette));
 
     // Swap raw vertex staging buffers: render thread gets the filled buffer,
     // game thread gets a clean buffer for the next frame.
@@ -1606,8 +1616,8 @@ void GLWorldViewRenderer::GPURenderNow()
     if (m_rt_draw_cmds.empty())
         return;
 
-    const int vp_y_gl = m_full_screen_h - m_vp_y - m_screen_h;
-    gpu_execute_passes(m_vp_x, vp_y_gl);
+    const int vp_y_gl = m_full_screen_h - m_rt_vp_y - m_rt_screen_h;
+    gpu_execute_passes(m_rt_vp_x, vp_y_gl, m_rt_screen_w, m_rt_screen_h);
 }
 
 void GLWorldViewRenderer::GPURenderToFBO(int pip_w, int pip_h)
@@ -1645,12 +1655,14 @@ void GLWorldViewRenderer::GPURenderToFBO(int pip_w, int pip_h)
         return;
 
     // FBO is pip_w × pip_h — fill it entirely.
-    gpu_execute_passes(0, 0);
+    gpu_execute_passes(0, 0, pip_w, pip_h);
 }
 
-void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
+void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl, int screen_w, int screen_h)
 {
     ensure_clut_valid();
+    m_draw_screen_w = screen_w;
+    m_draw_screen_h = screen_h;
 
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
     glBufferSubData(GL_ARRAY_BUFFER, 0,
@@ -1659,7 +1671,7 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
 
     // Execute all draw commands in submission order, interleaving tile batches
     // and 3D sprite flushes to maintain the painter's-algorithm depth order.
-    glViewport(vp_x, vp_y_gl, m_screen_w, m_screen_h);
+    glViewport(vp_x, vp_y_gl, screen_w, screen_h);
     glUseProgram(m_shader);
     glBindVertexArray(m_vao);
 
@@ -1680,7 +1692,7 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
     glUniform1f(m_loc_fullbright,    g_renderer_settings.shade_fullbright);
     glUniform1f(m_loc_ambient,       g_renderer_settings.shade_ambient);
     glUniform1f(m_loc_shade_scale,   g_renderer_settings.shade_scale);
-    glUniform1f(m_loc_shade_gamma,   g_renderer_settings.shade_gamma);
+    glUniform1f(m_loc_shade_gamma,   std::max(0.0f, g_renderer_settings.shade_gamma));
     glUniform1i(m_loc_lighting_mode, g_renderer_settings.lighting_mode);
     glUniform1i(m_loc_darkness_mode, g_renderer_settings.darkness_mode);
     glUniform1f(m_loc_fog_speed,     g_renderer_settings.fog_speed);
@@ -1761,6 +1773,7 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
                     GLenum gl_filter = (wanted_filter == 1) ? GL_LINEAR : GL_NEAREST;
                     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, gl_filter);
                     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, gl_filter);
+                    glUniform1i(m_loc_tile_filter, wanted_filter);
                     m_tile_filter_applied = wanted_filter;
                 }
             }
@@ -1793,7 +1806,7 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
                 }
                 glUseProgram(m_flatpoly_shader);
                 glBindVertexArray(m_flatpoly_vao);
-                glUniform2f(m_flatpoly_loc_viewport, (float)m_screen_w, (float)m_screen_h);
+                glUniform2f(m_flatpoly_loc_viewport, (float)screen_w, (float)screen_h);
                 glDrawArrays(GL_TRIANGLES, cmd.vert_start, cmd.vert_count);
                 // Restore tile shader state for subsequent CMD_TILES.
                 glUseProgram(m_shader);
@@ -1854,7 +1867,7 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
 
         glBindVertexArray(m_shadow_vao);
         glUseProgram(m_shadow_shader);
-        glUniform2f(m_shadow_loc_viewport, (float)m_screen_w, (float)m_screen_h);
+        glUniform2f(m_shadow_loc_viewport, (float)screen_w, (float)screen_h);
         glUniform1f(m_shadow_loc_darkness, sc.darkness);
         glUniform1f(m_shadow_loc_ndc_z,    sc.ndc_z);
 
@@ -1887,7 +1900,7 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
     // but without a scissor the GPU still rasterises (and alpha-blends)
     // sprites behind it, causing visible bleed-through.
     glEnable(GL_SCISSOR_TEST);
-    glScissor(vp_x, vp_y_gl, m_screen_w, m_screen_h);
+    glScissor(vp_x, vp_y_gl, screen_w, screen_h);
 
     for (const auto& cmd : m_rt_draw_cmds)
     {
@@ -1897,7 +1910,7 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
             glBindVertexArray(0);
             glUseProgram(0);
 
-            UIRenderer_SetScreenSize(m_screen_w, m_screen_h);
+            UIRenderer_SetScreenSize(screen_w, screen_h);
 
             // setup_world_sprite_processing computes the half-bucket-biased NDC z that
             // places sprites reliably in front of same-bucket tile geometry.  Call it
@@ -1923,7 +1936,7 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
             glBindVertexArray(0);
             glUseProgram(0);
 
-            UIRenderer_SetScreenSize(m_screen_w, m_screen_h);
+            UIRenderer_SetScreenSize(screen_w, screen_h);
 
             setup_world_sprite_processing(cmd.bucket_num);
 

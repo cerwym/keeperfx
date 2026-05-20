@@ -194,6 +194,14 @@ bool GLMapFadePass::CaptureAndUploadFrames()
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, blit_fbo);
         glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                                GL_TEXTURE_2D, m_tex[1], 0);
+        if (glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        {
+            WARNLOG("GLMapFadePass: world-capture blit FBO incomplete — world snapshot skipped");
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+            glDeleteFramebuffers(1, &blit_fbo);
+            return false;
+        }
         glBindFramebuffer(GL_READ_FRAMEBUFFER, 0); // default framebuffer
         glBlitFramebuffer(0, 0, w, h, 0, 0, w, h,
                           GL_COLOR_BUFFER_BIT, GL_NEAREST);
@@ -221,6 +229,14 @@ bool GLMapFadePass::CaptureAndUploadFrames()
                                GL_TEXTURE_2D, m_tex[0], 0);
         glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
                                   GL_RENDERBUFFER, depth_rb);
+        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        {
+            WARNLOG("GLMapFadePass: parchment capture FBO incomplete — parchment snapshot skipped");
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glDeleteRenderbuffers(1, &depth_rb);
+            glDeleteFramebuffers(1, &fbo);
+            return false;
+        }
 
         float saved_cc[4];
         glGetFloatv(GL_COLOR_CLEAR_VALUE, saved_cc);
