@@ -1082,6 +1082,7 @@ void GLUIRenderer::DrawPiPSprites(int pip_w, int pip_h)
         glDepthMask(GL_TRUE);
         glDisable(GL_BLEND);
         glUseProgram(0);
+        glViewport(0, 0, saved_w, saved_h);
         m_screen_width  = saved_w;
         m_screen_height = saved_h;
 
@@ -1727,6 +1728,7 @@ void GLUIRenderer::flush_quads_from(std::vector<UIQuad>& quads)
     glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE0);
 
+    glUseProgram(0);
     glBindVertexArray(0);
     quads.clear();
 }
@@ -1755,6 +1757,7 @@ void GLUIRenderer::flush_lines_from(std::vector<UILine>& lines)
         glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(GLUIVertex) * m_vertices.size(), m_vertices.data());
         glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_vertices.size());
         glBindVertexArray(0);
+        glUseProgram(0);
     }
     lines.clear();
 }

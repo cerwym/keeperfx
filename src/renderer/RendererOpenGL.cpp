@@ -86,6 +86,39 @@ RendererOpenGL::~RendererOpenGL()
     Shutdown();
 }
 
+void APIENTRY DebugCallback(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length,
+                            const GLchar* message, const void* userParam) {
+    // Ignore noisy non‑issues (optional)
+    if (id == 131169 || id == 131185 || id == 131218 || id == 131204)
+        return;
+
+    const char* src = source == GL_DEBUG_SOURCE_API               ? "API"
+                      : source == GL_DEBUG_SOURCE_WINDOW_SYSTEM   ? "WindowSys"
+                      : source == GL_DEBUG_SOURCE_SHADER_COMPILER ? "ShaderCompiler"
+                      : source == GL_DEBUG_SOURCE_THIRD_PARTY     ? "3rdParty"
+                      : source == GL_DEBUG_SOURCE_APPLICATION     ? "Application"
+                      : source == GL_DEBUG_SOURCE_OTHER           ? "Other"
+                                                                  : "Unknown";
+
+    const char* tp = type == GL_DEBUG_TYPE_ERROR                 ? "Error"
+                     : type == GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR ? "Deprecated"
+                     : type == GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR  ? "Undefined"
+                     : type == GL_DEBUG_TYPE_PORTABILITY         ? "Portability"
+                     : type == GL_DEBUG_TYPE_PERFORMANCE         ? "Performance"
+                     : type == GL_DEBUG_TYPE_MARKER              ? "Marker"
+                     : type == GL_DEBUG_TYPE_PUSH_GROUP          ? "PushGroup"
+                     : type == GL_DEBUG_TYPE_POP_GROUP           ? "PopGroup"
+                     : type == GL_DEBUG_TYPE_OTHER               ? "Other"
+                                                                 : "Unknown";
+
+    const char* sev = severity == GL_DEBUG_SEVERITY_HIGH           ? "HIGH"
+                      : severity == GL_DEBUG_SEVERITY_MEDIUM       ? "MEDIUM"
+                      : severity == GL_DEBUG_SEVERITY_LOW          ? "LOW"
+                      : severity == GL_DEBUG_SEVERITY_NOTIFICATION ? "NOTIFY"
+                                                                   : "Unknown";
+    JUSTLOG("[GL DEBUG] Severity=%s Type=%s Source=%s ID=%s Message=%s");
+}
+
 bool RendererOpenGL::Init()
 {
     // Create GL context (SDL2-based on desktop; see platform_gl_sdl2.cpp)
@@ -448,6 +481,24 @@ bool RendererOpenGL::Init()
                            512,  256,        /* ui_cmds, text_cmds */
                            0,    0);         /* shadow_cmds, debug_cmds */
 
+    // ToDo : disable this before i lose my fucking nut.
+#ifdef DEBUG
+    glEnable(GL_DEBUG_OUTPUT);
+    glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+
+    // Check if debug callback is supported before using it
+    if (glDebugMessageCallback != nullptr)
+    {
+        glDebugMessageCallback(DebugCallback, nullptr);
+        // Optional: enable everything
+        glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_TRUE);
+    }
+    else
+    {
+        WARNLOG("RendererOpenGL::Init: GL_KHR_debug not available; debug callback disabled");
+    }
+#endif // DEBUG
+
     return true;
 }
 
@@ -721,16 +772,35 @@ void RendererOpenGL::EndFrame()
     // populated before it transfers to the render-side.
     if (auto* mfp = RendererGetMapFadePass()) mfp->FlushToRenderGraph(m_render_graph);
 
-    if (RendererIsFadeCachePreserved())
     {
-        // Palette-fade loop: BeginFrame skipped opening the IR write windows,
-        // so no new UI IR was submitted this frame.  Preserve the render
-        // thread's read-side IR unchanged so it re-draws the same UI/world
-        // geometry as the last real frame.  Only update the FrameState so that
-        // palette darkening is visible via upload_palette_texture() and
-        // PopulateFromIR()'s palette lookups.
-        // Note: non-IR rt_ snapshots (pip, rawblit, zoom, etc.) were moved
-        // above and will be empty during fades — EndFrame_GL() handles that.
+        const UICommandBuffers& wui = m_render_graph.GetWriteUIBuffers();
+        SYNCDBG(1, "EndFrame: fade=%d ir_active=%d solid=%zu slabbg=%zu sprites=%zu sprR=%zu sprC=%zu "
+                   "slabsel=%zu fbo=%zu mm=%zu cptr=%zu chand=%zu",
+                (int)RendererIsFadeCachePreserved(),
+                (int)wui.ir_active,
+                wui.solid_boxes.Size(),   wui.slab_backgrounds.Size(),
+                wui.sprites.Size(),       wui.sprites_remap.Size(),
+                wui.sprites_colored.Size(), wui.slab_selectors.Size(),
+                wui.fbo_quads.Size(),     wui.minimaps.Size(),
+                wui.cursor_pointers.Size(), wui.cursor_hands.Size());
+    }
+
+    if (RendererIsFadeCachePreserved() ||
+        (!m_render_graph.GetWriteUIBuffers().HasAnyCommands() &&
+         !m_render_graph.HasWriteMapFadeCmd()))
+    {
+        // Palette-fade loop OR a spurious second present with no UI submissions
+        // and no map-fade transition: preserve the render thread's read-side IR
+        // unchanged so it re-draws the same UI/world geometry as the last real
+        // frame.  Only update FrameState so palette darkening / tint changes
+        // are visible.
+        //
+        // Excluded when a map-fade cmd is pending: PVM_ParchFadeIn/Out frames
+        // submit no UI sprites, but we must Flip() with empty write buffers so
+        // the render thread reads fresh (empty) UI data.  Without this, stale
+        // quads from the last PVM_ParchmentView frame (sidebar background,
+        // minimap) would replay over the map-fade blend every transition frame.
+        SYNCDBG(1, "EndFrame: UpdateFrameState (no flip) — preserving previous UI");
         m_render_graph.UpdateFrameState(m_rt_frame_state);
     }
     else
@@ -741,11 +811,6 @@ void RendererOpenGL::EndFrame()
             m_world_renderer->FlipBuffers();
 
         if (ui_close) ui_close->FlipBuffers();
-
-        // Cursor data flows through UICommandBuffers (IR path); FlipBuffers is
-        // a no-op here.  RenderGraph::Flip() below atomically swaps the cursor
-        // IR channels along with all other UI commands.
-        CursorLayer_FlipBuffers();
 
         // Flip IR command buffers: atomically swap write↔read and latch the
         // FrameState snapshot so the render thread reads from stable copies.
@@ -986,7 +1051,8 @@ void RendererOpenGL::EndFrame_GL()
                             GL_RED, GL_UNSIGNED_BYTE, cmd.src_buf);
         }
 
-        // Palette texture already on unit 1 from upload_palette_texture() above.
+        // m_texPalette is always bound to unit 1; rebind explicitly (upload_palette_texture
+        // restores active unit to GL_TEXTURE0 on exit, but the binding on unit 1 persists).
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, m_texPalette);
 
@@ -1555,18 +1621,21 @@ void RendererOpenGL::EndFrame_GL()
         cursor->ExecuteCursorFromIR(m_render_graph.GetUIBuffersRT());
     platform_swap_gl_buffers(lbWindow);
 
-    // Clear per-frame queues AFTER the swap — not in BeginFrame().
-    // RendererPresentFrame() can be called multiple times per game tick (fade loops,
-    // loading screens, video playback).  If these queues are only cleared in
-    // BeginFrame(), the second+ swap re-renders stale UI/cursor entries over
-    // a glClear'd background (world geometry was already consumed on the first
-    // swap), causing visible flicker.
-    // Don't clear during fades — preserve queue content for the next fade iteration.
-    if (!RendererIsFadeCachePreserved())
-    {
-        UIRenderer_Clear();
-        CursorLayer_Clear();
-    }
+    // Phase 3C NOTE: do NOT call UIRenderer_Clear() or CursorLayer_Clear() here.
+    // EndFrame_GL() runs on the render thread; by the time SwapBuffers returns,
+    // the game thread has already been unblocked (Signal() fired in EndFrame())
+    // and may have called BeginFrame() → UIRenderer_Clear() → SetLayer(0) for the
+    // next sidebar draw.  A render-thread Clear() here resets m_current_layer to 1,
+    // clobbering the game thread's SetLayer(0) and causing sidebar sprites to be
+    // submitted to the Front layer instead of Back → m_rt_quads[0] empty → blank sidebar.
+    //
+    // The stale-re-draw scenario this originally guarded against (multiple
+    // RendererPresentFrame calls per tick) is now handled by:
+    //   1. BeginFrame() calling UIRenderer_Clear() / CursorLayer_Clear() at the
+    //      correct time (before any IR submissions).
+    //   2. The HasAnyCommands() guard in EndFrame() which skips Flip() when no
+    //      UI commands were submitted (preserving previous read-side IR instead).
+    //   3. The RendererIsFadeCachePreserved() guard for fade-loop frames.
 
     // Collect pending GPU timer query results for Tracy GPU zones.
     KFX_GPU_COLLECT();
@@ -2011,6 +2080,7 @@ void RendererOpenGL::ApplyLensGPUPasses()
     glBindVertexArray(0);
 
     glDepthMask(GL_TRUE);
+    glUseProgram(0);
 }
 
 bool RendererOpenGL::SubmitOverheadMap(const uint8_t* tile_colors, int tiles_x, int tiles_y,
@@ -2206,6 +2276,7 @@ void RendererOpenGL::FlushSceneToFBO(int w, int h)
 
         glDepthMask(GL_TRUE);
         glActiveTexture(GL_TEXTURE0);
+        glUseProgram(0);
         m_rt_rawblit_pending = false;
     }
 
@@ -2284,6 +2355,7 @@ void RendererOpenGL::FlushSceneToFBO(int w, int h)
 
         glDepthMask(GL_TRUE);
         glActiveTexture(GL_TEXTURE0);
+        glUseProgram(0);
     }
     m_rt_overhead_map_cmds.clear();
 
@@ -2329,6 +2401,7 @@ void RendererOpenGL::FlushSceneToFBO(int w, int h)
         glDisable(GL_BLEND);
         glDepthMask(GL_TRUE);
         glActiveTexture(GL_TEXTURE0);
+        glUseProgram(0);
         m_rt_transparent_blit_pending = false;
     }
 }
@@ -2521,6 +2594,7 @@ void RendererOpenGL::upload_palette_texture()
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, m_texPalette);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 256, 1, GL_RGBA, GL_UNSIGNED_BYTE, m_palette_upload_buf);
+    glActiveTexture(GL_TEXTURE0);
 }
 
 bool RendererOpenGL::init_fade_table_texture()

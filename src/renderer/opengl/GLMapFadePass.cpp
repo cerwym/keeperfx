@@ -221,6 +221,10 @@ bool GLMapFadePass::CaptureAndUploadFrames()
                                GL_TEXTURE_2D, m_tex[0], 0);
         glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
                                   GL_RENDERBUFFER, depth_rb);
+
+        float saved_cc[4];
+        glGetFloatv(GL_COLOR_CLEAR_VALUE, saved_cc);
+
         glViewport(0, 0, w, h);
         glClearColor(0, 0, 0, 1);
         glDepthMask(GL_TRUE);
@@ -231,6 +235,9 @@ bool GLMapFadePass::CaptureAndUploadFrames()
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glDeleteRenderbuffers(1, &depth_rb);
         glDeleteFramebuffers(1, &fbo);
+
+        glClearColor(saved_cc[0], saved_cc[1], saved_cc[2], saved_cc[3]);
+        glDepthMask(GL_FALSE);
     }
 
     glViewport(0, 0, w, h);

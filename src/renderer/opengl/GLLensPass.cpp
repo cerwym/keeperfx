@@ -94,6 +94,7 @@ bool GLLensPassBase::CompilePass(const char* frag_src)
     glUseProgram(m_prog);
     int loc = glGetUniformLocation(m_prog, "u_texture");
     if (loc >= 0) glUniform1i(loc, 0);
+    glUseProgram(0);
 
     // Create fullscreen quad VAO
     glGenVertexArrays(1, &m_vao);
@@ -228,6 +229,7 @@ bool GLOverlayPass::CompileShaders()
     {
         glUseProgram(m_prog);
         glUniform1i(loc, 1);
+        glUseProgram(0);
     }
     return true;
 }
