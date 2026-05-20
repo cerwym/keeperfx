@@ -256,6 +256,10 @@ void LbScreenSwap(void)
 {
     /* Refresh the window surface pointer each frame (guards against resize/alt-tab). */
     lbScreenSurface = SDL_GetWindowSurface(lbWindow);
+    if (lbScreenSurface == NULL) {
+        ERRORLOG("LbScreenSwap: SDL_GetWindowSurface returned NULL: %s", SDL_GetError());
+        return;
+    }
     SDL_Rect dst = { 0, 0, lbScreenSurface->w, lbScreenSurface->h };
 
     if (lbScaleSurface != NULL)

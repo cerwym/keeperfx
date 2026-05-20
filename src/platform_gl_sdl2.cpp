@@ -232,8 +232,9 @@ extern "C" int platform_create_gl_context(void *sdl_window)
     // 0  = no vsync
     int vsync_result = SDL_GL_SetSwapInterval(-1); // Try adaptive first
     if (vsync_result != 0) {
-        // Fallback to strict vsync if adaptive not supported
-        SDL_GL_SetSwapInterval(1);
+        vsync_result = SDL_GL_SetSwapInterval(1); // Fallback to strict vsync
+        if (vsync_result != 0)
+            LbWarnLog("platform_create_gl_context: SDL_GL_SetSwapInterval failed for both adaptive and strict vsync: %s\n", SDL_GetError());
     }
 
     // The window was created with SDL_WINDOW_HIDDEN so that SDL2's internal

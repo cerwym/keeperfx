@@ -291,12 +291,22 @@ void PlatformWindows::VideoInit()
     // On Windows, SDL2 calls SetPixelFormat inside SDL_CreateWindow itself
     // (WIN_GL_SetupWindow), so these values must be established here, not in
     // platform_create_gl_context which runs after the window already exists.
-    SDL_GL_SetAttribute(SDL_GL_RED_SIZE,    10);
-    SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE,  10);
-    SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE,   10);
-    SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE,   2);
-    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE,  24);
+    // DOUBLEBUFFER and DEPTH_SIZE are critical: failure means single-buffered or
+    // depthless rendering, both of which cause severe visual artefacts.
+    struct { int attr; int value; const char* name; } gl_attrs[] = {
+        { SDL_GL_RED_SIZE,     10, "SDL_GL_RED_SIZE"     },
+        { SDL_GL_GREEN_SIZE,   10, "SDL_GL_GREEN_SIZE"   },
+        { SDL_GL_BLUE_SIZE,    10, "SDL_GL_BLUE_SIZE"    },
+        { SDL_GL_ALPHA_SIZE,    2, "SDL_GL_ALPHA_SIZE"   },
+        { SDL_GL_DOUBLEBUFFER,  1, "SDL_GL_DOUBLEBUFFER" },
+        { SDL_GL_DEPTH_SIZE,   24, "SDL_GL_DEPTH_SIZE"   },
+    };
+    for (int i = 0; i < (int)(sizeof(gl_attrs)/sizeof(gl_attrs[0])); ++i)
+    {
+        if (SDL_GL_SetAttribute((SDL_GLattr)gl_attrs[i].attr, gl_attrs[i].value) != 0)
+            fprintf(stderr, "PlatformWindows::VideoInit: %s=%d failed: %s\n",
+                    gl_attrs[i].name, gl_attrs[i].value, SDL_GetError());
+    }
 }
 
 // ----- File system helpers -----
