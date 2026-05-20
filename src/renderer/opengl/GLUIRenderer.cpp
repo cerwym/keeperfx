@@ -14,6 +14,7 @@
 #include "renderer/opengl/GLSpriteAtlas.h"
 #include "renderer/opengl/GLFontAtlas.h"
 #include "renderer/RendererManager.h"
+#include "renderer/RenderThreadManager.h"
 #include "bflib_basics.h"
 #include "bflib_video.h"       // lbDisplay.DrawFlags (UIAlphaFromDrawFlags), units_per_pixel_best
 #include "engine_render.h"     // colored_stripey_lines, hud_scale, line_box_size
@@ -636,10 +637,16 @@ void GLUIRenderer::DrawBack()
     KFX_GL_SCOPE(back_grp, "UIPass/Back");
 
     // Render only layer-0 (back) quads — the sidebar background panels that must land
-    // beneath the CPU staging-buffer blit.  No hand sprites, minimap, or lines here.
+    // beneath the CPU staging-buffer blit.  Layer-0 is populated by draw_whole_status_panel()
+    // via UIRenderer_SetLayer(0) in draw_2d_elements(), redraw_creature_view(), and
+    // ParchmentScene::draw().  If no sidebar is visible this vector is legitimately empty.
     if (m_rt_quads[0].empty())
     {
-        glDisable(GL_BLEND);  // world pass may have left blend enabled; ensure clean state
+        // Ensure both blend and depth-test are clean regardless of what the world
+        // pass may have left behind (gpu_execute_passes early-return leaves both
+        // states indeterminate when draw_cmds is empty).
+        glDisable(GL_BLEND);
+        glDisable(GL_DEPTH_TEST);
         return;
     }
 
@@ -709,6 +716,7 @@ static void FlushFBOQuads_impl(const std::vector<FBOQuad>& quads, GLuint prog, G
 
     glBindVertexArray(0);
     glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
     glActiveTexture(GL_TEXTURE0);
 }
 
@@ -732,17 +740,16 @@ void GLUIRenderer::DrawFront()
     glDisable(GL_SCISSOR_TEST);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
 
     // FBO/PiP composite quads drawn first so frame-corner sprites sit on top.
+    // FlushFBOQuads_impl manages its own GL_BLEND state (enable on entry, disable on exit).
     FlushFBOQuads_impl(m_fbo_quads, m_prog_fbo, m_loc_screen_fbo,
                        m_vao, m_vbo, m_screen_width, m_screen_height,
                        m_loc_fbo_clip_rect, m_loc_fbo_clip_radius, m_loc_fbo_clip_scrh);
     m_fbo_quads.clear();
-    // Re-enable blend for atlas sprites.
+
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
@@ -873,11 +880,10 @@ void GLUIRenderer::DrawFrontBase()
     glDisable(GL_SCISSOR_TEST);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
 
+    // FlushFBOQuads_impl manages its own GL_BLEND state (enable on entry, disable on exit).
     FlushFBOQuads_impl(m_fbo_quads, m_prog_fbo, m_loc_screen_fbo,
                        m_vao, m_vbo, m_screen_width, m_screen_height,
                        m_loc_fbo_clip_rect, m_loc_fbo_clip_radius, m_loc_fbo_clip_scrh);
@@ -965,6 +971,11 @@ void GLUIRenderer::DrawFrontOverlay()
 {
     KFX_ZONE("UIRenderer::DrawFrontOverlay");
     KFX_GL_SCOPE(front_ovl_grp, "UIPass/FrontOverlay");
+
+    // Guarantee scissor is off before this function's draws. DrawFront() and
+    // DrawFrontBase() both do this defensively; match that discipline so layer-3
+    // flushes (tooltip, corner frames) are never clipped by a stale scissor rect.
+    glDisable(GL_SCISSOR_TEST);
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -1186,11 +1197,11 @@ void GLUIRenderer::Clear()
     // m_minimap_pending is intentionally NOT reset here. Its lifecycle:
     //   - Set to true: SubmitMinimap() on the game thread.
     //   - Set to false: FlipBuffers() on the game thread, after copying to m_rt_minimap_pending.
-    // Clear() is called both from BeginFrame() (game thread) AND from the post-swap
-    // path in EndFrame_GL() (render thread).  Resetting m_minimap_pending in the
-    // render-thread call races with the game thread that may have just set it via
-    // SubmitMinimap() — causing the minimap to disappear every other frame.
+    // Clear() is called only from BeginFrame() on the game thread; it is NOT called
+    // from the render thread (see comment in RendererOpenGL.cpp near platform_swap_gl_buffers).
     m_current_layer = 1;  // Reset to front layer (default) each frame
+    m_world_depth_active = false;   // Safety: ensure flags are clear at frame start
+    m_top_overlay_active = false;
     m_game_vp_set = false;
 }
 
@@ -1220,6 +1231,10 @@ void GLUIRenderer::ExecuteUIFromIR(const UICommandBuffers& cmds, const FrameStat
 
     // Clear render-thread quad/line buffers and rebuild from IR commands.
     for (int i = 0; i < 4; ++i) { m_rt_quads[i].clear(); m_rt_lines[i].clear(); }
+
+    SYNCDBG(1, "ExecuteUIFromIR: sprites=%zu solid=%zu slabbg=%zu (atlas=%s)",
+            cmds.sprites.Size(), cmds.solid_boxes.Size(), cmds.slab_backgrounds.Size(),
+            m_sprite_atlas ? "ok" : "NULL");
 
     // Restore game viewport if it was captured this frame.
     if (cmds.game_vp.set) {
@@ -1345,44 +1360,44 @@ void GLUIRenderer::ExecuteUIFromIR(const UICommandBuffers& cmds, const FrameStat
     // than calling SubmitLine() which writes to m_lines[] (game-thread write buffer).
     // SubmitLine() must never be called from ExecuteUIFromIR (render thread) because
     // m_lines[] is concurrently cleared by Clear() on the game thread.
-    if (m_palette_data) {
-        for (const auto& cmd : cmds.slab_selectors) {
-            // Re-execute the stripey-line tessellation using the pre-computed params.
-            float dx = (float)(cmd.x2 - cmd.x1);
-            float dy = (float)(cmd.y2 - cmd.y1);
-            if (cmd.line_length < 0.001f) continue;
-            float ndx = dx / cmd.line_length;
-            float ndy = dy / cmd.line_length;
-            float phase = (float)cmd.game_turn;
-            const struct stripey_line* sl = &colored_stripey_lines[cmd.colour];
-            const int layer_idx = IRUILayerToIndex(cmd.layer);
-            constexpr int MAX_SEG = 512;
-            float t = 0.0f;
-            int segs = 0;
-            while (t < cmd.line_length && segs < MAX_SEG) {
-                float anim_pos = phase + t * cmd.step;
-                anim_pos = std::fmod(anim_pos, (float)STRIPEY_COLORS);
-                if (anim_pos < 0.0f) anim_pos += (float)STRIPEY_COLORS;
-                int ci = std::max(0, std::min(STRIPEY_COLORS-1, (int)anim_pos));
-                float t_end = std::min(t + cmd.band_width, cmd.line_length);
-                unsigned char pi = sl->stripey_line_color_array[ci];
-                float r = m_palette_data[pi*3+0]/VGA6_MAX;
-                float g = m_palette_data[pi*3+1]/VGA6_MAX;
-                float b = m_palette_data[pi*3+2]/VGA6_MAX;
-                float sx = (float)cmd.x1 + ndx*t;
-                float sy = (float)cmd.y1 + ndy*t;
-                float ex = (float)cmd.x1 + ndx*t_end;
-                float ey = (float)cmd.y1 + ndy*t_end;
-                UILine ln;
-                ln.x1 = sx; ln.y1 = sy; ln.x2 = ex; ln.y2 = ey;
-                ln.r = r;   ln.g = g;   ln.b = b;   ln.a = 1.0f;
-                ln.z = cmd.z_depth;
-                ln.thickness = cmd.thickness;
-                m_rt_lines[layer_idx].push_back(ln);
-                t = t_end; ++segs;
-            }
+    // Use the per-frame palette snapshot (pal) — not the live m_palette_data pointer —
+    // to avoid a data race with LbPaletteSet() on the game thread.
+    for (const auto& cmd : cmds.slab_selectors) {
+        float dx = (float)(cmd.x2 - cmd.x1);
+        float dy = (float)(cmd.y2 - cmd.y1);
+        if (cmd.line_length < 0.001f) continue;
+        float ndx = dx / cmd.line_length;
+        float ndy = dy / cmd.line_length;
+        float phase = (float)cmd.game_turn;
+        const struct stripey_line* sl = &colored_stripey_lines[cmd.colour];
+        const int layer_idx = IRUILayerToIndex(cmd.layer);
+        constexpr int MAX_SEG = 512;
+        float t = 0.0f;
+        int segs = 0;
+        while (t < cmd.line_length && segs < MAX_SEG) {
+            float anim_pos = phase + t * cmd.step;
+            anim_pos = std::fmod(anim_pos, (float)STRIPEY_COLORS);
+            if (anim_pos < 0.0f) anim_pos += (float)STRIPEY_COLORS;
+            int ci = std::max(0, std::min(STRIPEY_COLORS-1, (int)anim_pos));
+            float t_end = std::min(t + cmd.band_width, cmd.line_length);
+            unsigned char pi = sl->stripey_line_color_array[ci];
+            float r = pal[pi*3+0]/VGA6_MAX;
+            float g = pal[pi*3+1]/VGA6_MAX;
+            float b = pal[pi*3+2]/VGA6_MAX;
+            float sx = (float)cmd.x1 + ndx*t;
+            float sy = (float)cmd.y1 + ndy*t;
+            float ex = (float)cmd.x1 + ndx*t_end;
+            float ey = (float)cmd.y1 + ndy*t_end;
+            UILine ln;
+            ln.x1 = sx; ln.y1 = sy; ln.x2 = ex; ln.y2 = ey;
+            ln.r = r;   ln.g = g;   ln.b = b;   ln.a = 1.0f;
+            ln.z = cmd.z_depth;
+            ln.thickness = cmd.thickness;
+            m_rt_lines[layer_idx].push_back(ln);
+            t = t_end; ++segs;
         }
     }
+
 }
 
 void GLUIRenderer::PopulateFromIR(const UICommandBuffers& cmds, const FrameState& fs)
@@ -1834,12 +1849,18 @@ void GLUIRenderer::SubmitQuad(float x, float y, float w, float h, float u0, floa
 
 void GLUIRenderer::SetWorldDepth(float ndc_z)
 {
+    // Guard: render thread must not modify m_world_depth_active — the game thread
+    // reads it concurrently in ComputeIRLayer() during Phase 3C execution.
+    // Render-thread callers (GLWorldViewRenderer::GPURenderNow) no longer call
+    // this function; the guard is a safety net for any future inadvertent call.
+    if (g_on_render_thread) return;
     m_world_z            = ndc_z;
     m_world_depth_active = true;
 }
 
 void GLUIRenderer::ClearWorldDepth()
 {
+    if (g_on_render_thread) return;
     m_world_depth_active = false;
 }
 

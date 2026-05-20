@@ -964,11 +964,11 @@ void GLWorldViewRenderer::EndHandSpriteRendering()
     m_screen_h         = m_saved_screen_h;
     m_current_sprite_z = m_saved_sprite_z;
 
-    // Restore GL state dirtied by BeginHandSpriteRendering so the next frame's
-    // glClear(GL_DEPTH_BUFFER_BIT) actually clears (requires depthMask=GL_TRUE)
-    // and subsequent passes start from a known state.
+    // Restore depth mask so the next frame's glClear(GL_DEPTH_BUFFER_BIT) writes
+    // correctly (depth writes require depthMask=GL_TRUE).
+    // GL_DEPTH_TEST is intentionally left in whatever state BeginHandSpriteRendering
+    // found it — the cursor pass runs with depth disabled and we must not change that.
     glDepthMask(GL_TRUE);
-    glEnable(GL_DEPTH_TEST);
     glDisable(GL_BLEND);
 }
 
@@ -1903,11 +1903,8 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
             // places sprites reliably in front of same-bucket tile geometry.  Call it
             // first so both UIRenderer (JontySprites) and KSprite passes use the same z.
             setup_world_sprite_processing(cmd.bucket_num);
-            UIRenderer_BeginWorldDepth(m_current_sprite_z);
 
             draw_3d_sprites_for_bucket(cmd.bucket_num);
-            UIRenderer_DrawWorldSprites();
-            UIRenderer_EndWorldDepth();
 
             glUseProgram(m_shader);
             glBindVertexArray(m_vao);
@@ -1929,11 +1926,8 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl)
             UIRenderer_SetScreenSize(m_screen_w, m_screen_h);
 
             setup_world_sprite_processing(cmd.bucket_num);
-            UIRenderer_BeginWorldDepth(m_current_sprite_z);
 
             draw_frontview_3d_sprites_for_bucket_current(cmd.bucket_num);
-            UIRenderer_DrawWorldSprites();
-            UIRenderer_EndWorldDepth();
 
             glUseProgram(m_shader);
             glBindVertexArray(m_vao);

@@ -100,8 +100,7 @@ void GLCursorLayer::ExecuteCursorFromIR(const UICommandBuffers& cmds)
                                      k.draw_flags, k.draw_alpha);
         }
 
-        m_wvr->EndHandSpriteRendering();
-        glDisable(GL_BLEND);
+        m_wvr->EndHandSpriteRendering();  // restores depthMask and disables blend
     }
 }
 
