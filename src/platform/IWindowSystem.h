@@ -58,6 +58,44 @@ public:
      *  No-op on platforms where warping is meaningless. */
     virtual void WarpCursor(int /*x*/, int /*y*/) {}
 
+    // ----- Window management -----
+
+    virtual bool HasWindow() const { return false; }
+    virtual unsigned int GetWindowFlags() const { return 0; }
+    virtual void GetWindowSize(int* out_w, int* out_h) const
+    {
+        if (out_w) *out_w = 0;
+        if (out_h) *out_h = 0;
+    }
+    virtual int GetWindowDisplayIndex() const { return -1; }
+    virtual int GetNumVideoDisplays() const { return 0; }
+    virtual int GetDesktopDisplayMode(int /*display*/, int* out_w, int* out_h) const
+    {
+        if (out_w) *out_w = 0;
+        if (out_h) *out_h = 0;
+        return -1;
+    }
+    virtual int GetDisplayBounds(int /*display*/, int* out_x, int* out_y, int* out_w, int* out_h) const
+    {
+        if (out_x) *out_x = 0;
+        if (out_y) *out_y = 0;
+        if (out_w) *out_w = 0;
+        if (out_h) *out_h = 0;
+        return -1;
+    }
+    virtual int GetClosestDisplayMode(int /*display*/, int /*desired_w*/, int /*desired_h*/, int* out_w, int* out_h) const
+    {
+        if (out_w) *out_w = 0;
+        if (out_h) *out_h = 0;
+        return 0;
+    }
+    virtual int SetWindowDisplayMode(int /*w*/, int /*h*/) { return -1; }
+    virtual void SetWindowSize(int /*w*/, int /*h*/) {}
+    virtual int SetWindowFullscreen(unsigned int /*flags*/) { return -1; }
+    virtual void SetWindowBordered(int /*bordered*/) {}
+    virtual void SetWindowPosition(int /*x*/, int /*y*/) {}
+    virtual bool CreateWindow(const char* /*title*/, int /*x*/, int /*y*/, int /*w*/, int /*h*/, unsigned int /*flags*/) { return false; }
+
     // ----- Display info -----
 
     /** Returns the refresh rate (Hz) of the display the game window is on.

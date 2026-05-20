@@ -67,6 +67,113 @@ void WindowSystemSDL::WarpCursor(int x, int y)
     SDL_WarpMouseInWindow(lbWindow, x, y);
 }
 
+bool WindowSystemSDL::HasWindow() const
+{
+    return lbWindow != nullptr;
+}
+
+unsigned int WindowSystemSDL::GetWindowFlags() const
+{
+    return lbWindow ? SDL_GetWindowFlags(lbWindow) : 0;
+}
+
+void WindowSystemSDL::GetWindowSize(int* out_w, int* out_h) const
+{
+    if (out_w) *out_w = 0;
+    if (out_h) *out_h = 0;
+    if (lbWindow == nullptr)
+        return;
+    SDL_GetWindowSize(lbWindow, out_w, out_h);
+}
+
+int WindowSystemSDL::GetWindowDisplayIndex() const
+{
+    return lbWindow ? SDL_GetWindowDisplayIndex(lbWindow) : -1;
+}
+
+int WindowSystemSDL::GetNumVideoDisplays() const
+{
+    return SDL_GetNumVideoDisplays();
+}
+
+int WindowSystemSDL::GetDesktopDisplayMode(int display, int* out_w, int* out_h) const
+{
+    if (out_w) *out_w = 0;
+    if (out_h) *out_h = 0;
+    SDL_DisplayMode desktop;
+    if (SDL_GetDesktopDisplayMode(display, &desktop) != 0)
+        return -1;
+    if (out_w) *out_w = desktop.w;
+    if (out_h) *out_h = desktop.h;
+    return 0;
+}
+
+int WindowSystemSDL::GetDisplayBounds(int display, int* out_x, int* out_y, int* out_w, int* out_h) const
+{
+    if (out_x) *out_x = 0;
+    if (out_y) *out_y = 0;
+    if (out_w) *out_w = 0;
+    if (out_h) *out_h = 0;
+    SDL_Rect rect = {0, 0, 0, 0};
+    if (SDL_GetDisplayBounds(display, &rect) != 0)
+        return -1;
+    if (out_x) *out_x = rect.x;
+    if (out_y) *out_y = rect.y;
+    if (out_w) *out_w = rect.w;
+    if (out_h) *out_h = rect.h;
+    return 0;
+}
+
+int WindowSystemSDL::GetClosestDisplayMode(int display, int desired_w, int desired_h, int* out_w, int* out_h) const
+{
+    if (out_w) *out_w = 0;
+    if (out_h) *out_h = 0;
+    SDL_DisplayMode desired = {SDL_PIXELFORMAT_UNKNOWN, desired_w, desired_h, 0, 0};
+    SDL_DisplayMode closest = desired;
+    if (SDL_GetClosestDisplayMode(display, &desired, &closest) == nullptr)
+        return 0;
+    if (out_w) *out_w = closest.w;
+    if (out_h) *out_h = closest.h;
+    return 1;
+}
+
+int WindowSystemSDL::SetWindowDisplayMode(int w, int h)
+{
+    if (lbWindow == nullptr)
+        return -1;
+    SDL_DisplayMode dm = {SDL_PIXELFORMAT_UNKNOWN, w, h, 0, 0};
+    return SDL_SetWindowDisplayMode(lbWindow, &dm);
+}
+
+void WindowSystemSDL::SetWindowSize(int w, int h)
+{
+    if (lbWindow != nullptr)
+        SDL_SetWindowSize(lbWindow, w, h);
+}
+
+int WindowSystemSDL::SetWindowFullscreen(unsigned int flags)
+{
+    return lbWindow ? SDL_SetWindowFullscreen(lbWindow, flags) : -1;
+}
+
+void WindowSystemSDL::SetWindowBordered(int bordered)
+{
+    if (lbWindow != nullptr)
+        SDL_SetWindowBordered(lbWindow, bordered ? SDL_TRUE : SDL_FALSE);
+}
+
+void WindowSystemSDL::SetWindowPosition(int x, int y)
+{
+    if (lbWindow != nullptr)
+        SDL_SetWindowPosition(lbWindow, x, y);
+}
+
+bool WindowSystemSDL::CreateWindow(const char* title, int x, int y, int w, int h, unsigned int flags)
+{
+    lbWindow = SDL_CreateWindow(title, x, y, w, h, flags);
+    return lbWindow != nullptr;
+}
+
 int WindowSystemSDL::GetDisplayRefreshRate() const
 {
     if (lbWindow == nullptr)

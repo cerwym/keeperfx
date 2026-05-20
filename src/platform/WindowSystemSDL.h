@@ -26,6 +26,22 @@ public:
     void SetCursorVisible(bool visible) override;
     void WarpCursor(int x, int y) override;
 
+    // ----- Window management -----
+    bool HasWindow() const override;
+    unsigned int GetWindowFlags() const override;
+    void GetWindowSize(int* out_w, int* out_h) const override;
+    int GetWindowDisplayIndex() const override;
+    int GetNumVideoDisplays() const override;
+    int GetDesktopDisplayMode(int display, int* out_w, int* out_h) const override;
+    int GetDisplayBounds(int display, int* out_x, int* out_y, int* out_w, int* out_h) const override;
+    int GetClosestDisplayMode(int display, int desired_w, int desired_h, int* out_w, int* out_h) const override;
+    int SetWindowDisplayMode(int w, int h) override;
+    void SetWindowSize(int w, int h) override;
+    int SetWindowFullscreen(unsigned int flags) override;
+    void SetWindowBordered(int bordered) override;
+    void SetWindowPosition(int x, int y) override;
+    bool CreateWindow(const char* title, int x, int y, int w, int h, unsigned int flags) override;
+
     // ----- Display info -----
     int GetDisplayRefreshRate() const override;
 

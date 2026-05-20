@@ -235,6 +235,136 @@ extern "C" int PlatformManager_GetDisplayRefreshRate()
     return ws ? ws->GetDisplayRefreshRate() : 0;
 }
 
+extern "C" int PlatformManager_HasWindow()
+{
+    IPlatform* p = PlatformManager::Get();
+    if (!p) return 0;
+    IWindowSystem* ws = p->GetWindowSystem();
+    return (ws && ws->HasWindow()) ? 1 : 0;
+}
+
+extern "C" unsigned int PlatformManager_GetWindowFlags()
+{
+    IPlatform* p = PlatformManager::Get();
+    if (!p) return 0;
+    IWindowSystem* ws = p->GetWindowSystem();
+    return ws ? ws->GetWindowFlags() : 0;
+}
+
+extern "C" void PlatformManager_GetWindowSize(int* out_w, int* out_h)
+{
+    IPlatform* p = PlatformManager::Get();
+    if (out_w) *out_w = 0;
+    if (out_h) *out_h = 0;
+    if (!p) return;
+    IWindowSystem* ws = p->GetWindowSystem();
+    if (ws) ws->GetWindowSize(out_w, out_h);
+}
+
+extern "C" int PlatformManager_GetWindowDisplayIndex()
+{
+    IPlatform* p = PlatformManager::Get();
+    if (!p) return -1;
+    IWindowSystem* ws = p->GetWindowSystem();
+    return ws ? ws->GetWindowDisplayIndex() : -1;
+}
+
+extern "C" int PlatformManager_GetNumVideoDisplays()
+{
+    IPlatform* p = PlatformManager::Get();
+    if (!p) return 0;
+    IWindowSystem* ws = p->GetWindowSystem();
+    return ws ? ws->GetNumVideoDisplays() : 0;
+}
+
+extern "C" int PlatformManager_GetDesktopDisplayMode(int display, int* out_w, int* out_h)
+{
+    IPlatform* p = PlatformManager::Get();
+    if (out_w) *out_w = 0;
+    if (out_h) *out_h = 0;
+    if (!p) return -1;
+    IWindowSystem* ws = p->GetWindowSystem();
+    return ws ? ws->GetDesktopDisplayMode(display, out_w, out_h) : -1;
+}
+
+extern "C" int PlatformManager_GetDisplayBounds(int display, int* out_x, int* out_y, int* out_w, int* out_h)
+{
+    IPlatform* p = PlatformManager::Get();
+    if (out_x) *out_x = 0;
+    if (out_y) *out_y = 0;
+    if (out_w) *out_w = 0;
+    if (out_h) *out_h = 0;
+    if (!p) return -1;
+    IWindowSystem* ws = p->GetWindowSystem();
+    return ws ? ws->GetDisplayBounds(display, out_x, out_y, out_w, out_h) : -1;
+}
+
+extern "C" int PlatformManager_GetClosestDisplayMode(int display, int desired_w, int desired_h, int* out_w, int* out_h)
+{
+    IPlatform* p = PlatformManager::Get();
+    if (out_w) *out_w = 0;
+    if (out_h) *out_h = 0;
+    if (!p) return 0;
+    IWindowSystem* ws = p->GetWindowSystem();
+    return ws ? ws->GetClosestDisplayMode(display, desired_w, desired_h, out_w, out_h) : 0;
+}
+
+extern "C" int PlatformManager_SetWindowDisplayMode(int w, int h)
+{
+    IPlatform* p = PlatformManager::Get();
+    if (!p) return -1;
+    IWindowSystem* ws = p->GetWindowSystem();
+    return ws ? ws->SetWindowDisplayMode(w, h) : -1;
+}
+
+extern "C" void PlatformManager_SetWindowSize(int w, int h)
+{
+    IPlatform* p = PlatformManager::Get();
+    if (!p) return;
+    IWindowSystem* ws = p->GetWindowSystem();
+    if (ws) ws->SetWindowSize(w, h);
+}
+
+extern "C" int PlatformManager_SetWindowFullscreen(unsigned int flags)
+{
+    IPlatform* p = PlatformManager::Get();
+    if (!p) return -1;
+    IWindowSystem* ws = p->GetWindowSystem();
+    return ws ? ws->SetWindowFullscreen(flags) : -1;
+}
+
+extern "C" void PlatformManager_SetWindowBordered(int bordered)
+{
+    IPlatform* p = PlatformManager::Get();
+    if (!p) return;
+    IWindowSystem* ws = p->GetWindowSystem();
+    if (ws) ws->SetWindowBordered(bordered);
+}
+
+extern "C" void PlatformManager_SetWindowPosition(int x, int y)
+{
+    IPlatform* p = PlatformManager::Get();
+    if (!p) return;
+    IWindowSystem* ws = p->GetWindowSystem();
+    if (ws) ws->SetWindowPosition(x, y);
+}
+
+extern "C" int PlatformManager_CreateWindow(const char* title, int x, int y, int w, int h, unsigned int flags)
+{
+    IPlatform* p = PlatformManager::Get();
+    if (!p) return 0;
+    IWindowSystem* ws = p->GetWindowSystem();
+    return (ws && ws->CreateWindow(title, x, y, w, h, flags)) ? 1 : 0;
+}
+
+extern "C" void PlatformManager_WarpCursor(int x, int y)
+{
+    IPlatform* p = PlatformManager::Get();
+    if (!p) return;
+    IWindowSystem* ws = p->GetWindowSystem();
+    if (ws) ws->WarpCursor(x, y);
+}
+
 IAudioPlatform* PlatformManager_GetAudio()
 {
     IPlatform* p = PlatformManager::Get();
