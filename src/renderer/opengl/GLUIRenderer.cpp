@@ -718,6 +718,7 @@ static void FlushFBOQuads_impl(const std::vector<FBOQuad>& quads, GLuint prog, G
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
     glActiveTexture(GL_TEXTURE0);
+    glUseProgram(0);
 }
 
 void GLUIRenderer::DrawFront()
@@ -964,7 +965,9 @@ void GLUIRenderer::DrawFrontBase()
     }
 
     FlushLines_RT(1);
-    glDisable(GL_BLEND);  // DrawFrontOverlay may not always follow; close blend explicitly
+    glDepthMask(GL_TRUE);
+    glUseProgram(0);
+    glDisable(GL_BLEND);
 }
 
 void GLUIRenderer::DrawFrontOverlay()

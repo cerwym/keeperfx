@@ -721,6 +721,7 @@ void GLTextRenderer::Draw()
 
     // Restore GL state — depth test stays OFF; all passes after text
     // (screen tint, cursor) are 2D overlays that must not depth-test.
+    glActiveTexture(GL_TEXTURE0);
     glDisable(GL_BLEND);
     glBindVertexArray(0);
     glUseProgram(0);
