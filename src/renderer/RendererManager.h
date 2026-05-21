@@ -273,6 +273,11 @@ void RendererNotifyFrontendSpritesLoaded(void);
  *  campaign-map ensign / pin sprites without the staging-buffer fallback. */
 void RendererNotifyLandviewFlagLoaded(void);
 
+/** Append swipe_sprites into the live atlas after load_swipe_graphic_for_creature().
+ *  Swipe sprites are loaded dynamically per creature when entering possession mode.
+ *  Must be called after every successful load so DrawSwipeOverlay can look up UVs. */
+void RendererNotifySwipeSpritesLoaded(void);
+
 /** Call after setup_stuff() to initialise GPU resources that depend on game
  *  lookup tables (render_fade_tables, etc.) which aren't available yet when
  *  RendererInit() runs.  Must be called exactly once during startup. */
@@ -318,6 +323,7 @@ int WorldViewRenderer_SubmitKeeperSprite(int32_t dst_x, int32_t dst_y, int32_t d
  *  Must be called before each level load so stale data-pointer mappings
  *  from the previous level are not reused. */
 void WorldViewRenderer_ClearKeeperSpriteAtlas(void);
+void WorldViewRenderer_PreloadKeeperSpriteAtlas(void);
 
 /** Flush any pending GL work on the global sprite atlas (GLSpriteAtlas).
  *  Must be called from the render thread (the thread that owns the GL context).

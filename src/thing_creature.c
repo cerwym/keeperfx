@@ -369,6 +369,7 @@ TbBool load_swipe_graphic_for_creature(const struct Thing *thing)
         return false;
     }
     game.loaded_swipe_idx = swpe_idx;
+    RendererNotifySwipeSpritesLoaded();
     return true;
 }
 

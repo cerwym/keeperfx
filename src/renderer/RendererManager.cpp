@@ -47,6 +47,7 @@
 #include "player_data.h"       // my_player_number
 // Forward declaration to avoid pulling in frontend.h (conflicts with C++ stdlib)
 extern "C" { struct TbSpriteSheet; extern struct TbSpriteSheet *button_sprites; extern struct TbSpriteSheet *custom_sprites; extern struct TbSpriteSheet *pointer_sprites; extern struct TbSpriteSheet *map_flag; }
+#include "thing_creature.h"    // swipe_sprites
 #include "renderer/RenderPass_C.h"
 #include <unordered_map>
 #include "post_inc.h"
@@ -154,6 +155,19 @@ void RendererNotifyLandviewFlagLoaded()
     // SW mode: register into the IUIRenderer handle table so SubmitPanelSprite
     // falls back to LbSpriteDrawResized correctly.
     register_sheet_software(map_flag);
+}
+
+void RendererNotifySwipeSpritesLoaded()
+{
+#ifdef RENDERER_OPENGL_ENABLED
+    if (s_spriteAtlas && swipe_sprites && num_sprites(swipe_sprites) > 0) {
+        int32_t before = (int32_t)s_spriteAtlas->GetRegisteredCount();
+        s_spriteAtlas->AddSheet(swipe_sprites, "swipe_sprites");
+        int32_t after  = (int32_t)s_spriteAtlas->GetRegisteredCount();
+        SYNCLOG("RendererNotifySwipeSpritesLoaded: swipe_sprites=%p added %d new sprites (total %d)",
+                (void*)swipe_sprites, after - before, after);
+    }
+#endif
 }
 
 void RendererNotifyGameTablesReady()
