@@ -33,6 +33,7 @@
 #include "bflib_vidraw.h"
 #include "bflib_mshandler.hpp"
 #include "bflib_inputctrl.h"
+#include "platform/PlatformManager.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -113,20 +114,20 @@ TbResult LbMouseSetPosition(long x, long y)
 {
   if (!lbMouseInstalled)
     return Lb_FAIL;
-  SDL_Window *window;
   if (!lbMouseGrabbed)
   {
-    window = SDL_GetKeyboardFocus();
+    SDL_Window* window = SDL_GetKeyboardFocus();
     if (IsMouseInsideWindow())
     {
-      // in altinput mode
-      // first move the game cursor to the position of the HostOS cursor, and then move the HostOS cursor to the given x and y location.
-      // this keeps Host OS cursor and game cursor in sync (same position)
+      // in altinput mode: first sync the game cursor to the host cursor position,
+      // then warp the host cursor to the requested x,y.
       if (!LbMoveGameCursorToHostCursor())
       {
         return Lb_FAIL;
       }
     }
+    if (window != NULL)
+        SDL_WarpMouseInWindow(window, x, y);
   }
   else
   {
@@ -134,10 +135,8 @@ TbResult LbMouseSetPosition(long x, long y)
       {
         return Lb_FAIL;
       }
-      window = lbWindow;
+      PlatformManager_WarpCursor(x, y);
   }
-  if (window != NULL)
-      SDL_WarpMouseInWindow(window, x, y);
   return Lb_SUCCESS;
 }
 

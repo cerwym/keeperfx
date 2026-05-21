@@ -24,8 +24,6 @@
 
 #include "globals.h"
 
-#include <SDL2/SDL.h>
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -140,7 +138,7 @@ struct ScreenModeInfo {
      /** Window position Y. */
     int window_pos_y;
     /** SDL window flags. */
-    Uint32 sdlFlags;
+    unsigned int sdlFlags;
     /** Text description of the mode. */
     char Desc[23];
 };
@@ -287,8 +285,6 @@ extern unsigned short units_per_pixel;
 extern unsigned short display_id;
 
 extern TbDisplayStruct lbDisplay;
-extern SDL_Window *lbWindow;
-extern SDL_Color lbPaletteColors[];
 /******************************************************************************/
 TbBool LbScreenIsModeAvailable(TbScreenMode mode, unsigned short display);
 TbScreenMode LbRecogniseVideoModeString(const char *desc);

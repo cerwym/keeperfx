@@ -28,7 +28,7 @@
 #include "kfx/lense/LensEffect.h"
 #include "renderer/IPostProcessPass.h"
 
-#include "bflib_video.h"    // lbDisplay, lbPaletteColors, MyScreenWidth/Height
+#include "bflib_video.h"    // lbDisplay, MyScreenWidth/Height
 #include "bflib_render.h"   // render_fade_tables
 #include "bflib_vidraw.h"   // vec_window_width/height (PiP projection override), LbSpriteDrawResized
 #include "bflib_sprite.h"   // TbSpriteSheet, get_sprite
@@ -122,7 +122,7 @@ void APIENTRY DebugCallback(GLenum source, GLenum type, GLuint id, GLenum severi
 bool RendererOpenGL::Init()
 {
     // Create GL context (SDL2-based on desktop; see platform_gl_sdl2.cpp)
-    if (!platform_create_gl_context(lbWindow))
+    if (!platform_create_gl_context(platform_get_sdl_window()))
     {
         ERRORLOG("RendererOpenGL::Init: failed to create GL context");
         return false;
@@ -1637,7 +1637,7 @@ void RendererOpenGL::EndFrame_GL()
     SYNCDBG(0, "EndFrame_GL step 5: before cursor draw");
     if (auto* cursor = RendererGetCursorLayer())
         cursor->ExecuteCursorFromIR(m_render_graph.GetUIBuffersRT());
-    platform_swap_gl_buffers(lbWindow);
+    platform_swap_gl_buffers(platform_get_sdl_window());
 
     // Phase 3C NOTE: do NOT call UIRenderer_Clear() or CursorLayer_Clear() here.
     // EndFrame_GL() runs on the render thread; by the time SwapBuffers returns,

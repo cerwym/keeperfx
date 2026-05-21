@@ -39,6 +39,11 @@ int PlatformManager_GetDisplayRefreshRate(void);
 /* OpenGL context management (implemented per-platform for the GL backend)    */
 /******************************************************************************/
 
+/** Return the current SDL_Window as an opaque pointer.
+ *  Passed to platform_create_gl_context() and platform_swap_gl_buffers().
+ *  Returns NULL if no window has been created yet. */
+void* platform_get_sdl_window(void);
+
 /** Returns the address of an OpenGL function by name.
  *  Wraps SDL_GL_GetProcAddress on SDL2 platforms.
  *  Must only be called after a GL context has been created. */

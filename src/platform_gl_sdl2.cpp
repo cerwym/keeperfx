@@ -21,6 +21,7 @@
 /******************************************************************************/
 #include "pre_inc.h"
 #include "platform.h"
+#include "platform/WindowSystemSDL.h"
 
 #include <SDL2/SDL.h>
 #ifdef _WIN32
@@ -265,6 +266,11 @@ extern "C" void platform_destroy_gl_context(void)
 extern "C" void platform_swap_gl_buffers(void *sdl_window)
 {
     SDL_GL_SwapWindow(static_cast<SDL_Window*>(sdl_window));
+}
+
+extern "C" void* platform_get_sdl_window(void)
+{
+    return GetSDLWindowSystem()->GetSDLWindow();
 }
 
 extern "C" void platform_gl_release_context(void)
