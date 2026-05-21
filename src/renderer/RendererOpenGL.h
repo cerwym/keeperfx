@@ -468,7 +468,11 @@ private:
     // Written by game thread, read+cleared by render thread — atomic to prevent UB.
     std::atomic<bool>       m_fade_table_pending      {false};
 
-    void EndFrame_GL();      ///< All GL submission work; runs on the render thread.
+    /** GL submission pass — runs on the render thread.
+     *  Do NOT call UIRenderer_Clear() or CursorLayer_Clear() from here;
+     *  the game thread may be building the next frame concurrently once
+     *  EndFrame() signals the render thread. */
+    void EndFrame_GL();
 
 public:
     /** Flush all pending render commands (world geometry, raw blits, overhead

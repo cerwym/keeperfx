@@ -719,8 +719,6 @@ void GLTextRenderer::Draw()
     m_text_draw_colour = saved_colour;
     m_text_draw_flags  = saved_draw_flags;
 
-    // Restore GL state — depth test stays OFF; all passes after text
-    // (screen tint, cursor) are 2D overlays that must not depth-test.
     glActiveTexture(GL_TEXTURE0);
     glDisable(GL_BLEND);
     glBindVertexArray(0);

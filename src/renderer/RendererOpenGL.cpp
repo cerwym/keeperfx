@@ -922,18 +922,9 @@ void RendererOpenGL::EndFrame_GL()
         if (m_gl_mapfade)       m_gl_mapfade->SetScreenSize(sw, sh);
     }
 
-    // Restore depth mask before clearing — GPURenderNow() ends with
-    // glDepthMask(GL_FALSE) to protect against accidental depth writes during
-    // the overlay blit, but glClear(GL_DEPTH_BUFFER_BIT) respects the mask.
-    // Disable scissor unconditionally: if the previous frame's GPURenderNow
-    // returned early (no world geometry), gpu_execute_passes never ran and
-    // GL_SCISSOR_TEST may still be set to the world-viewport rect, causing
-    // glClear to only clear part of the framebuffer and leaving stale pixels.
     glDisable(GL_SCISSOR_TEST);
-    glDepthMask(GL_TRUE);
     {
-        // Resolve palette index → RGBA for the GL clear colour.
-        // lbPalette entries are 6-bit (0-63); shift left 2 to get 8-bit (0-252).
+        // Resolve palette index → RGBA for the GL clear colour (6-bit palette: shift left 2 for 8-bit).
         const float r = (float)(m_rt_frame_state.palette[m_rt_clearColourIndex * 3 + 0] << 2) / 255.0f;
         const float g = (float)(m_rt_frame_state.palette[m_rt_clearColourIndex * 3 + 1] << 2) / 255.0f;
         const float b = (float)(m_rt_frame_state.palette[m_rt_clearColourIndex * 3 + 2] << 2) / 255.0f;
@@ -1268,7 +1259,6 @@ void RendererOpenGL::EndFrame_GL()
             glBindFramebuffer(GL_FRAMEBUFFER, fbo.fbo);
             glViewport(0, 0, pw, ph);
             glClearColor(KFX_GL_CLEAR_COLOR);
-            glDepthMask(GL_TRUE);  // GPURenderToFBO leaves mask false; ensure depth is cleared
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             m_world_renderer->GPURenderToFBO(pw, ph);
             if (ui)
@@ -1604,19 +1594,6 @@ void RendererOpenGL::EndFrame_GL()
     if (m_textRenderer)
         m_textRenderer->ExecuteTextFromIR(m_render_graph.GetTextBuffersRT());
 
-    // ── Final overlay passes: screen tint + cursor ──────────────────────────
-    // Ensure depth test is OFF and depth mask is ON before the 2D overlay
-    // passes.  Multiple upstream passes (FlushFront layer-2, MapFadePass,
-    // TextRenderer) may leave GL_DEPTH_TEST in an indeterminate state
-    // depending on which layers had content this frame.
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_TRUE);
-
-    // Screen-tint overlay — composites over all rendered layers (tiles, sprites,
-    // UI, text). Driven by g_screen_tint set from palette-effect callbacks:
-    // possession/pain (red), dungeon-heart death flash (white), zoom-to-heart.
-    // No-op when alpha == 0 or no tint shader compiled.
-    // Rendered BEFORE the cursor so the cursor is never tinted.
     if (m_rt_frame_state.screen_tint[3] > 0.0f && m_tintProg)
     {
         glEnable(GL_BLEND);
@@ -1630,39 +1607,13 @@ void RendererOpenGL::EndFrame_GL()
         glDisable(GL_BLEND);
     }
 
-    // Cursor drawn last — after the screen-tint overlay — so it is always on
-    // top of every other rendered layer including possession/death-flash tints.
-    // Reads from the read-side UICommandBuffers (cursor_pointers / cursor_hands)
-    // swapped in by RenderGraph::Flip().
     SYNCDBG(0, "EndFrame_GL step 5: before cursor draw");
     if (auto* cursor = RendererGetCursorLayer())
         cursor->ExecuteCursorFromIR(m_render_graph.GetUIBuffersRT());
     platform_swap_gl_buffers(platform_get_sdl_window());
 
-    // Phase 3C NOTE: do NOT call UIRenderer_Clear() or CursorLayer_Clear() here.
-    // EndFrame_GL() runs on the render thread; by the time SwapBuffers returns,
-    // the game thread has already been unblocked (Signal() fired in EndFrame())
-    // and may have called BeginFrame() → UIRenderer_Clear() → SetLayer(0) for the
-    // next sidebar draw.  A render-thread Clear() here resets m_current_layer to 1,
-    // clobbering the game thread's SetLayer(0) and causing sidebar sprites to be
-    // submitted to the Front layer instead of Back → m_rt_quads[0] empty → blank sidebar.
-    //
-    // The stale-re-draw scenario this originally guarded against (multiple
-    // RendererPresentFrame calls per tick) is now handled by:
-    //   1. BeginFrame() calling UIRenderer_Clear() / CursorLayer_Clear() at the
-    //      correct time (before any IR submissions).
-    //   2. The HasAnyCommands() guard in EndFrame() which skips Flip() when no
-    //      UI commands were submitted (preserving previous read-side IR instead).
-    //   3. The RendererIsFadeCachePreserved() guard for fade-loop frames.
-
-    // Collect pending GPU timer query results for Tracy GPU zones.
     KFX_GPU_COLLECT();
-    // Mark the end of this rendered frame in Tracy's timeline.
     KFX_FRAMEMARK();
-
-    // m_frame_begun is reset on the GAME THREAD at the end of EndFrame(), not
-    // here.  Moving it to the game thread eliminates the race where BeginFrame
-    // for frame N+1 could fire before this point and see m_frame_begun=true.
 }
 
 uint8_t* RendererOpenGL::LockFramebuffer(int* out_pitch)

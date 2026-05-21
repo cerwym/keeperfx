@@ -937,25 +937,15 @@ bool GLWorldViewRenderer::init_flatpoly_shader()
 
 void GLWorldViewRenderer::BeginHandSpriteRendering()
 {
-    // Save current viewport params used by render_keepersprite_gpu()
-    m_saved_screen_w  = m_draw_screen_w;
-    m_saved_screen_h  = m_draw_screen_h;
-    m_saved_sprite_z  = m_current_sprite_z;
+    m_saved_screen_w   = m_draw_screen_w;
+    m_saved_screen_h   = m_draw_screen_h;
+    m_saved_sprite_z   = m_current_sprite_z;
 
-    // Hand sprites are at mouse position in full-screen pixel coordinates.
-    // Override viewport to full screen so the kspr shader converts them correctly.
-    m_draw_screen_w = m_full_screen_w;
-    m_draw_screen_h = m_full_screen_h;
-
-    // z = -1.0 maps to depth 0.0 (near plane); always passes GL_LEQUAL against
-    // any world geometry that was written at depth >= 0.0.
+    m_draw_screen_w    = m_full_screen_w;
+    m_draw_screen_h    = m_full_screen_h;
     m_current_sprite_z = -1.0f;
 
-    // Ensure the GL viewport covers the full window (same as post-GPUFlushNow state).
     glViewport(0, 0, m_full_screen_w, m_full_screen_h);
-
-    // Hand sprites must always appear on top — disable depth testing so world-pass
-    // depth values never cull them.
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
 }
@@ -966,10 +956,6 @@ void GLWorldViewRenderer::EndHandSpriteRendering()
     m_draw_screen_h    = m_saved_screen_h;
     m_current_sprite_z = m_saved_sprite_z;
 
-    // Restore depth mask so the next frame's glClear(GL_DEPTH_BUFFER_BIT) writes
-    // correctly (depth writes require depthMask=GL_TRUE).
-    // GL_DEPTH_TEST is intentionally left in whatever state BeginHandSpriteRendering
-    // found it — the cursor pass runs with depth disabled and we must not change that.
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
 }
@@ -1624,9 +1610,6 @@ void GLWorldViewRenderer::GPURenderToFBO(int pip_w, int pip_h)
 {
     KFX_ZONE("WVR::GPURenderToFBO");
 
-    // m_world_pass_active is already false (cleared by the main GPURenderNow
-    // call earlier in the same EndFrame).  m_screen_w/h are pip_w/pip_h as
-    // set by the preceding BeginWorldPass(nullptr, 0, pip_w, pip_h, 0, 0).
     if (!m_initialized)
     {
         m_pip_draw_cmds.clear();
@@ -1636,12 +1619,8 @@ void GLWorldViewRenderer::GPURenderToFBO(int pip_w, int pip_h)
         return;
     }
 
-    // Close any open PiP tile batch (gpu_flush uses m_pip_* when m_pip_capture=true).
     gpu_flush();
 
-    // BeginPiPCapture() redirected draw_view() writes to the m_pip_* buffers so
-    // the game thread's m_verts / m_draw_cmds are never touched.
-    // Move pip geometry into the rt_* slots that gpu_execute_passes() reads.
     m_rt_draw_cmds      = std::move(m_pip_draw_cmds);
     m_rt_shadow_cmds    = std::move(m_pip_shadow_cmds);
     m_rt_flatpoly_verts = std::move(m_pip_flatpoly_verts);
@@ -1649,12 +1628,11 @@ void GLWorldViewRenderer::GPURenderToFBO(int pip_w, int pip_h)
     m_rt_vert_count      = m_pip_vert_count;
     m_pip_vert_count     = 0;
     m_pip_cmd_vert_start = 0;
-    m_pip_capture        = false;  // clear before gpu_execute_passes to avoid confusion
+    m_pip_capture        = false;
 
     if (m_rt_draw_cmds.empty())
         return;
 
-    // FBO is pip_w × pip_h — fill it entirely.
     gpu_execute_passes(0, 0, pip_w, pip_h);
 }
 
@@ -1669,16 +1647,10 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl, int screen_w
                     (GLsizeiptr)(m_rt_vert_count * sizeof(WorldVertex)),
                     m_rt_verts);
 
-    // Execute all draw commands in submission order, interleaving tile batches
-    // and 3D sprite flushes to maintain the painter's-algorithm depth order.
     glViewport(vp_x, vp_y_gl, screen_w, screen_h);
     glUseProgram(m_shader);
     glBindVertexArray(m_vao);
 
-    // Enable hardware depth testing so billboarded sprites are correctly
-    // occluded by world geometry and vice-versa.  GL_LEQUAL allows sprites
-    // to render over same-bucket tile geometry (tiles flush before sprites
-    // in the DrawCmd list, writing depth; sprites at equal depth still pass).
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LEQUAL);
     glDepthMask(GL_TRUE);
@@ -1953,20 +1925,15 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl, int screen_w
         }
     }
 
-    // Restore UIRenderer screen dimensions to full screen after the game-viewport
-    // sprite pass — DrawFrontBase/Overlay (called after GPURenderNow) use this value
-    // for the u_screen_size shader uniform.  Leaving it as the game viewport size (or
-    // zero) would produce division-by-zero in the vertex shader for all UI elements.
     UIRenderer_SetScreenSize(m_full_screen_w, m_full_screen_h);
 
     glDisable(GL_SCISSOR_TEST);
-
     glBindVertexArray(0);
     glUseProgram(0);
-    glActiveTexture(GL_TEXTURE0);  // restore — sprite pass may leave unit 1/2 active
-    glDepthMask(GL_FALSE);
+    glActiveTexture(GL_TEXTURE0);  // sprite pass may leave unit 1/2 active
+    glDepthMask(GL_TRUE);
     glDisable(GL_DEPTH_TEST);
-    glDisable(GL_BLEND);           // render_keepersprite_gpu enables blend; always clean up here
+    glDisable(GL_BLEND);
     glViewport(0, 0, m_full_screen_w, m_full_screen_h);
 
     // Emit per-frame statistics as Tracy plots.
