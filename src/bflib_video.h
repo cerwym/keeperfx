@@ -288,6 +288,7 @@ extern unsigned short display_id;
 
 extern TbDisplayStruct lbDisplay;
 extern SDL_Window *lbWindow;
+extern SDL_Color lbPaletteColors[];
 /******************************************************************************/
 TbBool LbScreenIsModeAvailable(TbScreenMode mode, unsigned short display);
 TbScreenMode LbRecogniseVideoModeString(const char *desc);

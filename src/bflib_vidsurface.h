@@ -48,6 +48,19 @@ TbResult LbScreenSurfaceBlit(struct SSurface *surf, unsigned long x, unsigned lo
 void *LbScreenSurfaceLock(struct SSurface *surf);
 TbResult LbScreenSurfaceUnlock(struct SSurface *surf);
 
+/** Create the engine draw surface (lbDrawSurface) at w×h pixels, bpp bits per pixel.
+ *  Any previously existing draw surface must have been freed first.
+ *  Returns Lb_SUCCESS on success or Lb_FAIL on allocation failure. */
+TbResult LbScreenCreateDrawSurface(int w, int h, int bpp);
+
+/** Free lbDrawSurface if it was dynamically allocated (lbHasSecondSurface is true),
+ *  then null the pointer.  Safe to call when lbDrawSurface is already NULL. */
+void LbScreenFreeDrawSurface(void);
+
+/** Push the current lbPaletteColors table into the lbDrawSurface SDL palette.
+ *  No-op when lbDrawSurface is NULL or has no palette. */
+void LbScreenSetDrawSurfacePalette(void);
+
 /** Obtain the SDL window surface and create an intermediate scale surface when
  *  the draw surface BPP differs from the window BPP.  Call once from
  *  RendererSoftware::Init() after the SDL window exists.

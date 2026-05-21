@@ -192,6 +192,35 @@ TbResult LbScreenSurfaceUnlock(struct SSurface *surf)
 }
 
 /******************************************************************************/
+/* Draw surface lifecycle helpers (called from bflib_video)                   */
+/******************************************************************************/
+
+TbResult LbScreenCreateDrawSurface(int w, int h, int bpp)
+{
+    lbDrawSurface = SDL_CreateRGBSurface(0, w, h, bpp, 0, 0, 0, 0);
+    if (lbDrawSurface == NULL) {
+        ERRORLOG("Failed to create draw surface (%dx%dx%d): %s", w, h, bpp, SDL_GetError());
+        return Lb_FAIL;
+    }
+    return Lb_SUCCESS;
+}
+
+void LbScreenFreeDrawSurface(void)
+{
+    if (lbHasSecondSurface && lbDrawSurface != NULL) {
+        SDL_FreeSurface(lbDrawSurface);
+    }
+    lbDrawSurface = NULL;
+}
+
+void LbScreenSetDrawSurfacePalette(void)
+{
+    if (lbDrawSurface == NULL || lbDrawSurface->format == NULL || lbDrawSurface->format->palette == NULL)
+        return;
+    SDL_SetPaletteColors(lbDrawSurface->format->palette, lbPaletteColors, 0, PALETTE_COLORS);
+}
+
+/******************************************************************************/
 /* Screen-level helpers for RendererSoftware                                  */
 /******************************************************************************/
 

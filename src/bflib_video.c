@@ -461,21 +461,10 @@ TbResult LbScreenSetup(TbScreenMode mode, TbScreenCoord width, TbScreenCoord hei
         msspr = lbDisplay.MouseSprite;
         GetPointerHotspot(&hot_x,&hot_y);
     }
-    SDL_Surface* prevScreenSurf = lbScreenSurface;
     LbMouseChangeSprite(NULL);
-
-    if (lbHasSecondSurface) {
-        SDL_FreeSurface(lbDrawSurface);
-    }
-    if (lbScaleSurface != NULL) {
-        SDL_FreeSurface(lbScaleSurface);
-        lbScaleSurface = NULL;
-    }
-    lbDrawSurface = NULL;
+    LbScreenFreeDrawSurface();
+    LbScreenReleaseRendererSurfaces();
     lbScreenInitialised = false;
-
-    if (prevScreenSurf != NULL) {
-    }
 
     TbScreenModeInfo* mdinfo = LbScreenGetModeInfo(mode); // The desired mode has already been checked
     // Note:
@@ -552,9 +541,8 @@ TbResult LbScreenSetup(TbScreenMode mode, TbScreenCoord width, TbScreenCoord hei
     // The active renderer's Init() is responsible for connecting it to the display
     // (either via SDL_GetWindowSurface for software, or SDL_CreateRenderer for hardware).
     // This keeps SDL's surface and renderer APIs from conflicting on the same window.
-    lbDrawSurface = SDL_CreateRGBSurface(0, mdinfo->Width, mdinfo->Height, lbEngineBPP, 0, 0, 0, 0);
-    if (lbDrawSurface == NULL) {
-        ERRORLOG("Failed to create draw surface for mode %d (%s): %s", (int)mode, mdinfo->Desc, SDL_GetError());
+    if (LbScreenCreateDrawSurface((int)mdinfo->Width, (int)mdinfo->Height, (int)lbEngineBPP) != Lb_SUCCESS) {
+        ERRORLOG("Failed to create draw surface for mode %d (%s)", (int)mode, mdinfo->Desc);
         return Lb_FAIL;
     }
     lbHasSecondSurface = true;
@@ -656,7 +644,7 @@ TbResult LbPaletteSet(unsigned char *palette)
         bufColors += 3;
     }
     //if (SDL_SetPalette(lbDrawSurface, SDL_LOGPAL | SDL_PHYSPAL,
-    SDL_SetPaletteColors(lbDrawSurface->format->palette, lbPaletteColors, 0, PALETTE_COLORS);
+    LbScreenSetDrawSurfacePalette();
     //KfxFree(destColors);
     lbDisplay.Palette = lbPalette;
     return ret;
@@ -724,17 +712,10 @@ TbResult LbScreenReset(TbBool exiting_application)
     if (!lbScreenInitialised)
       return Lb_FAIL;
     LbMouseChangeSprite(NULL);
-    if (lbHasSecondSurface) {
-        SDL_FreeSurface(lbDrawSurface);
-    }
-    if (lbScaleSurface != NULL) {
-        SDL_FreeSurface(lbScaleSurface);
-        lbScaleSurface = NULL;
-    }
+    LbScreenFreeDrawSurface();
+    LbScreenReleaseRendererSurfaces();
     //do not free screen surface, it is freed automatically on SDL_Quit or next call to set video mode
     lbHasSecondSurface = false;
-    lbDrawSurface = NULL;
-    lbScreenSurface = NULL;
     // Mark as not initialized
     lbScreenInitialised = false;
     if (exiting_application)
