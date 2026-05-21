@@ -9,6 +9,7 @@
 #include "kjm_input.h"
 #include "platform/PlatformManager.h"
 #include "renderer/RendererManager.h"
+#include <SDL2/SDL.h>
 
 // See: https://trac.ffmpeg.org/ticket/3626
 extern "C" {

@@ -3,6 +3,8 @@
 
 #include "platform/IWindowSystem.h"
 
+struct SDL_Window;  // forward declaration; full type in WindowSystemSDL.cpp
+
 /** SDL2 desktop window-system implementation.
  *
  *  Used by PlatformWindows and PlatformLinux.  Wraps SDL focus events,
@@ -28,6 +30,7 @@ public:
 
     // ----- Window management -----
     bool HasWindow() const override;
+    SDL_Window* GetSDLWindow() const;
     unsigned int GetWindowFlags() const override;
     void GetWindowSize(int* out_w, int* out_h) const override;
     int GetWindowDisplayIndex() const override;
@@ -41,6 +44,7 @@ public:
     void SetWindowBordered(int bordered) override;
     void SetWindowPosition(int x, int y) override;
     bool CreateWindow(const char* title, int x, int y, int w, int h, unsigned int flags) override;
+    bool RecreateForSoftwareRenderer() override;
 
     // ----- Display info -----
     int GetDisplayRefreshRate() const override;

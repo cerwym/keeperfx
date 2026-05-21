@@ -96,6 +96,11 @@ public:
     virtual void SetWindowPosition(int /*x*/, int /*y*/) {}
     virtual bool CreateWindow(const char* /*title*/, int /*x*/, int /*y*/, int /*w*/, int /*h*/, unsigned int /*flags*/) { return false; }
 
+    /** Recreate the window without SDL_WINDOW_OPENGL so that SDL_GetWindowSurface()
+     *  can be used for software rendering.  No-op (returns true) on platforms where
+     *  the window is not OpenGL-flagged or where this is not applicable. */
+    virtual bool RecreateForSoftwareRenderer() { return true; }
+
     // ----- Display info -----
 
     /** Returns the refresh rate (Hz) of the display the game window is on.

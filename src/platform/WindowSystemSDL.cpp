@@ -19,7 +19,7 @@
 extern "C" volatile TbBool lbAppActive;   // defined with C linkage in bflib_inputctrl.cpp
 extern volatile TbBool lbMouseGrabbed;
 extern volatile TbBool lbMouseGrab;
-extern SDL_Window*   lbWindow;      // declared in bflib_video.h
+extern "C" SDL_Window* lbWindow = nullptr;  // owned here; extern declared in bflib_vidsurface.c (C linkage for C-file access)
 
 /******************************************************************************/
 
@@ -70,6 +70,11 @@ void WindowSystemSDL::WarpCursor(int x, int y)
 bool WindowSystemSDL::HasWindow() const
 {
     return lbWindow != nullptr;
+}
+
+SDL_Window* WindowSystemSDL::GetSDLWindow() const
+{
+    return lbWindow;
 }
 
 unsigned int WindowSystemSDL::GetWindowFlags() const
@@ -172,6 +177,30 @@ bool WindowSystemSDL::CreateWindow(const char* title, int x, int y, int w, int h
 {
     lbWindow = SDL_CreateWindow(title, x, y, w, h, flags);
     return lbWindow != nullptr;
+}
+
+bool WindowSystemSDL::RecreateForSoftwareRenderer()
+{
+    if (lbWindow == nullptr)
+        return false;
+    if (!(SDL_GetWindowFlags(lbWindow) & SDL_WINDOW_OPENGL))
+        return true;
+
+    SYNCLOG("WindowSystemSDL: removing SDL_WINDOW_OPENGL for software renderer");
+    int x, y, w, h;
+    SDL_GetWindowPosition(lbWindow, &x, &y);
+    SDL_GetWindowSize(lbWindow, &w, &h);
+    const char* title = SDL_GetWindowTitle(lbWindow);
+    Uint32 flags = SDL_GetWindowFlags(lbWindow) & ~(Uint32)SDL_WINDOW_OPENGL;
+
+    SDL_DestroyWindow(lbWindow);
+    lbWindow = SDL_CreateWindow(title, x, y, w, h, flags);
+    if (!lbWindow) {
+        ERRORLOG("WindowSystemSDL::RecreateForSoftwareRenderer: failed: %s", SDL_GetError());
+        return false;
+    }
+    SDL_ShowWindow(lbWindow);
+    return true;
 }
 
 int WindowSystemSDL::GetDisplayRefreshRate() const

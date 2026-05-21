@@ -35,9 +35,7 @@ struct SSurface {
     long pitch;
 };
 /******************************************************************************/
-extern struct SDL_Surface * lbScreenSurface;
 extern struct SDL_Surface * lbDrawSurface;
-extern struct SDL_Surface * lbScaleSurface;
 extern volatile TbBool lbHasSecondSurface;
 /******************************************************************************/
 void LbScreenSurfaceInit(struct SSurface *surf);
@@ -56,35 +54,6 @@ TbResult LbScreenCreateDrawSurface(int w, int h, int bpp);
 /** Free lbDrawSurface if it was dynamically allocated (lbHasSecondSurface is true),
  *  then null the pointer.  Safe to call when lbDrawSurface is already NULL. */
 void LbScreenFreeDrawSurface(void);
-
-/** Push the current lbPaletteColors table into the lbDrawSurface SDL palette.
- *  No-op when lbDrawSurface is NULL or has no palette. */
-void LbScreenSetDrawSurfacePalette(void);
-
-/** Obtain the SDL window surface and create an intermediate scale surface when
- *  the draw surface BPP differs from the window BPP.  Call once from
- *  RendererSoftware::Init() after the SDL window exists.
- *  Returns Lb_SUCCESS on success or Lb_FAIL if the window surface is unavailable. */
-TbResult LbScreenSetupRendererSurfaces(void);
-
-/** Release resources allocated by LbScreenSetupRendererSurfaces().
- *  lbScreenSurface is owned by SDL and is only nulled, not freed. */
-void LbScreenReleaseRendererSurfaces(void);
-
-/** Present the completed frame: runs the blit chain and calls SDL_UpdateWindowSurface.
- *  Refreshes the window surface pointer each call (guards against resize/alt-tab). */
-void LbScreenSwap(void);
-
-/** Fill the draw surface with colour_index (palette index, not RGB). */
-void LbScreenClearIndex(uint8_t colour_index);
-
-/** Lock the draw surface for CPU pixel writes.
- *  Returns the pixel pointer and writes the surface pitch to *out_pitch.
- *  Returns NULL on failure. */
-uint8_t* LbScreenGetPixels(int* out_pitch);
-
-/** Unlock the draw surface after CPU pixel writes. */
-void LbScreenReleasePixels(void);
 /******************************************************************************/
 #ifdef __cplusplus
 }

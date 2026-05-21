@@ -68,7 +68,6 @@ SDL_Color lbPaletteColors[PALETTE_COLORS];
 
 char lbDrawAreaTitle[128] = "Bullfrog Shell";
 volatile unsigned long lbIconIndex = 0;
-SDL_Window *lbWindow = NULL;
 
 TbDisplayStruct lbDisplay;
 
@@ -433,7 +432,6 @@ TbResult LbScreenInitialize(void)
 {
     // Clear global variables
     lbScreenInitialised = false;
-    lbScreenSurface = NULL;
     lbDrawSurface = NULL;
     lbHasSecondSurface = false;
     lbDoubleBufferingRequested = false;
@@ -463,7 +461,6 @@ TbResult LbScreenSetup(TbScreenMode mode, TbScreenCoord width, TbScreenCoord hei
     }
     LbMouseChangeSprite(NULL);
     LbScreenFreeDrawSurface();
-    LbScreenReleaseRendererSurfaces();
     lbScreenInitialised = false;
 
     TbScreenModeInfo* mdinfo = LbScreenGetModeInfo(mode); // The desired mode has already been checked
@@ -546,7 +543,6 @@ TbResult LbScreenSetup(TbScreenMode mode, TbScreenCoord width, TbScreenCoord hei
         return Lb_FAIL;
     }
     lbHasSecondSurface = true;
-    lbScreenSurface = lbDrawSurface; // placeholder; renderer Init() sets the real screen surface
 
     lbDisplay.DrawFlags = 0;
     lbDisplay.DrawColour = 0;
@@ -643,8 +639,8 @@ TbResult LbPaletteSet(unsigned char *palette)
         srcColors += 3;
         bufColors += 3;
     }
-    //if (SDL_SetPalette(lbDrawSurface, SDL_LOGPAL | SDL_PHYSPAL,
-    LbScreenSetDrawSurfacePalette();
+    if (lbDrawSurface != NULL && lbDrawSurface->format != NULL && lbDrawSurface->format->palette != NULL)
+        SDL_SetPaletteColors(lbDrawSurface->format->palette, lbPaletteColors, 0, PALETTE_COLORS);
     //KfxFree(destColors);
     lbDisplay.Palette = lbPalette;
     return ret;
@@ -713,10 +709,7 @@ TbResult LbScreenReset(TbBool exiting_application)
       return Lb_FAIL;
     LbMouseChangeSprite(NULL);
     LbScreenFreeDrawSurface();
-    LbScreenReleaseRendererSurfaces();
-    //do not free screen surface, it is freed automatically on SDL_Quit or next call to set video mode
     lbHasSecondSurface = false;
-    // Mark as not initialized
     lbScreenInitialised = false;
     if (exiting_application)
     {

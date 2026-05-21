@@ -33,17 +33,9 @@ extern "C" {
 #endif
 /******************************************************************************/
 
-extern char lbDrawAreaTitle[128];
-extern SDL_Window *lbWindow;
 
-/** Internal screen surface structure. */
-SDL_Surface * lbScreenSurface;
-/** Internal drawing surface structure.
- *  Sometimes may be same as screen surface. */
+/** Internal drawing surface structure — the engine's off-screen draw target. */
 SDL_Surface * lbDrawSurface;
-/** Intermediate surface used when the draw surface needs format conversion before
- *  being scaled up to the physical window surface (e.g. 8bpp→16bpp on Vita). */
-SDL_Surface * lbScaleSurface;
 
 /******************************************************************************/
 void LbScreenSurfaceInit(struct SSurface *surf)
@@ -213,138 +205,6 @@ void LbScreenFreeDrawSurface(void)
     lbDrawSurface = NULL;
 }
 
-void LbScreenSetDrawSurfacePalette(void)
-{
-    if (lbDrawSurface == NULL || lbDrawSurface->format == NULL || lbDrawSurface->format->palette == NULL)
-        return;
-    SDL_SetPaletteColors(lbDrawSurface->format->palette, lbPaletteColors, 0, PALETTE_COLORS);
-}
-
-/******************************************************************************/
-/* Screen-level helpers for RendererSoftware                                  */
-/******************************************************************************/
-
-TbResult LbScreenSetupRendererSurfaces(void)
-{
-    // Check if the window was created with SDL_WINDOW_OPENGL flag.
-    // If so, we cannot use SDL_GetWindowSurface() on it — we must recreate
-    // the window without the OpenGL flag to enable software rendering.
-    if (lbWindow != NULL && (SDL_GetWindowFlags(lbWindow) & SDL_WINDOW_OPENGL))
-    {
-        SYNCLOG("LbScreenSetupRendererSurfaces: window has SDL_WINDOW_OPENGL flag, recreating for software rendering");
-
-        // Save current window state
-        int x, y, w, h;
-        SDL_GetWindowPosition(lbWindow, &x, &y);
-        SDL_GetWindowSize(lbWindow, &w, &h);
-        Uint32 flags = SDL_GetWindowFlags(lbWindow);
-
-        // Remove OpenGL flag and recreate the window
-        flags &= ~SDL_WINDOW_OPENGL;
-
-        SDL_DestroyWindow(lbWindow);
-        lbWindow = SDL_CreateWindow(lbDrawAreaTitle, x, y, w, h, flags);
-
-        if (!lbWindow) {
-            ERRORLOG("LbScreenSetupRendererSurfaces: failed to recreate window: %s", SDL_GetError());
-            return Lb_FAIL;
-        }
-
-        SDL_ShowWindow(lbWindow); // ensure it's visible
-    }
-
-    lbScreenSurface = SDL_GetWindowSurface(lbWindow);
-    if (!lbScreenSurface) {
-        ERRORLOG("LbScreenSetupRendererSurfaces: SDL_GetWindowSurface failed: %s", SDL_GetError());
-        return Lb_FAIL;
-    }
-
-    if (lbDrawSurface->format->BitsPerPixel != lbScreenSurface->format->BitsPerPixel)
-    {
-        lbScaleSurface = SDL_CreateRGBSurfaceWithFormat(0,
-            lbDrawSurface->w, lbDrawSurface->h,
-            lbScreenSurface->format->BitsPerPixel, lbScreenSurface->format->format);
-        if (!lbScaleSurface) {
-            WARNLOG("LbScreenSetupRendererSurfaces: can't create scale surface: %s — direct blit will be attempted", SDL_GetError());
-        }
-    }
-    return Lb_SUCCESS;
-}
-
-void LbScreenReleaseRendererSurfaces(void)
-{
-    if (lbScaleSurface) {
-        SDL_FreeSurface(lbScaleSurface);
-        lbScaleSurface = NULL;
-    }
-    /* lbScreenSurface is owned by SDL (window surface); only null it. */
-    lbScreenSurface = NULL;
-}
-
-void LbScreenSwap(void)
-{
-    /* Refresh the window surface pointer each frame (guards against resize/alt-tab). */
-    lbScreenSurface = SDL_GetWindowSurface(lbWindow);
-    if (lbScreenSurface == NULL) {
-        ERRORLOG("LbScreenSwap: SDL_GetWindowSurface returned NULL: %s", SDL_GetError());
-        return;
-    }
-    SDL_Rect dst = { 0, 0, lbScreenSurface->w, lbScreenSurface->h };
-
-    if (lbScaleSurface != NULL)
-    {
-        /* Two-step: convert format (e.g. 8bpp → window BPP) then scale. */
-        if (SDL_BlitSurface(lbDrawSurface, NULL, lbScaleSurface, NULL) < 0) {
-            ERRORLOG("LbScreenSwap: format-convert blit failed: %s", SDL_GetError());
-            return;
-        }
-        if (SDL_BlitScaled(lbScaleSurface, NULL, lbScreenSurface, &dst) < 0) {
-            ERRORLOG("LbScreenSwap: scale blit failed: %s", SDL_GetError());
-            return;
-        }
-    }
-    else if (lbDrawSurface->w != lbScreenSurface->w || lbDrawSurface->h != lbScreenSurface->h)
-    {
-        if (SDL_BlitScaled(lbDrawSurface, NULL, lbScreenSurface, &dst) < 0) {
-            ERRORLOG("LbScreenSwap: scale blit failed: %s", SDL_GetError());
-            return;
-        }
-    }
-    else
-    {
-        if (SDL_BlitSurface(lbDrawSurface, NULL, lbScreenSurface, NULL) < 0) {
-            ERRORLOG("LbScreenSwap: blit failed: %s", SDL_GetError());
-            return;
-        }
-    }
-
-    if (SDL_UpdateWindowSurface(lbWindow) < 0) {
-        ERRORDBG(11, "LbScreenSwap: flip failed: %s", SDL_GetError());
-    }
-}
-
-void LbScreenClearIndex(uint8_t colour_index)
-{
-    if (lbDrawSurface)
-        SDL_FillRect(lbDrawSurface, NULL, colour_index);
-}
-
-uint8_t* LbScreenGetPixels(int* out_pitch)
-{
-    if (!lbDrawSurface)
-        return NULL;
-    if (SDL_LockSurface(lbDrawSurface) < 0)
-        return NULL;
-    if (out_pitch)
-        *out_pitch = lbDrawSurface->pitch;
-    return (uint8_t*)lbDrawSurface->pixels;
-}
-
-void LbScreenReleasePixels(void)
-{
-    if (lbDrawSurface)
-        SDL_UnlockSurface(lbDrawSurface);
-}
 /******************************************************************************/
 #ifdef __cplusplus
 }

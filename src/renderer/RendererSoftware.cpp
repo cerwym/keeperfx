@@ -24,17 +24,42 @@
 #include "bflib_sprite.h"    // TbSpriteSheet, get_sprite
 #include "bflib_vidraw.h"    // LbSpriteDrawResized
 #include "renderer/RendererManager.h"
+#include "platform/PlatformManager.h"
+#include "platform.h"        // platform_get_sdl_window
 
+#include <SDL2/SDL.h>
 #include <cstring>
 #include "post_inc.h"
 
 /******************************************************************************/
 
+static SDL_Surface* s_screenSurface = nullptr;
+static SDL_Surface* s_scaleSurface  = nullptr;
+
 bool RendererSoftware::Init()
 {
-    // Obtain the window surface and create intermediate scale surface if needed.
-    if (LbScreenSetupRendererSurfaces() != Lb_SUCCESS)
+    // Ensure window has no SDL_WINDOW_OPENGL flag — SDL_GetWindowSurface is incompatible with it.
+    if (!PlatformManager_RecreateWindowForSoftwareRenderer()) {
+        ERRORLOG("RendererSoftware::Init: failed to recreate window for software rendering");
         return false;
+    }
+
+    SDL_Window* win = static_cast<SDL_Window*>(platform_get_sdl_window());
+    s_screenSurface = SDL_GetWindowSurface(win);
+    if (!s_screenSurface) {
+        ERRORLOG("RendererSoftware::Init: SDL_GetWindowSurface failed: %s", SDL_GetError());
+        return false;
+    }
+
+    // Create an intermediate surface when draw BPP differs from window BPP.
+    if (lbDrawSurface->format->BitsPerPixel != s_screenSurface->format->BitsPerPixel) {
+        s_scaleSurface = SDL_CreateRGBSurfaceWithFormat(0,
+            lbDrawSurface->w, lbDrawSurface->h,
+            s_screenSurface->format->BitsPerPixel, s_screenSurface->format->format);
+        if (!s_scaleSurface) {
+            WARNLOG("RendererSoftware::Init: can't create scale surface: %s — direct blit will be attempted", SDL_GetError());
+        }
+    }
 
     // Initialize transparency mapping tables for sprite rendering
     if (render_ghost == nullptr) {
@@ -92,7 +117,11 @@ void RendererSoftware::Shutdown()
         render_alpha = nullptr;
     }
 
-    LbScreenReleaseRendererSurfaces();
+    if (s_scaleSurface) {
+        SDL_FreeSurface(s_scaleSurface);
+        s_scaleSurface = nullptr;
+    }
+    s_screenSurface = nullptr; // owned by SDL window, do not free
 
     // Clean up sub-renderers
     delete m_worldViewRenderer;
@@ -115,24 +144,65 @@ bool RendererSoftware::BeginFrame()
 
 void RendererSoftware::EndFrame()
 {
-    // Draw the cursor into WScreen before blitting to the window.
     CursorLayer_Draw();
-    LbScreenSwap();
+
+    SDL_Window* win = static_cast<SDL_Window*>(platform_get_sdl_window());
+    // Refresh the window surface pointer each frame (guards against resize/alt-tab).
+    s_screenSurface = SDL_GetWindowSurface(win);
+    if (!s_screenSurface) {
+        ERRORLOG("RendererSoftware::EndFrame: SDL_GetWindowSurface returned NULL: %s", SDL_GetError());
+        return;
+    }
+    SDL_Rect dst = { 0, 0, s_screenSurface->w, s_screenSurface->h };
+
+    if (s_scaleSurface != nullptr) {
+        // Two-step: convert format then scale.
+        if (SDL_BlitSurface(lbDrawSurface, NULL, s_scaleSurface, NULL) < 0) {
+            ERRORLOG("RendererSoftware::EndFrame: format-convert blit failed: %s", SDL_GetError());
+            return;
+        }
+        if (SDL_BlitScaled(s_scaleSurface, NULL, s_screenSurface, &dst) < 0) {
+            ERRORLOG("RendererSoftware::EndFrame: scale blit failed: %s", SDL_GetError());
+            return;
+        }
+    } else if (lbDrawSurface->w != s_screenSurface->w || lbDrawSurface->h != s_screenSurface->h) {
+        if (SDL_BlitScaled(lbDrawSurface, NULL, s_screenSurface, &dst) < 0) {
+            ERRORLOG("RendererSoftware::EndFrame: scaled blit failed: %s", SDL_GetError());
+            return;
+        }
+    } else {
+        if (SDL_BlitSurface(lbDrawSurface, NULL, s_screenSurface, NULL) < 0) {
+            ERRORLOG("RendererSoftware::EndFrame: blit failed: %s", SDL_GetError());
+            return;
+        }
+    }
+
+    if (SDL_UpdateWindowSurface(win) < 0) {
+        ERRORDBG(11, "RendererSoftware::EndFrame: flip failed: %s", SDL_GetError());
+    }
 }
 
 void RendererSoftware::ClearScreen(uint8_t colour_index)
 {
-    LbScreenClearIndex(colour_index);
+    if (lbDrawSurface)
+        SDL_FillRect(lbDrawSurface, NULL, colour_index);
 }
 
 uint8_t* RendererSoftware::LockFramebuffer(int* out_pitch)
 {
-    return LbScreenGetPixels(out_pitch);
+    if (!lbDrawSurface)
+        return nullptr;
+    if (SDL_LockSurface(lbDrawSurface) < 0)
+        return nullptr;
+    if (out_pitch)
+        *out_pitch = lbDrawSurface->pitch;
+    return static_cast<uint8_t*>(lbDrawSurface->pixels);
 }
 
 void RendererSoftware::UnlockFramebuffer()
 {
-    LbScreenReleasePixels();
+    if (lbDrawSurface)
+        SDL_UnlockSurface(lbDrawSurface);
 }
 
 void RendererSoftware::DrawSwipeOverlay(struct TbSpriteSheet* sprites, int frame,

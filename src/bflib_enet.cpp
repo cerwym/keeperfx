@@ -29,6 +29,7 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <enet6/enet.h>
+#include <SDL2/SDL.h>
 #include <cstddef>
 #include <climits>
 
