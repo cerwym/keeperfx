@@ -501,11 +501,6 @@ void init_custom_sprites(LevelNumber lvnum)
     memset(fp_to_td_sprite_add, 0, sizeof(fp_to_td_sprite_add));
     next_free_sprite = 0;
 
-    if (anim_names != NULL)
-    {
-        KfxFree(anim_names);
-    }
-
 #ifdef PLATFORM_VITA
     {
         SpriteCacheCtx cache_ctx = {
