@@ -1714,12 +1714,6 @@ bool RendererOpenGL::SubmitLandviewZoom(
     return true;
 }
 
-bool RendererOpenGL::SubmitStagingOverlay()
-{
-    // Staging buffer has been removed; callers should use SubmitTransparentBlit().
-    return false;
-}
-
 bool RendererOpenGL::SubmitTransparentBlit(const uint8_t* buf, int w, int h)
 {
     if (w != m_screenW || h != m_screenH)

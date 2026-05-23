@@ -210,14 +210,6 @@ int RendererNeedsUIReinitAfterLoad(void)
     return 1;
 }
 
-/** Explicitly composite m_stagingBuf (lbDisplay.WScreen) on the GL frame. */
-TbBool RendererSubmitStagingOverlay()
-{
-    IRenderer* rend = RendererGetActive();
-    if (!rend) return false;
-    return rend->SubmitStagingOverlay() ? true : false;
-}
-
 TbBool RendererSubmitTransparentBlit(const unsigned char* buf, int w, int h)
 {
     IRenderer* rend = RendererGetActive();

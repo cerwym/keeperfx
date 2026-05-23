@@ -156,25 +156,6 @@ public:
         return false;
     }
 
-    /** Explicit trigger to composite the current CPU staging buffer (lbDisplay.WScreen)
-     *  over the GPU frame with index-0 transparency.
-     *
-     *  Call this after any CPU-side WScreen write that must appear in the final frame
-     *  (e.g. after compressed_window_draw() writes the campaign-map window frame).
-     *  The GPU path (RendererOpenGL) sets a flag so EndFrame composites the buffer
-     *  exactly once, at the position configured for the staging blit, using the
-     *  palette-blit-transparent shader (index 0 = fully transparent).
-     *
-     *  Software backends return false — the WScreen write is already in the CPU
-     *  framebuffer and will be presented by SDL's flip at EndFrame.
-     *
-     *  @return true  (GPU path queued the overlay; caller need not do anything else).
-     *          false (software renderer; WScreen write already in final buffer). */
-    virtual bool SubmitStagingOverlay()
-    {
-        return false;
-    }
-
     /** Composite a caller-owned buffer over the GPU frame with index-0 transparency.
      *
      *  Equivalent to SubmitStagingOverlay() but takes an external buffer rather

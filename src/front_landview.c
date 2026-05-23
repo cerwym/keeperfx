@@ -892,10 +892,6 @@ void compressed_window_draw(void)
     LbHugeSpriteDraw(&map_window, map_window_len,
         RendererGetWScreen(), RendererScreenWidth(), RendererPhysicalHeight(),
         xshift, yshift, units_per_pixel_landview_frame);
-    // Composite the window frame (just written to WScreen) over the GPU frame.
-    // In GL mode this queues an explicit staging-overlay blit at EndFrame.
-    // In software mode this is a no-op — the WScreen write is already in the framebuffer.
-    RendererSubmitStagingOverlay();
 }
 
 void unload_map_and_window(void)

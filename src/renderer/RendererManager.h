@@ -468,13 +468,6 @@ TbBool RendererSubmitLandviewZoom(const unsigned char* src_buf, int src_w, int s
                                   float screen_cx,    float screen_cy,
                                   float scale);
 
-/** Composite the current CPU staging buffer (lbDisplay.WScreen) over the GPU
- *  frame with index-0 transparency.  Call after any CPU WScreen write that must
- *  appear over GPU-rendered content (e.g. compressed_window_draw() window frame).
- *  @return true  (GL: queued; overlay blit runs at EndFrame).
- *          false (software renderer: WScreen write already in final framebuffer). */
-TbBool RendererSubmitStagingOverlay(void);
-
 /** Composite an external palette-indexed buffer over the GPU frame with index-0
  *  transparency, without writing to lbDisplay.WScreen.
  *  Use when game code has drawn into a local bounce buffer (e.g. in GL mode where

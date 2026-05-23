@@ -94,8 +94,6 @@ public:
                             float screen_cx,    float screen_cy,
                             float scale) override;
 
-    bool SubmitStagingOverlay() override;
-
     bool SubmitTransparentBlit(const uint8_t* buf, int w, int h) override;
 
     void DrawSwipeOverlay(struct TbSpriteSheet* sprites, int frame,
