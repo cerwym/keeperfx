@@ -573,9 +573,13 @@ TbBool set_creature_door_combat(struct Thing *creatng, struct Thing *obthing)
     return true;
 }
 
+/*
+ * hand-feeding, or creatures picking up nearby food randomly
+ */
 void food_eaten_by_creature(struct Thing *foodtng, struct Thing *creatng)
 {
     struct CreatureControl* cctrl = creature_control_get_from_thing(creatng);
+    long old_hunger_level = cctrl->hunger_level;
     if (cctrl->instance_id == CrInst_NULL)
     {
         set_creature_instance(creatng, CrInst_EAT, 0, 0);
@@ -592,8 +596,14 @@ void food_eaten_by_creature(struct Thing *foodtng, struct Thing *creatng)
     }
     // Food is destroyed just below, so the sound must be made by creature
     thing_play_sample(creatng, 112+SOUND_RANDOM(3), NORMAL_PITCH, 0, 3, 0, 2, FULL_LOUDNESS);
+
+    anger_set_creature_anger(creatng, 0, AngR_Hungry);
     struct CreatureModelConfig* crconf = creature_stats_get_from_thing(creatng);
-    anger_apply_anger_to_creature(creatng, crconf->annoy_eat_food, AngR_Hungry, 1);
+    if (crconf->annoy_eat_food > 0 || old_hunger_level > (long)crconf->hunger_rate) {
+        // As food(It means <0), happiness can only be obtained when a creature is hungry. But for those who dislike it(It means >0), every time is torture.
+        anger_apply_anger_to_creature(creatng, crconf->annoy_eat_food, AngR_Other, 1);
+    }
+
     struct Dungeon* dungeon = get_players_num_dungeon(creatng->owner);
     if (!dungeon_invalid(dungeon)) {
         dungeon->lvstats.chickens_eaten++;
@@ -2137,6 +2147,12 @@ void level_up_familiar(struct Thing* famlrtng)
     }
 }
 
+TbBool creature_is_familiar(const struct Thing* thing)
+{
+    struct CreatureControl* cctrl = creature_control_get_from_thing(thing);
+    return (cctrl->summoner_idx > 0);
+}
+
 void add_creature_to_summon_list(struct Dungeon* dungeon, ThingIndex famlrtng)
 {
     if (dungeon->num_summon < MAX_SUMMONS)
@@ -2167,6 +2183,26 @@ void remove_creature_from_summon_list(struct Dungeon* dungeon, ThingIndex famlrt
         }
     }
 }
+
+TbBool remove_creature_from_summoner(const struct Thing* famlrtng)
+{
+    struct CreatureControl* famcctrl = creature_control_get_from_thing(famlrtng);
+    struct Thing* summonertng = thing_get(famcctrl->summoner_idx);
+    if (thing_is_creature(summonertng))
+    {
+        struct CreatureControl* sumcctrl = creature_control_get_from_thing(summonertng);
+        for (short j = 0; j < FAMILIAR_MAX; j++)
+        {
+            if (sumcctrl->familiar_idx[j] == famlrtng->index)
+            {
+                sumcctrl->familiar_idx[j] = 0;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 /**
  * @brief Casts a spell by caster creature targeted at given coordinates, most likely using shot to transfer the spell.
  *
@@ -3593,7 +3629,7 @@ void thing_fire_shot(struct Thing *firing, struct Thing *target, ThingModel shot
     }
     // Compute shot damage
     damage = shotst->damage;
-    if (shotst->fixed_damage == 0)
+    if (!(shotst->model_flags & ShMF_FixedDamage))
     {
         if ((shotst->model_flags & ShMF_StrengthBased) != 0)
         {
@@ -6276,7 +6312,7 @@ TngUpdateRet update_creature(struct Thing *thing)
     if (cctrl->hand_blocked_turns > 0)
         cctrl->hand_blocked_turns--;
     if (cctrl->regular_creature.navigation_map_changed == 0)
-        cctrl->regular_creature.navigation_map_changed = game.map_changed_for_nagivation;
+        cctrl->regular_creature.navigation_map_changed = game.map_changed_for_navigation;
     if ((cctrl->stopped_for_hand_turns == 0) || (cctrl->instance_id == CrInst_EAT))
     {
         process_creature_instance(thing);

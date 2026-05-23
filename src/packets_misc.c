@@ -19,11 +19,9 @@
 #include "kfx_memory.h"
 #include "pre_inc.h"
 #include "packets.h"
-#include "net_received_packets.h"
-#include "net_redundant_packets.h"
 
 #include "bflib_fileio.h"
-#include "bflib_network_exchange.h"
+#include "net_exchange_gameplay.h"
 #include "bflib_datetm.h"
 #include "front_landview.h"
 #include "frontend.h"
@@ -38,7 +36,7 @@
 extern "C" {
 #endif
 /******************************************************************************/
-#define PACKET_TURN_SIZE (NET_PLAYERS_COUNT*sizeof(struct PacketEx) + sizeof(TbBigChecksum))
+#define PACKET_TURN_SIZE (PACKETS_COUNT*sizeof(struct Packet) + sizeof(TbBigChecksum))
 #define MULTIPLAYER_PAUSE_COOLDOWN_MS 500
 struct Packet bad_packet;
 unsigned long initial_replay_seed;
@@ -47,7 +45,6 @@ extern TbBool IMPRISON_BUTTON_DEFAULT;
 extern TbBool FLEE_BUTTON_DEFAULT;
 extern TbBool get_skip_heart_zoom_feature(void);
 extern unsigned long get_host_player_id(void);
-extern void LbNetwork_TimesyncBarrier(void);
 extern TbBool keeper_screen_redraw(void);
 /******************************************************************************/
 #ifdef __cplusplus
@@ -175,8 +172,7 @@ TbBool open_packet_file_for_load(char *fname, struct CatalogueEntry *centry)
 void post_init_packets(void)
 {
     SYNCDBG(6,"Starting");
-    initialize_packet_tracking();
-    initialize_redundant_packets();
+    initialize_packet_history();
     if ((game.packet_load_enable) && (game.packet_load_initialized))
     {
         struct CatalogueEntry centry;
@@ -225,15 +221,15 @@ short save_packets(void)
         chksum = 0;
     LbFileSeek(game.packet_save_fp, 0, Lb_FILE_SEEK_END);
     // Prepare data in the buffer
-    for (int i = 0; i < NET_PLAYERS_COUNT; i++)
+    for (int i = 0; i < PACKETS_COUNT; i++)
         memcpy(&pckt_buf[i*sizeof(struct Packet)], &game.packets[i], sizeof(struct Packet));
-    memcpy(&pckt_buf[NET_PLAYERS_COUNT*sizeof(struct Packet)], &chksum, sizeof(TbBigChecksum));
+    memcpy(&pckt_buf[PACKETS_COUNT*sizeof(struct Packet)], &chksum, sizeof(TbBigChecksum));
     // Write buffer into file
     if (LbFileWrite(game.packet_save_fp, &pckt_buf, turn_data_size) != turn_data_size)
     {
         ERRORLOG("Packet file write error");
     }
-    for (int i = 0; i < NET_PLAYERS_COUNT; i++) {
+    for (int i = 0; i < PACKETS_COUNT; i++) {
         if (game.packets[i].action == PckA_PlyrMsgEnd) {
             if (LbFileWrite(game.packet_save_fp, get_player(i)->mp_pending_message, PLAYER_MP_MESSAGE_LEN) != PLAYER_MP_MESSAGE_LEN) {
                 ERRORLOG("Chat message file write error");
@@ -365,9 +361,9 @@ void load_packets_for_turn(GameTurn nturn)
         return;
     }
     game.packet_file_pos += turn_data_size;
-    for (long i = 0; i < NET_PLAYERS_COUNT; i++)
+    for (long i = 0; i < PACKETS_COUNT; i++)
         memcpy(&game.packets[i], &pckt_buf[i * sizeof(struct Packet)], sizeof(struct Packet));
-    for (long i = 0; i < NET_PLAYERS_COUNT; i++) {
+    for (long i = 0; i < PACKETS_COUNT; i++) {
         if (game.packets[i].action == PckA_PlyrMsgEnd) {
             if (LbFileRead(game.packet_save_fp, get_player(i)->mp_pending_message, PLAYER_MP_MESSAGE_LEN) == PLAYER_MP_MESSAGE_LEN) {
                 game.packet_file_pos += PLAYER_MP_MESSAGE_LEN;
@@ -376,7 +372,7 @@ void load_packets_for_turn(GameTurn nturn)
             }
         }
     }
-    TbBigChecksum tot_chksum = llong(&pckt_buf[NET_PLAYERS_COUNT * sizeof(struct Packet)]);
+    TbBigChecksum tot_chksum = llong(&pckt_buf[PACKETS_COUNT * sizeof(struct Packet)]);
     if (game.turns_fastforward > 0)
         game.turns_fastforward--;
     if (game.packet_checksum_verify)
@@ -386,13 +382,13 @@ void load_packets_for_turn(GameTurn nturn)
         {
             ERRORLOG("PacketSave checksum - Out of sync (GameTurn %u)", get_gameturn());
             if (!is_onscreen_msg_visible())
-                show_onscreen_msg(game_num_fps, "Out of sync");
+                show_onscreen_msg(turns_per_second, "Out of sync");
         } else
         if (pckt->checksum != pckt_chksum)
         {
             ERRORLOG("Oops we are really Out Of Sync (GameTurn %u)", game.play_gameturn);
             if (!is_onscreen_msg_visible())
-                show_onscreen_msg(game_num_fps, "Out of sync");
+                show_onscreen_msg(turns_per_second, "Out of sync");
         }
     }
 }
@@ -417,13 +413,12 @@ void set_packet_pause_toggle()
         return;
     }
     if (game.game_kind != GKind_LocalGame) {
-        MULTIPLAYER_LOG("set_packet_pause_toggle: Initiating unpause timesync");
+        MULTIPLAYER_LOG("set_packet_pause_toggle: broadcasting unpause");
         unpausing_in_progress = 1;
         keeper_screen_redraw();
         RendererPresentFrame();
-        LbNetwork_BroadcastUnpauseTimesync();
+        LbNetwork_BroadcastUnpause();
         if (my_player_number == get_host_player_id()) {
-            LbNetwork_TimesyncBarrier();
             process_pause_packet(0, 0);
         }
         unpausing_in_progress = 0;
@@ -437,6 +432,6 @@ void disable_packet_mode(void)
     close_packet_file();
     game.packet_load_enable = false;
     game.packet_save_enable = false;
-    show_onscreen_msg(2*game_num_fps, "Packet mode disabled");
+    show_onscreen_msg(2*turns_per_second, "Packet mode disabled");
     set_gui_visible(true);
 }

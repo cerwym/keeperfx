@@ -546,7 +546,8 @@ const CreatureStateCheck move_check_func_list[] = {
  * - 2: Fighting.
  */
 long const state_type_to_gui_state[STATE_TYPES_COUNT] = {
-    0, 1, 0, 0, 0, 2, 0, 0, 1, 0, 0, 2, 2, 1, 1,
+    CrGUIJob_Wandering, CrGUIJob_Working, CrGUIJob_Wandering, CrGUIJob_Wandering, CrGUIJob_Wandering, CrGUIJob_Fighting, CrGUIJob_Wandering, CrGUIJob_Wandering,
+    CrGUIJob_Working, CrGUIJob_Wandering, CrGUIJob_Wandering, CrGUIJob_Fighting, CrGUIJob_Fighting, CrGUIJob_Working, CrGUIJob_Working, CrGUIJob_Working
 };
 
 /******************************************************************************/
@@ -4896,6 +4897,10 @@ TbBool cleanup_creature_state_and_interactions(struct Thing *creatng)
     {
         remove_creature_from_group(creatng);
     }
+    if (creature_is_familiar(creatng))
+    {
+        remove_creature_from_summoner(creatng);
+    }
     remove_events_thing_is_attached_to(creatng);
     // Use the correct function to clear them properly. Terminating the spells also removes the attached effects.
     if (creature_under_spell_effect(creatng, CSAfF_Armour))
@@ -4966,6 +4971,8 @@ TbBool can_change_from_state_to(const struct Thing *thing, CrtrStateId curr_stat
         return (next_stati->override_call2arms);
     case CrStTyp_Follow:
         return (next_stati->override_follow);
+    case CrStTyp_DeepWork:
+        return (next_stati->override_deep_work);
     default:
         return true;
     }
@@ -5588,8 +5595,6 @@ TbBool setup_move_off_lava(struct Thing* thing)
     return false;
 }
 
-//todo CAVE_IN_NEAR_FLEE_POSITION into config file
-#define CAVE_IN_NEAR_FLEE_POSITION 200
 TbBool setup_move_out_of_cave_in(struct Thing* thing)
 {
     MapSlabCoord bx = 0;
@@ -5615,14 +5620,17 @@ TbBool setup_move_out_of_cave_in(struct Thing* thing)
     }
     if (valid_flee_pos) // If a flee position is found, go there.
     {
-        long dist = LbDiagonalLength(abs(thing->mappos.x.val - cctrl->flee_pos.x.val), abs(thing->mappos.y.val - cctrl->flee_pos.y.val));
-        // If you're too close to the flee position, no point in going there to escape cave in damage.
-        if (dist <= CAVE_IN_NEAR_FLEE_POSITION)
+        // If you're too close to the flee position, no point in going there to escape cave in damage. Creatures will not go to flee pos when they within slab_coord(2), so we use slab_coord(3) here.
+        if (get_chessboard_distance(&thing->mappos, &cctrl->flee_pos) <= slab_coord(3))
         {
             // Heroes that are near to a hero gate, should escape through it if they can.
             if (is_hero_thing(thing))
             {
                 if (good_leave_through_exit_door(thing))
+                {
+                    return true;
+                }
+                if (good_setup_wander_to_exit(thing))
                 {
                     return true;
                 }
@@ -5644,8 +5652,9 @@ TbBool setup_move_out_of_cave_in(struct Thing* thing)
         }
         else
         {
-            if (setup_person_move_to_coord(thing, &cctrl->flee_pos, 0))
+            if (external_set_thing_state(thing, CrSt_CreatureCombatFlee))
             {
+                cctrl->flee_start_turn = get_gameturn();
                 return true;
             }
         }

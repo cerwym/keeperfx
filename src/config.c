@@ -1034,7 +1034,7 @@ TbBool parse_named_field_blocks(char *buf, long len, const char *config_textname
 {
     int32_t pos = 0;
     // Initialize the array
-    if ((flags & CnfLd_AcceptPartial) == 0)
+    if ((flags & (CnfLd_AcceptPartial|CnfLd_PreListed)) == 0)
     {
         set_defaults(named_fields_set,config_textname);
     }
@@ -1367,6 +1367,10 @@ static char *_resolve_file_path_internal(char *dst, size_t dst_size,
   case FGrp_CrtrData:
       mdir=keeper_runtime_directory;
       sdir="creatrs";
+      break;
+  case FGrp_MpLevels:
+      mdir=keeper_runtime_directory;
+      sdir="multiplayer";
       break;
   default:
       mdir=keeper_runtime_directory;

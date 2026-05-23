@@ -98,9 +98,9 @@ enum TbPacketAction {
         PckA_UnusedSlot059,
         PckA_CheatEnter,//60
         PckA_CheatAllFree,
-        PckA_CheatCrtSpells,
+        PckA_CheatCrtSpells, // unused
         PckA_CheatRevealMap,
-        PckA_CheatCrAllSpls,
+        PckA_CheatCrAllSpls, // unused
         PckA_CheatUnusedPlaceholder065,//65
         PckA_CheatAllMagic,
         PckA_CheatAllRooms,
@@ -194,6 +194,12 @@ enum TbPacketAction {
         PckA_CheatGiveDoorTrap,
         PckA_RoomspaceHighlightToggle,
         PckA_UnusedSlot157,
+		PckA_CheatWinLevel,
+		PckA_CheatLoseLevel,
+		PckA_CheatLevelUp,
+		PckA_CheatLevelDown,
+		PckA_CheatApplySpell,
+		PckA_CheatKillCreature,
 };
 
 /** Packet flags for non-action player operation. */
@@ -264,6 +270,8 @@ struct CatalogueEntry;
 extern unsigned long initial_replay_seed;
 extern TbBool unpausing_in_progress;
 
+extern float camera_movement_x;
+extern float camera_movement_y;
 /**
  * Stores data exchanged between players each turn and used to re-create their input.
  */
@@ -330,10 +338,7 @@ void process_players_creature_passenger_packet_action(long idx);
 void process_players_creature_control_packet_action(long idx);
 void process_map_packet_clicks(long idx);
 void process_pause_packet(long a1, long a2);
-void process_quit_packet(struct PlayerInfo *player, short complete_quit);
 void message_text_key_add(char *message, TbKeyCode key, TbKeyMods kmodif);
-void process_chat_message_end(int player_id, const char *message);
-TbBool try_starting_level_from_chat(char* message, long player_id);
 void process_camera_controls(struct Camera* cam, struct Packet* pckt, struct PlayerInfo* player, TbBool is_local_camera);
 void process_first_person_look(struct Thing *thing, struct Packet *pckt, long current_horizontal, long current_vertical, long *out_horizontal, long *out_vertical, long *out_roll);
 TbBool can_process_creature_input(struct Thing *thing);

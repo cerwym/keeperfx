@@ -333,7 +333,7 @@ struct Game {
     unsigned short entrances_count;
     unsigned short nodungeon_creatr_list_start; /**< Linked list of creatures which have no dungeon (neutral and owned by nonexisting players) */
     enum GameKinds game_kind; /**< Kind of the game being played, from GameKinds enumeration. Originally was GameMode. */
-    TbBool map_changed_for_nagivation; // something with navigation
+    TbBool map_changed_for_navigation; // something with navigation
     struct PerExpLevelValues creature_scores[CREATURE_TYPES_MAX];
     struct Bookmark bookmark[BOOKMARKS_COUNT];
     struct CreaturePool pool;
@@ -343,7 +343,7 @@ struct Game {
     GameTurnDelta pay_day_progress[PLAYERS_COUNT];
     struct SoundSettings sound_settings;
     struct CreatureBattle battles[BATTLES_COUNT];
-    char evntbox_text_objective[MESSAGE_TEXT_LEN];
+    char evntbox_text_objective[PLAYERS_COUNT][MESSAGE_TEXT_LEN];
     char evntbox_text_buffer[MESSAGE_TEXT_LEN];
     struct TextScrollWindow evntbox_scroll_window;
     int32_t flash_button_index; /**< GUI Button Designation ID of a button which is supposed to flash, as part of tutorial. */
@@ -429,11 +429,11 @@ struct Game {
 /******************************************************************************/
 extern struct Game *gpGame;
 #define game (*gpGame)
-extern int32_t game_num_fps;
+extern int32_t turns_per_second;
 
-extern int32_t game_num_fps_draw_current;
-extern int32_t game_num_fps_draw_main;
-extern int32_t game_num_fps_draw_secondary;
+extern int32_t turns_per_second_draw_current;
+extern int32_t turns_per_second_draw_main;
+extern int32_t turns_per_second_draw_secondary;
 
 /******************************************************************************/
 #ifdef __cplusplus

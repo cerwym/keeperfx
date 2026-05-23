@@ -24,6 +24,7 @@
 #include "bflib_math.h"
 #include "bflib_planar.h"
 #include "bflib_sound.h"
+#include "bflib_joyst.h"
 #include "config_creature.h"
 #include "config_effects.h"
 #include "creature_battle.h"

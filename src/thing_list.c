@@ -1139,7 +1139,7 @@ void update_things(void)
     update_things_in_list(&game.thing_lists[TngList_Doors]);
     update_things_sounds_in_list(&game.thing_lists[TngList_AmbientSnds]);
     update_cave_in_things();
-    game.map_changed_for_nagivation = 0;
+    game.map_changed_for_navigation = 0;
     KFX_C_PLOT("Sim/CreatureCount", (double)game.thing_lists[TngList_Creatures].count);
     KFX_C_ZONE_END(ctx);
     SYNCDBG(9,"Finished");

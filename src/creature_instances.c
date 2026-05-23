@@ -45,6 +45,7 @@
 #include "map_utils.h"
 #include "ariadne_wallhug.h"
 #include "spdigger_stack.h"
+#include "tasks_list.h"
 #include "config_magic.h"
 #include "config_terrain.h"
 #include "gui_soundmsgs.h"
@@ -618,17 +619,14 @@ long instf_dig(struct Thing *creatng, int32_t *param)
     TRACE_THING(creatng);
     struct CreatureControl* cctrl = creature_control_get_from_thing(creatng);
     struct Dungeon* dungeon = get_dungeon(creatng->owner);
-    long task_idx = cctrl->digger.task_idx;
-    {
-        struct MapTask* task = get_dungeon_task_list_entry(dungeon, task_idx);
-        taskkind = task->kind;
-        if (task->coords != cctrl->digger.task_stl)
-        {
-            return 0;
-      }
-      stl_x = stl_num_decode_x(cctrl->digger.task_stl);
-      stl_y = stl_num_decode_y(cctrl->digger.task_stl);
+    long task_idx = find_dig_from_task_list(creatng->owner, cctrl->digger.task_stl);
+    if (task_idx < 0) {
+        return 0;
     }
+    struct MapTask* task = get_dungeon_task_list_entry(dungeon, task_idx);
+    taskkind = task->kind;
+    stl_x = stl_num_decode_x(cctrl->digger.task_stl);
+    stl_y = stl_num_decode_y(cctrl->digger.task_stl);
     struct SlabMap* slb = get_slabmap_for_subtile(stl_x, stl_y);
     if (slabmap_block_invalid(slb)) {
         return 0;
@@ -838,8 +836,12 @@ long instf_eat(struct Thing *creatng, int32_t *param)
 {
     TRACE_THING(creatng);
     struct CreatureControl* cctrl = creature_control_get_from_thing(creatng);
-    if (cctrl->hunger_amount > 0)
+    if (cctrl->hunger_amount > 0) {
         cctrl->hunger_amount--;
+    } else
+    if (cctrl->hunger_loss < 255) {
+        cctrl->hunger_loss++;
+    }
     apply_health_to_thing_and_display_health(creatng, game.conf.rules[creatng->owner].health.food_health_gain);
     cctrl->hunger_level = 0;
     return 1;
