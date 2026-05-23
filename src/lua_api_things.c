@@ -643,14 +643,6 @@ static int thing_eq(lua_State *L) {
     return 1;
 }
 
-static const struct luaL_Reg thing_methods[] = {{"make_thing_zombie", make_thing_zombie},
-                                                {"walk_to", lua_creature_walk_to},
-                                                {"kill", lua_kill_creature},
-                                                {"stun", lua_stun_creature},
-                                                {"destroy", lua_destroy_object},
-                                                {"delete", lua_delete_thing},
-                                                {"isValid", lua_is_valid},
-
 static const struct luaL_Reg thing_methods[] = {
     {"make_thing_zombie"            ,make_thing_zombie                  },
     {"walk_to"                      ,lua_creature_walk_to               },
