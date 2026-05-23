@@ -2959,7 +2959,7 @@ static const struct ConsoleCommand console_commands[] = {
     { "renderer.debug_gui_hitboxes", cmd_renderer_debug_gui_hitboxes, NULL },
     { "creature.chicken", cmd_chicken_creature, NULL },
 };
-};
+
 static const int console_command_count = sizeof(console_commands) / sizeof(*console_commands);
 
 
