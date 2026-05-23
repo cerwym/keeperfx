@@ -36,8 +36,6 @@
 #include "bflib_sound.h"
 #include "bflib_vidraw.h"
 #include "renderer/RendererManager.h"
-#include "bflib_network.h"
-#include "bflib_network_exchange.h"
 
 #include "config_strings.h"
 #include "config_campaigns.h"
