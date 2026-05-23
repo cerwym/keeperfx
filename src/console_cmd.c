@@ -385,7 +385,7 @@ void param_completion_for_magic_instance(PlayerNumber plyr_idx, char *args_str, 
         pr5_str += strspn(pr5_str, " ");
     }
 
-    const int suggested_key_max = 2048;
+    enum { suggested_key_max = 2048 };
     const char *suggested_key_list[suggested_key_max];
     memset(suggested_key_list, 0, sizeof(suggested_key_list));
     int suggested_key_cnt = 0;
@@ -1333,7 +1333,7 @@ void param_completion_for_create_thing(PlayerNumber plyr_idx, char *args_str, si
 
 
 
-    const int suggested_key_max = 2048;
+    enum { suggested_key_max = 2048 };
     const char *suggested_key_list[suggested_key_max];
     memset(suggested_key_list, 0, sizeof(suggested_key_list));
     int suggested_key_cnt = 0;
@@ -3155,7 +3155,7 @@ void do_param1_completion_for_name_command(PlayerNumber plyr_idx, char *args_str
         return;
     }
 
-    const int suggested_key_max = 2048;
+    enum { suggested_key_max = 2048 };
     const char *suggested_key_list[suggested_key_max];
     memset(suggested_key_list, 0, sizeof(suggested_key_list));
     int suggested_key_cnt = 0;
@@ -3207,7 +3207,7 @@ void cmd_auto_completion(PlayerNumber plyr_idx, char *cmd_str, size_t cmd_size)
     else
         cmd_len = space - cmd_str;
 
-    const int suggested_key_max = 2048;
+    enum { suggested_key_max = 2048 };
     int suggested_key_cnt = 0;
     const char *suggested_key_list[suggested_key_max];
     memset(suggested_key_list, 0, sizeof(suggested_key_list));
