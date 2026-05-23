@@ -1637,14 +1637,6 @@ void RendererOpenGL::UnlockFramebuffer()
 bool RendererOpenGL::BlitRaw8GPU(int dst_width, int dst_height, int dst_x, int dst_y,
                                   const unsigned char* src_buf, int src_width, int src_height)
 {
-    if (!m_rawblit_shader)
-    {
-        // Shader failed to compile during Init().  This is a fatal misconfiguration
-        // in GL mode — no CPU fallback is permitted.
-        ERRORLOG("RendererOpenGL::BlitRaw8GPU: shader not compiled; GPU blit dropped (src %dx%d)",
-                 src_width, src_height);
-        return false;
-    }
     if (!src_buf || src_width <= 0 || src_height <= 0)
     {
         ERRORLOG("RendererOpenGL::BlitRaw8GPU: invalid source (buf=%p w=%d h=%d)",
@@ -1666,11 +1658,6 @@ bool RendererOpenGL::SubmitVideoFrame(
     const uint8_t* px, int src_w, int src_h, int src_pitch,
     const uint8_t* bgra_pal, int dst_x, int dst_y, int dst_w, int dst_h)
 {
-    if (!m_rawblit_shader)
-    {
-        ERRORLOG("RendererOpenGL::SubmitVideoFrame: shader not compiled; GPU path dropped");
-        return false;
-    }
     if (!px || !bgra_pal || src_w <= 0 || src_h <= 0 || dst_w <= 0 || dst_h <= 0)
     {
         ERRORLOG("RendererOpenGL::SubmitVideoFrame: invalid params (px=%p src=%dx%d dst=%dx%d)",
@@ -1693,11 +1680,6 @@ bool RendererOpenGL::SubmitLandviewZoom(
     float screen_cx,    float screen_cy,
     float scale)
 {
-    if (!m_zoom_shader)
-    {
-        ERRORLOG("RendererOpenGL::SubmitLandviewZoom: shader not compiled; GPU path dropped");
-        return false;
-    }
     if (!src_buf || src_w <= 0 || src_h <= 0)
     {
         ERRORLOG("RendererOpenGL::SubmitLandviewZoom: invalid params (src=%p %dx%d)",

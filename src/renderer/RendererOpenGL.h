@@ -171,8 +171,6 @@ private:
     bool init_tile_atlas();
     bool init_fade_table_texture();
 
-
-
 private:
 
     // Screen dimensions — set in Init() once, used throughout EndFrame() for viewport sizing.
