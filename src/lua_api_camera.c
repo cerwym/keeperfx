@@ -57,8 +57,7 @@ static const struct luaL_Reg camera_methods[] = {
     int playerId = luaL_checkCamera(L, 1);
     const char* key = luaL_checkstring(L, 2);
     
-    struct PlayerInfo *player = get_player(playerId);
-    struct Camera* cam = get_player_active_camera(player);
+    struct Camera* cam = camera_get_active(playerId);
 
     if (strcmp(key, "pos") == 0) {
         luaL_checkCoord3d(L, 3, &cam->mappos);
@@ -93,8 +92,7 @@ static const struct luaL_Reg camera_methods[] = {
         return 1;
     }
 
-    struct PlayerInfo *player = get_player(playerId);
-    struct Camera* cam = get_player_active_camera(player);
+    struct Camera* cam = camera_get_active(playerId);
 
     if (strcmp(key, "pos") == 0) {
         lua_pushPos(L, &cam->mappos);
