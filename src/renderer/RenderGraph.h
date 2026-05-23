@@ -76,12 +76,21 @@ public:
     ShadowCommandBuffers& GetShadowBuffers() { return m_write.shadow; }
     DebugCommandBuffers&  GetDebugBuffers()  { return m_write.debug;  }
 
+    /** Read-only access to the write-side UI buffer (game thread, before Flip).
+     *  Used by EndFrame() to detect empty frames and skip Flip(). */
+    const UICommandBuffers& GetWriteUIBuffers() const { return m_write.ui; }
+
     /** Record a map-fade composite command for this frame (game thread).
      *  Transferred to the render-side by Flip() / UpdateFrameState(). */
     void SetMapFadeCmd(const IRMapFadeCmd& cmd) { m_write_map_fade = cmd; }
 
     /** Clear any pending map-fade command for this frame (game thread). */
     void ClearMapFadeCmd() { m_write_map_fade = std::nullopt; }
+
+    /** Returns true if a map-fade command has been written this frame (game thread).
+     *  Used by EndFrame() to force Flip() during ParchFadeIn/Out so stale UI quads
+     *  from the preceding parchment view are not replayed over the fade blend. */
+    bool HasWriteMapFadeCmd() const { return m_write_map_fade.has_value(); }
 
     // =========================================================================
     // Frame lifecycle (game thread)

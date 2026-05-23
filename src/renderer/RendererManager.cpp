@@ -60,6 +60,9 @@ static RendererType         s_activeType          = RENDERER_INVALID;
 // Consumed by RendererNeedsUIReinitAfterLoad to decide whether init_gui() is
 // required after a save-game load.  Starts true so the first load always reinits.
 static bool                 s_gui_sprites_dirty   = true;
+// Set by RendererNotifySpritesReloaded(); drained at the top of EndFrame() (after
+// WaitForCompletion) so the rebuild never races with in-flight IR commands.
+static bool                 s_rebuild_deferred    = false;
 static IWorldViewRenderer*  s_worldViewRenderer   = nullptr;
 static IMapFadePass*        s_mapFadePass         = nullptr;
 static ITextRenderer*       s_textRenderer        = nullptr;
@@ -85,27 +88,43 @@ void RendererNotifySpritesReloaded()
 {
     s_gui_sprites_dirty = true;
 #ifdef RENDERER_OPENGL_ENABLED
-    SYNCLOG("RendererNotifySpritesReloaded: s_spriteAtlas=%p gui_panel_sprites=%p button_sprites=%p",
+    // Schedule a deferred atlas rebuild.  The actual Rebuild() call is deferred to
+    // RendererDrainDeferredAtlasRebuild(), which is called at the top of EndFrame()
+    // after WaitForCompletion() — the only point where the render thread is
+    // guaranteed idle AND no sprites for the new frame have been submitted yet.
+    // Rebuilding here (mid-frame) would invalidate handles already written to the
+    // current frame's IR command buffer, causing a one-frame drop of all UI sprites.
+    s_rebuild_deferred = true;
+    SYNCLOG("RendererNotifySpritesReloaded: deferred rebuild scheduled (atlas=%p gui_panel=%p btn=%p)",
             (void*)s_spriteAtlas, (void*)gui_panel_sprites, (void*)button_sprites);
-    if (s_spriteAtlas) {
-        // Collect all sheets before calling Rebuild() so the entire
-        // Free→Init→AddSheet sequence is atomic under one exclusive lock.
-        // The render thread must never see the atlas in a partially-rebuilt state.
-        const TbSpriteSheet* sheets[3] = {};
-        const char*          names[3]  = {};
-        int count = 0;
-        if (gui_panel_sprites) { sheets[count] = gui_panel_sprites; names[count++] = "gui_panel_sprites"; }
-        if (button_sprites)    { sheets[count] = button_sprites;    names[count++] = "button_sprites";    }
-        if (custom_sprites && num_sprites(custom_sprites) > 0)
-            { sheets[count] = custom_sprites; names[count++] = "custom_sprites"; }
-        s_spriteAtlas->Rebuild(sheets, names, count);
-        for (int i = 0; i < count; ++i)
-            SYNCLOG("RendererNotifySpritesReloaded: added '%s' (%d sprites)", names[i], (int)num_sprites(sheets[i]));
-    } else {
-        SYNCLOG("RendererNotifySpritesReloaded: s_spriteAtlas is NULL (GL not active or not yet initialised)");
-    }
-    // Upload the slab background tile now that the palette is ready.
+    // Latch the slab-texture pointer immediately — UpdateSlabTexture() only stores
+    // a pointer, no GL calls, so it is safe to call from any thread at any time.
     UIRenderer_SetSlabTexture();
+#endif
+}
+
+void RendererDrainDeferredAtlasRebuild()
+{
+#ifdef RENDERER_OPENGL_ENABLED
+    if (!s_rebuild_deferred || !s_spriteAtlas)
+        return;
+    s_rebuild_deferred = false;
+
+    // Collect ALL currently-loaded sheets so nothing is lost after the wipe.
+    // pointer_sprites and frontend_sprite are added incrementally via AddSheet()
+    // after a normal rebuild; they must be included here so a deferred rebuild
+    // that fires after they've already been loaded doesn't lose them.
+    const TbSpriteSheet* sheets[5] = {};
+    const char*          names[5]  = {};
+    int count = 0;
+    if (gui_panel_sprites)                          { sheets[count] = gui_panel_sprites; names[count++] = "gui_panel_sprites"; }
+    if (button_sprites)                             { sheets[count] = button_sprites;    names[count++] = "button_sprites";    }
+    if (custom_sprites  && num_sprites(custom_sprites)  > 0) { sheets[count] = custom_sprites;  names[count++] = "custom_sprites";  }
+    if (pointer_sprites && num_sprites(pointer_sprites) > 0) { sheets[count] = pointer_sprites; names[count++] = "pointer_sprites"; }
+    if (frontend_sprite && num_sprites(frontend_sprite) > 0) { sheets[count] = frontend_sprite; names[count++] = "frontend_sprite"; }
+    s_spriteAtlas->Rebuild(sheets, names, count);
+    for (int i = 0; i < count; ++i)
+        SYNCLOG("RendererDrainDeferredAtlasRebuild: added '%s' (%d sprites)", names[i], (int)num_sprites(sheets[i]));
 #endif
 }
 

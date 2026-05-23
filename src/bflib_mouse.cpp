@@ -158,7 +158,8 @@ TbResult LbMoveGameCursorToHostCursor(void)
     int game_cursor_y = lbDisplay.MMouseY;
     int host_cursor_x, host_cursor_y;
     SDL_GetMouseState(&host_cursor_x, &host_cursor_y);
-    if (((host_cursor_x != game_cursor_x) || (host_cursor_y != game_cursor_y)) && LbIsActive())
+    if (((host_cursor_x != game_cursor_x) || (host_cursor_y != game_cursor_y)) &&
+        PlatformManager::Get()->GetWindowSystem()->IsAppActive())
     {
         if (!pointerHandler.SetMousePosition(host_cursor_x, host_cursor_y))
         {

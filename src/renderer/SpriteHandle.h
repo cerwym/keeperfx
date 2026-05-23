@@ -17,3 +17,19 @@
 
 using SpriteHandle = uint32_t;
 static constexpr SpriteHandle kInvalidSpriteHandle = UINT32_MAX;
+static constexpr uint16_t     kSpriteHandleInvalidIndex = UINT16_MAX;
+
+constexpr inline SpriteHandle MakeSpriteHandle(uint16_t generation, uint16_t index)
+{
+    return (SpriteHandle(generation) << 16) | SpriteHandle(index);
+}
+
+constexpr inline uint16_t SpriteHandleGeneration(SpriteHandle handle)
+{
+    return uint16_t(handle >> 16);
+}
+
+constexpr inline uint16_t SpriteHandleIndex(SpriteHandle handle)
+{
+    return uint16_t(handle & 0xFFFFu);
+}

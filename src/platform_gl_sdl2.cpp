@@ -227,16 +227,8 @@ extern "C" int platform_create_gl_context(void *sdl_window)
         return 0;
     }
 
-    // Enable VSync to prevent tearing and flickering during camera movements
-    // -1 = adaptive vsync (tear-free when possible, allow tearing when needed)
-    // 1  = strict vsync (always synchronized)
-    // 0  = no vsync
-    int vsync_result = SDL_GL_SetSwapInterval(-1); // Try adaptive first
-    if (vsync_result != 0) {
-        vsync_result = SDL_GL_SetSwapInterval(1); // Fallback to strict vsync
-        if (vsync_result != 0)
-            LbWarnLog("platform_create_gl_context: SDL_GL_SetSwapInterval failed for both adaptive and strict vsync: %s\n", SDL_GetError());
-    }
+    // Set no V-sync, it's fucking with frame ordering.
+    int vsync_result = SDL_GL_SetSwapInterval(0);
 
     // The window was created with SDL_WINDOW_HIDDEN so that SDL2's internal
     // SetPixelFormat does not trigger a visible DWM composition-pipeline

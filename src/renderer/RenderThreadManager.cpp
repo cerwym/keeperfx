@@ -10,6 +10,8 @@
 
 /******************************************************************************/
 
+thread_local bool g_on_render_thread = false;
+
 RenderThreadManager::~RenderThreadManager()
 {
     if (m_active)
@@ -66,6 +68,7 @@ void RenderThreadManager::Stop()
 
 void RenderThreadManager::ThreadProc(Fn init_fn, Fn work_fn, Fn cleanup_fn)
 {
+    g_on_render_thread = true;
     init_fn();
 
     {

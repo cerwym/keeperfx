@@ -53,8 +53,6 @@ volatile TbBool lbScreenInitialised = false;
 /** Bytes per pixel expected by the engine.
  * On any try of entering different video BPP, this mode will be emulated. */
 volatile unsigned short lbEngineBPP = 8;
-/** Informs if the application window is active (focused on screen). */
-extern volatile TbBool lbAppActive;
 /** True if we have two surfaces. */
 volatile TbBool lbHasSecondSurface;
 /** True if we request the double buffering to be on in next mode switch. */
@@ -435,7 +433,6 @@ TbResult LbScreenInitialize(void)
     lbDrawSurface = NULL;
     lbHasSecondSurface = false;
     lbDoubleBufferingRequested = false;
-    lbAppActive = true;
     LbMouseChangeMoveRatio(256, 256);
     // Register default video modes
     if (lbScreenModeInfoNum == 0) {

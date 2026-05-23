@@ -80,6 +80,11 @@ public:
     /** Called after all rendering is complete — presents the frame to the display. */
     virtual void EndFrame() = 0;
 
+    /** Block the calling thread until any in-flight asynchronous render work is complete.
+     *  Safe to call at any time; no-op when the render thread is already idle.
+     *  Backends with no dedicated render thread implement this as a no-op. */
+    virtual void FlushRenderWork() {}
+
     /** Clear the display to a palette colour index before rendering this frame.
      *  Call once per frame before any drawing takes place.
      *  GL backends store the index and resolve it against the current palette
@@ -280,11 +285,6 @@ public:
      *  than RendererGetActiveType() to avoid hard-coding backend identities.
      *  The result is a trivially-copyable POD — callers may store it by value. */
     virtual BackendCapabilities GetCapabilities() const = 0;
-
-    /** Returns true if this backend can execute IPostProcessPass GPU lens effects.
-     *  When true, RendererVita runs GPU passes in EndFrame() and LensManager
-     *  skips the corresponding CPU Draw() calls. */
-    virtual bool SupportsGPUPasses() const { return false; }
 
     // -------------------------------------------------------------------------
     // Sub-renderer access (managed internally by each backend)

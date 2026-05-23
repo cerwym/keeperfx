@@ -373,6 +373,14 @@ extern "C" int PlatformManager_RecreateWindowForSoftwareRenderer()
     return (ws && ws->RecreateForSoftwareRenderer()) ? 1 : 0;
 }
 
+extern "C" TbBool PlatformManager_GetIsAppActive() {
+    IPlatform* p = PlatformManager::Get();
+    if (!p)
+        return 0;
+    IWindowSystem* ws = p->GetWindowSystem();
+    return (ws && ws->IsAppActive()) ? 1 : 0;
+}
+
 IAudioPlatform* PlatformManager_GetAudio()
 {
     IPlatform* p = PlatformManager::Get();

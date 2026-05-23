@@ -690,6 +690,12 @@ void RendererOpenGL::EndFrame()
     // so the very first call passes through immediately (no prior frame).
     m_render_thread.WaitForCompletion();
 
+    // Execute any deferred atlas rebuild now: WaitForCompletion() guarantees the
+    // render thread has finished consuming the previous frame's IR (old-generation
+    // handles), and no sprites for this frame have been submitted yet — every
+    // handle emitted after this point will carry the new generation.
+    RendererDrainDeferredAtlasRebuild();
+
     // Lazily start the render thread on the first EndFrame() call.
     // All sub-renderer GL initialisation (GLWorldViewRenderer, GLTextRenderer,
     // GLMapFadePass, etc.) runs on the main thread with the context current
@@ -840,14 +846,13 @@ void RendererOpenGL::EndFrame()
     // The wait for completion has moved to the TOP of this function.
     m_render_thread.Signal();
 
-    // Reset the frame-begun flag HERE (game thread) rather than at the end of
-    // EndFrame_GL() (render thread).  This eliminates the cross-thread race:
-    // EndFrame_GL runs concurrently with the game thread building frame N+1,
-    // and if the game's next BeginFrame() fired before the render thread reached
-    // the old "m_frame_begun = false" line the idempotency guard would fire,
-    // leaving IR write-windows unopened for frame N+1 → blank frame → flicker.
-    // With this placement m_frame_begun becomes game-thread-only state.
+    // Reset the frame-begun flag HERE (game thread).
     m_frame_begun = false;
+}
+
+void RendererOpenGL::FlushRenderWork()
+{
+    m_render_thread.WaitForCompletion();
 }
 
 void RendererOpenGL::EndFrame_GL()

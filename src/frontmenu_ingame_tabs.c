@@ -2677,6 +2677,17 @@ void draw_whole_status_panel(void)
     draw_status_placefiller(gmnu, fs_units_per_px);
 }
 
+void draw_status_panel_background_only(void)
+{
+    // Draws only the tiled stone background of the status panel — no minimap,
+    // gold counter, or placefiller.  Used by ParchmentScene where the parchment
+    // map IS the map and the sidebar minimap must not be shown.
+    struct GuiMenu* gmnu = get_active_menu(menu_id_to_number(GMnu_MAIN));
+    int fs_units_per_px = (gmnu->height * 16 + 8) / LbTiledSpriteHeight(&status_panel);
+    draw_status_background(fs_units_per_px);
+    draw_status_placefiller(gmnu, fs_units_per_px);
+}
+
 void gui_set_button_flashing(long btn_idx, long gameturns)
 {
     game.flash_button_index = btn_idx;

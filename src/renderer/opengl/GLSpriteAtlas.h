@@ -18,6 +18,8 @@
 #ifdef RENDERER_OPENGL_ENABLED
 
 #include <glad/glad.h>
+#include <mutex>
+#include <shared_mutex>
 #include <unordered_map>
 #include <vector>
 #include <cstdint>
@@ -43,8 +45,17 @@ public:
     bool Init();
     void Free();
 
-    /** Decode and pack all sprites in a sheet into the atlas. */
-    void AddSheet(const struct TbSpriteSheet* sheet);
+    /** Decode and pack all sprites in a sheet into the atlas.
+     *  @param name  Optional debug label (e.g. "gui_panel_sprites") shown in log output. */
+    void AddSheet(const struct TbSpriteSheet* sheet, const char* name = nullptr);
+
+    /** Atomically rebuild the entire atlas: Free + Init + AddSheet for each
+     *  provided sheet, all under a single exclusive lock so the render thread
+     *  never sees a partially-rebuilt atlas.  Use instead of calling Free/Init/
+     *  AddSheet individually when replacing the entire atlas contents. */
+    void Rebuild(const struct TbSpriteSheet* const* sheets,
+                 const char* const*                 names,
+                 int                                count);
 
     /** Invalidate UV entries for all sprites in a sheet. */
     void RemoveSheet(const struct TbSpriteSheet* sheet);
@@ -52,7 +63,7 @@ public:
     /** Look up the opaque handle assigned to spr.  Returns kInvalidSpriteHandle if not found. */
     SpriteHandle GetHandle(const struct TbSprite* spr) const;
 
-    /** Look up precomputed UV by handle.  Returns false if out of range. */
+    /** Look up precomputed UV by handle.  Returns false if invalid, out-of-range, or stale (generation mismatch after atlas rebuild). */
     bool GetUV(SpriteHandle h, SpriteUV& out) const;
 
     /** Look up precomputed UV by sprite pointer (convenience overload for legacy callers). */
@@ -66,8 +77,8 @@ public:
      *  Returns nullptr if h is invalid or the sprite is empty. */
     uint8_t* GetSpriteMask(SpriteHandle h, int* out_w, int* out_h, int* out_stride) const;
 
-    GLuint GetTexture() const { return m_texture; }
-    size_t GetRegisteredCount() const { return m_sprite_to_handle.size(); }
+    GLuint GetTexture() const;
+    size_t GetRegisteredCount() const;
 
     /** Perform all deferred GL work: delete old texture (if any), create the
      *  new GL texture and upload the pixel buffer packed by AddSheet() calls.
@@ -79,6 +90,19 @@ private:
     bool pack_sprite(const struct TbSprite* spr, SpriteUV& out);
     void decode_rle(uint8_t* dst, int dst_stride, const struct TbSprite* spr);
     void flush_dirty();
+
+    // Unlocked variants — called only while m_mutex is already held.
+    SpriteHandle GetHandle_Unlocked(const struct TbSprite* spr) const;
+    bool GetUV_Unlocked(SpriteHandle h, SpriteUV& out) const;
+    void Free_Internal();
+    bool Init_Internal();
+    void AddSheet_Internal(const struct TbSpriteSheet* sheet, const char* name);
+
+    /** Guards all cross-thread access to atlas data.
+     *  Game thread holds exclusive lock during Free()/Init()/AddSheet()/RemoveSheet().
+     *  Render thread holds shared lock during GetUV()/GetTexture()/GetSpriteMask().
+     *  Render thread holds exclusive lock during FlushPendingGL() (writes m_texture). */
+    mutable std::shared_mutex m_mutex;
 
     GLuint               m_texture     = 0;
     GLuint               m_old_texture = 0;  // saved in Free(); deleted in FlushPendingGL()
@@ -95,8 +119,9 @@ private:
     int m_dirty_y_max = -1;
 
     std::unordered_map<const struct TbSprite*, SpriteHandle> m_sprite_to_handle;
-    std::vector<SpriteUV>                                    m_handle_uvs;  // indexed by SpriteHandle
+    std::vector<SpriteUV>                                    m_handle_uvs;  // indexed by SpriteHandleIndex(handle)
     uint32_t                                                 m_next_handle = 0;
+    uint16_t                                                 m_generation  = 0;
 };
 
 #endif // RENDERER_OPENGL_ENABLED

@@ -74,7 +74,6 @@
 #include "player_utils.h"
 #include "config_players.h"
 #include "player_computer.h"
-#include "kfx/memory_system_c.h"
 #include "game_saves.h"
 #include "engine_render.h"
 #include "engine_lenses.h"
@@ -128,6 +127,7 @@
 #include "vidfade.h"
 #include "config_settings.h"
 #include "config_keeperfx.h"
+#include "platform/PlatformManager.h"
 #include "renderer/RendererManager.h"
 #include "gui/gui_bridge.h"
 #include "game_legacy.h"
@@ -3204,7 +3204,7 @@ TbBool keeper_wait_for_screen_focus(void)
           force_application_close();
           break;
         }
-        if (LbIsActive())
+        if (PlatformManager::Get()->GetWindowSystem()->IsAppActive())
           return true;
         if ((game.system_flags & GSF_NetworkActive) != 0)
           return true;
@@ -3260,7 +3260,7 @@ void gameplay_loop_logic()
         }
     }
 #endif // FUNCTESTING
-    do_draw = display_should_be_updated_this_turn() || (!LbIsActive());
+    do_draw = display_should_be_updated_this_turn() || (!PlatformManager::Get()->GetWindowSystem()->IsAppActive());
     LbWindowsControl();
     input_eastegg();
     input();
@@ -3646,7 +3646,7 @@ static TbBool wait_at_frontend(void)
         break; // end while
       }
 
-      if ((!finish_menu) && (LbIsActive()))
+      if ((!finish_menu) && (PlatformManager::Get()->GetWindowSystem()->IsAppActive()))
       {
         frontend_draw();
         RendererPresentFrame();

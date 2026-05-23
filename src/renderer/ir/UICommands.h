@@ -49,6 +49,7 @@ struct IRUISolidBoxCmd
     int32_t   h          = 0;
     uint8_t   colour_idx = 0;   /**< Palette index. */
     float     alpha      = 1.0f; /**< 1.0 = opaque. */
+    float     ndc_z      = 0.5f; /**< NDC depth for WorldDepth layer; ignored for other layers. */
 };
 
 /** Slab background tile fill. */
@@ -250,6 +251,18 @@ struct UICommandBuffers
         minimaps.Reserve(2);
         cursor_pointers.Reserve(4);
         cursor_hands.Reserve(4);
+    }
+
+    /** Returns true if any drawable commands were submitted this frame.
+     *  Used by EndFrame() to decide whether to Flip() (real frame) or
+     *  UpdateFrameState() (empty frame that should preserve the previous UI). */
+    bool HasAnyCommands() const
+    {
+        return !solid_boxes.Empty()     || !slab_backgrounds.Empty() ||
+               !sprites.Empty()         || !sprites_remap.Empty()    ||
+               !sprites_colored.Empty() || !slab_selectors.Empty()   ||
+               !fbo_quads.Empty()       || !minimaps.Empty()         ||
+               !cursor_pointers.Empty() || !cursor_hands.Empty();
     }
 
     void Swap(UICommandBuffers& other)

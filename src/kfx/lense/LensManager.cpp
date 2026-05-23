@@ -262,7 +262,7 @@ void LensManager::Draw(unsigned char* srcbuf, unsigned char* dstbuf,
             // renderer handles it in EndFrame().  GetGPUPass() returns nullptr
             // and SupportsGPUPasses() returns false on all CPU-only platforms,
             // so this condition is always false there at zero cost.
-            if (effect->GetGPUPass() != nullptr && RendererGetActive()->SupportsGPUPasses()) {
+            if (effect->GetGPUPass() != nullptr && RendererGetActive()->GetCapabilities().supportsGPUPasses) {
                 rendered = true; // treat as rendered so fallback copy is suppressed
                 continue;
             }

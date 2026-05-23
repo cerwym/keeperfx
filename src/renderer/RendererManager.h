@@ -331,6 +331,13 @@ void WorldViewRenderer_PreloadKeeperSpriteAtlas(void);
  *  and deferred glDeleteTextures (after GLSpriteAtlas::Free()). */
 void RendererFlushPendingSpriteAtlas(void);
 
+/** Execute a deferred sprite-atlas rebuild, if one is pending.
+ *  Must be called from the game thread at the top of EndFrame(), after
+ *  WaitForCompletion() and before any sprite IR commands are submitted for the
+ *  new frame.  Calling at this point guarantees the render thread is idle (no
+ *  old-generation handles in flight) and all new handles use the new generation. */
+void RendererDrainDeferredAtlasRebuild(void);
+
 /** Set the game-entity context for the next keeper-sprite draw.
  *  Called by draw_jonty_mapwho() before dispatching each sprite so that
  *  render_keepersprite_gpu() can colour the depth-fail outline correctly.

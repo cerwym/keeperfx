@@ -142,6 +142,7 @@
                 "CMAKE_C_COMPILER": "cl.exe",
                 "CMAKE_CXX_COMPILER": "cl.exe",
                 "VCPKG_TARGET_TRIPLET": "x64-windows-static",
+                "VCPKG_INSTALLED_DIR": "${sourceDir}/../vcpkg_installed_x64",
                 "CMAKE_POLICY_VERSION_MINIMUM": "3.5",
                 "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>"
             }

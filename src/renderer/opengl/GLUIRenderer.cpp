@@ -443,6 +443,7 @@ void GLUIRenderer::SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, ui
         cmd.h          = h;
         cmd.colour_idx = color_idx;
         cmd.alpha      = 1.0f;
+        cmd.ndc_z      = m_world_depth_active ? m_world_z : 0.5f;
         m_ui_write_cmds->solid_boxes.Append(cmd);
         return;
     }
@@ -469,6 +470,7 @@ void GLUIRenderer::SubmitSolidBoxAlpha(int32_t x, int32_t y, int32_t w, int32_t 
         cmd.h          = h;
         cmd.colour_idx = color_idx;
         cmd.alpha      = alpha;
+        cmd.ndc_z      = m_world_depth_active ? m_world_z : 0.5f;
         m_ui_write_cmds->solid_boxes.Append(cmd);
         return;
     }
@@ -626,6 +628,11 @@ void GLUIRenderer::FlipBuffers()
     m_rt_minimap_size      = m_minimap_size;
     m_rt_minimap_pending   = m_minimap_pending;
     m_rt_minimap_submitted = m_minimap_submitted;
+    m_rt_game_vp_x         = m_game_vp_x;
+    m_rt_game_vp_y         = m_game_vp_y;
+    m_rt_game_vp_w         = m_game_vp_w;
+    m_rt_game_vp_h         = m_game_vp_h;
+    m_rt_game_vp_set       = m_game_vp_set;
     m_minimap_pending      = false;
     m_minimap_submitted    = false;
 }
@@ -841,12 +848,12 @@ void GLUIRenderer::DrawFront()
             // Scissor-clip layer-2 sprites to the game viewport so they can't
             // bleed onto the sidebar, overhead map, or zoom box.  These UI
             // elements don't write depth, so depth testing alone is insufficient.
-            if (m_game_vp_set && m_game_vp_w > 0 && m_game_vp_h > 0)
+            if (m_rt_game_vp_set && m_rt_game_vp_w > 0 && m_rt_game_vp_h > 0)
             {
                 glEnable(GL_SCISSOR_TEST);
-                // GL scissor origin is bottom-left; m_game_vp_y is top-left.
-                int scissor_y = m_screen_height - m_game_vp_y - m_game_vp_h;
-                glScissor(m_game_vp_x, scissor_y, m_game_vp_w, m_game_vp_h);
+                // GL scissor origin is bottom-left; m_rt_game_vp_y is top-left.
+                int scissor_y = m_screen_height - m_rt_game_vp_y - m_rt_game_vp_h;
+                glScissor(m_rt_game_vp_x, scissor_y, m_rt_game_vp_w, m_rt_game_vp_h);
             }
             glEnable(GL_DEPTH_TEST);
             glDepthFunc(GL_LEQUAL);
@@ -857,7 +864,7 @@ void GLUIRenderer::DrawFront()
             FlushQuads_RT(2);
             FlushLines_RT(2);
             glDisable(GL_DEPTH_TEST);
-            if (m_game_vp_set)
+            if (m_rt_game_vp_set)
                 glDisable(GL_SCISSOR_TEST);
         }
     }
@@ -986,11 +993,11 @@ void GLUIRenderer::DrawFrontOverlay()
     {
         if (!m_rt_quads[2].empty() || !m_rt_lines[2].empty())
         {
-            if (m_game_vp_set && m_game_vp_w > 0 && m_game_vp_h > 0)
+            if (m_rt_game_vp_set && m_rt_game_vp_w > 0 && m_rt_game_vp_h > 0)
             {
                 glEnable(GL_SCISSOR_TEST);
-                int scissor_y = m_screen_height - m_game_vp_y - m_game_vp_h;
-                glScissor(m_game_vp_x, scissor_y, m_game_vp_w, m_game_vp_h);
+                int scissor_y = m_screen_height - m_rt_game_vp_y - m_rt_game_vp_h;
+                glScissor(m_rt_game_vp_x, scissor_y, m_rt_game_vp_w, m_rt_game_vp_h);
             }
             glEnable(GL_DEPTH_TEST);
             glDepthFunc(GL_LEQUAL);
@@ -998,7 +1005,7 @@ void GLUIRenderer::DrawFrontOverlay()
             FlushQuads_RT(2);
             FlushLines_RT(2);
             glDisable(GL_DEPTH_TEST);
-            if (m_game_vp_set)
+            if (m_rt_game_vp_set)
                 glDisable(GL_SCISSOR_TEST);
         }
     }
@@ -1242,13 +1249,13 @@ void GLUIRenderer::ExecuteUIFromIR(const UICommandBuffers& cmds, const FrameStat
 
     // Restore game viewport if it was captured this frame.
     if (cmds.game_vp.set) {
-        m_game_vp_x   = cmds.game_vp.x;
-        m_game_vp_y   = cmds.game_vp.y;
-        m_game_vp_w   = cmds.game_vp.w;
-        m_game_vp_h   = cmds.game_vp.h;
-        m_game_vp_set = true;
+        m_rt_game_vp_x   = cmds.game_vp.x;
+        m_rt_game_vp_y   = cmds.game_vp.y;
+        m_rt_game_vp_w   = cmds.game_vp.w;
+        m_rt_game_vp_h   = cmds.game_vp.h;
+        m_rt_game_vp_set = true;
     } else {
-        m_game_vp_set = false;
+        m_rt_game_vp_set = false;
     }
 
     const uint8_t* pal = fs.palette; // 768-byte VGA6 palette snapshot
@@ -1264,7 +1271,7 @@ void GLUIRenderer::ExecuteUIFromIR(const UICommandBuffers& cmds, const FrameStat
         q.x1 = (float)(cmd.x+cmd.w); q.y1 = (float)(cmd.y+cmd.h);
         q.u0 = 0.0f; q.v0 = 0.0f; q.u1 = 1.0f; q.v1 = 1.0f;
         q.r = r; q.g = g; q.b = b; q.a = cmd.alpha;
-        q.z = 0.5f; q.mode = 3.0f; q.texture_id = 0; q.remap_row = -1;
+        q.z = cmd.ndc_z; q.mode = 3.0f; q.texture_id = 0; q.remap_row = -1;
         m_rt_quads[idx].push_back(q);
     }
 

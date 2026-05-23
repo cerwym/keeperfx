@@ -11,9 +11,6 @@
 #include "renderer/IUIRenderer.h"
 #include "renderer/ITextRenderer.h"
 
-// IShadowRenderer and IDebugRenderer are forward-declared in RenderGraph.h.
-// They don't have implementations yet; Execute() skips them if nullptr.
-
 /******************************************************************************/
 // RenderGraph::FrameBuffers
 /******************************************************************************/
@@ -123,28 +120,15 @@ void RenderGraph::Execute(
 
     // -------------------------------------------------------------------------
     // Layer 2: World pass (geometry → shadows → sprites → world-UI)
-    // GLWorldViewRenderer::ExecuteWorldFromIR() is called directly from
-    // EndFrame_GL() inside the lens-FBO bracket so that the lens post-process
-    // pass can operate on the world output.  Execute() documents the world IR
-    // is owned by the graph but does not dispatch it here to preserve the
-    // required FBO ordering.  IWorldViewRenderer::ExecuteFromIR() exists on
-    // the interface for future backends that don't use a lens FBO.
     (void)world;
 
     // -------------------------------------------------------------------------
     // Layer 3: UI pass — populate render-thread quad/line buffers from IR.
-    // PopulateFromIR() only fills the GPU geometry queues (m_rt_quads[] etc.);
-    // it issues no GL draw calls.  DrawBack() / DrawFront() in EndFrame_GL()
-    // then issue the actual draws in their required order relative to the
-    // rawblit, FMV, PiP, and zoom-box passes.
     if (ui)
         ui->PopulateFromIR(m_read.ui, m_read_fs);
 
     // -------------------------------------------------------------------------
     // Layer 4: Text pass
-    // GLTextRenderer::ExecuteTextFromIR() translates IR commands to deferred
-    // draws AND flushes them in one call.  It must run after DrawFrontOverlay()
-    // so text sits above all sprite layers.  EndFrame_GL() calls it directly.
     (void)text;
 
     // -------------------------------------------------------------------------

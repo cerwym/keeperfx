@@ -55,6 +55,7 @@ public:
     void     Shutdown() override;
     bool     BeginFrame() override;
     void     EndFrame() override;
+    void     FlushRenderWork() override;
     void     ClearScreen(uint8_t colour_index) override;
     uint8_t* LockFramebuffer(int* out_pitch) override;
     void     UnlockFramebuffer() override;

@@ -98,6 +98,11 @@ public:
      *  Default: no-op. */
     virtual void ClearKeeperSpriteAtlas() {}
 
+    /** Preload all known keeper sprites into the atlas so no decode/upload
+     *  happens during gameplay.  Call after init_custom_sprites() completes
+     *  (e.g. on the loading screen).  Default: no-op. */
+    virtual void PreloadKeeperSpriteAtlas() {}
+
     /** Notify the renderer of the current OS-window dimensions.
      *  Called from RendererOpenGL::BeginFrame_GL() whenever the screen size
      *  changes.  GPU backends use this to update projection matrices and

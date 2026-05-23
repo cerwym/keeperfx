@@ -19,9 +19,11 @@
 #include "gui_boxmenu.h"        // gui_draw_all_boxes
 #include "gui_tooltips.h"       // draw_tooltip
 #include "frontend.h"           // draw_gui
+#include "frontmenu_ingame_tabs.h" // draw_status_panel_background_only
 #include "bflib_video.h"        // pixel_size, scale_value_for_resolution
 #include "bflib_planar.h"      // TbRect
 #include "map_data.h"           // STL_PER_SLB
+#include "game_legacy.h"        // game, GOF_ShowGui
 
 // ---------------------------------------------------------------------------
 // Helpers — replicate the minimap_zoom → draw_tiles lookup from draw_zoom_box()
@@ -108,6 +110,18 @@ void ParchmentScene::draw(const DrawContext& ctx, const ClientViewState& view)
     draw_2d_map();
 
     RendererClearZoomBoxScreenRect();
+
+    // Draw sidebar background panels into layer 0 (Back) — same pattern as
+    // draw_2d_elements() in engine_redraw.c.  Without this, sidebar background
+    // sprites all go to layer 1 (Front), leaving m_rt_quads[0] empty and
+    // causing the sidebar background to be blank every parchment-view frame.
+    // Use the background-only variant: the parchment IS the map, so the sidebar
+    // minimap/compass must not be drawn here.
+    if ((game.operation_flags & GOF_ShowGui) != 0) {
+        UIRenderer_SetLayer(0);  // sidebar background must land before the staging blit
+        draw_status_panel_background_only();
+        UIRenderer_SetLayer(1);  // restore front layer for all other GUI draws
+    }
 
     // Draw all in-game GUI panels and menus.
     draw_gui();

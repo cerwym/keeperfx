@@ -56,6 +56,7 @@ TbBool      PlatformManager_ForcesAllModesAvailable(void);
 TbBool      PlatformManager_OwnsDisplay(void);
 /** Returns the refresh rate (Hz) of the display the game window is on, or 0 if unavailable. */
 int          PlatformManager_GetDisplayRefreshRate(void);
+TbBool       PlatformManager_GetIsAppActive(void);
 int          PlatformManager_HasWindow(void);
 unsigned int PlatformManager_GetWindowFlags(void);
 void         PlatformManager_GetWindowSize(int* out_w, int* out_h);

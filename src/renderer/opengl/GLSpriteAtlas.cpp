@@ -21,12 +21,18 @@
 
 bool GLSpriteAtlas::Init()
 {
+    std::unique_lock<std::shared_mutex> lock(m_mutex);
+    return Init_Internal();
+}
+
+bool GLSpriteAtlas::Init_Internal()
+{
     // CPU-only: reset pixel buffer and packer state.  GL texture creation is
     // deferred to FlushPendingGL() so it can run on the render thread that
     // owns the GL context after the first EndFrame().
     m_pixels.assign((size_t)k_atlas_w * k_atlas_h, 0u);
 
-    m_cursor_x    = 0;
+    m_cursor_x    = 1; // reserve atlas texel (0,0) as a safe fallback UV
     m_shelf_y     = 0;
     m_shelf_h     = 0;
     m_dirty_y_min = k_atlas_h;
@@ -38,6 +44,12 @@ bool GLSpriteAtlas::Init()
 }
 
 void GLSpriteAtlas::Free()
+{
+    std::unique_lock<std::shared_mutex> lock(m_mutex);
+    Free_Internal();
+}
+
+void GLSpriteAtlas::Free_Internal()
 {
     // Save the old texture ID so FlushPendingGL() can delete it on the render
     // thread.  Calling glDeleteTextures here would fail without a GL context.
@@ -173,6 +185,7 @@ void GLSpriteAtlas::flush_dirty()
 /******************************************************************************/
 void GLSpriteAtlas::FlushPendingGL()
 {
+    std::unique_lock<std::shared_mutex> lock(m_mutex);
     // Delete the previous texture that was freed on the game thread.
     if (m_old_texture) {
         glDeleteTextures(1, &m_old_texture);
@@ -205,20 +218,47 @@ void GLSpriteAtlas::FlushPendingGL()
         flush_dirty();
     }
 }
-void GLSpriteAtlas::AddSheet(const struct TbSpriteSheet* sheet)
+void GLSpriteAtlas::Rebuild(const struct TbSpriteSheet* const* sheets,
+                             const char* const*                 names,
+                             int                                count)
+{
+    std::unique_lock<std::shared_mutex> lock(m_mutex);
+    ++m_generation;
+    Free_Internal();
+    if (!Init_Internal()) {
+        ERRORLOG("GLSpriteAtlas::Rebuild: Init_Internal() FAILED");
+        return;
+    }
+    for (int i = 0; i < count; ++i) {
+        if (sheets[i]) AddSheet_Internal(sheets[i], names ? names[i] : nullptr);
+    }
+}
+
+void GLSpriteAtlas::AddSheet(const struct TbSpriteSheet* sheet, const char* name)
 {
     if (!sheet) return;
+    std::unique_lock<std::shared_mutex> lock(m_mutex);
+    AddSheet_Internal(sheet, name);
+}
+
+void GLSpriteAtlas::AddSheet_Internal(const struct TbSpriteSheet* sheet, const char* name)
+{
     long n = num_sprites(sheet);
     int packed = 0;
-    SYNCLOG("GLSpriteAtlas::AddSheet: Adding sheet %p with %ld sprites", sheet, n);
+    const char* label = name ? name : "(unknown)";
+    SYNCLOG("GLSpriteAtlas::AddSheet: Adding sheet '%s' (%p) with %ld sprites", label, sheet, n);
 
     for (long i = 0; i < n; ++i) {
         const struct TbSprite* spr = get_sprite(sheet, i);
         if (!spr || !spr->Data || spr->SWidth == 0 || spr->SHeight == 0) continue;
         if (m_sprite_to_handle.count(spr)) continue; // already present (sheet re-added)
+        if (m_next_handle >= kSpriteHandleInvalidIndex) {
+            ERRORLOG("GLSpriteAtlas::AddSheet: sprite handle table exhausted");
+            break;
+        }
         SpriteUV uv;
         if (pack_sprite(spr, uv)) {
-            SpriteHandle h = m_next_handle++;
+            SpriteHandle h = MakeSpriteHandle(m_generation, (uint16_t)m_next_handle++);
             m_sprite_to_handle[spr] = h;
             m_handle_uvs.push_back(uv);
             ++packed;
@@ -227,13 +267,14 @@ void GLSpriteAtlas::AddSheet(const struct TbSpriteSheet* sheet)
     // Do NOT call flush_dirty() here — AddSheet() may be called from the game
     // thread (without a GL context) during level load.  FlushPendingGL() will
     // do the actual upload (glTexImage2D or glTexSubImage2D) on the render thread.
-    SYNCLOG("GLSpriteAtlas::AddSheet: packed %d/%ld sprites from sheet %p (total handles: %d)",
-           packed, n, sheet, (int)m_handle_uvs.size());
+    SYNCLOG("GLSpriteAtlas::AddSheet: packed %d/%ld sprites from sheet '%s' (%p) (total handles: %d)",
+           packed, n, label, sheet, (int)m_handle_uvs.size());
 }
 
 void GLSpriteAtlas::RemoveSheet(const struct TbSpriteSheet* sheet)
 {
     if (!sheet) return;
+    std::unique_lock<std::shared_mutex> lock(m_mutex);
     long n = num_sprites(sheet);
     SYNCLOG("GLSpriteAtlas::RemoveSheet: Removing sheet %p with %ld sprites", sheet, n);
 
@@ -248,26 +289,60 @@ void GLSpriteAtlas::RemoveSheet(const struct TbSpriteSheet* sheet)
 
 SpriteHandle GLSpriteAtlas::GetHandle(const struct TbSprite* spr) const
 {
+    std::shared_lock<std::shared_mutex> lock(m_mutex);
+    return GetHandle_Unlocked(spr);
+}
+
+SpriteHandle GLSpriteAtlas::GetHandle_Unlocked(const struct TbSprite* spr) const
+{
     auto it = m_sprite_to_handle.find(spr);
     return (it != m_sprite_to_handle.end()) ? it->second : kInvalidSpriteHandle;
 }
 
 bool GLSpriteAtlas::GetUV(SpriteHandle h, SpriteUV& out) const
 {
-    if (h >= (SpriteHandle)m_handle_uvs.size()) return false;
-    out = m_handle_uvs[h];
+    std::shared_lock<std::shared_mutex> lock(m_mutex);
+    return GetUV_Unlocked(h, out);
+}
+
+bool GLSpriteAtlas::GetUV_Unlocked(SpriteHandle h, SpriteUV& out) const
+{
+    if (h == kInvalidSpriteHandle)
+        return false;
+
+    const uint16_t generation = SpriteHandleGeneration(h);
+    const uint16_t index      = SpriteHandleIndex(h);
+    if (generation != m_generation || index >= m_handle_uvs.size())
+        return false;
+
+    out = m_handle_uvs[index];
     return true;
 }
 
 bool GLSpriteAtlas::GetUV(const struct TbSprite* spr, SpriteUV& out) const
 {
-    return GetUV(GetHandle(spr), out);
+    // Take a single shared lock for the combined handle-lookup + UV-lookup.
+    std::shared_lock<std::shared_mutex> lock(m_mutex);
+    return GetUV_Unlocked(GetHandle_Unlocked(spr), out);
+}
+
+GLuint GLSpriteAtlas::GetTexture() const
+{
+    std::shared_lock<std::shared_mutex> lock(m_mutex);
+    return m_texture;
+}
+
+size_t GLSpriteAtlas::GetRegisteredCount() const
+{
+    std::shared_lock<std::shared_mutex> lock(m_mutex);
+    return m_sprite_to_handle.size();
 }
 
 uint8_t* GLSpriteAtlas::GetSpriteMask(SpriteHandle h, int* out_w, int* out_h, int* out_stride) const
 {
+    std::shared_lock<std::shared_mutex> lock(m_mutex);
     SpriteUV uv;
-    if (!GetUV(h, uv)) return nullptr;
+    if (!GetUV_Unlocked(h, uv)) return nullptr;
 
     const int w = uv.pixel_w;
     const int h_px = uv.pixel_h;

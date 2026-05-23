@@ -13,10 +13,9 @@
 #include <SDL2/SDL.h>
 #include "post_inc.h"
 
-// bflib_inputctrl.h declares lbMouseGrabbed / lbMouseGrab / lbAppActive.
+// bflib_inputctrl.h declares lbMouseGrabbed / lbMouseGrab.
 // We keep them as the shared source of truth for now; the window system
 // reads/writes through them so existing callers see consistent state.
-extern "C" volatile TbBool lbAppActive;   // defined with C linkage in bflib_inputctrl.cpp
 extern volatile TbBool lbMouseGrabbed;
 extern volatile TbBool lbMouseGrab;
 extern "C" SDL_Window* lbWindow = nullptr;  // owned here; extern declared in bflib_vidsurface.c (C linkage for C-file access)
@@ -38,13 +37,11 @@ bool WindowSystemSDL::IsAppActive() const
 void WindowSystemSDL::OnFocusGained()
 {
     m_appActive = true;
-    lbAppActive = true;
 }
 
 void WindowSystemSDL::OnFocusLost()
 {
     m_appActive = false;
-    lbAppActive = false;
 }
 
 void WindowSystemSDL::SetCursorGrab(bool grab)

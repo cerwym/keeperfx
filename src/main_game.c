@@ -185,6 +185,7 @@ static void init_level(void)
     recheck_all_mod_exist();
     init_custom_sprites(get_selected_level_number());
     RendererNotifyCustomSpritesReloaded();
+    WorldViewRenderer_PreloadKeeperSpriteAtlas();
     load_stats_files();
     check_and_auto_fix_stats();
 

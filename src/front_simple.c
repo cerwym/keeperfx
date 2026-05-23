@@ -35,6 +35,7 @@
 #include "config.h"
 #include "kjm_input.h"
 #include "scrcapt.h"
+#include "platform/PlatformManager.h"
 #include "renderer/RendererManager.h"
 #include "gui_draw.h"
 #include "vidfade.h"
@@ -488,7 +489,7 @@ TbBool wait_for_installation_files(void)
                 exit_keeper = 1;
             if ((exit_keeper) || (quit_game))
               break;
-        } while (!LbIsActive());
+        } while (! PlatformManager_GetIsAppActive());
         if (is_key_pressed(KC_Q,KMod_DONTCARE) || is_key_pressed(KC_X,KMod_DONTCARE) || is_key_pressed(KC_ESCAPE, KMod_DONTCARE))
         {
           ERRORLOG("User requested quit, giving up");

@@ -38,6 +38,11 @@
 #include <mutex>
 #include <condition_variable>
 
+/** True on the dedicated render thread; false on all other threads.
+ *  Set once at thread startup in ThreadProc() — read-only thereafter.
+ *  Use to guard state mutations that must not cross the game/render thread boundary. */
+extern thread_local bool g_on_render_thread;
+
 /******************************************************************************/
 
 class RenderThreadManager

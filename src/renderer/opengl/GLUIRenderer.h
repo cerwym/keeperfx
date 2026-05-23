@@ -335,6 +335,11 @@ private:
     int  m_game_vp_w = 0;
     int  m_game_vp_h = 0;
     bool m_game_vp_set = false;
+    int  m_rt_game_vp_x = 0;
+    int  m_rt_game_vp_y = 0;
+    int  m_rt_game_vp_w = 0;
+    int  m_rt_game_vp_h = 0;
+    bool m_rt_game_vp_set = false;
 
     // IR write target — set by SetUICommandBuffers(); null in stale-replay/PiP frames.
     UICommandBuffers* m_ui_write_cmds = nullptr;

@@ -93,6 +93,12 @@ public:
      *  a stable snapshot even after the game starts the next frame. */
     void FlipBuffers();
 
+    bool HasPendingCommands() const
+    {
+        return !m_draw_cmds.empty() || !m_shadow_cmds.empty() || !m_flatpoly_verts.empty()
+            || (m_vert_count > m_cmd_vert_start);
+    }
+
     // ── IR (Intermediate Representation) path ─────────────────────────────────
 
     /** Set the IR write target for this frame.
@@ -129,22 +135,21 @@ public:
                            const unsigned char* data, int src_w, int src_h,
                            unsigned int draw_flags, const unsigned char* remap) override;
 
-    // Internal implementation used by SubmitKeeperSprite.
-    int render_keepersprite_gpu(int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
-                                const unsigned char* data, int src_w, int src_h,
-                                unsigned int draw_flags, const unsigned char* remap);
+    // IWorldViewRenderer: clear per-level atlas cache.
+    void ClearKeeperSpriteAtlas() override;
+
+    // IWorldViewRenderer: preload all known sprites during level load so no
+    // decode/upload ever occurs during gameplay.
+    void PreloadKeeperSpriteAtlas() override;
+
+   
 
     // Called by GLUIRenderer::Draw() (via UIRenderer_Draw) to render power-hand
     // keeper sprites after glClear() with full-screen NDC coordinates.
-    // Saves m_screen_w/h and m_current_sprite_z, sets them to MyScreenWidth/Height
-    // and z=-1 (near plane, always on top), restores in EndHandSpriteRendering().
+    // Saves the render-thread active viewport size and m_current_sprite_z, sets them
+    // to full-screen and z=-1 (near plane, always on top), restores in EndHandSpriteRendering().
     void BeginHandSpriteRendering();
     void EndHandSpriteRendering();
-
-    /** Clear the per-sprite decode atlas.  Must be called before new sprite
-     *  data is loaded (e.g. between levels) so stale data-pointer → layer
-     *  mappings are not reused. */
-    void ClearKeeperSpriteAtlas();
 
     /** Attempt to initialise GL resources outside of a world pass, e.g. from
      *  RendererOpenGL::BeginFrame().  No-op when already initialised.
@@ -158,6 +163,10 @@ private:
     bool init_shadow_shader();
     bool init_keeper_sprite_shader();
     bool init_flatpoly_shader();
+
+     // Internal implementation used by SubmitKeeperSprite.
+    int render_keepersprite_gpu(int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h, const unsigned char* data,
+                                int src_w, int src_h, unsigned int draw_flags, const unsigned char* remap);
 
     // Append one triangle (3 PolyPoint vertices, integer screen pixels) to the staging array.
     // tile_id is the flat block_ptrs[] index from p->block;
@@ -188,7 +197,9 @@ private:
      *  Uploads the vertex buffer, sets the given viewport (already in GL
      *  bottom-origin coords), executes all three draw passes, then resets the
      *  viewport to the full screen and clears the draw-command lists. */
-    void gpu_execute_passes(int vp_x, int vp_y_gl);
+    void gpu_execute_passes(int vp_x, int vp_y_gl, int screen_w, int screen_h);
+    void ensure_clut_valid();
+    void execute_preload_atlas();  // render-thread: bulk decode+upload of all known sprites
 
     // Setup world sprite processing for a bucket (replaces global hook approach)
     void setup_world_sprite_processing(int32_t bucket_num);
@@ -196,7 +207,9 @@ private:
     // Deferred draw command (built during DrawIsometricView/DrawFrontView, executed by GPURenderNow)
     struct DrawCmd {
         enum Type { CMD_TILES, CMD_SPRITES, CMD_SHADOWS, CMD_FLAT_POLYS,
-                    CMD_FRONTVIEW_SPRITES } type;
+                    CMD_FRONTVIEW_SPRITES,
+                    CMD_PRELOAD_KSPR_ATLAS  // one-shot: bulk decode+upload on render thread
+                  } type;
         // CMD_TILES fields
         int vert_start  = 0;
         int vert_count  = 0;
@@ -260,10 +273,20 @@ private:
     GLuint m_kspr_sprite_array  = 0;  // GL_TEXTURE_2D_ARRAY 256×256×k_kspr_atlas_layers GL_R8
     GLuint m_kspr_atlas_shader  = 0;  // separate program using sampler2DArray
     int    m_kspr_atlas_used    = 0;  // next free layer index
+    int    m_kspr_atlas_peak    = 0;  // high-water mark across the session (for sizing k_kspr_atlas_layers)
     int    m_kspr_atlas_hits    = 0;  // cache hits this frame
     int    m_kspr_atlas_misses  = 0;  // cache misses (decode+upload) this frame
     struct AtlasEntry { int layer; int src_w; };
     std::unordered_map<const uint8_t*, AtlasEntry> m_kspr_atlas_map;
+
+    // CLUT (Colour Lookup Table): 256×k_clut_rows GL_RGBA8 texture.
+    // Row 0 = identity (palette[i] for all i).
+    // Rows 1..k_clut_rows-1 = per-remap CLUTs (palette[remap[i]]).
+    static const int k_clut_rows = 128;
+    GLuint m_kspr_clut_tex      = 0;
+    int    m_kspr_clut_used     = 1;   // next free row (0 = identity, always allocated)
+    std::unordered_map<const uint8_t*, int> m_kspr_clut_map;
+    uint8_t m_kspr_clut_palette_snap[768] = {};
 
     // Flat-colour polygon GL objects (QK_PolyMode0/4/BasicPolygon — full GPU path)
     GLuint m_flatpoly_shader        = 0;
@@ -308,10 +331,11 @@ private:
     // Atlas-shader uniform locations (sampler2DArray variant)
     GLint  m_kspr_atlas_loc_viewport = -1;
     GLint  m_kspr_atlas_loc_sprite   = -1;
-    GLint  m_kspr_atlas_loc_palette  = -1;
+    GLint  m_kspr_atlas_loc_clut     = -1;  // u_clut (unit 1)
     GLint  m_kspr_atlas_loc_alpha    = -1;
     GLint  m_kspr_atlas_loc_z_ndc    = -1;
     GLint  m_kspr_atlas_loc_layer    = -1;
+    GLint  m_kspr_atlas_loc_clut_v   = -1;  // u_clut_v (CLUT row V coord)
 
     // Glow-shader uniform locations (shared vert; u_sprite + u_viewport + u_z_ndc only)
     GLint  m_kspr_glow_loc_viewport = -1;
@@ -333,6 +357,13 @@ private:
     GLint  m_kspr_atlas_outline_loc_color        = -1;
     GLint  m_kspr_atlas_outline_loc_layer        = -1;
 
+    // Atlas glow shader for additive sprites (sampler2DArray variant)
+    GLuint m_kspr_atlas_glow_shader          = 0;
+    GLint  m_kspr_atlas_glow_loc_viewport    = -1;
+    GLint  m_kspr_atlas_glow_loc_sprite      = -1;
+    GLint  m_kspr_atlas_glow_loc_z_ndc       = -1;
+    GLint  m_kspr_atlas_glow_loc_layer       = -1;
+
     // Full OS-window dimensions — set by SetFullScreenSize(), used in
     // BeginHandSpriteRendering() and gpu_execute_passes() for full-screen viewport.
     int            m_full_screen_w = 0;
@@ -350,6 +381,8 @@ private:
     int            m_pitch      = 0;       // staging buffer row stride (bytes)
     int            m_current_bucket = 0;   // bucket index being processed (used for depth z)
     float          m_current_sprite_z = 0.0f; // NDC depth for current bucket sprites
+    int            m_draw_screen_w = 0;    // render-thread-only active viewport width
+    int            m_draw_screen_h = 0;    // render-thread-only active viewport height
 
     // Front-view state: when DrawFrontView() fills the draw list, sprites
     // must use draw_frontview_3d_sprites_for_bucket() instead of draw_3d_sprites_for_bucket().
@@ -377,6 +410,11 @@ private:
     std::vector<DrawCmd>        m_rt_draw_cmds;
     std::vector<ShadowCmd>      m_rt_shadow_cmds;
     std::vector<FlatPolyVertex> m_rt_flatpoly_verts;
+    int                        m_rt_screen_w = 0;
+    int                        m_rt_screen_h = 0;
+    int                        m_rt_vp_x     = 0;
+    int                        m_rt_vp_y     = 0;
+    uint8_t                    m_rt_palette[768] = {};
 
     // ── poly_pool safety fence ───────────────────────────────────────────────
     // CMD_SPRITES / CMD_FRONTVIEW_SPRITES dispatch on the render thread reads
