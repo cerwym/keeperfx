@@ -15,6 +15,7 @@
 #include "bflib_fileio.h"
 #include "config.h"
 #include "config_magic.h"
+#include "config_terrain.h"
 #include "globals.h"
 #include "thing_data.h"
 #include "kfx/profiling/KfxProfilingC.h"
@@ -301,20 +302,17 @@ void lua_on_level_up(struct Thing *thing)
 }
 
 // Called when a slab type changes (e.g. pretty_path -> hatchery_area, path -> pretty_path)
-void lua_on_slab_kind_change(MapSlabCoord slb_x, MapSlabCoord slb_y, SlabKind old_slab)
+void lua_on_slab_kind_change(MapSlabCoord slb_x, MapSlabCoord slb_y, SlabKind old_slab) 
 {
-	SYNCDBG(6,"Starting");
-	lua_getglobal(Lvl_script, "OnSlabKindChange");
-	if (lua_isfunction(Lvl_script, -1))
-	{
-		lua_pushSlab(Lvl_script, slb_x, slb_y);
-		lua_pushstring(Lvl_script, get_conf_parameter_text(slab_desc, old_slab));
-		CheckLua(Lvl_script, lua_pcall(Lvl_script, 2, 0, 0),"OnSlabKindChange");
-	}
-	else
-	{
-		lua_pop(Lvl_script, 1);
-	}
+    SYNCDBG(6, "Starting");
+    lua_getglobal(Lvl_script, "OnSlabKindChange");
+    if (lua_isfunction(Lvl_script, -1)) {
+        lua_pushSlab(Lvl_script, slb_x, slb_y);
+        lua_pushstring(Lvl_script, get_conf_parameter_text(slab_desc, old_slab)); // "DIRT", "PRETTY_PATH", etc.
+        CheckLua(Lvl_script, lua_pcall(Lvl_script, 2, 0, 0), "OnSlabKindChange");
+    } else {
+        lua_pop(Lvl_script, 1);
+    }
 }
 
 void lua_on_slab_owner_change(MapSlabCoord slb_x, MapSlabCoord slb_y, PlayerNumber old_owner)
