@@ -884,7 +884,7 @@ void RendererOpenGL::EndFrame_GL()
         {
             if (m_world_renderer) m_world_renderer->SetFadeTexture(m_texFade);
             auto* ui = RendererGetUIRenderer();
-            if (ui) ui->SetFadeTexture(m_texFade);
+            if (ui) ui->SetFadeTexture(static_cast<GpuTextureHandle>(m_texFade));
             SYNCLOG("EndFrame_GL: fade-table texture created (tex=%u)", m_texFade);
         }
     }
@@ -1272,7 +1272,7 @@ void RendererOpenGL::EndFrame_GL()
             glViewport(0, 0, m_rt_frame_state.screen_w, m_rt_frame_state.screen_h);
 
             if (ui)
-                ui->SubmitFBOQuad(pcmd.x, pcmd.y, pw, ph, fbo.color_tex, pcmd.clip_radius);
+                ui->SubmitFBOQuad(pcmd.x, pcmd.y, pw, ph, static_cast<GpuTextureHandle>(fbo.color_tex), pcmd.clip_radius);
         }
 
         m_rt_pip_queue.clear();

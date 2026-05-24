@@ -23,6 +23,9 @@
 #  include "renderer/opengl/GLUIRenderer.h"
 #  include "renderer/opengl/GLCursorLayer.h"
 #endif
+#ifdef RENDERER_VULKAN_ENABLED
+#  include "renderer/RendererVulkan.h"
+#endif
 #ifdef PLATFORM_VITA
 #  include "renderer/RendererVita.h"
 #endif
@@ -383,6 +386,11 @@ static IRenderer* create_renderer(RendererType type)
 #ifdef RENDERER_OPENGL_ENABLED
         case RENDERER_OPENGL:
             return new RendererOpenGL();
+#endif
+
+#ifdef RENDERER_VULKAN_ENABLED
+        case RENDERER_VULKAN:
+            return new RendererVulkan();
 #endif
 
 #ifdef PLATFORM_VITA

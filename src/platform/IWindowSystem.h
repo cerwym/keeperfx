@@ -101,6 +101,11 @@ public:
      *  the window is not OpenGL-flagged or where this is not applicable. */
     virtual bool RecreateForSoftwareRenderer() { return true; }
 
+    /** Recreate the window without SDL_WINDOW_VULKAN so that the Vulkan surface
+     *  is released before switching away from the Vulkan backend.  No-op (returns
+     *  true) on platforms where the window is not Vulkan-flagged. */
+    virtual bool RecreateForVulkanRenderer() { return true; }
+
     // ----- Display info -----
 
     /** Returns the refresh rate (Hz) of the display the game window is on.

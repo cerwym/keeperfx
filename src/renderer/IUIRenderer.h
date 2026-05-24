@@ -19,6 +19,7 @@
 #pragma once
 
 #include "renderer/SpriteHandle.h"
+#include "renderer/GpuTypes.h"
 #include <unordered_map>
 #include <cstdint>
 
@@ -236,7 +237,7 @@ public:
      *  @param clip_radius  Clip-circle radius in NDC space; < 0 = no clip.
      *  CPU default: no-op. */
     virtual void SubmitFBOQuad(int /*x*/, int /*y*/, int /*w*/, int /*h*/,
-                               uint32_t /*tex_id*/, float /*clip_radius*/ = -1.0f) {}
+                               GpuTextureHandle /*tex_id*/, float /*clip_radius*/ = -1.0f) {}
 
     /** Draw all queued elements.  CPU default: no-op. */
     virtual void Draw();
@@ -280,7 +281,7 @@ public:
      *  Using uint32_t instead of GLuint to avoid pulling GL headers into this
      *  backend-agnostic interface (GLuint == uint32_t on all supported platforms).
      *  Default: no-op. */
-    virtual void SetFadeTexture(uint32_t /*tex*/) {}
+    virtual void SetFadeTexture(GpuTextureHandle /*tex*/) {}
 
     /** Open the IR write window for this frame.
      *  Called from RendererOpenGL::BeginFrame_GL() once per non-fade-cache frame.

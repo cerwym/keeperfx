@@ -16,6 +16,9 @@
         "luajit",
         "zlib",
         "glad",
-        "curl"
+        "curl",
+        "vulkan",
+        "vk-bootstrap",
+        "vulkan-memory-allocator"
     ]
 }

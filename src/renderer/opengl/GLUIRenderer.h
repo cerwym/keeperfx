@@ -59,9 +59,9 @@ struct UILine {
  *  (no palette lookup).  Rendered before layer-1 atlas sprites so the zoom-box
  *  frame corners appear on top of the isometric PiP content. */
 struct FBOQuad {
-    float x0, y0, x1, y1;   // Screen rectangle (pixels)
-    GLuint tex_id;           // RGBA8 FBO colour texture
-    float clip_radius;       // Rounded-rect corner radius; < 0 = no clip
+    float            x0, y0, x1, y1;   // Screen rectangle (pixels)
+    GpuTextureHandle tex_id;            // RGBA8 FBO colour texture
+    float            clip_radius;       // Rounded-rect corner radius; < 0 = no clip
 };
 
 /**
@@ -93,7 +93,7 @@ public:
 
     /** Submit an RGBA8 FBO colour texture as a picture-in-picture quad.
      *  IUIRenderer override — uses uint32_t for tex_id to avoid GL header in base. */
-    void SubmitFBOQuad(int x, int y, int w, int h, uint32_t tex_id, float clip_radius = -1.0f) override;
+    void SubmitFBOQuad(int x, int y, int w, int h, GpuTextureHandle tex_id, float clip_radius = -1.0f) override;
     /** IUIRenderer override: mark start of PiP sprite capture. */
     void BeginPiPSprites() override;
     /** IUIRenderer override: flush PiP sprites into the bound FBO. */
@@ -179,7 +179,7 @@ public:
 
     /** Set the fade-table texture for player-colour remap draws.
      *  IUIRenderer override: tex is GLuint (uint32_t) — GL context must be current. */
-    void SetFadeTexture(uint32_t tex) override;
+    void SetFadeTexture(GpuTextureHandle tex) override;
 
         /** Called once per frame by EndFrame(), before DrawBack().
      *  When replay=true and the queues are empty, restores the last real frame's

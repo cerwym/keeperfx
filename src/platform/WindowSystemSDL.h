@@ -45,6 +45,7 @@ public:
     void SetWindowPosition(int x, int y) override;
     bool CreateWindow(const char* title, int x, int y, int w, int h, unsigned int flags) override;
     bool RecreateForSoftwareRenderer() override;
+    bool RecreateForVulkanRenderer() override;
 
     // ----- Display info -----
     int GetDisplayRefreshRate() const override;

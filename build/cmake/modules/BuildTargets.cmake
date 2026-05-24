@@ -32,6 +32,13 @@ if(NOT KEEPERFX_RENDERER_OPENGL)
     list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/renderer/backends/OpenGLSpriteBackend\\.cpp$")
 endif()
 
+# Vulkan renderer exclusion
+if(NOT KEEPERFX_RENDERER_VULKAN)
+    list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/renderer/RendererVulkan\\.cpp$")
+    list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/platform_vk_sdl2\\.cpp$")
+    list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/renderer/vulkan/.*\\.cpp$")
+endif()
+
 # ━━━ Networking Exclusions ━━━
 if(NOT KEEPERFX_NETWORKING)
     list(FILTER KEEPERFX_SOURCES_C EXCLUDE REGEX ".*/api\\.c$")

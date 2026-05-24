@@ -36,6 +36,7 @@ typedef int RendererType;
 #  define RENDERER_OPENGL   2
 #  define RENDERER_VITA     3
 #  define RENDERER_3DS      4
+#  define RENDERER_VULKAN   5
 #endif
 
 #ifdef __cplusplus

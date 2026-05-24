@@ -18,6 +18,7 @@
 #include <cstddef>
 #include <utility>
 #include "renderer/SpriteHandle.h"
+#include "renderer/GpuTypes.h"
 #include "renderer/ir/IRCommandBuffer.h"
 
 // Forward declarations to avoid pulling in platform headers.
@@ -136,13 +137,13 @@ struct IRUISlabSelectorCmd
 /** FBO quad composite (Picture-in-Picture zoom box). */
 struct IRUIFBOQuadCmd
 {
-    IRUILayer layer          = IRUILayer::Front;
-    int32_t   x              = 0;
-    int32_t   y              = 0;
-    int32_t   w              = 0;
-    int32_t   h              = 0;
-    uint32_t  fbo_texture_id = 0;   /**< Opaque backend GL texture handle. */
-    float     clip_radius    = -1.0f; /**< < 0 = no rounded clip. */
+    IRUILayer        layer          = IRUILayer::Front;
+    int32_t          x              = 0;
+    int32_t          y              = 0;
+    int32_t          w              = 0;
+    int32_t          h              = 0;
+    GpuTextureHandle fbo_texture_id = kInvalidGpuTexture; /**< Opaque backend texture handle. */
+    float            clip_radius    = -1.0f; /**< < 0 = no rounded clip. */
 };
 
 /** Minimap pixel buffer submission. */

@@ -180,20 +180,45 @@ bool WindowSystemSDL::RecreateForSoftwareRenderer()
 {
     if (lbWindow == nullptr)
         return false;
-    if (!(SDL_GetWindowFlags(lbWindow) & SDL_WINDOW_OPENGL))
+    Uint32 cur_flags = SDL_GetWindowFlags(lbWindow);
+    if (!(cur_flags & (SDL_WINDOW_OPENGL | SDL_WINDOW_VULKAN)))
         return true;
 
-    SYNCLOG("WindowSystemSDL: removing SDL_WINDOW_OPENGL for software renderer");
+    SYNCLOG("WindowSystemSDL: removing SDL_WINDOW_OPENGL/VULKAN for software renderer");
     int x, y, w, h;
     SDL_GetWindowPosition(lbWindow, &x, &y);
     SDL_GetWindowSize(lbWindow, &w, &h);
     const char* title = SDL_GetWindowTitle(lbWindow);
-    Uint32 flags = SDL_GetWindowFlags(lbWindow) & ~(Uint32)SDL_WINDOW_OPENGL;
+    Uint32 flags = cur_flags & ~(Uint32)(SDL_WINDOW_OPENGL | SDL_WINDOW_VULKAN);
 
     SDL_DestroyWindow(lbWindow);
     lbWindow = SDL_CreateWindow(title, x, y, w, h, flags);
     if (!lbWindow) {
         ERRORLOG("WindowSystemSDL::RecreateForSoftwareRenderer: failed: %s", SDL_GetError());
+        return false;
+    }
+    SDL_ShowWindow(lbWindow);
+    return true;
+}
+
+bool WindowSystemSDL::RecreateForVulkanRenderer()
+{
+    if (lbWindow == nullptr)
+        return false;
+    if (!(SDL_GetWindowFlags(lbWindow) & SDL_WINDOW_VULKAN))
+        return true;
+
+    SYNCLOG("WindowSystemSDL: removing SDL_WINDOW_VULKAN");
+    int x, y, w, h;
+    SDL_GetWindowPosition(lbWindow, &x, &y);
+    SDL_GetWindowSize(lbWindow, &w, &h);
+    const char* title = SDL_GetWindowTitle(lbWindow);
+    Uint32 flags = SDL_GetWindowFlags(lbWindow) & ~(Uint32)SDL_WINDOW_VULKAN;
+
+    SDL_DestroyWindow(lbWindow);
+    lbWindow = SDL_CreateWindow(title, x, y, w, h, flags);
+    if (!lbWindow) {
+        ERRORLOG("WindowSystemSDL::RecreateForVulkanRenderer: failed: %s", SDL_GetError());
         return false;
     }
     SDL_ShowWindow(lbWindow);

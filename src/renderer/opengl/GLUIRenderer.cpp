@@ -152,9 +152,9 @@ bool GLUIRenderer::SetPaletteTexture(GLuint palette_texture_id, GLenum target)
     return true;
 }
 
-void GLUIRenderer::SetFadeTexture(uint32_t tex)
+void GLUIRenderer::SetFadeTexture(GpuTextureHandle tex)
 {
-    m_fade_texture = tex;
+    m_fade_texture = static_cast<GLuint>(tex);
 }
 
 /** Map current layer state to the appropriate IRUILayer enum value. */
@@ -695,7 +695,7 @@ static void FlushFBOQuads_impl(const std::vector<FBOQuad>& quads, GLuint prog, G
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
 
     for (const FBOQuad& q : quads) {
-        glBindTexture(GL_TEXTURE_2D, q.tex_id);
+        glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(q.tex_id));
 
         // Set rounded-rect clip uniforms per quad.
         glUniform1f(loc_clip_radius, q.clip_radius);
@@ -1182,7 +1182,7 @@ void GLUIRenderer::Draw()
     DrawFront();
 }
 
-void GLUIRenderer::SubmitFBOQuad(int x, int y, int w, int h, uint32_t tex_id, float clip_radius)
+void GLUIRenderer::SubmitFBOQuad(int x, int y, int w, int h, GpuTextureHandle tex_id, float clip_radius)
 {
     FBOQuad q;
     q.x0     = (float)x;

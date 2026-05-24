@@ -38,6 +38,7 @@ enum RendererType {
     RENDERER_OPENGL   = 2,  /**< OpenGL backend — framebuffer blit + GPU world geometry */
     RENDERER_VITA     = 3,  /**< PS Vita — vitaGL over GXM */
     RENDERER_3DS      = 4,  /**< Nintendo 3DS — citro3d/PICA200 */
+    RENDERER_VULKAN   = 5,  /**< Vulkan backend — SDL2 window, vk-bootstrap device */
 };
 
 /******************************************************************************/
