@@ -41,6 +41,7 @@ enum TbFontDrawFlags {
 
 struct TbSprite;
 struct TbSetupSprite;
+struct TbSpriteSheet;
 
 enum DkcodepageLetter {
    DKChr_Null,

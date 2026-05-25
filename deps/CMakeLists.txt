@@ -105,7 +105,7 @@ if(UNIX AND NOT APPLE)
 
 	FetchContent_Declare(astronomy_src
 		GIT_REPOSITORY https://github.com/cosinekitty/astronomy.git
-		GIT_TAG        main
+		GIT_TAG        master
 		GIT_SHALLOW    ON
 	)
 
