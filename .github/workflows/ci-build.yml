@@ -86,16 +86,63 @@ jobs:
             out/build/${{ matrix.preset }}/*.dll
           if-no-files-found: warn
 
+  build-msvc:
+    name: Build Windows x64 (MSVC)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: '9558037875497b9db8cf38fcd7db68ec661bffe7'
+          vcpkgDirectory: '${{ github.workspace }}/external/vcpkg'
+
+      - name: Cache vcpkg packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/../vcpkg_installed_x64
+          key: vcpkg-msvc-x64-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}
+
+      - name: Setup CMake and Ninja
+        uses: lukka/get-cmake@latest
+
+      - name: Configure CMake
+        uses: lukka/run-cmake@v10
+        with:
+          configurePreset: x64-windows-static-debug
+
+      - name: Build
+        uses: lukka/run-cmake@v10
+        with:
+          buildPreset: x64-windows-static-debug
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: keeperfx-windows-x64-msvc-debug
+          path: |
+            out/build/x64-windows-static-debug/keeperfx*.exe
+            out/build/x64-windows-static-debug/keeperfx_hvlog*.exe
+            out/build/x64-windows-static-debug/*.pdb
+            out/build/x64-windows-static-debug/*.map
+          if-no-files-found: warn
+
   summary:
     name: Build Summary
     runs-on: ubuntu-latest
-    needs: build
+    needs: [build, build-msvc]
     if: always()
 
     steps:
       - name: Check build status
         run: |
-          if [ "${{ needs.build.result }}" == "success" ]; then
+          if [ "${{ needs.build.result }}" == "success" ] && [ "${{ needs.build-msvc.result }}" == "success" ]; then
             echo "✅ All builds passed!"
             exit 0
           else
