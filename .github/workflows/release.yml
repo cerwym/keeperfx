@@ -11,49 +11,112 @@ on:
         type: string
 
 jobs:
-  build-all-platforms:
+  prepare:
+    name: Prepare
+    runs-on: ubuntu-latest
+    outputs:
+      registry_owner: ${{ steps.lower.outputs.owner }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - id: lower
+        run: echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_OUTPUT
+
+      - id: version
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            echo "version=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          fi
+
+  # ── Linux + Windows MinGW — built in Docker containers on Ubuntu ─────────────
+  build-containerized:
     name: Build ${{ matrix.name }}
-    runs-on: ${{ matrix.os }}
-    
+    runs-on: ubuntu-latest
+    needs: prepare
+    container:
+      image: ghcr.io/${{ needs.prepare.outputs.registry_owner }}/keeperfx-build-${{ matrix.image }}:latest
+      options: --user root
+
     strategy:
       fail-fast: false
       matrix:
         include:
-          - name: Windows x86
-            os: windows-latest
+          - name: Windows x86 (MinGW)
+            image: mingw32
             preset: windows-x86-release
-            artifact-name: keeperfx-windows-x86
-            platform: windows-x86
+            artifact-name: keeperfx-windows-x86-mingw
+            platform: windows-x86-mingw
+            pkg: zip
 
-          - name: Windows x64
-            os: windows-latest
+          - name: Windows x64 (MinGW)
+            image: mingw64
             preset: windows-x64-release
-            artifact-name: keeperfx-windows-x64
-            platform: windows-x64
+            artifact-name: keeperfx-windows-x64-mingw
+            platform: windows-x64-mingw
+            pkg: zip
 
           - name: Linux x64
-            os: ubuntu-24.04
+            image: linux
             preset: linux-x64-release
             artifact-name: keeperfx-linux-x64
             platform: linux-x64
-
-          - name: macOS Universal
-            os: macos-14
-            preset: macos-universal
-            artifact-name: keeperfx-macos-universal
-            platform: macos-universal
+            pkg: tar
 
     steps:
-      - name: Set version
-        id: version
-        run: |
-          if [ "${{ github.event_name }}" = "release" ]; then
-            echo "VERSION=${{ github.ref_name }}" >> $GITHUB_ENV
-          else
-            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
-          fi
-        shell: bash
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
 
+      - name: Mark git directory as safe
+        run: git config --global --add safe.directory '*'
+
+      - name: Configure CMake
+        run: cmake --preset ${{ matrix.preset }}
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: 4
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: 4
+
+      - name: Package artifacts (zip)
+        if: matrix.pkg == 'zip'
+        run: |
+          apt-get install -y -qq zip
+          cd out/build/${{ matrix.preset }}
+          zip -r ../../../keeperfx-${{ needs.prepare.outputs.version }}-${{ matrix.platform }}.zip keeperfx* *.exe *.map *.dll || true
+
+      - name: Package artifacts (tar)
+        if: matrix.pkg == 'tar'
+        run: |
+          cd out/build/${{ matrix.preset }}
+          tar czf ../../../keeperfx-${{ needs.prepare.outputs.version }}-${{ matrix.platform }}.tar.gz keeperfx* *.map || true
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: keeperfx-${{ needs.prepare.outputs.version }}-${{ matrix.platform }}.*
+
+      - name: Upload to release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: keeperfx-${{ needs.prepare.outputs.version }}-${{ matrix.platform }}.*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── Windows MSVC x64 — native Windows runner ────────────────────────────────
+  build-msvc:
+    name: Build Windows x64 (MSVC)
+    runs-on: windows-latest
+    needs: prepare
+
+    steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
@@ -64,15 +127,13 @@ jobs:
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgGitCommitId: '9558037875497b9db8cf38fcd7db68ec661bffe7'
+          vcpkgDirectory: '${{ github.workspace }}/external/vcpkg'
 
       - name: Cache vcpkg packages
         uses: actions/cache@v4
         with:
-          path: |
-            ${{ github.workspace }}/vcpkg
-            ~/.cache/vcpkg
-            ~/AppData/Local/vcpkg
-          key: vcpkg-release-${{ matrix.os }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}
+          path: ${{ github.workspace }}/../vcpkg_installed_x64
+          key: vcpkg-msvc-x64-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}
 
       - name: Setup CMake and Ninja
         uses: lukka/get-cmake@latest
@@ -80,60 +141,96 @@ jobs:
       - name: Configure CMake
         uses: lukka/run-cmake@v10
         with:
-          configurePreset: ${{ matrix.preset }}
+          configurePreset: x64-windows-static-release
 
       - name: Build
         uses: lukka/run-cmake@v10
         with:
-          buildPreset: ${{ matrix.preset }}
+          buildPreset: x64-windows-static-release
 
-      - name: Package artifacts (Windows)
-        if: runner.os == 'Windows'
+      - name: Package artifacts
         run: |
-          cd out/build/${{ matrix.preset }}
-          7z a ../../../keeperfx-${{ env.VERSION }}-${{ matrix.platform }}.zip keeperfx* *.exe *.map
-
-      - name: Package artifacts (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          cd out/build/${{ matrix.preset }}
-          tar czf ../../../keeperfx-${{ env.VERSION }}-${{ matrix.platform }}.tar.gz keeperfx* *.map
-
-      - name: Package artifacts (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          cd out/build/${{ matrix.preset }}
-          zip -r ../../../keeperfx-${{ env.VERSION }}-${{ matrix.platform }}.zip keeperfx* *.map
+          cd out/build/x64-windows-static-release
+          7z a ../../../keeperfx-${{ needs.prepare.outputs.version }}-windows-x64-msvc.zip keeperfx* *.exe *.map
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact-name }}
-          path: keeperfx-${{ env.VERSION }}-${{ matrix.platform }}.*
+          name: keeperfx-windows-x64-msvc
+          path: keeperfx-${{ needs.prepare.outputs.version }}-windows-x64-msvc.zip
 
       - name: Upload to release
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
-          files: keeperfx-${{ env.VERSION }}-${{ matrix.platform }}.*
+          files: keeperfx-${{ needs.prepare.outputs.version }}-windows-x64-msvc.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # ── macOS Universal — native macOS runner ────────────────────────────────────
+  build-macos:
+    name: Build macOS Universal
+    runs-on: macos-14
+    needs: prepare
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: '9558037875497b9db8cf38fcd7db68ec661bffe7'
+          vcpkgDirectory: '${{ github.workspace }}/external/vcpkg'
+
+      - name: Cache vcpkg packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/../vcpkg_installed_macos
+          key: vcpkg-macos-universal-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}
+
+      - name: Setup CMake and Ninja
+        uses: lukka/get-cmake@latest
+
+      - name: Configure CMake
+        uses: lukka/run-cmake@v10
+        with:
+          configurePreset: macos-universal
+
+      - name: Build
+        uses: lukka/run-cmake@v10
+        with:
+          buildPreset: macos-universal
+
+      - name: Package artifacts
+        run: |
+          cd out/build/macos-universal
+          zip -r ../../../keeperfx-${{ needs.prepare.outputs.version }}-macos-universal.zip keeperfx* *.map || true
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: keeperfx-macos-universal
+          path: keeperfx-${{ needs.prepare.outputs.version }}-macos-universal.zip
+
+      - name: Upload to release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: keeperfx-${{ needs.prepare.outputs.version }}-macos-universal.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── WebAssembly — native Ubuntu, Emscripten toolchain ────────────────────────
   build-wasm:
     name: Build WebAssembly
     runs-on: ubuntu-24.04
+    needs: prepare
 
     steps:
-      - name: Set version
-        id: version
-        run: |
-          if [ "${{ github.event_name }}" = "release" ]; then
-            echo "VERSION=${{ github.ref_name }}" >> $GITHUB_ENV
-          else
-            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
-          fi
-        shell: bash
-
       - name: Checkout code
         uses: actions/checkout@v4
         with:
@@ -144,11 +241,6 @@ jobs:
         uses: mymindstorm/setup-emsdk@v14
         with:
           version: 'latest'
-
-      - name: Setup vcpkg
-        uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgGitCommitId: '9558037875497b9db8cf38fcd7db68ec661bffe7'
 
       - name: Setup CMake and Ninja
         uses: lukka/get-cmake@latest
@@ -166,26 +258,30 @@ jobs:
       - name: Package artifacts
         run: |
           cd out/build/wasm-release
-          tar czf ../../../keeperfx-${{ env.VERSION }}-wasm.tar.gz *.wasm *.js *.html
+          tar czf ../../../keeperfx-${{ needs.prepare.outputs.version }}-wasm.tar.gz *.wasm *.js *.html
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: keeperfx-wasm
-          path: keeperfx-${{ env.VERSION }}-wasm.tar.gz
+          path: keeperfx-${{ needs.prepare.outputs.version }}-wasm.tar.gz
 
       - name: Upload to release
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
-          files: keeperfx-${{ env.VERSION }}-wasm.tar.gz
+          files: keeperfx-${{ needs.prepare.outputs.version }}-wasm.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # ── Homebrew platforms (3DS, Vita, Switch, Wii U) — SDK containers ───────────
   build-homebrew:
     name: Build ${{ matrix.name }}
-    runs-on: ubuntu-24.04
-    container: ${{ matrix.container }}
+    runs-on: ubuntu-latest
+    needs: prepare
+    container:
+      image: ghcr.io/${{ needs.prepare.outputs.registry_owner }}/${{ matrix.image }}:latest
+      options: --user root
 
     strategy:
       fail-fast: false
@@ -193,44 +289,37 @@ jobs:
         include:
           - name: Nintendo 3DS
             preset: 3ds-release
-            container: ghcr.io/${{ github.repository_owner }}/keeperfx-build-3ds-sdk:latest
+            image: keeperfx-build-3ds-sdk
             artifact-name: keeperfx-3ds
             platform: 3ds
 
           - name: PS Vita
             preset: vita-release
-            container: ghcr.io/${{ github.repository_owner }}/build-vitasdk:latest
+            image: build-vitasdk
             artifact-name: keeperfx-vita
             platform: vita
 
           - name: Nintendo Switch
             preset: switch-release
-            container: ghcr.io/${{ github.repository_owner }}/keeperfx-build-switch-sdk:latest
+            image: keeperfx-build-switch-sdk
             artifact-name: keeperfx-switch
             platform: switch
 
           - name: Wii U
             preset: wii-u-release
-            container: ghcr.io/${{ github.repository_owner }}/keeperfx-build-wii-u-sdk:latest
+            image: keeperfx-build-wii-u-sdk
             artifact-name: keeperfx-wii-u
             platform: wii-u
 
     steps:
-      - name: Set version
-        id: version
-        run: |
-          if [ "${{ github.event_name }}" = "release" ]; then
-            echo "VERSION=${{ github.ref_name }}" >> $GITHUB_ENV
-          else
-            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
-          fi
-        shell: bash
-
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           submodules: recursive
+
+      - name: Mark git directory as safe
+        run: git config --global --add safe.directory '*'
 
       - name: Setup CMake and Ninja
         uses: lukka/get-cmake@latest
@@ -248,18 +337,18 @@ jobs:
       - name: Package artifacts
         run: |
           cd out/build/${{ matrix.preset }}
-          tar czf ../../../keeperfx-${{ env.VERSION }}-${{ matrix.platform }}.tar.gz *
+          tar czf ../../../keeperfx-${{ needs.prepare.outputs.version }}-${{ matrix.platform }}.tar.gz *
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact-name }}
-          path: keeperfx-${{ env.VERSION }}-${{ matrix.platform }}.tar.gz
+          path: keeperfx-${{ needs.prepare.outputs.version }}-${{ matrix.platform }}.tar.gz
 
       - name: Upload to release
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
-          files: keeperfx-${{ env.VERSION }}-${{ matrix.platform }}.tar.gz
+          files: keeperfx-${{ needs.prepare.outputs.version }}-${{ matrix.platform }}.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
