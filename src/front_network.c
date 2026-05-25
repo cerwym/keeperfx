@@ -573,7 +573,7 @@ void frontnet_send_campaign_change_message(const char* campaign_fname)
         *dot = '\0';
     }
 
-    char msg[64];
+    char msg[70];
     snprintf(msg, sizeof(msg), "%s:_", base_name);
     send_network_chat_message(my_player_number, msg);
 }
@@ -608,7 +608,7 @@ void handle_autostart_multiplayer_messaging(void)
         if (autostart_multiplayer_level > 0) {
             level = autostart_multiplayer_level;
         }
-        snprintf(player->mp_message_text, PLAYER_MP_MESSAGE_LEN, "%s:%d", camp, level);
+        snprintf(player->mp_message_text, PLAYER_MP_MESSAGE_LEN, "%.*s:%d", (int)(PLAYER_MP_MESSAGE_LEN - 12), camp, level);
         lbInkey = KC_RETURN;
         send_pending = false;
     }

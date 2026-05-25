@@ -356,7 +356,6 @@ void draw_overhead_map(const struct TbRect *map_area, long block_size, PlayerNum
                     unsigned char g_val = 0x00; // default: transparent
                     struct Map* mapblk = get_map_block_at(stl_x, stl_y);
                     struct SlabMap* slb = get_slabmap_for_subtile(stl_x, stl_y);
-                    long owner = slabmap_owner(slb);
                     TbBool is_blink = (((mapblk->flags & SlbAtFlg_Unexplored) != 0) || ((mapblk->flags & SlbAtFlg_TaggedValuable) != 0))
                         && ((get_gameturn() % (8 * gui_blink_rate)) >= 4 * gui_blink_rate);
                     if (is_blink)
