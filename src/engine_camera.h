@@ -69,7 +69,7 @@ struct ComponentVector {
     short z;
 };
 
-extern struct Camera {
+struct Camera {
     struct Coord3d mappos;
     unsigned char view_mode;
     int rotation_angle_x;
