@@ -1388,29 +1388,10 @@ static char *_resolve_file_path_internal(char *dst, size_t dst_size,
       if (fname == NULL)
           fname = "";
 
-      /* SAFETY: Validate component lengths before string concatenation */
-      /* Use safe strnlen with max 4KB per component (generous but bounded) */
-      int len_mdir = strnlen(mdir, 4096);
-      int len_mod_dir = strnlen(mod_dir, 4096);
-      int len_sdir = strnlen(sdir, 4096);
-      int len_fname = strnlen(fname, 4096);
-      
-      /* Check for invalid string lengths (detected by strnlen returning max) */
-      if (len_mdir >= 4096 || len_mod_dir >= 4096 || len_sdir >= 4096 || len_fname >= 4096) {
-          ERRORMSG("CORRUPTED STRING: mdir_len=%d, mod_dir_len=%d, sdir_len=%d, fname_len=%d (possibly unterminated or unmapped)",
-                   len_mdir, len_mod_dir, len_sdir, len_fname);
-          dst[0] = '\0';
-          return dst;
-      }
-      
-      /* Sanity check: strings should be reasonable length */
-      if (len_mdir >= 4096 || len_mod_dir >= 4096 || 
-          len_sdir >= 4096 || len_fname >= 4096) {
-          ERRORMSG("INSANE STRING LENGTH: mdir=%d, mod_dir=%d, sdir=%d, fname=%d bytes",
-                   len_mdir, len_mod_dir, len_sdir, len_fname);
-          dst[0] = '\0';
-          return dst;
-      }
+      int len_mdir = (int)strlen(mdir);
+      int len_mod_dir = (int)strlen(mod_dir);
+      int len_sdir = (int)strlen(sdir);
+      int len_fname = (int)strlen(fname);
       
       int total_len = len_mdir + len_mod_dir + len_sdir + len_fname + 3; /* +3 for separators */
       
