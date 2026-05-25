@@ -696,8 +696,8 @@ void cull_gate_to_point(struct Gate *gt, long distance_threshold)
 {
     int diff_a;
     int diff_b;
-    diff_a = abs(gt->start_coordinate_x - gt->end_coordinate_x);
-    diff_b = abs(gt->start_coordinate_y - gt->end_coordinate_y);
+    diff_a = abs((int)(gt->start_coordinate_x - gt->end_coordinate_x));
+    diff_b = abs((int)(gt->start_coordinate_y - gt->end_coordinate_y));
     if (diff_a <= diff_b)
     {
       if (diff_b + (diff_a >> 1) < distance_threshold)
@@ -817,14 +817,14 @@ void cull_gate_to_best_point(struct Gate *gt, long distance_threshold)
     {
         int diff_x;
         int diff_y;
-        diff_x = abs(gt->start_coordinate_x - gt->intersection_coordinate_x);
-        diff_y = abs(gt->start_coordinate_y - gt->intersection_coordinate_y);
+        diff_x = abs((int)(gt->start_coordinate_x - gt->intersection_coordinate_x));
+        diff_y = abs((int)(gt->start_coordinate_y - gt->intersection_coordinate_y));
         if (diff_x <= diff_y)
             start_to_intersection_distance = (diff_x >> 1) + diff_y;
         else
             start_to_intersection_distance = (diff_y >> 1) + diff_x;
-        diff_x = abs(gt->end_coordinate_x - gt->intersection_coordinate_x);
-        diff_y = abs(gt->end_coordinate_y - gt->intersection_coordinate_y);
+        diff_x = abs((int)(gt->end_coordinate_x - gt->intersection_coordinate_x));
+        diff_y = abs((int)(gt->end_coordinate_y - gt->intersection_coordinate_y));
         if (diff_x <= diff_y)
             end_to_intersection_distance = diff_y + (diff_x >> 1);
         else
@@ -1036,9 +1036,9 @@ long gate_route_to_coords(long trAx, long trAy, long trBx, long trBy, int32_t *r
             int dist_A;
             int dist_B;
             bwp_x = best_path.waypoints[wp_idx].x;
-            dist_x = abs(gt->start_coordinate_x - bwp_x);
+            dist_x = abs((int)(gt->start_coordinate_x - bwp_x));
             bwp_y = best_path.waypoints[wp_idx].y;
-            dist_y = abs(gt->start_coordinate_y - bwp_y);
+            dist_y = abs((int)(gt->start_coordinate_y - bwp_y));
             if (dist_x <= dist_y)
                 dist_A = (dist_x >> 1) + dist_y;
             else
@@ -1047,8 +1047,8 @@ long gate_route_to_coords(long trAx, long trAy, long trBx, long trBy, int32_t *r
 
             int dist_C;
             int dist_D;
-            dist_x = abs(gt->end_coordinate_x - bwp_x);
-            dist_y = abs(gt->end_coordinate_y - bwp_y);
+            dist_x = abs((int)(gt->end_coordinate_x - bwp_x));
+            dist_y = abs((int)(gt->end_coordinate_y - bwp_y));
             if ( dist_x <= dist_y )
                 dist_x >>= 1;
             else
@@ -1060,15 +1060,15 @@ long gate_route_to_coords(long trAx, long trAy, long trBx, long trBy, int32_t *r
             if (wp_idx < best_path.waypoints_num-1)
             {
               bwp_x = best_path.waypoints[wp_idx+1].x;
-              dist_x = abs(gt->start_coordinate_x - bwp_x);
+              dist_x = abs((int)(gt->start_coordinate_x - bwp_x));
               bwp_y = best_path.waypoints[wp_idx+1].y;
-              dist_y = abs(gt->start_coordinate_y - bwp_y);
+              dist_y = abs((int)(gt->start_coordinate_y - bwp_y));
               if (dist_x <= dist_y)
                   dist_B = (dist_x >> 1) + dist_y;
               else
                   dist_B = dist_x + (dist_y >> 1);
-              dist_x = abs(gt->end_coordinate_x - bwp_x);
-              dist_y = abs(gt->end_coordinate_y - bwp_y);
+              dist_x = abs((int)(gt->end_coordinate_x - bwp_x));
+              dist_y = abs((int)(gt->end_coordinate_y - bwp_y));
               if (dist_y >= dist_x)
                   dist_D = (dist_x >> 1) + dist_y;
               else
@@ -2160,7 +2160,7 @@ TbBool ariadne_get_starting_angle_and_side_of_wallhug(struct Thing *thing, struc
     nxdelta_y_neg = (thing->mappos.y.val - (long)arid->current_waypoint_pos.y.val) <= 0;
     int axis_closer;
     int nav_radius;
-    axis_closer = abs(thing->mappos.x.val - (long)arid->current_waypoint_pos.x.val) < abs(thing->mappos.y.val - (long)arid->current_waypoint_pos.y.val);
+    axis_closer = abs((int)(thing->mappos.x.val - (long)arid->current_waypoint_pos.x.val)) < abs((int)(thing->mappos.y.val - (long)arid->current_waypoint_pos.y.val));
     nav_radius = thing_nav_sizexy(thing) / 2;
     MapCoord cur_pos_y_beg;
     MapCoord cur_pos_y_end;

@@ -302,6 +302,9 @@ TbScreenCoord LbGraphicsScreenHeight(void);
 unsigned short LbGetCurrentDisplayIndex();
 
 TbPixel LbPaletteFindColour(const unsigned char *pal, unsigned char r, unsigned char g, unsigned char b);
+TbResult LbScreenWaitVbi(void);
+TbResult LbPaletteSet(unsigned char *palette);
+TbResult LbPaletteGet(unsigned char *palette);
 TbResult LbPaletteDataFillBlack(unsigned char *palette);
 TbResult LbPaletteDataFillWhite(unsigned char *palette);
 
