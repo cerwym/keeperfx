@@ -695,7 +695,7 @@ TbBool play_description_speech(LevelNumber lvnum, short play_good)
       if (strchr(lvinfo->speech_before, '.') == NULL)
       {
           WARNLOG("No extension specified for good speech file; defaulting to '.wav'.");
-          char path[DISKPATH_SIZE];
+          char path[DISKPATH_SIZE + 4];
           snprintf(path, sizeof(path), "%s.wav", lvinfo->speech_before);
           fname = get_game_file_path_fmt(FGrp_AtlSound, "%s", path);
       }
@@ -712,7 +712,7 @@ TbBool play_description_speech(LevelNumber lvnum, short play_good)
       if (strchr(lvinfo->speech_after, '.') == NULL)
       {
           WARNLOG("No extension specified for evil speech file; defaulting to '.wav'.");
-          char path[DISKPATH_SIZE];
+          char path[DISKPATH_SIZE + 4];
           snprintf(path, sizeof(path), "%s.wav", lvinfo->speech_after);
           fname = get_game_file_path_fmt(FGrp_AtlSound, "%s", path);
       }
