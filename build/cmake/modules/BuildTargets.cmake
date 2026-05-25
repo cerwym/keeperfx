@@ -246,6 +246,9 @@ if(KEEPERFX_TRACY AND TARGET TracyClient)
     target_link_libraries(keeperfx_hvlog PRIVATE TracyClient)
 endif()
 
+# ━━━ All main KeeperFX targets — used by Platform*.cmake modules ━━━
+set(KFX_TARGETS keeperfx keeperfx_hvlog)
+
 # ━━━ OpenGL shaders are now embedded in the executable ━━━
 # Previously copied from src/renderer/opengl/shaders/ but now included as constants
 # in src/renderer/opengl/GLShaders.h for easier distribution.

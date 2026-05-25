@@ -6,7 +6,6 @@ on:
       - master
       - dev
       - "release/**"
-      - "feature/renderer-abstraction-cicd"
     paths:
       - "docker/**"
       - "vcpkg.json"
@@ -53,6 +52,21 @@ jobs:
             image: build-vitasdk
             context: .
             dockerfile: docker/vitasdk/Dockerfile
+
+          - name: 3ds-sdk
+            image: keeperfx-build-3ds-sdk
+            context: .
+            dockerfile: docker/3ds-sdk/Dockerfile
+
+          - name: switch-sdk
+            image: keeperfx-build-switch-sdk
+            context: .
+            dockerfile: docker/switch-sdk/Dockerfile
+
+          - name: wii-u-sdk
+            image: keeperfx-build-wii-u-sdk
+            context: .
+            dockerfile: docker/wii-u-sdk/Dockerfile
 
     steps:
       - name: Checkout

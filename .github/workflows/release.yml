@@ -193,7 +193,7 @@ jobs:
         include:
           - name: Nintendo 3DS
             preset: 3ds-release
-            container: devkitpro/devkitarm:latest
+            container: ghcr.io/${{ github.repository_owner }}/keeperfx-build-3ds-sdk:latest
             artifact-name: keeperfx-3ds
             platform: 3ds
 
@@ -205,9 +205,15 @@ jobs:
 
           - name: Nintendo Switch
             preset: switch-release
-            container: devkitpro/devkita64:latest
+            container: ghcr.io/${{ github.repository_owner }}/keeperfx-build-switch-sdk:latest
             artifact-name: keeperfx-switch
             platform: switch
+
+          - name: Wii U
+            preset: wii-u-release
+            container: ghcr.io/${{ github.repository_owner }}/keeperfx-build-wii-u-sdk:latest
+            artifact-name: keeperfx-wii-u
+            platform: wii-u
 
     steps:
       - name: Set version
@@ -225,11 +231,6 @@ jobs:
         with:
           fetch-depth: 0
           submodules: recursive
-
-      - name: Setup vcpkg
-        uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgGitCommitId: '9558037875497b9db8cf38fcd7db68ec661bffe7'
 
       - name: Setup CMake and Ninja
         uses: lukka/get-cmake@latest

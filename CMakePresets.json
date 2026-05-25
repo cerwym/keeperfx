@@ -292,7 +292,7 @@
             "description": "Cross-compile for Windows x86 from Linux using i686-w64-mingw32. Designed for use inside the keeperfx-build-mingw32 Docker image.",
             "inherits": [ "cross-base", "Release" ],
             "cacheVariables": {
-                "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build/cmake/mingw32.cmake",
+                "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build/cmake/toolchains/mingw32.cmake",
                 "CMAKE_EXPORT_COMPILE_COMMANDS": "on",
                 "CMAKE_BUILD_TYPE": "Release"
             }
@@ -305,7 +305,7 @@
             "description": "Cross-compile for Windows x86 from Linux using i686-w64-mingw32, with full debug symbols. For use inside the keeperfx-build-mingw32 Docker image.",
             "inherits": [ "cross-base", "Debug" ],
             "cacheVariables": {
-                "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build/cmake/mingw32.cmake",
+                "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build/cmake/toolchains/mingw32.cmake",
                 "CMAKE_EXPORT_COMPILE_COMMANDS": "on"
             }
         },
@@ -317,9 +317,21 @@
             "description": "Cross-compile for Windows x64 from Linux using x86_64-w64-mingw32. Designed for use inside the keeperfx-build-mingw64 Docker image.",
             "inherits": [ "cross-base", "Release" ],
             "cacheVariables": {
-                "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build/cmake/mingw64.cmake",
+                "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build/cmake/toolchains/mingw64.cmake",
                 "CMAKE_EXPORT_COMPILE_COMMANDS": "on",
                 "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+
+        {
+            "name": "windows-x64-debug",
+            "displayName": "Windows x64 Debug (Docker/Linux cross-compile)",
+            "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" },
+            "description": "Cross-compile for Windows x64 from Linux using x86_64-w64-mingw32, with full debug symbols. For use inside the keeperfx-build-mingw64 Docker image.",
+            "inherits": [ "cross-base", "Debug" ],
+            "cacheVariables": {
+                "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build/cmake/toolchains/mingw64.cmake",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "on"
             }
         },
 
@@ -461,6 +473,123 @@
                 "CMAKE_TOOLCHAIN_FILE": "$env{DEVKITPRO}/cmake/Switch.cmake",
                 "CMAKE_BUILD_TYPE": "Release",
                 "PLATFORM_SWITCH": "ON",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "on"
+            }
+        },
+
+        {
+            "name": "switch-reldebug",
+            "displayName": "Nintendo Switch RelWithDebInfo",
+            "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" },
+            "description": "Nintendo Switch build with debug symbols for crash analysis",
+            "inherits": "base",
+            "cacheVariables": {
+                "CMAKE_TOOLCHAIN_FILE": "$env{DEVKITPRO}/cmake/Switch.cmake",
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "PLATFORM_SWITCH": "ON",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "on"
+            }
+        },
+
+        {
+            "name": "switch-debug",
+            "displayName": "Nintendo Switch Debug",
+            "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" },
+            "description": "Nintendo Switch debug build with full debug symbols",
+            "inherits": "base",
+            "cacheVariables": {
+                "CMAKE_TOOLCHAIN_FILE": "$env{DEVKITPRO}/cmake/Switch.cmake",
+                "CMAKE_BUILD_TYPE": "Debug",
+                "PLATFORM_SWITCH": "ON",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "on"
+            }
+        },
+
+        {
+            "name": "3ds-reldebug",
+            "displayName": "3DS RelWithDebInfo",
+            "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" },
+            "description": "Nintendo 3DS build with debug symbols for crash analysis",
+            "inherits": "base",
+            "cacheVariables": {
+                "CMAKE_TOOLCHAIN_FILE": "$env{DEVKITPRO}/cmake/3DS.cmake",
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "PLATFORM_3DS": "ON",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "on"
+            }
+        },
+
+        {
+            "name": "3ds-debug",
+            "displayName": "3DS Debug",
+            "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" },
+            "description": "Nintendo 3DS debug build with full debug symbols",
+            "inherits": "base",
+            "cacheVariables": {
+                "CMAKE_TOOLCHAIN_FILE": "$env{DEVKITPRO}/cmake/3DS.cmake",
+                "CMAKE_BUILD_TYPE": "Debug",
+                "PLATFORM_3DS": "ON",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "on"
+            }
+        },
+
+        {
+            "name": "wii-u-release",
+            "displayName": "Nintendo Wii U Release",
+            "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" },
+            "description": "Nintendo Wii U release build using devkitPPC + WUT",
+            "inherits": "base",
+            "cacheVariables": {
+                "CMAKE_TOOLCHAIN_FILE": "$env{DEVKITPRO}/cmake/WiiU.cmake",
+                "CMAKE_BUILD_TYPE": "Release",
+                "PLATFORM_WII_U": "ON",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "on"
+            }
+        },
+
+        {
+            "name": "wii-u-reldebug",
+            "displayName": "Nintendo Wii U RelWithDebInfo",
+            "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" },
+            "description": "Nintendo Wii U build with debug symbols for crash analysis",
+            "inherits": "base",
+            "cacheVariables": {
+                "CMAKE_TOOLCHAIN_FILE": "$env{DEVKITPRO}/cmake/WiiU.cmake",
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "PLATFORM_WII_U": "ON",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "on"
+            }
+        },
+
+        {
+            "name": "wii-u-debug",
+            "displayName": "Nintendo Wii U Debug",
+            "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" },
+            "description": "Nintendo Wii U debug build with full debug symbols",
+            "inherits": "base",
+            "cacheVariables": {
+                "CMAKE_TOOLCHAIN_FILE": "$env{DEVKITPRO}/cmake/WiiU.cmake",
+                "CMAKE_BUILD_TYPE": "Debug",
+                "PLATFORM_WII_U": "ON",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "on"
+            }
+        },
+
+        {
+            "name": "macos-universal",
+            "displayName": "macOS Universal (arm64 + x86_64)",
+            "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Darwin" },
+            "description": "macOS Universal Binary build targeting both Apple Silicon and Intel, using vcpkg",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/out/build/${presetName}",
+            "installDir": "${sourceDir}/out/install/${presetName}",
+            "cacheVariables": {
+                "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}",
+                "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/external/vcpkg/scripts/buildsystems/vcpkg.cmake",
+                "VCPKG_INSTALLED_DIR": "${sourceDir}/../vcpkg_installed_macos",
+                "VCPKG_TARGET_TRIPLET": "arm64-osx",
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_OSX_ARCHITECTURES": "arm64;x86_64",
                 "CMAKE_EXPORT_COMPILE_COMMANDS": "on"
             }
         }
@@ -632,6 +761,13 @@
         },
 
         {
+            "name": "windows-x64-debug",
+            "displayName": "Windows x64 Debug",
+            "inherits": "StandardLog",
+            "configurePreset": "windows-x64-debug"
+        },
+
+        {
             "name": "linux-x64-release",
             "displayName": "Linux x64 Release",
             "inherits": "StandardLog",
@@ -650,13 +786,6 @@
             "displayName": "WebAssembly Release Build",
             "inherits": "StandardLog",
             "configurePreset": "wasm-release"
-        },
-
-        {
-            "name": "3ds-release",
-            "displayName": "3DS Release Build",
-            "inherits": "StandardLog",
-            "configurePreset": "3ds-release"
         },
 
         {
@@ -704,6 +833,69 @@
             "displayName": "Nintendo Switch Release Build",
             "inherits": "StandardLog",
             "configurePreset": "switch-release"
+        },
+
+        {
+            "name": "switch-reldebug",
+            "displayName": "Nintendo Switch RelWithDebInfo Build",
+            "inherits": "StandardLog",
+            "configurePreset": "switch-reldebug"
+        },
+
+        {
+            "name": "switch-debug",
+            "displayName": "Nintendo Switch Debug Build",
+            "inherits": "StandardLog",
+            "configurePreset": "switch-debug"
+        },
+
+        {
+            "name": "3ds-release",
+            "displayName": "3DS Release Build",
+            "inherits": "StandardLog",
+            "configurePreset": "3ds-release"
+        },
+
+        {
+            "name": "3ds-reldebug",
+            "displayName": "3DS RelWithDebInfo Build",
+            "inherits": "StandardLog",
+            "configurePreset": "3ds-reldebug"
+        },
+
+        {
+            "name": "3ds-debug",
+            "displayName": "3DS Debug Build",
+            "inherits": "StandardLog",
+            "configurePreset": "3ds-debug"
+        },
+
+        {
+            "name": "wii-u-release",
+            "displayName": "Nintendo Wii U Release Build",
+            "inherits": "StandardLog",
+            "configurePreset": "wii-u-release"
+        },
+
+        {
+            "name": "wii-u-reldebug",
+            "displayName": "Nintendo Wii U RelWithDebInfo Build",
+            "inherits": "StandardLog",
+            "configurePreset": "wii-u-reldebug"
+        },
+
+        {
+            "name": "wii-u-debug",
+            "displayName": "Nintendo Wii U Debug Build",
+            "inherits": "StandardLog",
+            "configurePreset": "wii-u-debug"
+        },
+
+        {
+            "name": "macos-universal",
+            "displayName": "macOS Universal Build",
+            "inherits": "StandardLog",
+            "configurePreset": "macos-universal"
         }
     ]
 }
