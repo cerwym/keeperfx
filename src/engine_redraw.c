@@ -979,7 +979,7 @@ void redraw_display(void)
         LbTextSetWindow(0, 0, MyScreenWidth, MyScreenHeight);
         lbDisplay.DrawFlags = 0;
         LbTextSetFont(winfont);
-        char text[16];
+        char text[32];
         if (draw_spell_cost > 0)
             snprintf(text, sizeof(text), "%ld", draw_spell_cost);
 	else

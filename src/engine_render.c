@@ -8112,7 +8112,7 @@ static void prepare_jonty_remap_and_scale(int32_t *scale, const struct BucketKin
     if (fade <= 0)
     {
         WARNLOG("Invalid fade value %d for thing %d at (%d,%d,%d), using minimum fade", 
-                fade, thing->index, thing->mappos.x.val, thing->mappos.y.val, thing->mappos.z.val);
+                fade, thing->index, (int)thing->mappos.x.val, (int)thing->mappos.y.val, (int)thing->mappos.z.val);
         fade = 1;  // Set minimum safe value
     }
 

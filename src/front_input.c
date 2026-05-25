@@ -1264,7 +1264,6 @@ static TbBool get_dungeon_control_pausable_action_inputs(void)
       if (is_game_key_pressed(Gkey_SnapCamera, true, true))
       {
           struct Camera* cam = camera_get_slot(player->id_number, CamIV_Isometric);
-          struct Packet* pckt = get_packet(my_player_number);
           int angle = cam->rotation_angle_x;
           if (key_modifiers & KMod_CONTROL)
           {
