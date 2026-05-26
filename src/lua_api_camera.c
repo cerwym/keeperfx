@@ -11,6 +11,7 @@
 #include "thing_data.h"
 #include "thing_creature.h"
 #include "player_data.h"
+#include "kfx/engine/cameras.h"
 
 #include "lua_base.h"
 #include "lua_params.h"

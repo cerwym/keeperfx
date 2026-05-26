@@ -435,7 +435,7 @@ TbBool load_game(long slot_num)
     }
     my_player_number = game.local_plyr_idx;
     LbFileClose(fh);
-    snprintf(game.campaign_fname, sizeof(game.campaign_fname), "%s", campaign.fname);
+    snprintf(game.campaign_fname, sizeof(game.campaign_fname), "%.*s", (int)(sizeof(game.campaign_fname) - 1), campaign.fname);
     reinit_level_after_load();
     output_message(SMsg_GameLoaded, 0);
     panel_map_update(0, 0, game.map_subtiles_x+1, game.map_subtiles_y+1);
@@ -674,7 +674,7 @@ short load_continue_game(void)
     // Restoring intralevel data
     read_continue_game_part((unsigned char *)&intralvl, sizeof(struct Game),
         sizeof(struct IntralevelData));
-    snprintf(game.campaign_fname, sizeof(game.campaign_fname), "%s", campaign.fname);
+    snprintf(game.campaign_fname, sizeof(game.campaign_fname), "%.*s", (int)(sizeof(game.campaign_fname) - 1), campaign.fname);
     update_extra_levels_visibility();
     JUSTMSG("Continued level %d from %s", lvnum, campaign.name);
     return true;
