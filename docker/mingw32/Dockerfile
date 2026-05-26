@@ -47,6 +47,7 @@ RUN dpkg --add-architecture i386 \
         automake \
         libtool \
         perl \
+        pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
 # ── KFX build tools → /usr/local/bin ────────────────────────────────────────

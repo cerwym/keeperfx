@@ -57,8 +57,9 @@ jobs:
       # safety net while old images are still in the registry.
       # autoconf/libtool: needed by alsa vcpkg port (autotools-based)
       # gcc-multilib/libc6-dev-i386: needed for luajit buildvm-32 on x64 host
+      # pkg-config: needed by vcpkg_fixup_pkgconfig for mingw cross-builds
       - name: Install vcpkg prerequisites
-        run: apt-get update -qq && apt-get install -y --no-install-recommends zip unzip python3 nasm autoconf libtool gcc-multilib libc6-dev-i386
+        run: apt-get update -qq && apt-get install -y --no-install-recommends zip unzip python3 nasm autoconf libtool gcc-multilib libc6-dev-i386 pkg-config
 
       - name: Export vcpkg binary-cache env vars
         run: |
