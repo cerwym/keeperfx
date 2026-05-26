@@ -58,8 +58,9 @@ jobs:
       # libltdl-dev: libxcrypt configure checks for ltdl development files
       # gcc-multilib/libc6-dev-i386: needed for luajit buildvm-32 on x64 host
       # pkg-config: needed by vcpkg_fixup_pkgconfig for mingw cross-builds
+      # python3-venv: needed by libsystemd vcpkg port (creates a Python venv)
       - name: Install vcpkg prerequisites
-        run: apt-get update -qq && apt-get install -y --no-install-recommends zip unzip python3 nasm autoconf autoconf-archive automake libtool libltdl-dev gcc-multilib libc6-dev-i386 pkg-config
+        run: apt-get update -qq && apt-get install -y --no-install-recommends zip unzip python3 python3-venv nasm autoconf autoconf-archive automake libtool libltdl-dev gcc-multilib libc6-dev-i386 pkg-config
 
       - name: Enable vcpkg binary caching (x-gha)
         run: |
