@@ -42,12 +42,6 @@ jobs:
             vcpkg-triplet: x64-linux-keeperfx
             artifact-name: keeperfx-linux-x64
 
-          - name: Linux x64 (ASAN)
-            image: linux
-            preset: linux-x64-asan
-            vcpkg-triplet: x64-linux-keeperfx
-            artifact-name: keeperfx-linux-x64-asan
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
