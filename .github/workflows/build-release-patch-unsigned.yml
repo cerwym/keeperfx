@@ -34,6 +34,7 @@ jobs:
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
+        submodules: recursive
 
     - name: Mark git directory as safe
       run: git config --global --add safe.directory '*'
@@ -43,6 +44,27 @@ jobs:
         set -eux
         apt-get update -qq
         apt-get install -y --no-install-recommends 7zip make
+
+    - name: Export vcpkg binary-cache env vars
+      uses: actions/github-script@v7
+      with:
+        script: |
+          core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+          core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+    - name: Bootstrap vcpkg
+      run: |
+        chmod +x ./external/vcpkg/bootstrap-vcpkg.sh
+        ./external/vcpkg/bootstrap-vcpkg.sh -disableMetrics
+
+    - name: Install vcpkg packages
+      run: |
+        ./external/vcpkg/vcpkg install \
+          --triplet x86-mingw-cross \
+          --overlay-triplets build/vcpkg-triplets \
+          --x-install-root=vcpkg_installed
+      env:
+        VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
 
     - uses: dkfans/setup-cpp@master
 
@@ -75,15 +97,6 @@ jobs:
       run: |
         set -eux
         make BUILD_NUMBER=$BUILD_NUMBER PACKAGE_SUFFIX=$PACKAGE_SUFFIX pkg-enginegfx
-
-    - name: Copy SDL2 DLLs for packaging
-      run: |
-        set -eux
-        mkdir -p sdl/for_final_package
-        cp /usr/i686-w64-mingw32/bin/SDL2.dll       sdl/for_final_package/
-        cp /usr/i686-w64-mingw32/bin/SDL2_mixer.dll  sdl/for_final_package/
-        cp /usr/i686-w64-mingw32/bin/SDL2_image.dll  sdl/for_final_package/
-        cp /usr/i686-w64-mingw32/bin/SDL2_net.dll    sdl/for_final_package/
 
     - name: Create release package
       run: |
