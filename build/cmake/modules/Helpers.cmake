@@ -24,15 +24,23 @@ function(apply_keeperfx_warnings TARGET)
         return()
     endif()
 
-    set(WARNFLAGS -Wall -W -Wshadow -Wno-sign-compare -Wno-unused-parameter -Wno-strict-aliasing -Wno-unknown-pragmas -Wno-absolute-value -Wno-format-truncation -Werror)
-    
+    set(WARNFLAGS_COMMON -Wall -W -Wno-sign-compare -Wno-unused-parameter -Wno-strict-aliasing -Wno-unknown-pragmas -Werror)
+    set(WARNFLAGS_C   ${WARNFLAGS_COMMON} -Wshadow)
+    set(WARNFLAGS_CXX ${WARNFLAGS_COMMON})
+
     if(PLATFORM_VITA OR PLATFORM_3DS OR PLATFORM_SWITCH)
         # ARM/AArch64 cross-compile: no x86-specific flags
-        target_compile_options(${TARGET} PRIVATE ${WARNFLAGS} -Wno-format-truncation -Wno-char-subscripts)
+        target_compile_options(${TARGET} PRIVATE
+            $<$<COMPILE_LANGUAGE:C>:${WARNFLAGS_C} -Wno-char-subscripts>
+            $<$<COMPILE_LANGUAGE:CXX>:${WARNFLAGS_CXX} -Wno-char-subscripts>
+        )
     else()
         # Desktop: MinGW or native Linux
-        set(GNU_COMPILER_FLAG -march=x86-64 -fno-omit-frame-pointer -fmessage-length=0)
-        target_compile_options(${TARGET} PRIVATE ${WARNFLAGS} ${GNU_COMPILER_FLAG})
+        set(GNU_COMPILER_FLAGS -march=x86-64 -fno-omit-frame-pointer -fmessage-length=0)
+        target_compile_options(${TARGET} PRIVATE
+            $<$<COMPILE_LANGUAGE:C>:${WARNFLAGS_C} ${GNU_COMPILER_FLAGS}>
+            $<$<COMPILE_LANGUAGE:CXX>:${WARNFLAGS_CXX} ${GNU_COMPILER_FLAGS}>
+        )
     endif()
 endfunction()
 

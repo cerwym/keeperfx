@@ -74,50 +74,6 @@ void LbCursorSpriteSetScalingHeightSimple(long y, long sheight, long dheight)
     LbSpriteSetScalingHeightSimpleArray(cursor_ysteps_array, y, sheight, dheight);
 }
 
-/**
- * Draws the mouse pointer sprite on a display buffer.
- */
-static long PointerDraw(long x, long y, const struct TbSprite *spr, TbPixel *outbuf, unsigned long scanline)
-{
-    unsigned int dwidth;
-    unsigned int dheight;
-    // Prepare bounds
-    dwidth = scale_ui_value_lofi(spr->SWidth);
-    dheight = scale_ui_value_lofi(spr->SHeight);
-    if ( (dwidth <= 0) || (dheight <= 0) )
-        return 1;
-    if ( (lbDisplay.MouseWindowWidth <= 0) || (lbDisplay.MouseWindowHeight <= 0) )
-        return 1;
-    // Normally it would be enough to check if ((dwidth+x) >= gwidth), but due to rounding we need to add swidth
-    if ((x < 0) || ((dwidth + spr->SWidth + x) >= lbDisplay.MouseWindowWidth))
-    {
-        LbCursorSpriteSetScalingWidthClipped(x, spr->SWidth, dwidth, lbDisplay.MouseWindowWidth);
-    } else {
-        LbCursorSpriteSetScalingWidthSimple(x, spr->SWidth, dwidth);
-    }
-    // Normally it would be enough to check if ((dheight+y) >= gheight), but our simple rounding may enlarge the image
-    if ((y < 0) || ((dheight + spr->SHeight + y) >= lbDisplay.MouseWindowHeight))
-    {
-        LbCursorSpriteSetScalingHeightClipped(y, spr->SHeight, dheight, lbDisplay.MouseWindowHeight);
-    } else {
-        LbCursorSpriteSetScalingHeightSimple(y, spr->SHeight, dheight);
-    }
-    int32_t *xstep;
-    int32_t *ystep;
-    {
-        xstep = &cursor_xsteps_array[0];
-        ystep = &cursor_ysteps_array[0];
-    }
-    outbuf = &outbuf[xstep[0] + scanline * ystep[0]];
-    const struct TbSourceBuffer buffer = {
-        spr->Data,
-        spr->SWidth,
-        spr->SHeight,
-        spr->SWidth,
-    };
-    return LbSpriteDrawUsingScalingUpDataSolidLR(outbuf, scanline, lbDisplay.MouseWindowHeight, xstep, ystep, &buffer);
-}
-
 // Methods
 
 LbI_PointerHandler::LbI_PointerHandler(void)

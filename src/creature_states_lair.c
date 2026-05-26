@@ -132,7 +132,7 @@ long creature_will_sleep(struct Thing *thing)
         return false;
     long dist_x = (long)thing->mappos.x.stl.num - (long)lairtng->mappos.x.stl.num;
     long dist_y = (long)thing->mappos.y.stl.num - (long)lairtng->mappos.y.stl.num;
-    return (abs(dist_x) < 1) && (abs(dist_y) < 1);
+    return (labs(dist_x) < 1) && (labs(dist_y) < 1);
 }
 
 /**

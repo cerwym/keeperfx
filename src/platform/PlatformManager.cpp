@@ -3,7 +3,9 @@
 #include "platform/IWindowSystem.h"
 #include "platform.h"
 #include "bflib_fileio.h"
+#ifdef TRACY_ENABLE
 #include <tracy/Tracy.hpp>
+#endif
 #include "kfx/profiling/KfxProfiling.h"
 #include "post_inc.h"
 
@@ -20,6 +22,7 @@ void PlatformManager::Set(IPlatform* platform)
 {
     delete s_instance;
     s_instance = platform;
+#ifdef TRACY_ENABLE
     // Probably could do this in a nicer way, but fuck it for now.
     tracy::SetThreadName("KeeperFX Main Thread");
 
@@ -37,6 +40,7 @@ void PlatformManager::Set(IPlatform* platform)
     KFX_PLOT_CONFIG("UI/Lines",         tracy::PlotFormatType::Number, true,  false, KFX_COLOR_RENDER_CPU);
     KFX_PLOT_CONFIG("Sim/CreatureCount",tracy::PlotFormatType::Number, true,  true,  KFX_COLOR_SIMULATION);
     KFX_PLOT_CONFIG("AI/ActivePlayers", tracy::PlotFormatType::Number, true,  false, KFX_COLOR_AI);
+#endif
 }
 
 // ----- Default IWindowSystem (base class impl) -----

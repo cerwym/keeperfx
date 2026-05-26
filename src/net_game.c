@@ -138,7 +138,7 @@ static void setup_players_from_startup_packets(const struct StartupSyncPacket st
             game.creatures_tend_imprison = imprison;
             game.creatures_tend_flee = flee;
         }
-        snprintf(player->player_name, sizeof(struct TbNetworkPlayerName), "%s", net_player[i].name);
+        snprintf(player->player_name, sizeof(struct TbNetworkPlayerName), "%.*s", (int)(sizeof(struct TbNetworkPlayerName) - 1), net_player[i].name);
         k++;
     }
 }

@@ -18,7 +18,7 @@
 // reads/writes through them so existing callers see consistent state.
 extern volatile TbBool lbMouseGrabbed;
 extern volatile TbBool lbMouseGrab;
-extern "C" SDL_Window* lbWindow = nullptr;  // owned here; extern declared in bflib_vidsurface.c (C linkage for C-file access)
+SDL_Window* lbWindow = nullptr;  // owned here; extern declared in bflib_vidsurface.c (C linkage for C-file access)
 
 /******************************************************************************/
 

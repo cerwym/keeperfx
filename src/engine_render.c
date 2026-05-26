@@ -1003,7 +1003,7 @@ static void fill_in_points_cluedo(struct Camera *cam, long bstl_x, long bstl_y, 
             + (apos + camera_matrix.r[1].v[1]) * (camera_matrix.r[1].v[0] - view_alt)
              - camera_matrix.r[1].v[3]
              - apos * -view_alt) >> 14)) >> 16)) << 8;
-    hview_z = (abs(view_z) >> 1);
+    hview_z = (labs(view_z) >> 1);
     if (hview_z < 32) {
         hview_z = 0;
     } else
@@ -1220,7 +1220,7 @@ static void fill_in_points_isometric(struct Camera *cam, long bstl_x, long bstl_
         + ((bpos * camera_matrix.r[2].v[2]
          + (apos + camera_matrix.r[2].v[1]) * (camera_matrix.r[2].v[0] - view_alt)
           - hpos - camera_matrix.r[2].v[3]) >> 14);
-    hview_z = (abs(view_z) >> 1);
+    hview_z = (labs(view_z) >> 1);
     if (hview_z < 32) {
         hview_z = 0;
     } else
@@ -1749,7 +1749,7 @@ static void fiddle_half_gamut(long start_stl_x, long start_stl_y, long step, lon
          * Changing it to float would lead to conditions like "if (delta_y != 1)" not working.
          */
         volatile long delta_y;
-        delta_y = abs(stl_y - start_stl_y);
+        delta_y = labs(stl_y - start_stl_y);
         long rect_factor;
 
         TbBool set_x_min_rect;
@@ -2250,7 +2250,7 @@ static void create_line_const_z(unsigned char color, long pos_z, long beg_x, lon
     vec_y = end_y - beg_y;
     create_box_coords(&start, beg_x, beg_y, pos_z);
 
-    if (abs(vec_y) > abs(vec_x))
+    if (labs(vec_y) > labs(vec_x))
     {
         if (vec_y < 0)
         {
@@ -2266,7 +2266,7 @@ static void create_line_const_z(unsigned char color, long pos_z, long beg_x, lon
         }
         for (pos_y = beg_y + COORD_PER_STL; pos_y <= end_y; pos_y += COORD_PER_STL)
         {
-            pos_x = beg_x + vec_x * abs(pos_y - beg_y) / abs(vec_y);
+            pos_x = beg_x + vec_x * labs(pos_y - beg_y) / labs(vec_y);
             create_box_coords(&end, pos_x, pos_y, pos_z);
             create_line_segment(&start, &end, color);
             memcpy(&start, &end, sizeof(struct EngineCoord));
@@ -2288,7 +2288,7 @@ static void create_line_const_z(unsigned char color, long pos_z, long beg_x, lon
         }
         for (pos_x = beg_x + COORD_PER_STL; pos_x <= end_x; pos_x += COORD_PER_STL)
         {
-            pos_y = beg_y + vec_y * abs(pos_x - beg_x) / abs(vec_x);
+            pos_y = beg_y + vec_y * labs(pos_x - beg_x) / labs(vec_x);
             create_box_coords(&end, pos_x, pos_y, pos_z);
             create_line_segment(&start, &end, color);
             memcpy(&start, &end, sizeof(struct EngineCoord));
@@ -5377,7 +5377,7 @@ static void draw_stripey_line(long x1,long y1,long x2,long y2,unsigned char line
     int32_t distance_a, distance_b, a, b, a1, b1, a2, b2, relative_window_a, relative_window_b, remainder, remainder_limit;
     int32_t *x_coord, *y_coord; // Maintain a reference to the actual X/Y coordinates, even after swapping A and B
 
-    if (abs(y2 - y1) < abs(x2 - x1))
+    if (labs(y2 - y1) < labs(x2 - x1))
     {
         x_coord = &a;
         y_coord = &b;
@@ -5528,7 +5528,7 @@ static void draw_stripey_line(long x1,long y1,long x2,long y2,unsigned char line
     int put_pixels_left = line_thickness/2; // Allocate half of the thickness to the left
     int put_pixels_right = line_thickness-put_pixels_left; // Remaining thickness is placed to the right
 
-    TbBool isHorizontal = abs(x2 - x1) >= abs(y2 - y1); // Check if line is more horizontal than vertical, helps with the "pixel-art look".
+    TbBool isHorizontal = labs(x2 - x1) >= labs(y2 - y1); // Check if line is more horizontal than vertical, helps with the "pixel-art look".
     int temp_x, temp_y;
     float color_animation_position = color_index;
     // Main loop to draw the line
@@ -8664,8 +8664,8 @@ void create_frontview_map_volume_box(struct Camera *cam, unsigned char stl_width
     convert_world_coord_to_front_view_screen_coord(&pos, cam, &coord_x, &coord_y, &coord_z);
     box_width -= coord_x;
     box_height -= coord_y;
-    box_width = abs(box_width);
-    box_height = abs(box_height);
+    box_width = labs(box_width);
+    box_height = labs(box_height);
     switch ( orient )
     {
     //case 0: // North
@@ -8726,8 +8726,8 @@ void create_fancy_frontview_map_volume_box(struct RoomSpace roomspace, struct Ca
     convert_world_coord_to_front_view_screen_coord(&pos, cam, &coord_x, &coord_y, &coord_z);
     box_width -= coord_x;
     box_height -= coord_y;
-    box_width = abs(box_width);
-    box_height = abs(box_height);
+    box_width = labs(box_width);
+    box_height = labs(box_height);
     int room_slab_width = roomspace.width;
     int room_slab_height = roomspace.height;
     if (orient % 2 == 1)

@@ -228,7 +228,7 @@ static void init_level(void)
         }
     }
     init_navigation();
-    snprintf(game.campaign_fname, sizeof(game.campaign_fname), "%s", campaign.fname);
+    snprintf(game.campaign_fname, sizeof(game.campaign_fname), "%.*s", (int)(sizeof(game.campaign_fname) - 1), campaign.fname);
     light_set_lights_on(1);
     {
         for (size_t i = 0; i < PLAYERS_COUNT; i++)

@@ -895,7 +895,7 @@ short do_left_map_drag(long begin_x, long begin_y, int32_t curr_x, int32_t curr_
   }
   x = (curr_x - (MyScreenWidth >> 1)) / 2;
   y = (curr_y - (MyScreenHeight >> 1)) / 2;
-  if ((abs(curr_x - old_mx) < 2) && (abs(curr_y - old_my) < 2))
+  if ((labs(curr_x - old_mx) < 2) && (labs(curr_y - old_my) < 2))
     return 0;
   if (!grabbed_small_map)
   {

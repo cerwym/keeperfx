@@ -288,7 +288,7 @@ TbBool OverlayEffect::Setup(long lens_idx)
             m_gl_pass_ready = true;
         }
         else
-            SYNCDBG(7, "GL overlay pass init failed — CPU fallback");
+            { SYNCDBG(7, "GL overlay pass init failed — CPU fallback"); }
     }
 #endif
 

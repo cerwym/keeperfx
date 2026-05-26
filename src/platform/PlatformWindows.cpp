@@ -14,7 +14,7 @@
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>
-#include <sstream>>
+#include <sstream>
 #include <malloc.h>
 #include <errno.h>
 #include "bflib_crash.h"
@@ -485,7 +485,7 @@ long PlatformWindows::FileWrite(TbFileHandle handle, const void* buf, unsigned l
 
     DebugPrint(std::string(static_cast<const char*>(buf), len));
 
-    long itemsWritten = fwrite(buf, 1, len, static_cast<TbFileInfo*>(handle)->fp);
+    return (long)fwrite(buf, 1, len, static_cast<TbFileInfo*>(handle)->fp);
 }
 
 int PlatformWindows::FileSeek(TbFileHandle handle, long offset, unsigned char origin)

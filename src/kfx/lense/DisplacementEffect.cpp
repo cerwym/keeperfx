@@ -189,7 +189,7 @@ TbBool DisplacementEffect::Setup(long lens_idx)
 #ifdef PLATFORM_VITA
     m_gpu_pass.Configure((int)m_algorithm, m_magnitude, m_period);
     m_gpu_pass.Init();
-#else
+#elif defined(RENDERER_OPENGL_ENABLED)
     if (!m_gl_pass_ready)
     {
         if (m_gl_pass.Init())
@@ -199,7 +199,7 @@ TbBool DisplacementEffect::Setup(long lens_idx)
             m_gl_pass_ready = true;
         }
         else
-            SYNCDBG(7, "GL displacement pass init failed — CPU fallback");
+            { SYNCDBG(7, "GL displacement pass init failed — CPU fallback"); }
     }
 #endif
     SYNCDBG(7, "Displacement effect ready (algo=%d, mag=%d, period=%d)",
@@ -213,13 +213,10 @@ void DisplacementEffect::Cleanup()
     m_current_lens = -1;
 #ifdef PLATFORM_VITA
     m_gpu_pass.Free();
-#else
+#elif defined(RENDERER_OPENGL_ENABLED)
     m_gl_pass.Free();
     m_gl_pass_ready = false;
-#endif
-}
-
-TbBool DisplacementEffect::Draw(LensRenderContext* ctx)
+#endif(LensRenderContext* ctx)
 {
     if (m_current_lens < 0)
     {

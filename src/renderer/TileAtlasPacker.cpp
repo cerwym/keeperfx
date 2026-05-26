@@ -38,7 +38,7 @@ bool TileAtlasPacker::InitPacker()
     m_rgba_scratch = (uint8_t*)malloc(sz);
     if (!m_rgba_scratch)
     {
-        ERRORLOG("TileAtlasPacker: failed to allocate scratch buffer (%zu bytes)", sz);
+        ERRORLOG("TileAtlasPacker: failed to allocate scratch buffer (%u bytes)", (unsigned)sz);
         return false;
     }
     return true;

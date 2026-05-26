@@ -650,7 +650,11 @@ static void set_config_check(const struct NamedFieldSet* named_fields_set, const
     char concatenated_values[MAX_TEXT_LENGTH];
     if (field->argnum == -1)
     {
-        snprintf(concatenated_values, sizeof(concatenated_values), "%s %s %s %s", scline->tp[2],scline->tp[3],scline->tp[4],scline->tp[5]);
+        snprintf(concatenated_values, sizeof(concatenated_values), "%.*s %.*s %.*s %.*s",
+            (int)(sizeof(concatenated_values)/4 - 2), scline->tp[2],
+            (int)(sizeof(concatenated_values)/4 - 2), scline->tp[3],
+            (int)(sizeof(concatenated_values)/4 - 2), scline->tp[4],
+            (int)(sizeof(concatenated_values)/4 - 2), scline->tp[5]);
         value->longs[1] = parse_named_field_value(field, concatenated_values,named_fields_set,id,src_str,ccf_SplitExecution|ccf_DuringLevel);
     }
     else
@@ -1671,7 +1675,7 @@ static void new_creature_type_check(const struct ScriptLine* scline)
 
     int i = game.conf.crtr_conf.model_count;
     game.conf.crtr_conf.model_count++;
-    snprintf(game.conf.crtr_conf.model[i].name, COMMAND_WORD_LEN, "%s", scline->tp[0]);
+    snprintf(game.conf.crtr_conf.model[i].name, COMMAND_WORD_LEN, "%.*s", COMMAND_WORD_LEN - 1, scline->tp[0]);
     creature_desc[i-1].name = game.conf.crtr_conf.model[i].name;
     creature_desc[i-1].num = i;
 
@@ -1701,7 +1705,7 @@ static void new_room_type_check(const struct ScriptLine* scline)
 
     roomst = get_room_kind_stats(i);
     memset(roomst->code_name, 0, COMMAND_WORD_LEN);
-    snprintf(roomst->code_name, COMMAND_WORD_LEN, "%s", scline->tp[0]);
+    snprintf(roomst->code_name, COMMAND_WORD_LEN, "%.*s", COMMAND_WORD_LEN - 1, scline->tp[0]);
     roomst->name_stridx = GUIStr_Empty;
     roomst->tooltip_stridx = GUIStr_Empty;
     roomst->creature_creation_model = 0;
@@ -1734,7 +1738,7 @@ static void new_object_type_check(const struct ScriptLine* scline)
     int tmodel = game.conf.object_conf.object_types_count -1;
     struct ObjectConfigStats* objst = get_object_model_stats(tmodel);
     memset(objst->code_name, 0, COMMAND_WORD_LEN);
-    snprintf(objst->code_name, COMMAND_WORD_LEN, "%s", scline->tp[0]);
+    snprintf(objst->code_name, COMMAND_WORD_LEN, "%.*s", COMMAND_WORD_LEN - 1, scline->tp[0]);
     objst->map_icon = 0;
     objst->hand_icon = 0;
     objst->genre = 0;
@@ -1755,7 +1759,7 @@ static void new_trap_type_check(const struct ScriptLine* scline)
     short i = game.conf.trapdoor_conf.trap_types_count-1;
     struct TrapConfigStats *trapst = get_trap_model_stats(i);
     memset(trapst->code_name, 0, COMMAND_WORD_LEN);
-    snprintf(trapst->code_name, COMMAND_WORD_LEN, "%s", scline->tp[0]);
+    snprintf(trapst->code_name, COMMAND_WORD_LEN, "%.*s", COMMAND_WORD_LEN - 1, scline->tp[0]);
     trapst->name_stridx = GUIStr_Empty;
     trapst->tooltip_stridx = GUIStr_Empty;
     trapst->bigsym_sprite_idx = 0;
@@ -5312,7 +5316,9 @@ static void set_game_rule_check(const struct ScriptLine* scline)
                 return;
             }
             plyr_idx = ALL_PLAYERS;
-            snprintf(rulevalue_str, MAX_TEXT_LENGTH, "%s %s", scline->tp[1], scline->tp[2]);
+            snprintf(rulevalue_str, MAX_TEXT_LENGTH, "%.*s %.*s",
+                (int)(MAX_TEXT_LENGTH/2 - 2), scline->tp[1],
+                (int)(MAX_TEXT_LENGTH/2 - 2), scline->tp[2]);
         }
     }
     ALLOCATE_SCRIPT_VALUE(scline->command, plyr_idx);

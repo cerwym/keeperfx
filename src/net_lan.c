@@ -191,8 +191,8 @@ void lan_refresh_sessions(void)
             entry->port = game_port;
         }
         if (entry) {
-            snprintf(entry->name, SESSION_NAME_MAX_LEN, "%s", payload);
-            snprintf(entry->lobby_id, SESSION_LOBBY_ID_MAX_LEN, "%s", parsed_lobby_id);
+            snprintf(entry->name, SESSION_NAME_MAX_LEN, "%.*s", SESSION_NAME_MAX_LEN - 1, payload);
+            snprintf(entry->lobby_id, SESSION_LOBBY_ID_MAX_LEN, "%.*s", SESSION_LOBBY_ID_MAX_LEN - 1, parsed_lobby_id);
             entry->last_seen_milliseconds = now;
         }
     }
@@ -209,10 +209,10 @@ void lan_refresh_sessions(void)
         entry->joinable = 1;
         entry->in_use = 1;
         entry->id = (unsigned long)lan_session_count;
-        snprintf(entry->text, SESSION_NAME_MAX_LEN, "%s", session_cache[i].name);
-        snprintf(entry->join_address, SESSION_LOBBY_ID_MAX_LEN, "LAN:%s:%d",
-            session_cache[i].ip, session_cache[i].port);
-        snprintf(entry->lobby_id, SESSION_LOBBY_ID_MAX_LEN, "%s", session_cache[i].lobby_id);
+        snprintf(entry->text, SESSION_NAME_MAX_LEN, "%.*s", SESSION_NAME_MAX_LEN - 1, session_cache[i].name);
+        snprintf(entry->join_address, SESSION_LOBBY_ID_MAX_LEN, "LAN:%.*s:%d",
+            (int)(SESSION_LOBBY_ID_MAX_LEN - 8), session_cache[i].ip, session_cache[i].port);
+        snprintf(entry->lobby_id, SESSION_LOBBY_ID_MAX_LEN, "%.*s", SESSION_LOBBY_ID_MAX_LEN - 1, session_cache[i].lobby_id);
     }
     session_cache_count = write_index;
 }

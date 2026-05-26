@@ -15,10 +15,19 @@
         "ffmpeg",
         "luajit",
         "zlib",
-        "glad",
         "curl",
-        "vulkan",
-        "vk-bootstrap",
-        "vulkan-memory-allocator"
+        "glad",
+        {
+            "name": "vulkan",
+            "platform": "windows"
+        },
+        {
+            "name": "vk-bootstrap",
+            "platform": "windows"
+        },
+        {
+            "name": "vulkan-memory-allocator",
+            "platform": "windows"
+        }
     ]
 }

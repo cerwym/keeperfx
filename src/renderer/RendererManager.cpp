@@ -63,9 +63,6 @@ static RendererType         s_activeType          = RENDERER_INVALID;
 // Consumed by RendererNeedsUIReinitAfterLoad to decide whether init_gui() is
 // required after a save-game load.  Starts true so the first load always reinits.
 static bool                 s_gui_sprites_dirty   = true;
-// Set by RendererNotifySpritesReloaded(); drained at the top of EndFrame() (after
-// WaitForCompletion) so the rebuild never races with in-flight IR commands.
-static bool                 s_rebuild_deferred    = false;
 static IWorldViewRenderer*  s_worldViewRenderer   = nullptr;
 static IMapFadePass*        s_mapFadePass         = nullptr;
 static ITextRenderer*       s_textRenderer        = nullptr;
@@ -74,6 +71,9 @@ static SoftwareUIRenderer*  s_softwareUIRenderer  = nullptr;  // non-null only i
 static ICursorLayer*        s_cursorLayer         = nullptr;
 #ifdef RENDERER_OPENGL_ENABLED
 static GLSpriteAtlas*       s_spriteAtlas         = nullptr;  // non-null only in GL mode
+// Set by RendererNotifySpritesReloaded(); drained at the top of EndFrame() (after
+// WaitForCompletion) so the rebuild never races with in-flight IR commands.
+static bool                 s_rebuild_deferred    = false;
 #endif
 // Software-mode sprite handle registry (GL mode uses s_spriteAtlas->GetHandle instead)
 static std::unordered_map<const TbSprite*, SpriteHandle> s_sprite_to_handle;
@@ -504,7 +504,9 @@ static IUIRenderer* create_ui_renderer(RendererType type)
 #endif
     (void)type;
     auto* swui = new SoftwareUIRenderer();
+#ifdef RENDERER_OPENGL_ENABLED
     s_spriteAtlas = nullptr;
+#endif
     s_softwareUIRenderer = swui;
     register_sheet_software(gui_panel_sprites);
     register_sheet_software(button_sprites);

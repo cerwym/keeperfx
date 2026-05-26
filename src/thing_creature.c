@@ -396,7 +396,7 @@ void draw_swipe_graphic(void)
         if (instance_draws_possession_swipe(cctrl->instance_id))
         {
             long n = (int)cctrl->inst_turn * (5 << 8) / cctrl->inst_total_turns;
-            long frame = max(((abs(n) >> 8) - 1), 0);
+            long frame = max(((labs(n) >> 8) - 1), 0);
             if (frame >= SWIPE_SPRITE_FRAMES)
                 frame = SWIPE_SPRITE_FRAMES - 1;
             RendererDrawSwipeOverlay(swipe_sprites, (int)frame,

@@ -254,7 +254,7 @@ TbBool MistEffect::Setup(long lens_idx)
         if (m_gl_pass.Init())
             m_gl_pass_ready = true;
         else
-            SYNCDBG(7, "GL mist pass init failed — CPU fallback");
+            { SYNCDBG(7, "GL mist pass init failed — CPU fallback"); }
     }
 #endif
     

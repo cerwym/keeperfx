@@ -823,8 +823,8 @@ extern "C" TbBool InitAudio(const SoundSettings * settings) {
 		KFX_ZONE_COLOR("InitAudio::upload_banks", KFX_COLOR_RENDER_CPU);
 		g_banks[0] = upload_decoded_bank(std::move(g_pending_banks[0]));
 		g_banks[1] = upload_decoded_bank(std::move(g_pending_banks[1]));
-		SYNCLOG("InitAudio: sound banks ready (banks: %zu + %zu samples)",
-			g_banks[0].size(), g_banks[1].size());
+		SYNCLOG("InitAudio: sound banks ready (banks: %u + %u samples)",
+			(unsigned)g_banks[0].size(), (unsigned)g_banks[1].size());
 		g_openal_device = std::move(device);
 		g_openal_context = std::move(context);
 		return true;

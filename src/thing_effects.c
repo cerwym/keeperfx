@@ -1626,7 +1626,7 @@ struct Thing *create_price_effect(const struct Coord3d *pos, long plyr_idx, long
     struct Thing* elemtng = create_effect_element(pos, TngEffElm_Price, plyr_idx);
     TRACE_THING(elemtng);
     if (!thing_is_invalid(elemtng)) {
-        elemtng->price_effect.number = abs(price);
+        elemtng->price_effect.number = labs(price);
     }
     return elemtng;
 }

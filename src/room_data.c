@@ -1521,7 +1521,7 @@ TbBool find_random_valid_position_for_thing_in_room(struct Thing *thing, struct 
         ERRORLOG("Number of slabs %d for %s is not positive",(int)room->slabs_count,room_code_name(room->kind));
         return false;
     }
-    int navi_radius = abs(thing_nav_block_sizexy(thing) << 8) >> 1;
+    int navi_radius = labs(thing_nav_block_sizexy(thing) << 8) >> 1;
     unsigned long k;
     long n = THING_RANDOM(thing, room->slabs_count);
     SlabCodedCoords slbnum = room->slabs_list;

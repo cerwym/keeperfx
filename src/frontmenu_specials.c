@@ -120,7 +120,7 @@ int selected_resurrect_creature(const struct Dungeon *dungeon, const struct GuiB
     {
         listitm_idx = resurrect_creature_scroll_offset + (gbtn->btype_value & LbBFeF_IntValueMask);
         if (listitm_idx < DEAD_CREATURES_MAX_COUNT) {
-            return abs(dungeon->dead_creature_idx + listitm_idx) % DEAD_CREATURES_MAX_COUNT;
+            return labs(dungeon->dead_creature_idx + listitm_idx) % DEAD_CREATURES_MAX_COUNT;
         }
     }
     return -1;

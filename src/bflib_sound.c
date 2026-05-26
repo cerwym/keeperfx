@@ -390,7 +390,7 @@ long get_emitter_pan(const struct SoundReceiver *recv, const struct SoundEmitter
     long diff_x = emit->pos.val_x - (long)recv->pos.val_x;
     long diff_y = emit->pos.val_y - (long)recv->pos.val_y;
     // Faster way of doing simple thing: radius = sqrt(dist_x*dist_y);
-    long radius = LbDiagonalLength(abs(diff_x), abs(diff_y));
+    long radius = LbDiagonalLength(labs(diff_x), labs(diff_y));
     if (radius < deadzone_radius) {
       return 64;
     }
@@ -423,7 +423,7 @@ long get_emitter_pitch_from_doppler(const struct SoundReceiver *recv, struct Sou
     long next_pitch = emit->curr_pitch;
     if (next_pitch != target_pitch)
     {
-        next_pitch += (abs(target_pitch - next_pitch) >> 1);
+        next_pitch += (labs(target_pitch - next_pitch) >> 1);
     }
     emit->target_pitch = target_pitch;
     emit->curr_pitch = next_pitch;

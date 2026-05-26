@@ -58,26 +58,26 @@ jobs:
       - name: Mark git directory as safe
         run: git config --global --add safe.directory '*'
 
-      - name: Install extra dependencies (Linux)
-        if: contains(matrix.image, 'linux')
-        run: apt-get update -qq && apt-get install -y --no-install-recommends libcurl4-openssl-dev
+      # Export the two env-vars that vcpkg needs to use the GitHub Actions binary cache.
+      # Doing this in the Docker container requires github-script to be run on the host
+      # runner; the env-vars are then forwarded into the container via the `env:` map.
+      - name: Export vcpkg binary-cache env vars
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
 
-      - name: Install extra dependencies (MinGW x64)
-        if: matrix.image == 'mingw64'
+      - name: Bootstrap vcpkg
         run: |
-          TMP=$(mktemp -d)
-          curl -fsSL "https://curl.se/windows/latest.cgi?p=win64-mingw.zip" -o "${TMP}/curl.zip"
-          unzip -q "${TMP}/curl.zip" -d "${TMP}/curl"
-          CURL_DIR=$(ls -d "${TMP}/curl"/curl-*-win64-mingw 2>/dev/null | head -1)
-          cp -r "${CURL_DIR}/include/." /usr/x86_64-w64-mingw32/include/
-          cp    "${CURL_DIR}/lib/libcurl.dll.a" /usr/x86_64-w64-mingw32/lib/ 2>/dev/null || true
-          cp    "${CURL_DIR}/lib/libcurl.a"     /usr/x86_64-w64-mingw32/lib/ 2>/dev/null || true
-          rm -rf "${TMP}"
+          chmod +x ./external/vcpkg/bootstrap-vcpkg.sh
+          ./external/vcpkg/bootstrap-vcpkg.sh -disableMetrics
 
       - name: Configure CMake
         run: cmake --preset ${{ matrix.preset }}
         env:
           CMAKE_BUILD_PARALLEL_LEVEL: 4
+          VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
 
       - name: Build
         run: cmake --build --preset ${{ matrix.preset }}
@@ -113,23 +113,31 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
+      # Export the two env-vars vcpkg needs for its GitHub Actions binary cache.
+      # This lets vcpkg cache every compiled package individually so only changed
+      # packages are rebuilt — keeps configure time under ~2 min once primed.
+      - name: Export vcpkg binary-cache env vars
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
+        env:
+          VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
         with:
           vcpkgGitCommitId: '9558037875497b9db8cf38fcd7db68ec661bffe7'
           vcpkgDirectory: '${{ github.workspace }}/external/vcpkg'
-
-      - name: Cache vcpkg packages
-        uses: actions/cache@v4
-        with:
-          path: ${{ github.workspace }}/../vcpkg_installed_x64
-          key: vcpkg-msvc-x64-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}
 
       - name: Setup CMake and Ninja
         uses: lukka/get-cmake@latest
 
       - name: Configure CMake
         uses: lukka/run-cmake@v10
+        env:
+          VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
         with:
           configurePreset: x64-windows-static-debug
 

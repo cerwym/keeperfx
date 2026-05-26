@@ -21,7 +21,7 @@
 
 #ifdef PLATFORM_VITA
 #include "renderer/vita/VitaOverlayPass.h"
-#else
+#elif defined(RENDERER_OPENGL_ENABLED)
 #include "renderer/opengl/GLLensPass.h"
 #endif
 
@@ -42,7 +42,11 @@ public:
     }
 #else
     virtual IPostProcessPass* GetGPUPass() override {
+#ifdef RENDERER_OPENGL_ENABLED
         return m_gl_pass_ready ? &m_gl_pass : nullptr;
+#else
+        return nullptr;
+#endif
     }
 #endif
 
@@ -51,7 +55,7 @@ private:
 
 #ifdef PLATFORM_VITA
     VitaOverlayPass m_gpu_pass;
-#else
+#elif defined(RENDERER_OPENGL_ENABLED)
     GLOverlayPass m_gl_pass;
     bool m_gl_pass_ready = false;
 #endif

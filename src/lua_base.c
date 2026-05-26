@@ -79,7 +79,7 @@ int setLuaPath( lua_State* L)
     lua_getglobal(L, "package");
     lua_getfield(L, -1, "path"); // get field "path" from table at top of stack (-1)
     const char *cur_path = lua_tostring(L, -1); // grab path string from top of stack
-    char new_path[PATH_LENGTH];
+    char new_path[PATH_LENGTH * 4];
     snprintf(new_path, sizeof(new_path), "%s;%s;%s;%s", levelpath,campaignpath,fx_data_path,cur_path);
     lua_pop(L, 1); // get rid of the string on the stack we just pushed on line 5
     lua_pushstring(L, new_path); // push the new one
@@ -392,7 +392,7 @@ void cleanup_serialized_data() {
 
 void generate_lua_types_file()
 {
-    char filepath[DISKPATH_SIZE];
+    char filepath[DISKPATH_SIZE + 32];
     snprintf(filepath, sizeof(filepath), "%s/native_types.lua", keeper_runtime_directory);
     TbFileHandle out = LbFileOpen(filepath, Lb_FILE_MODE_NEW);
     if (!out) {

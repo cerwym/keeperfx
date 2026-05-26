@@ -1408,7 +1408,7 @@ short anim_open(char *fname, int arg1, short arg2, int width, int height, int bp
 				return false;
 			}
 		} else {
-			LbFileSeek(animation.inpfhndl, -sizeof(AnimFLIChunk), Lb_FILE_SEEK_CURRENT);
+			LbFileSeek(animation.inpfhndl, -(long)sizeof(AnimFLIChunk), Lb_FILE_SEEK_CURRENT);
 		}
 		animation.frame_count = 0;
 	}

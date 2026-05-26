@@ -4184,7 +4184,9 @@ short process_command_line(unsigned short argc, char *argv[])
       {
         // append bad parstr to bad_params string
         char param_buffer[128] = "";
-        snprintf(param_buffer, sizeof(param_buffer), "%s%s", strnlen(bad_params, TEXT_BUFFER_LENGTH) > 0 ? ", " : "" , parstr);
+        snprintf(param_buffer, sizeof(param_buffer), "%s%.*s",
+            strnlen(bad_params, TEXT_BUFFER_LENGTH) > 0 ? ", " : "",
+            (int)(sizeof(param_buffer) - 3), parstr);
         str_append(bad_params, sizeof(bad_params), param_buffer);
         bad_param=narg;
       }

@@ -1815,7 +1815,7 @@ static void autofill_savegame_name(struct GuiButton *gbtn)
 
     struct TbDate curr_date;
     struct TbTime curr_time;
-    char datetime_buf[12];
+    char datetime_buf[16];
     if (LbDateTime(&curr_date, &curr_time) >= Lb_OK)
     {
         unsigned int year2 = (unsigned int)(curr_date.Year % 100);

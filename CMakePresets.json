@@ -12,7 +12,8 @@
             "cacheVariables": {
                 "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}",
                 "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/external/vcpkg/scripts/buildsystems/vcpkg.cmake",
-                "VCPKG_INSTALLED_DIR": "${sourceDir}/../vcpkg_installed"
+                "VCPKG_INSTALLED_DIR": "${sourceDir}/../vcpkg_installed",
+                "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/build/vcpkg-triplets"
             }
         },
 
@@ -90,13 +91,17 @@
         {
             "name": "linux-base",
             "displayName": "Linux Base",
-            "description": "Base for Linux native builds (no vcpkg toolchain; uses system packages)",
+            "description": "Base for Linux native builds (vcpkg x64-linux-keeperfx triplet)",
             "hidden": true,
             "generator": "Ninja",
             "binaryDir": "${sourceDir}/out/build/${presetName}",
             "installDir": "${sourceDir}/out/install/${presetName}",
             "cacheVariables": {
-                "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}"
+                "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}",
+                "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/external/vcpkg/scripts/buildsystems/vcpkg.cmake",
+                "VCPKG_INSTALLED_DIR": "${sourceDir}/../vcpkg_installed",
+                "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/build/vcpkg-triplets",
+                "VCPKG_TARGET_TRIPLET": "x64-linux-keeperfx"
             }
         },
         
@@ -237,13 +242,16 @@
         {
             "name": "cross-base",
             "displayName": "Cross-Compile Base",
-            "description": "Base for Docker/Linux cross-compile builds (no vcpkg; toolchain set per-preset)",
+            "description": "Base for Docker/Linux cross-compile builds (vcpkg; triplet set per-preset)",
             "hidden": true,
             "generator": "Ninja",
             "binaryDir": "${sourceDir}/out/build/${presetName}",
             "installDir": "${sourceDir}/out/install/${presetName}",
             "cacheVariables": {
-                "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}"
+                "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}",
+                "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/external/vcpkg/scripts/buildsystems/vcpkg.cmake",
+                "VCPKG_INSTALLED_DIR": "${sourceDir}/../vcpkg_installed",
+                "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/build/vcpkg-triplets"
             }
         },
 
@@ -292,9 +300,9 @@
             "description": "Cross-compile for Windows x86 from Linux using i686-w64-mingw32. Designed for use inside the keeperfx-build-mingw32 Docker image.",
             "inherits": [ "cross-base", "Release" ],
             "cacheVariables": {
-                "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build/cmake/toolchains/mingw32.cmake",
                 "CMAKE_EXPORT_COMPILE_COMMANDS": "on",
-                "CMAKE_BUILD_TYPE": "Release"
+                "CMAKE_BUILD_TYPE": "Release",
+                "VCPKG_TARGET_TRIPLET": "x86-mingw-cross"
             }
         },
 
@@ -305,8 +313,8 @@
             "description": "Cross-compile for Windows x86 from Linux using i686-w64-mingw32, with full debug symbols. For use inside the keeperfx-build-mingw32 Docker image.",
             "inherits": [ "cross-base", "Debug" ],
             "cacheVariables": {
-                "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build/cmake/toolchains/mingw32.cmake",
-                "CMAKE_EXPORT_COMPILE_COMMANDS": "on"
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "on",
+                "VCPKG_TARGET_TRIPLET": "x86-mingw-cross"
             }
         },
 
@@ -317,9 +325,9 @@
             "description": "Cross-compile for Windows x64 from Linux using x86_64-w64-mingw32. Designed for use inside the keeperfx-build-mingw64 Docker image.",
             "inherits": [ "cross-base", "Release" ],
             "cacheVariables": {
-                "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build/cmake/toolchains/mingw64.cmake",
                 "CMAKE_EXPORT_COMPILE_COMMANDS": "on",
-                "CMAKE_BUILD_TYPE": "Release"
+                "CMAKE_BUILD_TYPE": "Release",
+                "VCPKG_TARGET_TRIPLET": "x64-mingw-cross"
             }
         },
 
@@ -330,8 +338,8 @@
             "description": "Cross-compile for Windows x64 from Linux using x86_64-w64-mingw32, with full debug symbols. For use inside the keeperfx-build-mingw64 Docker image.",
             "inherits": [ "cross-base", "Debug" ],
             "cacheVariables": {
-                "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build/cmake/toolchains/mingw64.cmake",
-                "CMAKE_EXPORT_COMPILE_COMMANDS": "on"
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "on",
+                "VCPKG_TARGET_TRIPLET": "x64-mingw-cross"
             }
         },
 

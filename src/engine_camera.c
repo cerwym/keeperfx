@@ -97,7 +97,7 @@ MapCoordDelta get_2d_distance(const struct Coord3d *pos1, const struct Coord3d *
 {
     long dist_x = (long)pos1->x.val - (long)pos2->x.val;
     long dist_y = (long)pos1->y.val - (long)pos2->y.val;
-    return LbDiagonalLength(abs(dist_x), abs(dist_y));
+    return LbDiagonalLength(labs(dist_x), labs(dist_y));
 }
 
 MapCoordDelta get_2d_distance_squared(const struct Coord3d *pos1, const struct Coord3d *pos2)
@@ -287,7 +287,7 @@ unsigned long scale_camera_zoom_to_screen(unsigned long zoom_lvl)
 
 void view_set_camera_y_inertia(struct Camera *cam, long delta, long ilimit)
 {
-    long abslimit = abs(ilimit);
+    long abslimit = labs(ilimit);
     cam->inertia_y += delta;
     if (cam->inertia_y < -abslimit) {
         cam->inertia_y = -abslimit;
@@ -300,7 +300,7 @@ void view_set_camera_y_inertia(struct Camera *cam, long delta, long ilimit)
 
 void view_set_camera_x_inertia(struct Camera *cam, long delta, long ilimit)
 {
-    long abslimit = abs(ilimit);
+    long abslimit = labs(ilimit);
     cam->inertia_x += delta;
     if (cam->inertia_x < -abslimit) {
         cam->inertia_x = -abslimit;
@@ -313,7 +313,7 @@ void view_set_camera_x_inertia(struct Camera *cam, long delta, long ilimit)
 
 void view_set_camera_rotation_inertia(struct Camera *cam, long delta, long ilimit)
 {
-    int limit_val = abs(ilimit);
+    int limit_val = labs(ilimit);
     int new_val = delta + cam->inertia_rotation;
     cam->inertia_rotation = new_val;
     if (new_val < -limit_val)

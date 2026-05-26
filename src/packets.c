@@ -1224,7 +1224,7 @@ void process_first_person_look(struct Thing *thing, struct Packet *pckt, long cu
     long lowerLimit = ANGLE_MASK - 227;
     long upperLimit = 227;
     if (verticalPos > upperLimit && verticalPos < lowerLimit) {
-        if (abs(verticalPos - upperLimit) < abs(verticalPos - lowerLimit)) {
+        if (labs(verticalPos - upperLimit) < labs(verticalPos - lowerLimit)) {
             verticalPos = upperLimit;
         } else {
             verticalPos = lowerLimit;
