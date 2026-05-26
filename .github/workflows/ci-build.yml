@@ -31,21 +31,25 @@ jobs:
           - name: Windows x86
             image: mingw32
             preset: windows-x86-release
+            vcpkg-triplet: x86-mingw-cross
             artifact-name: keeperfx-windows-x86
 
           - name: Windows x64
             image: mingw64
             preset: windows-x64-release
+            vcpkg-triplet: x64-mingw-cross
             artifact-name: keeperfx-windows-x64
 
           - name: Linux x64
             image: linux
             preset: linux-x64-release
+            vcpkg-triplet: x64-linux-keeperfx
             artifact-name: keeperfx-linux-x64
 
           - name: Linux x64 (ASAN)
             image: linux
             preset: linux-x64-asan
+            vcpkg-triplet: x64-linux-keeperfx
             artifact-name: keeperfx-linux-x64-asan
 
     steps:
@@ -62,7 +66,7 @@ jobs:
       # These are baked into rebuilt Docker images but we install here as a
       # safety net while old images are still in the registry.
       - name: Install vcpkg prerequisites
-        run: apt-get update -qq && apt-get install -y --no-install-recommends zip python3 nasm
+        run: apt-get update -qq && apt-get install -y --no-install-recommends zip unzip python3 nasm
 
       # Export the two env-vars that vcpkg needs to use the GitHub Actions binary cache.
       # Doing this in the Docker container requires github-script to be run on the host
@@ -78,6 +82,15 @@ jobs:
         run: |
           chmod +x ./external/vcpkg/bootstrap-vcpkg.sh
           ./external/vcpkg/bootstrap-vcpkg.sh -disableMetrics
+
+      - name: Install vcpkg packages
+        run: |
+          ./external/vcpkg/vcpkg install \
+            --triplet ${{ matrix.vcpkg-triplet }} \
+            --overlay-triplets build/vcpkg-triplets \
+            --x-install-root=vcpkg_installed
+        env:
+          VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
 
       - name: Configure CMake
         run: cmake --preset ${{ matrix.preset }}
