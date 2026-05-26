@@ -36,12 +36,6 @@ jobs:
             vcpkg-triplet: x86-mingw-cross
             artifact-name: keeperfx-windows-x86
 
-          - name: Windows x64
-            image: mingw64
-            preset: windows-x64-release
-            vcpkg-triplet: x64-mingw-cross
-            artifact-name: keeperfx-windows-x64
-
           - name: Linux x64
             image: linux
             preset: linux-x64-release
