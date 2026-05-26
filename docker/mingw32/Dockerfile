@@ -43,6 +43,10 @@ RUN dpkg --add-architecture i386 \
         ca-certificates \
         python3 \
         nasm \
+        autoconf \
+        automake \
+        libtool \
+        perl \
     && rm -rf /var/lib/apt/lists/*
 
 # ── KFX build tools → /usr/local/bin ────────────────────────────────────────

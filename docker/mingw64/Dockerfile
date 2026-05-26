@@ -22,6 +22,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # ── Toolchain & build tools ──────────────────────────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
         gcc-mingw-w64-x86-64-posix \
         g++-mingw-w64-x86-64-posix \
         cmake \
@@ -33,6 +34,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
         python3 \
         nasm \
+        autoconf \
+        automake \
+        libtool \
+        perl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src

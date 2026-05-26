@@ -34,6 +34,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
         python3 \
         nasm \
+        autoconf \
+        automake \
+        libtool \
         # SDL2 system dependencies (needed for vcpkg's SDL2 port to compile)
         libx11-dev \
         libxext-dev \
