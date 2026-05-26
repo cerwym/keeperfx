@@ -121,18 +121,11 @@ jobs:
             /usr/local/vitasdk/arm-vita-eabi/include/vitaGL.h
           key: vitagl-externalproject-${{ matrix.preset }}-${{ hashFiles('CMakeLists.txt') }}
 
-      - name: Setup CMake and Ninja
-        uses: lukka/get-cmake@latest
-
       - name: Configure CMake
-        uses: lukka/run-cmake@v10
-        with:
-          configurePreset: ${{ matrix.preset }}
+        run: cmake --preset ${{ matrix.preset }}
 
       - name: Build
-        uses: lukka/run-cmake@v10
-        with:
-          buildPreset: ${{ matrix.preset }}
+        run: cmake --build --preset ${{ matrix.preset }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

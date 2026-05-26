@@ -123,11 +123,11 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Setup vcpkg
-        uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgGitCommitId: '9558037875497b9db8cf38fcd7db68ec661bffe7'
-          vcpkgDirectory: '${{ github.workspace }}/external/vcpkg'
+      - name: Bootstrap vcpkg
+        shell: pwsh
+        run: |
+          cd external/vcpkg
+          .\bootstrap-vcpkg.bat -disableMetrics
 
       - name: Cache vcpkg packages
         uses: actions/cache@v4
@@ -135,18 +135,15 @@ jobs:
           path: ${{ github.workspace }}/../vcpkg_installed_x64
           key: vcpkg-msvc-x64-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}
 
-      - name: Setup CMake and Ninja
-        uses: lukka/get-cmake@latest
-
       - name: Configure CMake
-        uses: lukka/run-cmake@v10
-        with:
-          configurePreset: x64-windows-static-release
+        shell: pwsh
+        run: cmake --preset x64-windows-static-release
+        env:
+          VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
 
       - name: Build
-        uses: lukka/run-cmake@v10
-        with:
-          buildPreset: x64-windows-static-release
+        shell: pwsh
+        run: cmake --build --preset x64-windows-static-release
 
       - name: Package artifacts
         run: |
@@ -180,11 +177,10 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Setup vcpkg
-        uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgGitCommitId: '9558037875497b9db8cf38fcd7db68ec661bffe7'
-          vcpkgDirectory: '${{ github.workspace }}/external/vcpkg'
+      - name: Bootstrap vcpkg
+        run: |
+          chmod +x ./external/vcpkg/bootstrap-vcpkg.sh
+          ./external/vcpkg/bootstrap-vcpkg.sh -disableMetrics
 
       - name: Cache vcpkg packages
         uses: actions/cache@v4
@@ -192,18 +188,13 @@ jobs:
           path: ${{ github.workspace }}/../vcpkg_installed_macos
           key: vcpkg-macos-universal-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}
 
-      - name: Setup CMake and Ninja
-        uses: lukka/get-cmake@latest
-
       - name: Configure CMake
-        uses: lukka/run-cmake@v10
-        with:
-          configurePreset: macos-universal
+        run: cmake --preset macos-universal
+        env:
+          VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
 
       - name: Build
-        uses: lukka/run-cmake@v10
-        with:
-          buildPreset: macos-universal
+        run: cmake --build --preset macos-universal
 
       - name: Package artifacts
         run: |
@@ -242,18 +233,11 @@ jobs:
         with:
           version: 'latest'
 
-      - name: Setup CMake and Ninja
-        uses: lukka/get-cmake@latest
-
       - name: Configure CMake
-        uses: lukka/run-cmake@v10
-        with:
-          configurePreset: wasm-release
+        run: cmake --preset wasm-release
 
       - name: Build
-        uses: lukka/run-cmake@v10
-        with:
-          buildPreset: wasm-release
+        run: cmake --build --preset wasm-release
 
       - name: Package artifacts
         run: |
@@ -321,18 +305,11 @@ jobs:
       - name: Mark git directory as safe
         run: git config --global --add safe.directory '*'
 
-      - name: Setup CMake and Ninja
-        uses: lukka/get-cmake@latest
-
       - name: Configure CMake
-        uses: lukka/run-cmake@v10
-        with:
-          configurePreset: ${{ matrix.preset }}
+        run: cmake --preset ${{ matrix.preset }}
 
       - name: Build
-        uses: lukka/run-cmake@v10
-        with:
-          buildPreset: ${{ matrix.preset }}
+        run: cmake --build --preset ${{ matrix.preset }}
 
       - name: Package artifacts
         run: |
