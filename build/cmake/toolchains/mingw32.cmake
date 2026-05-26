@@ -9,4 +9,6 @@ set(CMAKE_RC_COMPILER  ${TOOLCHAIN_PREFIX}-windres)
 set(CMAKE_FIND_ROOT_PATH /usr/${TOOLCHAIN_PREFIX})
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
 set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
-set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+# BOTH so vcpkg cmake-wrapper find_path/find_library can resolve absolute
+# vcpkg_installed paths directly without re-rooting through the sysroot.
+set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE BOTH)

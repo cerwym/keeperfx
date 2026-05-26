@@ -55,11 +55,11 @@ jobs:
       # vcpkg bootstrap compiles from source and needs zip + python3.
       # These are baked into rebuilt Docker images but we install here as a
       # safety net while old images are still in the registry.
-      # autoconf/libtool: needed by alsa vcpkg port (autotools-based)
+      # autoconf/automake/libtool: needed by alsa vcpkg port (autotools-based)
       # gcc-multilib/libc6-dev-i386: needed for luajit buildvm-32 on x64 host
       # pkg-config: needed by vcpkg_fixup_pkgconfig for mingw cross-builds
       - name: Install vcpkg prerequisites
-        run: apt-get update -qq && apt-get install -y --no-install-recommends zip unzip python3 nasm autoconf libtool gcc-multilib libc6-dev-i386 pkg-config
+        run: apt-get update -qq && apt-get install -y --no-install-recommends zip unzip python3 nasm autoconf automake libtool gcc-multilib libc6-dev-i386 pkg-config
 
       - name: Export vcpkg binary-cache env vars
         run: |
