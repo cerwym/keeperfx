@@ -27,6 +27,7 @@ configure_file(${KEEPERFX_VER_DEFS_H_IN} ${KEEPERFX_VER_DEFS_H_OUT})
 # Build Options
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 option(KEEPERFX_USE_NSIGHT "Launch with Nvidia Nsight Graphics for GPU debugging (MSVC only)" OFF)
+option(KEEPERFX_HVLOG     "Build with high-verbosity logging (BFDEBUG_LEVEL=10)" OFF)
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Load CMake Modules

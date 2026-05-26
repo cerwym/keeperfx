@@ -52,8 +52,6 @@ PKG_MP_MAPPACK_FILES := $(patsubst multiplayer/%,pkg/multiplayer/%,$(shell find 
 PKG_MP_MAPPACK_DIRS = $(sort $(dir $(PKG_MP_MAPPACK_FILES)))
 PKG_BIN = pkg/$(notdir $(BIN))
 PKG_BIN_MAP = $(PKG_BIN:%.exe=%.map)
-PKG_HVLOGBIN = pkg/$(notdir $(HVLOGBIN))
-PKG_HVLOGBIN_MAP = $(PKG_HVLOGBIN:%.exe=%.map)
 PKG_DOCS = \
 	pkg/keeperfx_readme.txt \
 	pkg/launcher-auto-file-removal.txt
@@ -70,8 +68,6 @@ PKG_FILES = \
 	pkg/keeperfx.cfg \
 	$(PKG_BIN) \
 	$(PKG_BIN_MAP) \
-	$(PKG_HVLOGBIN) \
-	$(PKG_HVLOGBIN_MAP) \
 	$(PKG_DOCS)
 
 .PHONY: package
@@ -93,14 +89,8 @@ pkg/keeperfx.cfg: config/keeperfx.cfg | pkg
 $(PKG_BIN): $(BIN) | pkg
 	$(CP) $^ $@
 
-$(PKG_HVLOGBIN): $(HVLOGBIN) | pkg
-	$(CP) $^ $@
-
 $(PKG_BIN_MAP): $(BIN) | pkg
 	$(CP) $(BIN:%.exe=%.map) $@
-
-$(PKG_HVLOGBIN_MAP): $(HVLOGBIN) | pkg
-	$(CP) $(HVLOGBIN:%.exe=%.map) $@
 
 pkg/%.txt: docs/%.txt | pkg
 	$(CP) $^ $@

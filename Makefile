@@ -19,7 +19,6 @@ EXEEXT = .exe
 BUILD_PRESET = windows-x86-release
 BUILD_DIR    = out/build/$(BUILD_PRESET)
 BIN          = $(BUILD_DIR)/keeperfx$(EXEEXT)
-HVLOGBIN     = $(BUILD_DIR)/keeperfx_hvlog$(EXEEXT)
 
 RM    = rm -f
 CP    = cp -f

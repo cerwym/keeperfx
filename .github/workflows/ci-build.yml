@@ -173,7 +173,6 @@ jobs:
           name: keeperfx-windows-x64-msvc-debug
           path: |
             out/build/x64-windows-static-debug/keeperfx*.exe
-            out/build/x64-windows-static-debug/keeperfx_hvlog*.exe
             out/build/x64-windows-static-debug/*.pdb
             out/build/x64-windows-static-debug/*.map
           if-no-files-found: warn

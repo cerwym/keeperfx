@@ -1,5 +1,5 @@
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# BuildTargets.cmake — Target definitions (keeperfx, keeperfx_hvlog, tests)
+# BuildTargets.cmake — Target definitions (keeperfx, tests)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 # ━━━ Source File Collection ━━━
@@ -172,7 +172,7 @@ if(PLATFORM_VITA OR PLATFORM_3DS OR PLATFORM_SWITCH)
     target_link_libraries(centitoml PUBLIC centijson_static)
 endif()
 
-# ━━━ Main Targets: keeperfx & keeperfx_hvlog ━━━
+# ━━━ Main Target: keeperfx ━━━
 add_executable(keeperfx ${KEEPERFX_SOURCES_C} ${KEEPERFX_SOURCES_CXX})
 if(MSVC)
     set_target_properties(keeperfx PROPERTIES
@@ -181,7 +181,11 @@ if(MSVC)
     )
 endif()
 target_include_directories(keeperfx PRIVATE src deps/centitoml deps/centijson/include)
-target_compile_definitions(keeperfx PUBLIC BFDEBUG_LEVEL=0)
+if(KEEPERFX_HVLOG)
+    target_compile_definitions(keeperfx PUBLIC BFDEBUG_LEVEL=10)
+else()
+    target_compile_definitions(keeperfx PUBLIC BFDEBUG_LEVEL=0)
+endif()
 if(WIN32)
     target_sources(keeperfx PRIVATE "res/keeperfx_stdres.rc")
 endif()
@@ -228,30 +232,8 @@ if(KEEPERFX_TRACY AND TARGET TracyClient)
     target_link_libraries(keeperfx PRIVATE TracyClient)
 endif()
 
-add_executable(keeperfx_hvlog ${KEEPERFX_SOURCES_C} ${KEEPERFX_SOURCES_CXX})
-target_include_directories(keeperfx_hvlog PRIVATE src deps/centitoml deps/centijson/include)
-target_compile_definitions(keeperfx_hvlog PUBLIC BFDEBUG_LEVEL=10)
-if(WIN32)
-    target_sources(keeperfx_hvlog PRIVATE "res/keeperfx_stdres.rc")
-endif()
-apply_keeperfx_warnings(keeperfx_hvlog)
-apply_keeperfx_link_flags(keeperfx_hvlog)
-apply_windows_system_libs(keeperfx_hvlog)
-
-kfx_link_sdl2_target(keeperfx_hvlog)
-
-# Link glad for OpenGL renderer (hvlog target mirrors keeperfx)
-if(KEEPERFX_RENDERER_OPENGL AND TARGET glad::glad)
-    target_link_libraries(keeperfx_hvlog PRIVATE glad::glad)
-endif()
-
-# Link Tracy profiler (hvlog mirrors keeperfx)
-if(KEEPERFX_TRACY AND TARGET TracyClient)
-    target_link_libraries(keeperfx_hvlog PRIVATE TracyClient)
-endif()
-
 # ━━━ All main KeeperFX targets — used by Platform*.cmake modules ━━━
-set(KFX_TARGETS keeperfx keeperfx_hvlog)
+set(KFX_TARGETS keeperfx)
 
 # ━━━ OpenGL shaders are now embedded in the executable ━━━
 # Previously copied from src/renderer/opengl/shaders/ but now included as constants

@@ -110,11 +110,7 @@ _backtrace(int depth, LPCONTEXT context)
     int64_t keeperFxBaseAddr = 0x00000000;
     char mapFileLine[512];
 
-    #if (BFDEBUG_LEVEL > 7)
-        FILE *mapFile = fopen("keeperfx_hvlog.map", "r");
-    #else
-        FILE *mapFile = fopen("keeperfx.map", "r");
-    #endif
+    FILE *mapFile = fopen("keeperfx.map", "r");
 
     if (mapFile)
     {
