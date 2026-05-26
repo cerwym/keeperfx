@@ -25,6 +25,7 @@ extern "C" {
 #endif
 
 struct Thing;
+struct Room;
 
 void lua_on_chatmsg(PlayerNumber plyr_idx, char *msg);
 void lua_on_game_start();

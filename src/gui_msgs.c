@@ -289,7 +289,7 @@ void targeted_message_add(char type, PlayerNumber plyr_idx, PlayerNumber target_
     {
         memcpy(&game.messages[i], &game.messages[i-1], sizeof(struct GuiMessage));
     }
-    snprintf(game.messages[0].text, sizeof(game.messages[0].text), "%s", full_msg_text);
+    snprintf(game.messages[0].text, sizeof(game.messages[0].text), "%.*s", (int)(sizeof(game.messages[0].text) - 1), full_msg_text);
     game.messages[0].plyr_idx = plyr_idx;
     game.messages[0].expiration_turn = get_gameturn() + timeout;
     game.messages[0].target_idx = target_idx;
