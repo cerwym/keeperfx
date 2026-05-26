@@ -62,11 +62,16 @@ jobs:
       - name: Install vcpkg prerequisites
         run: apt-get update -qq && apt-get install -y --no-install-recommends zip unzip python3 python3-venv nasm autoconf autoconf-archive automake libtool libltdl-dev gcc-multilib libc6-dev-i386 pkg-config
 
-      - name: Enable vcpkg binary caching (x-gha)
-        run: |
-          echo "VCPKG_BINARY_SOURCES=clear;x-gha,readwrite" >> $GITHUB_ENV
-          echo "ACTIONS_CACHE_URL=${ACTIONS_CACHE_URL}" >> $GITHUB_ENV
-          echo "ACTIONS_RUNTIME_TOKEN=${ACTIONS_RUNTIME_TOKEN}" >> $GITHUB_ENV
+      - name: Cache vcpkg binary packages
+        uses: actions/cache@v4
+        with:
+          path: /tmp/vcpkg-cache
+          key: vcpkg-bin-${{ matrix.vcpkg-triplet }}-${{ hashFiles('vcpkg.json', 'build/vcpkg-triplets/**', 'build/vcpkg-ports/**') }}
+          restore-keys: |
+            vcpkg-bin-${{ matrix.vcpkg-triplet }}-
+
+      - name: Enable vcpkg binary caching (files)
+        run: echo "VCPKG_BINARY_SOURCES=clear;files,/tmp/vcpkg-cache,readwrite" >> $GITHUB_ENV
 
       - name: Cache vcpkg bootstrap binary
         id: cache-vcpkg-bootstrap
@@ -143,12 +148,17 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Enable vcpkg binary caching (x-gha)
+      - name: Cache vcpkg binary packages
+        uses: actions/cache@v4
+        with:
+          path: C:\vcpkg-cache
+          key: vcpkg-bin-x64-windows-static-${{ hashFiles('vcpkg.json', 'build/vcpkg-triplets/**', 'build/vcpkg-ports/**') }}
+          restore-keys: |
+            vcpkg-bin-x64-windows-static-
+
+      - name: Enable vcpkg binary caching (files)
         shell: bash
-        run: |
-          echo "VCPKG_BINARY_SOURCES=clear;x-gha,readwrite" >> $GITHUB_ENV
-          echo "ACTIONS_CACHE_URL=${ACTIONS_CACHE_URL}" >> $GITHUB_ENV
-          echo "ACTIONS_RUNTIME_TOKEN=${ACTIONS_RUNTIME_TOKEN}" >> $GITHUB_ENV
+        run: echo "VCPKG_BINARY_SOURCES=clear;files,C:/vcpkg-cache,readwrite" >> $GITHUB_ENV
 
       - name: Cache vcpkg bootstrap binary
         id: cache-vcpkg-bootstrap
