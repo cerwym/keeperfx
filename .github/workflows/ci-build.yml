@@ -58,6 +58,12 @@ jobs:
       - name: Mark git directory as safe
         run: git config --global --add safe.directory '*'
 
+      # vcpkg bootstrap compiles from source and needs zip + python3.
+      # These are baked into rebuilt Docker images but we install here as a
+      # safety net while old images are still in the registry.
+      - name: Install vcpkg prerequisites
+        run: apt-get update -qq && apt-get install -y --no-install-recommends zip python3 nasm
+
       # Export the two env-vars that vcpkg needs to use the GitHub Actions binary cache.
       # Doing this in the Docker container requires github-script to be run on the host
       # runner; the env-vars are then forwarded into the container via the `env:` map.
