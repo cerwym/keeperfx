@@ -76,7 +76,7 @@ jobs:
     - name: Build (CMake)
       run: |
         set -eux
-        cmake --preset windows-x86-release
+        cmake --preset windows-x86-release -DBUILD_NUMBER=$BUILD_NUMBER -DPACKAGE_SUFFIX=$PACKAGE_SUFFIX
         cmake --build --preset windows-x86-release
       env:
         CMAKE_BUILD_PARALLEL_LEVEL: 4
@@ -101,7 +101,8 @@ jobs:
     - name: Create release package
       run: |
         set -eux
-        make BUILD_NUMBER=$BUILD_NUMBER PACKAGE_SUFFIX=$PACKAGE_SUFFIX package
+        make BUILD_NUMBER=$BUILD_NUMBER PACKAGE_SUFFIX=$PACKAGE_SUFFIX pkg-assemble
+        cmake --build --preset windows-x86-release --target package
         echo "ZIP_NAME=$(basename -s .7z pkg/keeperfx*.7z)" >> "$GITHUB_ENV"
         rm pkg/keeperfx*.7z
 

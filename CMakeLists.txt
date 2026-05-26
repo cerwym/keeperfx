@@ -13,10 +13,14 @@ set(CMAKE_CXX_STANDARD 20)
 # Version information
 set(VER_MAJOR       1)
 set(VER_MINOR       3)
-set(VER_RELEASE     1)
+set(VER_RELEASE     2)
 set(VER_BUILD       0)
-set(VER_STRING      "${VER_MAJOR}.${VER_MINOR}.${VER_RELEASE}.${VER_BUILD} ${PACKAGE_SUFFIX}")
-set(PACKAGE_SUFFIX  "")
+
+# Packaging parameters (override via -DBUILD_NUMBER=<n> -DPACKAGE_SUFFIX=<s>)
+set(BUILD_NUMBER    "0"  CACHE STRING "Monotonic build number (git rev-list count)")
+set(PACKAGE_SUFFIX  ""   CACHE STRING "Distribution suffix appended to package filename (e.g. Alpha, Release)")
+
+set(VER_STRING "${VER_MAJOR}.${VER_MINOR}.${VER_RELEASE}.${BUILD_NUMBER} ${PACKAGE_SUFFIX}")
 
 # Generate version header
 set(KEEPERFX_VER_DEFS_H_IN ${CMAKE_SOURCE_DIR}/build/ver_defs.h.in)
@@ -69,3 +73,9 @@ endif()
 if(PLATFORM_WII_U)
     include(PlatformWiiU)
 endif()
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Packaging (CPack)
+# See: build/cmake/modules/Packaging.cmake
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+include(Packaging)

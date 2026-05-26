@@ -52,6 +52,10 @@ PKG_MP_MAPPACK_FILES := $(patsubst multiplayer/%,pkg/multiplayer/%,$(shell find 
 PKG_MP_MAPPACK_DIRS = $(sort $(dir $(PKG_MP_MAPPACK_FILES)))
 PKG_BIN = pkg/$(notdir $(BIN))
 PKG_BIN_MAP = $(PKG_BIN:%.exe=%.map)
+
+# All files except the binary itself (binary is installed by cmake/CPack)
+PKG_DATA_FILES = $(filter-out $(PKG_BIN), $(PKG_FILES))
+
 PKG_DOCS = \
 	pkg/keeperfx_readme.txt \
 	pkg/launcher-auto-file-removal.txt
@@ -70,7 +74,7 @@ PKG_FILES = \
 	$(PKG_BIN_MAP) \
 	$(PKG_DOCS)
 
-.PHONY: package
+.PHONY: package pkg-assemble clean-package
 
 pkg pkg/creatrs pkg/fxdata pkg/campgns pkg/fxdata/lua $(PKG_MAPPACK_DIRS) $(PKG_MP_MAPPACK_DIRS)  $(PKG_CAMPAIGN_DIRS) $(PKG_FXDATA_DIRS) $(PKG_MOD_DIRS):
 	$(MKDIR) $@
@@ -138,6 +142,9 @@ $(PKG_NAME): $(PKG_FILES) | pkg
 	$(RM) $@ && cd $(dir $(PKG_NAME)) && 7z a $(notdir $(PKG_NAME)) $(patsubst pkg/%,%,$^) >/dev/null
 
 package: $(PKG_NAME)
+
+pkg-assemble: $(PKG_DATA_FILES)
+	@echo "Game data assembled into pkg/ — run 'cmake --build --target package' to create the archive"
 
 clean-package:
 	$(RM) -r pkg
