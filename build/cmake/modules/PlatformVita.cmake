@@ -33,7 +33,7 @@ endif()
 set(VITAGL_INSTALL_LIB "$ENV{VITASDK}/arm-vita-eabi/lib/libvitaGL.a")
 ExternalProject_Add(vitagl_external
     GIT_REPOSITORY  https://github.com/Rinnegatamante/vitaGL.git
-    GIT_TAG         e6011789a48be7f483b840e5e276f50253c06604
+    GIT_TAG         0cded29df58148f4e32738de577766864d45c852
     GIT_SHALLOW     FALSE
     SOURCE_DIR      ${CMAKE_BINARY_DIR}/_deps/vitagl-src
     BUILD_IN_SOURCE TRUE
