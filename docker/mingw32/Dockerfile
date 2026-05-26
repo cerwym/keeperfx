@@ -26,6 +26,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN dpkg --add-architecture i386 \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
+        build-essential \
         gcc-mingw-w64-i686-win32 \
         g++-mingw-w64-i686-win32 \
         cmake \
