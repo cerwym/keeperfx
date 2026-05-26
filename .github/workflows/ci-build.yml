@@ -94,6 +94,7 @@ jobs:
           ./external/vcpkg/vcpkg install \
             --triplet ${{ matrix.vcpkg-triplet }} \
             --overlay-triplets build/vcpkg-triplets \
+            --overlay-ports build/vcpkg-ports \
             --x-install-root=vcpkg_installed \
             --allow-unsupported
 

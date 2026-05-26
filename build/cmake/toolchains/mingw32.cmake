@@ -15,17 +15,3 @@ set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
 # Standard Linux paths are excluded by NO_DEFAULT_PATH in the cmake wrappers.
 set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY BOTH)
 set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE BOTH)
-
-# GCC 13 for i686-w64-mingw32 enables __AVX512BF16__, __AVXNECONVERT__ and
-# __AVX512FP16__ by default even on 32-bit x86 targets.  These extensions
-# reference _Float16 / __bf16 types that are not supported on i686, causing
-# compile errors in any translation unit that includes <immintrin.h> (e.g. libspng).
-# The -mno- flags are supposed to undefine these macros but don't (GCC 13 bug
-# in the Ubuntu 24.04 mingw-w64 packages).  The -U flags forcibly undefine
-# the built-in macros at the preprocessor level, which is the reliable fix.
-# Setting CMAKE_C/CXX_FLAGS_INIT ensures all cmake projects using this toolchain
-# (including vcpkg port builds) receive these flags.
-set(_mingw32_no_broken_exts
-    "-mno-avx512f -mno-avx512bf16 -mno-avxneconvert -mno-avx512fp16 -U__AVX512BF16__ -U__AVXNECONVERT__ -U__AVX512FP16__")
-set(CMAKE_C_FLAGS_INIT   "${_mingw32_no_broken_exts}")
-set(CMAKE_CXX_FLAGS_INIT "${_mingw32_no_broken_exts}")
