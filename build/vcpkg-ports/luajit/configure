@@ -81,6 +81,7 @@ all:
 	        \$(MAKE) -C src host/buildvm-x86\$(EXECUTABLE_SUFFIX) \$(COMMON_OPTIONS) \$(BUILD_OPTIONS) \\
 	          BUILDVM_T=host/buildvm-x86\$(EXECUTABLE_SUFFIX) "TARGET_TESTARCH=\$\${TARGET_TESTARCH}" \\
 	          "HOST_CC=${CC} -m32" \\
+	          "HOST_XCFLAGS=-I. -DLUAJIT_OS=LUAJIT_OS_WINDOWS -malign-double" \\
 	        || exit 1; \\
 	    else \\
 	        \$(MAKE) -C src host/buildvm-\$\$DA\$(EXECUTABLE_SUFFIX) \$(COMMON_OPTIONS) \$(BUILD_OPTIONS) \\
