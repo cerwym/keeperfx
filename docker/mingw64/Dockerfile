@@ -69,12 +69,11 @@ RUN set -eux; \
     rm -rf "${TMP}"
 
 # ── curl MinGW x86_64 prebuilts ─────────────────────────────────────────────
-ARG CURL_VER=8.12.1_2
 RUN set -eux; \
     TMP=$(mktemp -d); \
-    curl -fsSL "https://curl.se/windows/dl-${CURL_VER}/curl-${CURL_VER}-win64-mingw.zip" -o "${TMP}/curl.zip"; \
+    curl -fsSL "https://curl.se/windows/latest.cgi?p=win64-mingw.zip" -o "${TMP}/curl.zip"; \
     unzip -q "${TMP}/curl.zip" -d "${TMP}/curl"; \
-    CURL_DIR="${TMP}/curl/curl-${CURL_VER}-win64-mingw"; \
+    CURL_DIR=$(ls -d "${TMP}/curl"/curl-*-win64-mingw 2>/dev/null | head -1); \
     cp -r "${CURL_DIR}/include/." "${PREFIX}/include/"; \
     cp    "${CURL_DIR}/lib/libcurl.dll.a" "${PREFIX}/lib/" 2>/dev/null || true; \
     cp    "${CURL_DIR}/lib/libcurl.a"     "${PREFIX}/lib/" 2>/dev/null || true; \

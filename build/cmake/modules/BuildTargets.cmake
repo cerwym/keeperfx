@@ -67,7 +67,11 @@ if(NOT KEEPERFX_NETWORKING)
     list(APPEND KEEPERFX_SOURCES_C "src/bflib_network_stub.c")
 endif()
 
-# ━━━ Homebrew Platform Exclusions & Stubs ━━━
+# ━━━ Matchmaking Exclusion ━━━
+if(NOT KEEPERFX_MATCHMAKING)
+    list(FILTER KEEPERFX_SOURCES_C EXCLUDE REGEX ".*/net_matchmaking\\.c$")
+endif()
+
 if(PLATFORM_VITA OR PLATFORM_3DS OR PLATFORM_SWITCH)
     list(FILTER KEEPERFX_SOURCES_C EXCLUDE REGEX ".*/audio/audio_openal\\.c$")
     list(FILTER KEEPERFX_SOURCES_C EXCLUDE REGEX ".*/input/input_sdl\\.c$")
