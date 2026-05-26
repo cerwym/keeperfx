@@ -1994,7 +1994,7 @@ static void heart_lost_quick_objective_check(const struct ScriptLine *scline)
     {
         SCRPTWRNLOG("Quick Objective no %ld overwritten by different text", scline->np[0]);
     }
-    snprintf(game.quick_messages[scline->np[0]], MESSAGE_TEXT_LEN, "%s", scline->tp[1]);
+    snprintf(game.quick_messages[scline->np[0]], MESSAGE_TEXT_LEN, "%.*s", MESSAGE_TEXT_LEN - 1, scline->tp[1]);
 
     TbMapLocation location = 0;
     if (scline->tp[2][0] != '\0')
@@ -5773,7 +5773,7 @@ static void quick_message_check(const struct ScriptLine* scline)
     {
         SCRPTWRNLOG("Quick Message no %ld overwritten by different text", scline->np[0]);
     }
-    snprintf(game.quick_messages[scline->np[0]], MESSAGE_TEXT_LEN, "%s", scline->tp[1]);
+    snprintf(game.quick_messages[scline->np[0]], MESSAGE_TEXT_LEN, "%.*s", MESSAGE_TEXT_LEN - 1, scline->tp[1]);
     value->longs[0]= scline->np[0];
     get_chat_icon_from_value(scline->tp[2], &value->chars[4], &value->chars[5]);
     PROCESS_SCRIPT_VALUE(scline->command);

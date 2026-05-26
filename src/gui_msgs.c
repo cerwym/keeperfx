@@ -258,7 +258,8 @@ void message_add(char type, PlayerNumber plyr_idx, const char *text)
     {
         memcpy(&game.messages[i], &game.messages[i-1], sizeof(struct GuiMessage));
     }
-    snprintf(game.messages[0].text, sizeof(game.messages[0].text), "%s", text);
+    snprintf(game.messages[0].text, sizeof(game.messages[0].text), "%.*s",
+             (int)(sizeof(game.messages[0].text) - 1), text);
     game.messages[0].plyr_idx = plyr_idx;
     game.messages[0].expiration_turn = get_gameturn() + GUI_MESSAGES_DELAY;
     game.messages[0].target_idx = -1;

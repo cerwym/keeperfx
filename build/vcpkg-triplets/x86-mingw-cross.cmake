@@ -10,4 +10,4 @@ set(VCPKG_LIBRARY_LINKAGE static)
 set(VCPKG_CMAKE_SYSTEM_NAME MinGW)
 
 get_filename_component(_triplet_dir "${CMAKE_CURRENT_LIST_FILE}" DIRECTORY)
-set(VCPKG_CHAINLOAD_TOOLCHAIN_FILE "${_triplet_dir}/../cmake/toolchains/mingw32-posix.cmake")
+set(VCPKG_CHAINLOAD_TOOLCHAIN_FILE "${_triplet_dir}/../cmake/toolchains/mingw32.cmake")
