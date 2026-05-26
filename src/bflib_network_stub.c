@@ -24,8 +24,6 @@
 #include "net_game.h"
 #include "net_input_lag.h"
 #include "net_checksums.h"
-#include "net_redundant_packets.h"
-#include "net_received_packets.h"
 #include "front_network.h"
 #include "packets.h"
 #include "player_data.h"
@@ -88,21 +86,12 @@ unsigned short calculate_skip_input(void) { return 0; }
 void  update_turn_checksums(void) {}
 short checksums_different(void) { return 0; }
 
-/* net_redundant_packets.c stubs */
-void initialize_redundant_packets(void) {}
-void unbundle_packets(const char *bundled_buffer, PlayerNumber source_player) { (void)bundled_buffer; (void)source_player; }
-
-/* net_received_packets.c stubs */
-void initialize_packet_tracking(void) {}
-const struct Packet* get_received_packets_for_turn(GameTurn turn) { (void)turn; return NULL; }
-
 /* bflib_enet.cpp — network stats (enet excluded, stubs return zero) */
 unsigned long GetPing(int id) { (void)id; return 0; }
-unsigned long GetPingVariance(int id) { (void)id; return 0; }
 unsigned int  GetPacketLoss(int id) { (void)id; return 0; }
 unsigned int  GetClientDataInTransit(void) { return 0; }
-unsigned int  GetIncomingPacketQueueSize(void) { return 0; }
 unsigned int  GetClientPacketsLost(void) { return 0; }
-unsigned int  GetClientOutgoingDataTotal(void) { return 0; }
-unsigned int  GetClientIncomingDataTotal(void) { return 0; }
-unsigned int  GetClientReliableCommandsInFlight(void) { return 0; }
+unsigned int  GetUploadRateBytesPerSecond(void) { return 0; }
+unsigned int  GetDownloadRateBytesPerSecond(void) { return 0; }
+void          enet_matchmaking_host_update(void) {}
+uint16_t      enet_get_bound_ipv6_port(void) { return 0; }
