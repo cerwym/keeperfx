@@ -104,12 +104,14 @@ TbBool cumulative_screen_shot(void) { return 0; }
 // PlatformVita/3DS/Switch SystemInit. On PC it is a static array in custom_sprites.c.
 unsigned char *big_scratch = NULL;
 
+// Sprite table arrays used on all platforms (also referenced by Vita sprite cache).
+short iso_td_add[KEEPERSPRITE_ADD_NUM];
+short td_iso_add[KEEPERSPRITE_ADD_NUM];
+
 #ifndef PLATFORM_VITA
 struct TbSpriteSheet *gui_panel_sprites = NULL;
 short bad_icon_id = INT16_MAX;
 int total_sprite_zip_count = 0;
-short iso_td_add[KEEPERSPRITE_ADD_NUM];
-short td_iso_add[KEEPERSPRITE_ADD_NUM];
 TbSpriteData keepersprite_add[KEEPERSPRITE_ADD_NUM] = { 0 };
 struct KeeperSprite creature_table_add[KEEPERSPRITE_ADD_NUM] = { {0} };
 

@@ -520,7 +520,7 @@ int LbLog(struct TbLog *log, const char *fmt_str, va_list arg)
   LbFileWrite(file, linebuf, strlen(linebuf));
   if (log->prefix[0] != '\0') {
       // Build prefixed message for platform routing
-      char fullbuf[2048];
+      char fullbuf[2048 + LOG_PREFIX_LEN];
       snprintf(fullbuf, sizeof(fullbuf), "%s%s", log->prefix, linebuf);
       PlatformManager_LogWrite(fullbuf);
   } else {
