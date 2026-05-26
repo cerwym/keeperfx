@@ -53,17 +53,35 @@ jobs:
         run: git config --global --add safe.directory '*'
 
       - name: Install vcpkg prerequisites
-        run: apt-get update -qq && apt-get install -y --no-install-recommends zip unzip python3 nasm autoconf automake libtool gcc-multilib libc6-dev-i386 pkg-config
+        run: apt-get update -qq && apt-get install -y --no-install-recommends zip unzip python3 nasm autoconf autoconf-archive automake libtool gcc-multilib libc6-dev-i386 pkg-config
 
-      - name: Export vcpkg binary-cache env vars
+      - name: Enable vcpkg binary caching (x-gha)
         run: |
+          echo "VCPKG_BINARY_SOURCES=clear;x-gha,readwrite" >> $GITHUB_ENV
           echo "ACTIONS_CACHE_URL=${ACTIONS_CACHE_URL}" >> $GITHUB_ENV
           echo "ACTIONS_RUNTIME_TOKEN=${ACTIONS_RUNTIME_TOKEN}" >> $GITHUB_ENV
 
+      - name: Cache vcpkg bootstrap binary
+        id: cache-vcpkg-bootstrap
+        uses: actions/cache@v4
+        with:
+          path: external/vcpkg/vcpkg
+          key: vcpkg-bootstrap-linux-${{ hashFiles('external/vcpkg/CMakeLists.txt') }}
+
       - name: Bootstrap vcpkg
+        if: steps.cache-vcpkg-bootstrap.outputs.cache-hit != 'true'
         run: |
           chmod +x ./external/vcpkg/bootstrap-vcpkg.sh
           ./external/vcpkg/bootstrap-vcpkg.sh -disableMetrics
+
+      - name: Cache vcpkg downloads
+        uses: actions/cache@v4
+        with:
+          path: external/vcpkg/downloads
+          key: vcpkg-downloads-${{ matrix.vcpkg-triplet }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-downloads-${{ matrix.vcpkg-triplet }}-
+            vcpkg-downloads-
 
       - name: Install vcpkg packages
         run: |
@@ -72,8 +90,6 @@ jobs:
             --overlay-triplets build/vcpkg-triplets \
             --x-install-root=vcpkg_installed \
             --allow-unsupported
-        env:
-          VCPKG_BINARY_SOURCES: "clear"
 
       - name: Set prototype suffix
         run: |
