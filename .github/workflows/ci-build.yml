@@ -96,7 +96,12 @@ jobs:
             --overlay-triplets build/vcpkg-triplets \
             --overlay-ports build/vcpkg-ports \
             --x-install-root=vcpkg_installed \
-            --allow-unsupported
+            --allow-unsupported \
+          || {
+            echo "=== vcpkg install failed; printing build error logs ==="
+            find external/vcpkg/buildtrees -name "*-err.log" -newer external/vcpkg/buildtrees -exec sh -c 'echo "--- $1 ---"; cat "$1"' _ {} \; 2>/dev/null | tail -200
+            exit 1
+          }
 
       - name: Configure CMake
         run: cmake --preset ${{ matrix.preset }}
