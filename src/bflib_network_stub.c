@@ -33,14 +33,7 @@
 
 #include "post_inc.h"
 
-/* net_game.c — multiplayer session data (UI still compiled, network disabled) */
-long net_number_of_sessions = 0;
-struct TbNetworkSessionNameEntry *net_session[SESSION_ENTRIES_COUNT] = { NULL };
-long net_session_index_active = -1;
-char net_service[16][NET_SERVICE_LEN];
-char net_player_name[20] = { 0 };
-struct TbNetworkPlayerName net_player[MAX_NET_USERS];
-struct ConfigInfo net_config_info;
+/* net_game.c — excluded when KEEPERFX_NETWORKING=OFF; stub only what front_network.c does NOT define */
 struct TbNetworkPlayerInfo net_player_info[MAX_NET_USERS];
 
 TbBool network_player_active(int plyr_idx) { (void)plyr_idx; return 0; }
