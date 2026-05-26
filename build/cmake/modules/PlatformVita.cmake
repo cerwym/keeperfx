@@ -33,12 +33,13 @@ endif()
 set(VITAGL_INSTALL_LIB "$ENV{VITASDK}/arm-vita-eabi/lib/libvitaGL.a")
 ExternalProject_Add(vitagl_external
     GIT_REPOSITORY  https://github.com/Rinnegatamante/vitaGL.git
-    GIT_TAG         0cded29df58148f4e32738de577766864d45c852
+    GIT_TAG         26a53112e817290f0f7ab628151e4e210583c571
     GIT_SHALLOW     FALSE
     SOURCE_DIR      ${CMAKE_BINARY_DIR}/_deps/vitagl-src
     BUILD_IN_SOURCE TRUE
     CONFIGURE_COMMAND ""
     PATCH_COMMAND   git reset --hard HEAD && git clean -fd
+                 && /bin/sh -c "grep -q 'MAX_SCENES_PER_FRAME' source/shared.h || printf '#ifndef MAX_SCENES_PER_FRAME\\n#define MAX_SCENES_PER_FRAME 8\\n#endif\\n' >> source/shared.h"
     BUILD_COMMAND   /bin/bash -c "rm -f $ENV{VITASDK}/arm-vita-eabi/lib/libvitaGL.a $ENV{VITASDK}/arm-vita-eabi/include/vitaGL.h $ENV{VITASDK}/arm-vita-eabi/include/imgui_impl_vitagl.h && make LOG_ERRORS=2 HAVE_RAZOR=0 HAVE_PROFILING=0 HAVE_DEBUGGER=1 DEBUG_GLSL_TRANSLATOR=1 DEBUG_GLSL_PREPROCESSOR=1 HAVE_GLSL_SUPPORT=1"
     INSTALL_COMMAND /bin/bash -c "make install LOG_ERRORS=2 HAVE_RAZOR=0 HAVE_PROFILING=0 HAVE_DEBUGGER=1 DEBUG_GLSL_TRANSLATOR=1 DEBUG_GLSL_PREPROCESSOR=1 HAVE_GLSL_SUPPORT=1"
     BUILD_BYPRODUCTS "${VITAGL_INSTALL_LIB}")
