@@ -95,7 +95,6 @@ TbPixel net_player_colours[] = { 251, 58, 182, 11 };
 const int32_t hand_limp_xoffset[] = { 32, 31, 30, 29, 28, 27, 26, 24, 22, 19, 15, 9 };
 const int32_t hand_limp_yoffset[] = { -11, -10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0 };
 
-long fe_net_level_selected;
 static struct NetLandLocalState net_map_local;
 static struct NetLandRemoteSlap net_map_remote_slap[MAX_NET_USERS];
 struct ScreenPacket net_screen_packet[MAX_NET_USERS];
