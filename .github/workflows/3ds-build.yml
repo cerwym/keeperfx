@@ -1,8 +1,6 @@
 name: 3DS Build
 
 on:
-  pull_request:
-    branches: [ "**" ]
   workflow_dispatch:
 
 jobs:
