@@ -48,6 +48,11 @@ RUN dpkg --add-architecture i386 \
         libtool \
         perl \
         pkg-config \
+        gcc-multilib \
+        libc6-dev-i386 \
+        python3-venv \
+        autoconf-archive \
+        libltdl-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # ── KFX build tools → /usr/local/bin ────────────────────────────────────────

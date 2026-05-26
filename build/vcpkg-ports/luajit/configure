@@ -77,9 +77,16 @@ all:
 	      x86)   TARGET_TESTARCH="\$(TARGET_TESTARCH_x86)" ;; \\
 	      x64)   TARGET_TESTARCH="\$(TARGET_TESTARCH_x64)" ;; \\
 	    esac ; \\
-	    \$(MAKE) -C src host/buildvm-\$\$DA\$(EXECUTABLE_SUFFIX) \$(COMMON_OPTIONS) \$(BUILD_OPTIONS) \\
-	      BUILDVM_T=host/buildvm-\$\$DA\$(EXECUTABLE_SUFFIX) "TARGET_TESTARCH=\$\${TARGET_TESTARCH}" \\
-	    || exit 1; \\
+	    if [ "\$\$DA" = "x86" ]; then \\
+	        \$(MAKE) -C src host/buildvm-x86\$(EXECUTABLE_SUFFIX) \$(COMMON_OPTIONS) \$(BUILD_OPTIONS) \\
+	          BUILDVM_T=host/buildvm-x86\$(EXECUTABLE_SUFFIX) "TARGET_TESTARCH=\$\${TARGET_TESTARCH}" \\
+	          "HOST_CC=${CC} -m32" \\
+	        || exit 1; \\
+	    else \\
+	        \$(MAKE) -C src host/buildvm-\$\$DA\$(EXECUTABLE_SUFFIX) \$(COMMON_OPTIONS) \$(BUILD_OPTIONS) \\
+	          BUILDVM_T=host/buildvm-\$\$DA\$(EXECUTABLE_SUFFIX) "TARGET_TESTARCH=\$\${TARGET_TESTARCH}" \\
+	        || exit 1; \\
+	    fi ; \\
 	done
 
 install:
