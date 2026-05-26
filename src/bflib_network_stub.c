@@ -43,12 +43,15 @@ struct TbNetworkPlayerInfo net_player_info[MAX_NET_USERS];
 TbBool network_player_active(int plyr_idx) { (void)plyr_idx; return 0; }
 const char *network_player_name(int plyr_idx) { (void)plyr_idx; return ""; }
 void sync_various_data(void) {}
+void sync_initial_network_seed(void) {}
 unsigned long get_host_player_id(void) { return 0; }
-short setup_network_service(int srvidx) { (void)srvidx; return 0; }
+short setup_network_service(enum FrontendNetService service) { (void)service; return 0; }
 int   setup_old_network_service(void) { return 0; }
-void  init_players_network_game(CoroutineLoop *context) { (void)context; }
+TbBool init_players_network_game(void) { return 0; }
 void  setup_count_players(void) {}
 long  network_session_join(void) { return 0; }
+void  process_quit_packet(struct PlayerInfo *player, short complete_quit) { (void)player; (void)complete_quit; }
+void  process_disconnected_network_players(void) {}
 
 /* net_main.c / net_lobby.c — LbNetwork API stubs */
 void    LbNetwork_SetServerPort(int port) { (void)port; }
