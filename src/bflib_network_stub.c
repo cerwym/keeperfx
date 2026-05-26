@@ -19,7 +19,10 @@
 #include "bflib_coroutine.h"
 #include "net_main.h"
 #include "net_lobby.h"
+#include "net_exchange_common.h"
 #include "net_exchange_gameplay.h"
+#include "net_lan.h"
+#include "net_matchmaking.h"
 #include "net_resync.h"
 #include "net_game.h"
 #include "net_input_lag.h"
@@ -70,6 +73,33 @@ TbError LbNetwork_ExchangeLogin(char *plyr_name) { (void)plyr_name; return Lb_FA
 TbError LbNetwork_ExchangeFrontend(void *send_buf, void *server_buf, size_t frame_size) { (void)send_buf; (void)server_buf; (void)frame_size; return Lb_FAIL; }
 TbError LbNetwork_ExchangeGameplay(void *send_buf, void *server_buf, size_t frame_size) { (void)send_buf; (void)server_buf; (void)frame_size; return Lb_FAIL; }
 void    LbNetwork_BroadcastUnpause(void) {}
+
+/* net_main.c — netstate global */
+struct NetState netstate;
+
+/* net_lan.c — LAN session discovery stubs */
+struct TbNetworkSessionNameEntry lan_sessions[LAN_SESSIONS_MAX];
+int lan_session_count = 0;
+void lan_refresh_sessions(void) {}
+void lan_host_update(void) {}
+
+/* net_matchmaking.c — matchmaking stubs */
+struct TbNetworkSessionNameEntry matchmaking_sessions[MATCHMAKING_SESSIONS_MAX];
+int matchmaking_session_count = 0;
+char join_lobby_id[MATCHMAKING_ID_MAX] = { 0 };
+void matchmaking_refresh_sessions(void) {}
+void matchmaking_connect_async(void) {}
+
+/* net_exchange_common.c — chat and sync stubs */
+void send_network_chat_message(int player_id, const char *message) { (void)player_id; (void)message; }
+struct PlayerInfo *prepare_network_chat_message(int player_id, const char *message) { (void)player_id; (void)message; return NULL; }
+void wait_for_all_players(void) {}
+
+/* net_exchange_gameplay.c — packet history stubs */
+void initialize_packet_history(void) {}
+void store_packet_history(PlayerNumber player, const struct Packet *packet) { (void)player; (void)packet; }
+const struct Packet *get_history_packet(PlayerNumber player, GameTurn turn) { (void)player; (void)turn; return NULL; }
+void process_gameplay_chat_message(int player_id, const char *message) { (void)player_id; (void)message; }
 
 /* net_resync.cpp — called from main_game.c */
 TbBool detailed_multiplayer_logging = 0;

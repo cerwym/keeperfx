@@ -29,6 +29,7 @@
 #include "scrcapt.h"
 #include "audio/audio_interface.h"
 #include "input/input_interface.h"
+#include "platform.h"
 
 /* api.c stubs (SDL_net removed) */
 int api_init_server(void) { return 0; }
@@ -49,6 +50,14 @@ TbBool play_music_track(int t) { (void)t; return 0; }
 void resume_music(void) {}
 void stop_music(void) {}
 #endif /* !PLATFORM_VITA */
+
+/* bflib_sndlib.cpp — async preload stub (Vita only; uses std::thread unavailable on Vita SDK) */
+#ifdef PLATFORM_VITA
+void SoundBanks_StartAsyncLoad(void) {}
+#endif /* PLATFORM_VITA */
+
+/* platform_gl_sdl2.cpp — SDL window accessor stub (excluded on all homebrew; no desktop GL context) */
+void* platform_get_sdl_window(void) { return NULL; }
 
 /* steam_api.cpp stubs — steam_api.hpp uses extern "C" so define in C */
 int steam_api_init(void) { return 0; }
