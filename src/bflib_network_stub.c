@@ -14,16 +14,19 @@
 #include <stdint.h>
 #include <stddef.h>
 #include "bflib_basics.h"
-#include "bflib_network.h"
-#include "bflib_network_exchange.h"
+#include "bflib_netsession.h"
 #include "bflib_enet.h"
 #include "bflib_coroutine.h"
+#include "net_main.h"
+#include "net_lobby.h"
+#include "net_exchange_gameplay.h"
 #include "net_resync.h"
 #include "net_game.h"
 #include "net_input_lag.h"
 #include "net_checksums.h"
 #include "net_redundant_packets.h"
 #include "net_received_packets.h"
+#include "front_network.h"
 #include "packets.h"
 #include "player_data.h"
 
@@ -31,13 +34,13 @@
 
 /* net_game.c — multiplayer session data (UI still compiled, network disabled) */
 long net_number_of_sessions = 0;
-struct TbNetworkSessionNameEntry *net_session[32] = { NULL };
+struct TbNetworkSessionNameEntry *net_session[SESSION_ENTRIES_COUNT] = { NULL };
 long net_session_index_active = -1;
 char net_service[16][NET_SERVICE_LEN];
 char net_player_name[20] = { 0 };
-struct TbNetworkPlayerName net_player[NET_PLAYERS_COUNT];
+struct TbNetworkPlayerName net_player[MAX_NET_USERS];
 struct ConfigInfo net_config_info;
-struct TbNetworkPlayerInfo net_player_info[NET_PLAYERS_COUNT];
+struct TbNetworkPlayerInfo net_player_info[MAX_NET_USERS];
 
 TbBool network_player_active(int plyr_idx) { (void)plyr_idx; return 0; }
 const char *network_player_name(int plyr_idx) { (void)plyr_idx; return ""; }
@@ -49,25 +52,23 @@ void  init_players_network_game(CoroutineLoop *context) { (void)context; }
 void  setup_count_players(void) {}
 long  network_session_join(void) { return 0; }
 
-/* bflib_network.cpp — LbNetwork API stubs */
+/* net_main.c / net_lobby.c — LbNetwork API stubs */
 void    LbNetwork_SetServerPort(int port) { (void)port; }
 void    LbNetwork_InitSessionsFromCmdLine(const char *str) { (void)str; }
-TbError LbNetwork_Init(unsigned long srvcindex, unsigned long maxplayrs, struct TbNetworkPlayerInfo *locplayr, struct ServiceInitData *init_data) { (void)srvcindex; (void)maxplayrs; (void)locplayr; (void)init_data; return Lb_FAIL; }
+TbError LbNetwork_Init(uint32_t srvcindex, uint32_t maxplayrs, struct TbNetworkPlayerInfo *locplayr, struct ServiceInitData *init_data) { (void)srvcindex; (void)maxplayrs; (void)locplayr; (void)init_data; return Lb_FAIL; }
 TbError LbNetwork_Join(struct TbNetworkSessionNameEntry *nsname, char *playr_name, int32_t *playr_num, void *optns) { (void)nsname; (void)playr_name; (void)playr_num; (void)optns; return Lb_FAIL; }
 TbError LbNetwork_Create(char *nsname_str, char *plyr_name, uint32_t *plyr_num, void *optns) { (void)nsname_str; (void)plyr_name; (void)plyr_num; (void)optns; return Lb_FAIL; }
 TbError LbNetwork_EnableNewPlayers(TbBool allow) { (void)allow; return Lb_FAIL; }
-TbError LbNetwork_EnumerateServices(TbNetworkCallbackFunc callback, void *user_data) { (void)callback; (void)user_data; return Lb_FAIL; }
 TbError LbNetwork_EnumeratePlayers(struct TbNetworkSessionNameEntry *sesn, TbNetworkCallbackFunc callback, void *user_data) { (void)sesn; (void)callback; (void)user_data; return Lb_FAIL; }
 TbError LbNetwork_EnumerateSessions(TbNetworkCallbackFunc callback, void *ptr) { (void)callback; (void)ptr; return Lb_FAIL; }
 TbError LbNetwork_Stop(void) { return Lb_FAIL; }
 void    LbNetwork_UpdateInputLagIfHost(void) {}
 
-/* bflib_network_exchange.cpp — packet exchange stubs */
-TbError LbNetwork_Exchange(enum NetMessageType msg_type, void *send_buf, void *server_buf, size_t buf_size) { (void)msg_type; (void)send_buf; (void)server_buf; (void)buf_size; return Lb_FAIL; }
+/* net_lobby.c / net_exchange_gameplay.c — packet exchange stubs */
 TbError LbNetwork_ExchangeLogin(char *plyr_name) { (void)plyr_name; return Lb_FAIL; }
-void    LbNetwork_WaitForMissingPackets(void *server_buf, size_t client_frame_size) { (void)server_buf; (void)client_frame_size; }
-void    LbNetwork_SendChatMessageImmediate(int player_id, const char *message) { (void)player_id; (void)message; }
-void    LbNetwork_BroadcastUnpauseTimesync(void) {}
+TbError LbNetwork_ExchangeFrontend(void *send_buf, void *server_buf, size_t frame_size) { (void)send_buf; (void)server_buf; (void)frame_size; return Lb_FAIL; }
+TbError LbNetwork_ExchangeGameplay(void *send_buf, void *server_buf, size_t frame_size) { (void)send_buf; (void)server_buf; (void)frame_size; return Lb_FAIL; }
+void    LbNetwork_BroadcastUnpause(void) {}
 
 /* net_resync.cpp — called from main_game.c */
 TbBool detailed_multiplayer_logging = 0;
