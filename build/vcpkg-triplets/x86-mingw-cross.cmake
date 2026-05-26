@@ -9,12 +9,12 @@ set(VCPKG_CRT_LINKAGE static)
 set(VCPKG_LIBRARY_LINKAGE static)
 set(VCPKG_CMAKE_SYSTEM_NAME MinGW)
 
-# GCC 13 for i686-w64-mingw32 ships avx512bf16intrin.h / avx512fp16vlintrin.h
-# which unconditionally reference _Float16 / __bf16 — types not supported on
-# 32-bit x86 targets.  Disabling AVX-512F prevents GCC from including those
-# headers, fixing compilation of any port that pulls in <immintrin.h> (e.g. libspng).
-set(VCPKG_C_FLAGS   "-mno-avx512f")
-set(VCPKG_CXX_FLAGS "-mno-avx512f")
+# GCC 13 for i686-w64-mingw32 enables __AVX512BF16__ and __AVXNECONVERT__
+# by default even on 32-bit targets, causing compile errors because
+# avx512bf16intrin.h / avxneconvertintrin.h reference _Float16 / __bf16
+# which are x86_64-only types.  Explicitly disable each extension.
+set(VCPKG_C_FLAGS   "-mno-avx512f -mno-avx512bf16 -mno-avxneconvert -mno-avx512fp16")
+set(VCPKG_CXX_FLAGS "-mno-avx512f -mno-avx512bf16 -mno-avxneconvert -mno-avx512fp16")
 
 get_filename_component(_triplet_dir "${CMAKE_CURRENT_LIST_FILE}" DIRECTORY)
 set(VCPKG_CHAINLOAD_TOOLCHAIN_FILE "${_triplet_dir}/../cmake/toolchains/mingw32.cmake")

@@ -55,10 +55,11 @@ jobs:
       # Safety-net installs for packages not yet baked into the Docker images.
       # autoconf-archive: needed by libxcrypt vcpkg port (m4 macros)
       # autoconf/automake/libtool: needed by alsa/libxcrypt (autotools-based ports)
+      # libltdl-dev: libxcrypt configure checks for ltdl development files
       # gcc-multilib/libc6-dev-i386: needed for luajit buildvm-32 on x64 host
       # pkg-config: needed by vcpkg_fixup_pkgconfig for mingw cross-builds
       - name: Install vcpkg prerequisites
-        run: apt-get update -qq && apt-get install -y --no-install-recommends zip unzip python3 nasm autoconf autoconf-archive automake libtool gcc-multilib libc6-dev-i386 pkg-config
+        run: apt-get update -qq && apt-get install -y --no-install-recommends zip unzip python3 nasm autoconf autoconf-archive automake libtool libltdl-dev gcc-multilib libc6-dev-i386 pkg-config
 
       - name: Enable vcpkg binary caching (x-gha)
         run: |
