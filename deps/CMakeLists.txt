@@ -53,7 +53,7 @@ endif()
 
 ## luajit
 find_library(LUAJIT_LIB NAMES lua51 luajit-5.1 luajit REQUIRED)
-find_path(LUAJIT_INCLUDE NAMES lua.h PATH_SUFFIXES luajit luajit-5.1 REQUIRED)
+find_path(LUAJIT_INCLUDE NAMES lua.h PATH_SUFFIXES luajit luajit-5.1 luajit-2.1 REQUIRED)
 target_link_libraries(keeperfx PUBLIC ${LUAJIT_LIB})
 target_include_directories(keeperfx PUBLIC ${LUAJIT_INCLUDE})
 
