@@ -24,7 +24,7 @@ function(apply_keeperfx_warnings TARGET)
         return()
     endif()
 
-    set(WARNFLAGS -Wall -W -Wshadow -Wno-sign-compare -Wno-unused-parameter -Wno-strict-aliasing -Wno-unknown-pragmas -Wno-absolute-value -Werror)
+    set(WARNFLAGS -Wall -W -Wshadow -Wno-sign-compare -Wno-unused-parameter -Wno-strict-aliasing -Wno-unknown-pragmas -Wno-absolute-value -Wno-format-truncation -Werror)
     
     if(PLATFORM_VITA OR PLATFORM_3DS OR PLATFORM_SWITCH)
         # ARM/AArch64 cross-compile: no x86-specific flags
