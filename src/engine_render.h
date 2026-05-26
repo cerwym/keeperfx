@@ -153,6 +153,8 @@ extern unsigned char temp_cluedo_mode;
 /******************************************************************************/
 
 extern TbSpriteData keepersprite_add[KEEPERSPRITE_ADD_NUM];
+extern short iso_td_add[KEEPERSPRITE_ADD_NUM];
+extern short td_iso_add[KEEPERSPRITE_ADD_NUM];
 
 /** Try to submit a keeper sprite through IWorldViewRenderer::SubmitKeeperSprite.
  *  Returns 1 if successfully submitted (CPU blit skipped), 0 to fall back. */
