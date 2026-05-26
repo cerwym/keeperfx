@@ -19,9 +19,10 @@ vcpkg_cmake_configure(
         -DBUILD_EXAMPLES=OFF
         # GCC 13 for i686-w64-mingw32 has a broken immintrin.h that unconditionally
         # includes avx512bf16intrin.h / avxneconvertintrin.h which use _Float16 /
-        # __bf16 types not supported on 32-bit x86 targets.  Disabling SIMD
-        # optimizations prevents libspng from including <immintrin.h> entirely.
-        -DSPNG_DISABLE_OPT=ON
+        # __bf16 types not supported on 32-bit x86 targets.  Disabling the
+        # ENABLE_OPT cmake option causes libspng to compile with -DSPNG_DISABLE_OPT=1
+        # which guards out the <immintrin.h> include entirely.
+        -DENABLE_OPT=OFF
 )
 
 vcpkg_cmake_install()
