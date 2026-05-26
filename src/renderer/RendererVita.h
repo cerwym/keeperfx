@@ -39,7 +39,6 @@ public:
 
     const char* GetName() const override { return "Vita (vitaGL palette shader)"; }
     bool SupportsRuntimeSwitch() const override { return false; }
-    bool SupportsGPUPasses() const override { return true; }
 
     BackendCapabilities GetCapabilities() const override {
         BackendCapabilities c = {};
@@ -49,6 +48,11 @@ public:
         c.supportsGPUPasses       = 1;
         return c;
     }
+
+    IWorldViewRenderer* GetWorldViewRenderer() override { return nullptr; }
+    IMapFadePass*        GetMapFadePass()        override { return nullptr; }
+    ITextRenderer*       GetTextRenderer()       override { return nullptr; }
+    IUIRenderer*         GetUIRenderer()         override { return nullptr; }
 
 private:
     static const int k_gameW = 640;
