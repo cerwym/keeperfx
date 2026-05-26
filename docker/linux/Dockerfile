@@ -40,6 +40,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         # Networking
         libminiupnpc-dev \
         libnatpmp-dev \
+        libcurl4-openssl-dev \
         # Image/compression
         libspng-dev \
         libminizip-dev \

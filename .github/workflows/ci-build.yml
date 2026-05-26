@@ -58,6 +58,32 @@ jobs:
       - name: Mark git directory as safe
         run: git config --global --add safe.directory '*'
 
+      - name: Install extra dependencies (Linux)
+        if: contains(matrix.image, 'linux')
+        run: apt-get update -qq && apt-get install -y --no-install-recommends libcurl4-openssl-dev
+
+      - name: Install extra dependencies (MinGW x86)
+        if: matrix.image == 'mingw32'
+        run: |
+          TMP=$(mktemp -d)
+          curl -fsSL "https://curl.se/windows/dl-8.12.1_2/curl-8.12.1_2-win32-mingw.zip" -o "${TMP}/curl.zip"
+          unzip -q "${TMP}/curl.zip" -d "${TMP}/curl"
+          cp -r "${TMP}/curl/curl-8.12.1_2-win32-mingw/include/." /usr/i686-w64-mingw32/include/
+          cp    "${TMP}/curl/curl-8.12.1_2-win32-mingw/lib/libcurl.dll.a" /usr/i686-w64-mingw32/lib/
+          cp    "${TMP}/curl/curl-8.12.1_2-win32-mingw/lib/libcurl.a"     /usr/i686-w64-mingw32/lib/ 2>/dev/null || true
+          rm -rf "${TMP}"
+
+      - name: Install extra dependencies (MinGW x64)
+        if: matrix.image == 'mingw64'
+        run: |
+          TMP=$(mktemp -d)
+          curl -fsSL "https://curl.se/windows/dl-8.12.1_2/curl-8.12.1_2-win64-mingw.zip" -o "${TMP}/curl.zip"
+          unzip -q "${TMP}/curl.zip" -d "${TMP}/curl"
+          cp -r "${TMP}/curl/curl-8.12.1_2-win64-mingw/include/." /usr/x86_64-w64-mingw32/include/
+          cp    "${TMP}/curl/curl-8.12.1_2-win64-mingw/lib/libcurl.dll.a" /usr/x86_64-w64-mingw32/lib/
+          cp    "${TMP}/curl/curl-8.12.1_2-win64-mingw/lib/libcurl.a"     /usr/x86_64-w64-mingw32/lib/ 2>/dev/null || true
+          rm -rf "${TMP}"
+
       - name: Configure CMake
         run: cmake --preset ${{ matrix.preset }}
         env:
