@@ -216,7 +216,10 @@ void DisplacementEffect::Cleanup()
 #elif defined(RENDERER_OPENGL_ENABLED)
     m_gl_pass.Free();
     m_gl_pass_ready = false;
-#endif(LensRenderContext* ctx)
+#endif
+}
+
+TbBool DisplacementEffect::Draw(LensRenderContext* ctx)
 {
     if (m_current_lens < 0)
     {
