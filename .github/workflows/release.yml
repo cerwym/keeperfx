@@ -135,11 +135,24 @@ jobs:
           path: ${{ github.workspace }}/../vcpkg_installed_x64
           key: vcpkg-msvc-x64-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}
 
+      - name: Setup MSVC Developer Environment
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vsPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          $vcvars = Join-Path $vsPath "VC\Auxiliary\Build\vcvars64.bat"
+          $output = cmd /c "`"$vcvars`" > nul 2>&1 && set"
+          foreach ($line in $output) {
+            if ($line -match '^([^=]+)=(.*)$') {
+              "$($Matches[1])=$($Matches[2])" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
+            }
+          }
+
       - name: Configure CMake
         shell: pwsh
         run: cmake --preset x64-windows-static-release
         env:
-          VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+          VCPKG_BINARY_SOURCES: "clear"
 
       - name: Build
         shell: pwsh
@@ -191,7 +204,7 @@ jobs:
       - name: Configure CMake
         run: cmake --preset macos-universal
         env:
-          VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+          VCPKG_BINARY_SOURCES: "clear"
 
       - name: Build
         run: cmake --build --preset macos-universal

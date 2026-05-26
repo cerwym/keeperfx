@@ -52,6 +52,9 @@ jobs:
       - name: Mark git directory as safe
         run: git config --global --add safe.directory '*'
 
+      - name: Install vcpkg prerequisites
+        run: apt-get update -qq && apt-get install -y --no-install-recommends zip unzip python3 nasm autoconf libtool gcc-multilib libc6-dev-i386
+
       - name: Export vcpkg binary-cache env vars
         run: |
           echo "ACTIONS_CACHE_URL=${ACTIONS_CACHE_URL}" >> $GITHUB_ENV
@@ -67,9 +70,10 @@ jobs:
           ./external/vcpkg/vcpkg install \
             --triplet ${{ matrix.vcpkg-triplet }} \
             --overlay-triplets build/vcpkg-triplets \
-            --x-install-root=vcpkg_installed
+            --x-install-root=vcpkg_installed \
+            --allow-unsupported
         env:
-          VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+          VCPKG_BINARY_SOURCES: "clear"
 
       - name: Set prototype suffix
         run: |

@@ -62,7 +62,7 @@ jobs:
           --overlay-triplets build/vcpkg-triplets \
           --x-install-root=vcpkg_installed
       env:
-        VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+        VCPKG_BINARY_SOURCES: "clear"
 
     - uses: dkfans/setup-cpp@master
 
