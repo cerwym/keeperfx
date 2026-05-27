@@ -6,12 +6,14 @@
 # Homebrew platforms (Vita, 3DS, Switch) use their own SDK bundled dependencies
 if(NOT PLATFORM_VITA AND NOT PLATFORM_3DS AND NOT PLATFORM_SWITCH)
     # ━━━ SDL2 & Graphics ━━━
-    # MinGW cross-compile: force static SDL2 libs (no runtime DLLs)
+    # MinGW cross-compile: force static SDL2 libs (no runtime DLLs) and enable
+    # POSIX-compatible printf (so %zu, %zd etc. work for size_t formatting).
     if(MINGW OR CMAKE_CROSSCOMPILING)
         set(SDL2_USE_STATIC_LIBS ON)
         set(SDL2IMAGE_STATIC ON)
         set(SDL2MIXER_STATIC ON)
         set(SDL2NET_STATIC ON)
+        add_compile_definitions(__USE_MINGW_ANSI_STDIO=1)
     endif()
     
     find_package(SDL2 CONFIG REQUIRED)
