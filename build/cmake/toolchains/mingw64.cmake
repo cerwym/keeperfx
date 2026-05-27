@@ -2,6 +2,7 @@
 # Used by the windows-x64-* CMake presets when building inside the
 # keeperfx-build-mingw64 Docker image on a Linux host.
 set(CMAKE_SYSTEM_NAME Windows)
+set(CMAKE_SYSTEM_PROCESSOR x86_64)
 set(TOOLCHAIN_PREFIX x86_64-w64-mingw32)
 set(CMAKE_C_COMPILER   ${TOOLCHAIN_PREFIX}-gcc)
 set(CMAKE_CXX_COMPILER ${TOOLCHAIN_PREFIX}-g++)

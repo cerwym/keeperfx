@@ -36,7 +36,19 @@ function(apply_keeperfx_warnings TARGET)
         )
     else()
         # Desktop: MinGW or native Linux
-        set(GNU_COMPILER_FLAGS -march=x86-64 -fno-omit-frame-pointer -fmessage-length=0)
+        # Use correct march for the target processor; cross-compile to x86 uses i686
+        if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(i386|i486|i586|i686|x86)$")
+            set(GNU_COMPILER_FLAGS -march=i686 -fno-omit-frame-pointer -fmessage-length=0)
+        else()
+            set(GNU_COMPILER_FLAGS -march=x86-64 -fno-omit-frame-pointer -fmessage-length=0)
+        endif()
+        # MinGW cross-compile: GCC's -Wformat checker uses Windows (ms_printf) rules
+        # and rejects %zu/%zd even with __USE_MINGW_ANSI_STDIO=1 on some toolchain
+        # versions. Suppress format warnings on MinGW to avoid false positives.
+        if(MINGW OR (CMAKE_CROSSCOMPILING AND CMAKE_SYSTEM_NAME STREQUAL "Windows"))
+            list(APPEND WARNFLAGS_C   -Wno-format)
+            list(APPEND WARNFLAGS_CXX -Wno-format)
+        endif()
         target_compile_options(${TARGET} PRIVATE
             $<$<COMPILE_LANGUAGE:C>:${WARNFLAGS_C} ${GNU_COMPILER_FLAGS}>
             $<$<COMPILE_LANGUAGE:CXX>:${WARNFLAGS_CXX} ${GNU_COMPILER_FLAGS}>
