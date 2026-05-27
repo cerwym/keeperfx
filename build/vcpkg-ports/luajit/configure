@@ -114,7 +114,7 @@ all:
 	done
 
 install:
-	\$(MAKE) install \$(COMMON_OPTIONS)
+	\$(MAKE) install \$(COMMON_OPTIONS) \$(BUILD_OPTIONS) \$(PREBUILD_BUILDVM_X_ARG)
 ifeq (${LJARCH},)
 	mkdir -p "\$\${DESTDIR}\$(BUILDVM_PREFIX)"
 	install -m 0755 "src/host/minilua\$(EXECUTABLE_SUFFIX)" "\$\${DESTDIR}\$(BUILDVM_PREFIX)/minilua\$(EXECUTABLE_SUFFIX)"
