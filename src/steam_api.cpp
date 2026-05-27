@@ -30,6 +30,7 @@ static HMODULE steam_lib;
 #include "bflib_fileio.h"
 #include "post_inc.h"
 
+#ifdef _WIN32
 // Result from the dynamically loaded SteamAPI_Init function
 enum ESteamAPIInitResult
 {
@@ -52,8 +53,9 @@ union SteamApiInitUnion
 };
 
 // Variables
-SteamApiInitFunc SteamAPI_Init = nullptr;
-SteamApiShutdownFunc SteamAPI_Shutdown = nullptr;
+static SteamApiInitFunc SteamAPI_Init = nullptr;
+static SteamApiShutdownFunc SteamAPI_Shutdown = nullptr;
+#endif
 
 /**
  * @brief Initializes the Steam API in KeeperFX.
