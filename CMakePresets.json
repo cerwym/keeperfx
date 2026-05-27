@@ -251,7 +251,8 @@
                 "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}",
                 "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/external/vcpkg/scripts/buildsystems/vcpkg.cmake",
                 "VCPKG_INSTALLED_DIR": "${sourceDir}/vcpkg_installed",
-                "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/build/vcpkg-triplets"
+                "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/build/vcpkg-triplets",
+                "VCPKG_APPLOCAL_DEPS": "OFF"
             }
         },
 
