@@ -17,6 +17,7 @@
 #include <glad/glad.h>
 #include <cstring>
 #include <cstdlib>
+#include <cmath>
 #include <algorithm>
 #include "post_inc.h"
 

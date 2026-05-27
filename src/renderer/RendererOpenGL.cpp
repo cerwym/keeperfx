@@ -116,7 +116,7 @@ void APIENTRY DebugCallback(GLenum source, GLenum type, GLuint id, GLenum severi
                       : severity == GL_DEBUG_SEVERITY_LOW          ? "LOW"
                       : severity == GL_DEBUG_SEVERITY_NOTIFICATION ? "NOTIFY"
                                                                    : "Unknown";
-    JUSTLOG("[GL DEBUG] Severity=%s Type=%s Source=%s ID=%s Message=%s");
+    JUSTLOG("[GL DEBUG] Severity=%s Type=%s Source=%s Id=%u Message=%s", sev, tp, src, id, message);
 }
 
 bool RendererOpenGL::Init()
@@ -794,7 +794,7 @@ void RendererOpenGL::EndFrame()
     if (auto* mfp = RendererGetMapFadePass()) mfp->FlushToRenderGraph(m_render_graph);
 
     {
-        const UICommandBuffers& wui = m_render_graph.GetWriteUIBuffers();
+        const UICommandBuffers& wui [[maybe_unused]] = m_render_graph.GetWriteUIBuffers();
         SYNCDBG(1, "EndFrame: fade=%d ir_active=%d solid=%zu slabbg=%zu sprites=%zu sprR=%zu sprC=%zu "
                    "slabsel=%zu fbo=%zu mm=%zu cptr=%zu chand=%zu",
                 (int)RendererIsFadeCachePreserved(),
