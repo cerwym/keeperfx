@@ -38,11 +38,11 @@ struct SamplerBinding {
 
 GLUIRenderer::GLUIRenderer()
     : m_prog_sprite(0)
+    , m_prog_sprite_colored(-1)
     , m_prog_font(0)
     , m_prog_solid(0)
     , m_prog_remap(0)
     , m_prog_fbo(0)
-    , m_prog_sprite_colored(-1)
     , m_loc_screen_sprite(-1)
     , m_loc_screen_sprite_colored(-1)
     , m_loc_screen_font(-1)

@@ -41,6 +41,11 @@ GLTextRenderer::GLTextRenderer()
     , m_loc_font_atlas(-1)
     , m_loc_palette(-1)
     , m_loc_text_color(-1)
+    , m_batch_scissor_x(0)
+    , m_batch_scissor_y(0)
+    , m_batch_scissor_w(0)
+    , m_batch_scissor_h(0)
+    , m_batch_scissor_enabled(false)
     , m_font(nullptr)
     , m_justify_window{}
     , m_clip_window{}
@@ -48,11 +53,6 @@ GLTextRenderer::GLTextRenderer()
     , m_dbc_colour0(0)
     , m_dbc_colour1(0)
     , m_dbc_enabled(false)
-    , m_batch_scissor_x(0)
-    , m_batch_scissor_y(0)
-    , m_batch_scissor_w(0)
-    , m_batch_scissor_h(0)
-    , m_batch_scissor_enabled(false)
 {
 }
 
@@ -768,7 +768,7 @@ void GLTextRenderer::FlushSegment(const char* sbuf, const char* ebuf,
         unsigned long chr = ch;
 
         // Non-breaking space (UTF-8: 0xC2 0xA0) — advance like a normal space
-        if (ch == '\xc2' && (c + 1) < ebuf && (unsigned char)c[1] == '\xa0')
+        if (ch == 0xC2 && (c + 1) < ebuf && (unsigned char)c[1] == 0xA0)
         {
             current_x += space_len;
             ++c;

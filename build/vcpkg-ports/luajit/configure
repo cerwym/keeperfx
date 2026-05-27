@@ -75,7 +75,7 @@ ifeq (${LJARCH},x86)
 # wrong for a native 64-bit host tool. Set HOST_CFLAGS explicitly instead.
 PREBUILD_BUILDVM_CMD = \$(MAKE) -C src host/buildvm-x86\$(EXECUTABLE_SUFFIX) \
   BUILDVM_T=host/buildvm-x86\$(EXECUTABLE_SUFFIX) \
-  TARGET_SYS=Linux \
+  TARGET_SYS=Windows \
   LDFLAGS= LIBS= CFLAGS= CPPFLAGS= CC=gcc \
   "TARGET_TESTARCH=\$(TARGET_TESTARCH_x86)" \
   "HOST_CC=gcc -m32" \

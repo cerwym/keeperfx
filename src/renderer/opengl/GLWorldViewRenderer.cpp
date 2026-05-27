@@ -1985,7 +1985,6 @@ void GLWorldViewRenderer::DrawIsometricView()
     for (int bi = BUCKETS_COUNT - 1; bi >= 0; bi--)
     {
         m_current_bucket = bi;
-        const float z_ndc = 2.0f * (float)bi / (float)(BUCKETS_COUNT - 1) - 1.0f;
         bool bucket_has_3d_sprites = false;
         bool bucket_has_flat_polys = false;
         const int flatpoly_vert_start = (int)fpverts.size();
