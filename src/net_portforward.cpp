@@ -29,7 +29,9 @@
 #include "bflib_basics.h"
 #include "bflib_datetm.h"
 
+#ifndef MINIUPNP_STATICLIB
 #define MINIUPNP_STATICLIB
+#endif
 #include <miniupnpc/miniupnpc.h>
 #include <miniupnpc/upnpcommands.h>
 #include <miniupnpc/upnperrors.h>
@@ -40,11 +42,7 @@ typedef struct LPMSG *MSG;
 #endif
 
 #define NATPMP_STATICLIB
-#ifdef __WIN32__
 #include <natpmp/natpmp.h>
-#else
-#include <natpmp.h>
-#endif
 
 #include <cstdio>
 #include <ctime>
