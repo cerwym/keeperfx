@@ -38,11 +38,11 @@
   "features": {
     "buildvm-32": {
       "description": "Install host tools for 32 bit targets",
-      "supports": "native & (arm32 | x86) & (!windows | mingw)"
+      "supports": "(!windows | mingw)"
     },
     "buildvm-64": {
       "description": "Install host tools for 64 bit targets",
-      "supports": "native & (arm64 | x64) & (!windows | mingw)"
+      "supports": "(!windows | mingw)"
     }
   }
 }
