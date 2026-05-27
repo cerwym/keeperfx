@@ -34,6 +34,7 @@
 #include "frontmenu_ingame_evnt.h"
 #include "sprites.h"
 #include "custom_sprites.h"
+#include "renderer/RendererManager.h"
 #include "keeperfx.hpp"
 #include "post_inc.h"
 
@@ -81,7 +82,7 @@ void message_draw(void)
                     }
                     else if (game.messages[i].plyr_idx == game.neutral_player_num)
                     {
-                        spr_idx = ((game.play_gameturn >> 1) & 3) + GPS_plyrsym_symbol_player_red_std_b;
+                        spr_idx = ((get_gameturn() >> 1) & 3) + GPS_plyrsym_symbol_player_red_std_b;
                         plyr_idx = 0;
                     }
                     else
@@ -156,7 +157,7 @@ void message_draw(void)
                 case MsgType_Creature:
                 {
                     spr = get_panel_sprite(spr_idx);
-                    LbSpriteDrawResized(x, y, ps_units_per_px, spr);
+                    UIRenderer_SubmitPanelSpriteRaw(x, y, ps_units_per_px, spr);
                     break;
                 }
                 case MsgType_CreatureSpell:
@@ -166,7 +167,7 @@ void message_draw(void)
                 case MsgType_CreatureInstance:
                 {
                     spr = get_panel_sprite(spr_idx);
-                    LbSpriteDrawResized(x, y, ps_units_per_px, spr);
+                    UIRenderer_SubmitPanelSpriteRaw(x, y, ps_units_per_px, spr);
                     break;
                 }
             }
@@ -204,7 +205,7 @@ void message_update(void)
     while (i >= 0)
     {
         struct GuiMessage* gmsg = &game.messages[i];
-        if (game.play_gameturn > gmsg->expiration_turn)
+        if (get_gameturn() > gmsg->expiration_turn)
         {
             game.active_messages_count--;
             game.messages[game.active_messages_count].text[0] = 0;
@@ -257,9 +258,10 @@ void message_add(char type, PlayerNumber plyr_idx, const char *text)
     {
         memcpy(&game.messages[i], &game.messages[i-1], sizeof(struct GuiMessage));
     }
-    snprintf(game.messages[0].text, sizeof(game.messages[0].text), "%s", text);
+    snprintf(game.messages[0].text, sizeof(game.messages[0].text), "%.*s",
+             (int)(sizeof(game.messages[0].text) - 1), text);
     game.messages[0].plyr_idx = plyr_idx;
-    game.messages[0].expiration_turn = game.play_gameturn + GUI_MESSAGES_DELAY;
+    game.messages[0].expiration_turn = get_gameturn() + GUI_MESSAGES_DELAY;
     game.messages[0].target_idx = -1;
     game.messages[0].type = type;
     if (game.active_messages_count < GUI_MESSAGES_COUNT) {
@@ -288,9 +290,9 @@ void targeted_message_add(char type, PlayerNumber plyr_idx, PlayerNumber target_
     {
         memcpy(&game.messages[i], &game.messages[i-1], sizeof(struct GuiMessage));
     }
-    snprintf(game.messages[0].text, sizeof(game.messages[0].text), "%s", full_msg_text);
+    snprintf(game.messages[0].text, sizeof(game.messages[0].text), "%.*s", (int)(sizeof(game.messages[0].text) - 1), full_msg_text);
     game.messages[0].plyr_idx = plyr_idx;
-    game.messages[0].expiration_turn = game.play_gameturn + timeout;
+    game.messages[0].expiration_turn = get_gameturn() + timeout;
     game.messages[0].target_idx = target_idx;
     game.messages[0].type = type;
     if (game.active_messages_count < GUI_MESSAGES_COUNT) {

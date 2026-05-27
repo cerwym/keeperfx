@@ -43,6 +43,7 @@ typedef unsigned char TbRGBColorTable[COLOUR_TABLE_DIMENSION][COLOUR_TABLE_DIMEN
 extern unsigned char fade_palette_in;
 extern unsigned char frontend_palette[768];
 extern TbRGBColorTable colours;
+extern float g_palette_possession_tint;
 
 #pragma pack()
 /******************************************************************************/

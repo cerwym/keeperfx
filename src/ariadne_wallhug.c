@@ -497,7 +497,7 @@ long creature_cannot_move_directly_to_with_collide(struct Thing *creatng, struct
         else
             clpcor = (prev_pos.x.val + COORD_PER_STL) & 0xFFFFFF00;
         next_pos.x.val = clpcor;
-        next_pos.y.val = dt_y * abs(clpcor - orig_pos.x.val) / dt_x + orig_pos.y.val;
+        next_pos.y.val = dt_y * labs(clpcor - orig_pos.x.val) / dt_x + orig_pos.y.val;
         next_pos.z.val = prev_pos.z.val;
         switch (creature_cannot_move_directly_to_with_collide_sub(creatng, prev_pos, slab_flags, crt_owner_flags))
         {
@@ -520,7 +520,7 @@ long creature_cannot_move_directly_to_with_collide(struct Thing *creatng, struct
         else
             clpcor = (prev_pos.y.val + COORD_PER_STL) & 0xFFFFFF00;
         next_pos.y.val = clpcor;
-        next_pos.x.val = dt_x * abs(clpcor - orig_pos.y.val) / dt_y + orig_pos.x.val;
+        next_pos.x.val = dt_x * labs(clpcor - orig_pos.y.val) / dt_y + orig_pos.x.val;
         next_pos.z.val = prev_pos.z.val;
         switch (creature_cannot_move_directly_to_with_collide_sub(creatng, next_pos, slab_flags, crt_owner_flags))
         {
@@ -565,7 +565,7 @@ long creature_cannot_move_directly_to_with_collide(struct Thing *creatng, struct
         else
             clpcor = (prev_pos.y.val + COORD_PER_STL) & 0xFFFFFF00;
         next_pos.y.val = clpcor;
-        next_pos.x.val = dt_x * abs(clpcor - orig_pos.y.val) / dt_y + orig_pos.x.val;
+        next_pos.x.val = dt_x * labs(clpcor - orig_pos.y.val) / dt_y + orig_pos.x.val;
         next_pos.z.val = prev_pos.z.val;
         switch (creature_cannot_move_directly_to_with_collide_sub(creatng, next_pos, slab_flags, crt_owner_flags))
         {
@@ -588,7 +588,7 @@ long creature_cannot_move_directly_to_with_collide(struct Thing *creatng, struct
         else
             clpcor = (prev_pos.x.val + COORD_PER_STL) & 0xFFFFFF00;
         next_pos.x.val = clpcor;
-        next_pos.y.val = dt_y * abs(clpcor - orig_pos.x.val) / dt_x + orig_pos.y.val;
+        next_pos.y.val = dt_y * labs(clpcor - orig_pos.x.val) / dt_x + orig_pos.y.val;
         next_pos.z.val = prev_pos.z.val;
         switch (creature_cannot_move_directly_to_with_collide_sub(creatng, next_pos, slab_flags, crt_owner_flags))
         {
@@ -1487,7 +1487,7 @@ static SubtlCodedCoords get_map_index_of_first_block_thing_colliding_with_travel
                 pos.y.stl.num = creature_pos.y.stl.num + 1;
                 pos.y.stl.pos = 0;
             }
-            pos.x.val = (int)(delta_x * abs(pos.y.val - reference_x)) / delta_y + reference_y;
+            pos.x.val = (int)(delta_x * labs(pos.y.val - reference_x)) / delta_y + reference_y;
 
             pos.z.val = creature_pos.z.val;
             stl_num = get_map_index_of_first_block_thing_colliding_with_at(creatng, &pos, slab_flags, crt_owner_flags);
@@ -1508,7 +1508,7 @@ static SubtlCodedCoords get_map_index_of_first_block_thing_colliding_with_travel
                 pos.x.stl.pos = 0;
             }
 
-            pos.y.val = (int)(delta_y * abs(pos.x.val - reference_x)) / delta_x + reference_y;
+            pos.y.val = (int)(delta_y * labs(pos.x.val - reference_x)) / delta_x + reference_y;
             pos.z.val = creature_pos.z.val;
             stl_num = get_map_index_of_first_block_thing_colliding_with_at(creatng, &pos, slab_flags, crt_owner_flags);
             if (stl_num >= 0)
@@ -1546,7 +1546,7 @@ static SubtlCodedCoords get_map_index_of_first_block_thing_colliding_with_travel
         pos.x.stl.num = creature_pos.x.stl.num + 1;
         pos.x.stl.pos = 0;
     }
-    pos.y.val = (int)(delta_y * abs(pos.x.val - reference_y)) / delta_x + reference_x;
+    pos.y.val = (int)(delta_y * labs(pos.x.val - reference_y)) / delta_x + reference_x;
     pos.z.val = creature_pos.z.val;
     stl_num = get_map_index_of_first_block_thing_colliding_with_at(creatng, &pos, slab_flags, crt_owner_flags);
     if (stl_num >= 0)
@@ -1565,7 +1565,7 @@ static SubtlCodedCoords get_map_index_of_first_block_thing_colliding_with_travel
         pos.y.stl.num = creature_pos.y.stl.num + 1;
         pos.y.stl.pos = 0;
     }
-    pos.x.val = (int)(delta_x * abs(pos.y.val - reference_x)) / delta_y + reference_y;
+    pos.x.val = (int)(delta_x * labs(pos.y.val - reference_x)) / delta_y + reference_y;
     pos.z.val = creature_pos.z.val;
     stl_num = get_map_index_of_first_block_thing_colliding_with_at(creatng, &pos, slab_flags, crt_owner_flags);
     if (stl_num >= 0)

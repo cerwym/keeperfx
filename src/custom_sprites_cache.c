@@ -7,7 +7,7 @@
 #include "bflib_fileio.h"
 #include <psp2/io/fcntl.h>
 #include <psp2/io/stat.h>
-#include <SDL2/SDL.h>
+#include "bflib_datetm.h"
 #include <string.h>
 #include <stdlib.h>
 #include "post_inc.h"
@@ -235,7 +235,7 @@ static void tier_write(const char *path, const SpriteCacheCtx *ctx,
                        const SpriteCacheTierSnapshot *base,
                        const ZipFP *fps, int n_fps)
 {
-    uint32_t t0 = SDL_GetTicks();
+    TbClockMSec t0 = LbTimerClock();
     sceIoMkdir(CACHE_DIR, 0777);
 
     char tmp[MAX_PATH_LEN];
@@ -342,13 +342,13 @@ static void tier_write(const char *path, const SpriteCacheCtx *ctx,
         return;
     }
     if (cnt_kspr > 0 || cnt_cspr > 0) {
-        JUSTLOG("sprite_cache: wrote '%s' (+%d ksprites[%d..%d], +%d icons[%d..%d]) in %u ms",
+        JUSTLOG("sprite_cache: wrote '%s' (+%d ksprites[%d..%d], +%d icons[%d..%d]) in %d ms",
                 path, cnt_kspr, base_kspr, base_kspr + cnt_kspr - 1,
                 cnt_cspr, base_icons, base_icons + cnt_cspr - 1,
-                SDL_GetTicks() - t0);
+                (int)(LbTimerClock() - t0));
     } else {
-        JUSTLOG("sprite_cache: wrote '%s' (+0 ksprites, +0 icons) in %u ms",
-                path, SDL_GetTicks() - t0);
+        JUSTLOG("sprite_cache: wrote '%s' (+0 ksprites, +0 icons) in %d ms",
+                path, (int)(LbTimerClock() - t0));
     }
     return;
 
@@ -365,7 +365,7 @@ err:
 static TbBool tier_try_load(const char *path, SpriteCacheCtx *ctx,
                              const SpriteCacheTierSnapshot *expected_base)
 {
-    uint32_t t0 = SDL_GetTicks();
+    TbClockMSec t0 = LbTimerClock();
 
     SceUID fd = sceIoOpen(path, SCE_O_RDONLY, 0);
     if (fd < 0) return false;
@@ -476,13 +476,13 @@ static TbBool tier_try_load(const char *path, SpriteCacheCtx *ctx,
 
     sceIoClose(fd);
     if (h_cnt_kspr > 0 || h_cnt_cspr > 0) {
-        JUSTLOG("sprite_cache: loaded '%s' (+%u ksprites[%u..%u], +%u icons[%u..%u]) in %u ms",
+        JUSTLOG("sprite_cache: loaded '%s' (+%u ksprites[%u..%u], +%u icons[%u..%u]) in %d ms",
                 path, h_cnt_kspr, h_base_kspr, h_base_kspr + h_cnt_kspr - 1,
                 h_cnt_cspr, h_base_icons, h_base_icons + h_cnt_cspr - 1,
-                SDL_GetTicks() - t0);
+                (int)(LbTimerClock() - t0));
     } else {
-        JUSTLOG("sprite_cache: loaded '%s' (+0 ksprites, +0 icons) in %u ms",
-                path, SDL_GetTicks() - t0);
+        JUSTLOG("sprite_cache: loaded '%s' (+0 ksprites, +0 icons) in %d ms",
+                path, (int)(LbTimerClock() - t0));
     }
     return true;
 

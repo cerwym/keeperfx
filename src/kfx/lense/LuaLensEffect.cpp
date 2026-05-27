@@ -26,6 +26,7 @@ extern "C" {
 }
 
 #include "../../keeperfx.hpp"
+#include "kfx/profiling/KfxProfiling.h"
 #include "../../post_inc.h"
 
 /******************************************************************************/
@@ -201,6 +202,7 @@ void LuaLensEffect::Cleanup()
 
 TbBool LuaLensEffect::Draw(LensRenderContext* ctx)
 {
+    KFX_ZONE("LensEffect::Draw");
     // Check if lens is active (0 = no lens, anything else = active)
     if (m_current_lens == 0) {
         return false;

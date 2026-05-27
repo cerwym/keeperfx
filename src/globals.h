@@ -122,7 +122,7 @@ uint64_t LbSystemClockMilliseconds(void);
 #define SYNCLOG(format, ...) LbSyncLog("[%" PRIu32 "] %s: " format "\n", get_gameturn(), __func__ , ##__VA_ARGS__)
 #define JUSTLOG(format, ...) LbJustLog("[%" PRIu32 "] %s: " format "\n", get_gameturn(), __func__ , ##__VA_ARGS__)
 extern TbBool detailed_multiplayer_logging;
-#define MULTIPLAYER_LOG(format, ...) do { if (detailed_multiplayer_logging && game.game_kind == GKind_MultiGame) { LbJustLog("[%" PRIu32 "][%" PRIu64 " ms] %s: " format "\n", get_gameturn(), LbSystemClockMilliseconds(), __func__ , ##__VA_ARGS__); } } while(0)
+#define MULTIPLAYER_LOG(format, ...) do { if (detailed_multiplayer_logging && game.game_kind == GKind_MultiGame) { LbJustLog("[%" PRIu32 "][%llu ms] %s: " format "\n", get_gameturn(), (unsigned long long)LbSystemClockMilliseconds(), __func__ , ##__VA_ARGS__); } } while(0)
 #define SCRPTLOG(format, ...) LbScriptLog(text_line_number,"%s: " format "\n", __func__ , ##__VA_ARGS__)
 #define SCRPTERRLOG(format, ...) LbErrorLog("%s(line %lu): " format "\n", __func__ , text_line_number, ##__VA_ARGS__)
 #define SCRPTWRNLOG(format, ...) LbWarnLog("%s(line %lu): " format "\n", __func__ , text_line_number, ##__VA_ARGS__)
@@ -318,11 +318,14 @@ typedef uint16_t NavColour;
 typedef int8_t SmallAroundIndex;
 /** a player state as defined in config_players*/
 typedef uint8_t PlayerState;
+/** Index to the Creature Control array. */
 typedef uint16_t CctrlIndex;
 /** index to a function, positive for C functions, negative for lua functions*/
 typedef int16_t FuncIdx;
+/** locations like an action point, last event etc. */
 typedef uint32_t TbMapLocation;
-
+/** Controller buttons state. flags field, each bit represents a button */
+typedef uint64_t TbControllerButtons; 
 
 /**
  * Stores a 2d coordinate (x,y).

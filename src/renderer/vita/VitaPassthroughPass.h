@@ -8,8 +8,7 @@
  *     Not a LensEffect GPU pass — owned directly by RendererVita.
  */
 /******************************************************************************/
-#ifndef VITA_PASSTHROUGH_PASS_H
-#define VITA_PASSTHROUGH_PASS_H
+#pragma once
 
 #ifdef PLATFORM_VITA
 
@@ -42,4 +41,3 @@ private:
 };
 
 #endif // PLATFORM_VITA
-#endif // VITA_PASSTHROUGH_PASS_H

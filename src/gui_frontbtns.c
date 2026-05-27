@@ -20,6 +20,7 @@
 #include "pre_inc.h"
 #include "gui_frontbtns.h"
 
+#include <stdlib.h>     /* free() — for hit_mask release in kill_button() */
 #include "globals.h"
 #include "bflib_basics.h"
 #include "bflib_guibtns.h"
@@ -35,6 +36,7 @@
 #include "sprites.h"
 #include "game_legacy.h"
 #include "custom_sprites.h"
+#include "renderer/RendererManager.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -370,6 +372,8 @@ void kill_button(struct GuiButton *gbtn)
         gbtn->maintain_call = NULL;
         gbtn->content.ptr = NULL;
         gbtn->gmenu_idx = 0;
+        if (gbtn->hit_mask) { free(gbtn->hit_mask); gbtn->hit_mask = NULL; }
+        gbtn->hit_mask_w = gbtn->hit_mask_h = gbtn->hit_mask_stride = 0;
     }
 }
 
@@ -598,7 +602,8 @@ void gui_area_compsetting_button(struct GuiButton *gbtn)
     SYNCDBG(12,"Finished");
 }
 
-void gui_area_creatrmodel_button(struct GuiButton *gbtn)
+// Creature list panel icon — small creature head in the right-panel grid.
+void gui_area_creature_list_icon(struct GuiButton *gbtn)
 {
     SYNCDBG(10,"Starting");
     int spr_idx;
@@ -771,30 +776,30 @@ void frontend_draw_button(struct GuiButton *gbtn, unsigned short btntype, const 
     {
      case 1:
          spr = get_frontend_sprite(spridx);
-         LbSpriteDrawResized(x, y, units_per_px, spr);
+         UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_px, spr);
          x += spr->SWidth * units_per_px / 16;
          spr = get_frontend_sprite(spridx+1);
-         LbSpriteDrawResized(x, y, units_per_px, spr);
+         UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_px, spr);
          x += spr->SWidth * units_per_px / 16;
          break;
     case 2:
         spr = get_frontend_sprite(spridx);
-        LbSpriteDrawResized(x, y, units_per_px, spr);
+        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_px, spr);
         x += spr->SWidth * units_per_px / 16;
         spr = get_frontend_sprite(spridx+1);
-        LbSpriteDrawResized(x, y, units_per_px, spr);
+        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_px, spr);
         x += spr->SWidth * units_per_px / 16;
-        LbSpriteDrawResized(x, y, units_per_px, spr);
+        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_px, spr);
         x += spr->SWidth * units_per_px / 16;
         break;
     default:
         spr = get_frontend_sprite(spridx);
-        LbSpriteDrawResized(x, y, units_per_px, spr);
+        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_px, spr);
         x += spr->SWidth * units_per_px / 16;
         break;
     }
     spr = get_frontend_sprite(spridx+2);
-    LbSpriteDrawResized(x, y, units_per_px, spr);
+    UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_px, spr);
     if (text != NULL)
     {
         lbDisplay.DrawFlags = drw_flags;
@@ -834,16 +839,16 @@ void frontend_draw_scroll_box_tab(struct GuiButton *gbtn)
     // Since this tab is attachable from top, it is important to keep bottom position without variation
     pos_y = gbtn->scr_pos_y + gbtn->height - spr->SHeight * fs_units_per_px / 16;
     spr = get_frontend_sprite(GFS_hugearea_thc_cor_tl);
-    LbSpriteDrawResized(pos_x, pos_y, fs_units_per_px, spr);
+    UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, fs_units_per_px, spr);
     pos_x += spr->SWidth * fs_units_per_px / 16;
     spr = get_frontend_sprite(GFS_hugearea_thc_tx1_tc);
-    LbSpriteDrawResized(pos_x, pos_y, fs_units_per_px, spr);
+    UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, fs_units_per_px, spr);
     pos_x += spr->SWidth * fs_units_per_px / 16;
     spr = get_frontend_sprite(GFS_hugearea_thc_tx1_tc);
-    LbSpriteDrawResized(pos_x, pos_y, fs_units_per_px, spr);
+    UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, fs_units_per_px, spr);
     pos_x += spr->SWidth * fs_units_per_px / 16;
     spr = get_frontend_sprite(GFS_hugearea_thc_cor_tr);
-    LbSpriteDrawResized(pos_x, pos_y, fs_units_per_px, spr);
+    UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, fs_units_per_px, spr);
 }
 
 void frontend_draw_scroll_box(struct GuiButton *gbtn)
@@ -1017,7 +1022,7 @@ void gui_area_flash_cycle_button(struct GuiButton *gbtn)
             ctptr = (unsigned char *)gbtn->content.ptr;
             if ((ctptr != NULL) && (*ctptr > 0))
             {
-                if ((game.play_gameturn % (2 * gui_blink_rate)) >= gui_blink_rate) {
+                if ((get_gameturn() % (2 * gui_blink_rate)) >= gui_blink_rate) {
                     spr_idx += 2;
                 }
             }
@@ -1086,7 +1091,7 @@ void gui_draw_scroll_box(struct GuiButton *gbtn, int height_lines, TbBool draw_s
     pos_x = gbtn->scr_pos_x;
     for (i=0; i < 6; i++)
     {
-        LbSpriteDrawResized(pos_x, pos_y, units_per_px, spr);
+        UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, units_per_px, spr);
         pos_x += spr->SWidth * units_per_px / 16;
         spr++;
     }
@@ -1108,7 +1113,7 @@ void gui_draw_scroll_box(struct GuiButton *gbtn, int height_lines, TbBool draw_s
       pos_x = gbtn->scr_pos_x;
       for (i=0; i < 6; i++)
       {
-          LbSpriteDrawResized(pos_x, pos_y, units_per_px, spr);
+          UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, units_per_px, spr);
           pos_x += spr->SWidth * units_per_px / 16;
           spr++;
       }
@@ -1133,7 +1138,7 @@ void gui_draw_scroll_box(struct GuiButton *gbtn, int height_lines, TbBool draw_s
     pos_x = gbtn->scr_pos_x;
     for (i=0; i < 6; i++)
     {
-        LbSpriteDrawResized(pos_x, pos_y, units_per_px, spr);
+        UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, units_per_px, spr);
         pos_x += spr->SWidth * units_per_px / 16;
         spr++;
     }

@@ -37,6 +37,7 @@
 #include "front_input.h"
 #include "game_legacy.h"
 #include "kjm_input.h"
+#include "renderer/RendererManager.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -119,7 +120,7 @@ int selected_resurrect_creature(const struct Dungeon *dungeon, const struct GuiB
     {
         listitm_idx = resurrect_creature_scroll_offset + (gbtn->btype_value & LbBFeF_IntValueMask);
         if (listitm_idx < DEAD_CREATURES_MAX_COUNT) {
-            return abs(dungeon->dead_creature_idx + listitm_idx) % DEAD_CREATURES_MAX_COUNT;
+            return labs(dungeon->dead_creature_idx + listitm_idx) % DEAD_CREATURES_MAX_COUNT;
         }
     }
     return -1;
@@ -151,14 +152,14 @@ void draw_resurrect_creature(struct GuiButton *gbtn)
     if (i != -1)
     {
         struct CreatureStorage* cstore = &dungeon->dead_creatures[i];
-        struct CreatureModelConfig* crconf = &game.conf.crtr_conf.model[cstore->model];
+        struct CreatureModelConfig* crconf = creature_stats_get(cstore->model);
         lbDisplay.DrawFlags = Lb_TEXT_HALIGN_LEFT;
         long spr_idx = get_creature_model_graphics(cstore->model, CGI_HandSymbol);
         const struct TbSprite* spr = get_panel_sprite(spr_idx);
         int x = gbtn->scr_pos_x - scale_ui_value_lofi(1);
         int y = gbtn->scr_pos_y - (19 * tx_units_per_px / 16);
 
-        if (LbGraphicsScreenHeight() < 400)
+        if (RendererScreenHeight() < 400)
         {
             y = gbtn->scr_pos_y - (19 * tx_units_per_px / 32);
         }
@@ -241,13 +242,13 @@ void draw_transfer_creature(struct GuiButton *gbtn)
     if (!thing_is_invalid(thing))
     {
         const struct CreatureControl* cctrl = creature_control_get_from_thing(thing);
-        struct CreatureModelConfig* crconf = &game.conf.crtr_conf.model[thing->model];
+        struct CreatureModelConfig* crconf = creature_stats_get_from_thing(thing);
         lbDisplay.DrawFlags = Lb_TEXT_HALIGN_LEFT;
         long spr_idx = get_creature_model_graphics(thing->model, CGI_HandSymbol);
         const struct TbSprite* spr = get_panel_sprite(spr_idx);
         int x = gbtn->scr_pos_x - scale_ui_value_lofi(1);
         int y = gbtn->scr_pos_y - (19 * tx_units_per_px / 16);
-        if (LbGraphicsScreenHeight() < 400)
+        if (RendererScreenHeight() < 400)
         {
             y = gbtn->scr_pos_y - (19 * tx_units_per_px / 32);
         }

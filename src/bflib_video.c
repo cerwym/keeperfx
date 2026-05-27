@@ -53,8 +53,6 @@ volatile TbBool lbScreenInitialised = false;
 /** Bytes per pixel expected by the engine.
  * On any try of entering different video BPP, this mode will be emulated. */
 volatile unsigned short lbEngineBPP = 8;
-/** Informs if the application window is active (focused on screen). */
-extern volatile TbBool lbAppActive;
 /** True if we have two surfaces. */
 volatile TbBool lbHasSecondSurface;
 /** True if we request the double buffering to be on in next mode switch. */
@@ -67,9 +65,7 @@ unsigned char lbPalette[PALETTE_SIZE];
 SDL_Color lbPaletteColors[PALETTE_COLORS];
 
 char lbDrawAreaTitle[128] = "Bullfrog Shell";
-volatile TbBool lbInteruptMouse;
 volatile unsigned long lbIconIndex = 0;
-SDL_Window *lbWindow = NULL;
 
 TbDisplayStruct lbDisplay;
 
@@ -98,87 +94,6 @@ static long fade_count;
 void *LbExeReferenceNumber(void)
 {
   return NULL;
-}
-
-/** Locks the graphics screen.
- *  This function gives access to the WScreen pointer, which contains buffer
- *  of size GraphicsScreenWidth x GraphicsScreenHeight.
- *  It also allows accessing GraphicsWindowPtr buffer, of size
- *  GraphicsWindowWidth x GraphicsWindowHeight, but with pitch (scanline length)
- *   same as graphics screen (which is GraphicsScreenWidth).
- *
- * @return Lb_SUCCESS if the lock was successful.
- * @see LbScreenUnlock()
- */
-TbResult LbScreenLock(void)
-{
-    SYNCDBG(12,"Starting");
-    if (!lbScreenInitialised)
-        return Lb_FAIL;
-
-    int pitch = 0;
-    unsigned char *pixels = RendererLockFramebuffer(&pitch);
-    if (!pixels) {
-        lbDisplay.GraphicsWindowPtr = NULL;
-        lbDisplay.WScreen = NULL;
-        return Lb_FAIL;
-    }
-
-    lbDisplay.WScreen = pixels;
-    lbDisplay.GraphicsScreenWidth = pitch;
-    lbDisplay.GraphicsWindowPtr = &lbDisplay.WScreen[lbDisplay.GraphicsWindowX +
-        lbDisplay.GraphicsScreenWidth * lbDisplay.GraphicsWindowY];
-    return Lb_SUCCESS;
-}
-
-TbResult LbScreenUnlock(void)
-{
-    SYNCDBG(12,"Starting");
-    if (!lbScreenInitialised)
-        return Lb_FAIL;
-    lbDisplay.WScreen = NULL;
-    lbDisplay.GraphicsWindowPtr = NULL;
-    RendererUnlockFramebuffer();
-    return Lb_SUCCESS;
-}
-
-TbResult LbScreenSwap(void)
-{
-    KFX_BREADCRUMB("LbScreenSwap");
-    SYNCDBG(12,"Starting");
-    PlatformManager_FrameTick();
-    TbResult ret = LbMouseOnBeginSwap();
-    if (ret == Lb_SUCCESS) {
-#if defined(VITA_PERF_LOG)
-        {
-            static Uint32 _ef_accum = 0;
-            static int    _ef_cnt   = 0;
-            Uint32 _ef_t0 = SDL_GetTicks();
-            RendererEndFrame();
-            _ef_accum += SDL_GetTicks() - _ef_t0;
-            if (++_ef_cnt >= 60) {
-                JUSTLOG("[perf] EndFrame   avg %u ms/frame (60-frame window)", _ef_accum / 60u);
-                _ef_accum = 0; _ef_cnt = 0;
-            }
-        }
-#else
-        RendererEndFrame();
-#endif
-    }
-    LbMouseOnEndSwap();
-    return ret;
-}
-
-TbResult LbScreenClear(TbPixel colour)
-{
-    SYNCDBG(12,"Starting");
-    if ((!lbScreenInitialised) || (lbDrawSurface == NULL))
-      return Lb_FAIL;
-    if (SDL_FillRect(lbDrawSurface, NULL, colour) < 0) {
-        ERRORLOG("Error while clearing screen.");
-        return Lb_FAIL;
-    }
-  return Lb_SUCCESS;
 }
 
 /** Returns the currently active screen mode.
@@ -253,10 +168,7 @@ TbResult LbPaletteFadeStep(unsigned char *from_palette,unsigned char *to_palette
         palette[i+2] = fade_count * (target_color_component - source_color_component) / fade_steps + source_color_component;
     }
     LbScreenWaitVbi();
-    TbResult ret = LbPaletteSet(palette);
-    if (lbHasSecondSurface)
-        LbScreenSwap();
-    return ret;
+    return LbPaletteSet(palette);
 }
 
 TbResult LbPaletteStopOpenFade(void)
@@ -329,16 +241,16 @@ TbResult LbScreenWaitVbi(void)
 unsigned short LbGetCurrentDisplayIndex()
 {
     unsigned short current_display_id = display_id; // default to the already set display_id
-    if (lbWindow != NULL)
+    if (PlatformManager_HasWindow())
     {
-        int ret = SDL_GetWindowDisplayIndex(lbWindow); // Get the screen that the game is currently running on (if it is running)
+        int ret = PlatformManager_GetWindowDisplayIndex(); // Get the screen that the game is currently running on (if it is running)
         if (ret >= 0)
         {
             current_display_id = (unsigned short)ret; // update the record of the current display that keeperfx is rendering to
         }
         else
         {
-            ERRORLOG("SDL_GetWindowDisplayIndex failed: %s", SDL_GetError());
+            ERRORLOG("PlatformManager_GetWindowDisplayIndex failed: %s", SDL_GetError());
         }
     }
     return current_display_id;
@@ -360,7 +272,19 @@ static TbBool LbHwCheckIsModeAvailable(TbScreenMode mode, unsigned short display
     {
         if (mdinfo->VideoFlags & Lb_VF_BORDERLESS)
         {
-            // bordeless window - do nothing
+            // borderless window at desktop resolution
+            if (mdinfo->Width == 0 || mdinfo->Height == 0)
+            {
+                int desktop_w = 0;
+                int desktop_h = 0;
+                if (PlatformManager_GetDesktopDisplayMode(display, &desktop_w, &desktop_h) != 0)
+                {
+                    ERRORLOG("PlatformManager_GetDesktopDisplayMode failed: %s", SDL_GetError());
+                    return false;
+                }
+                mdinfo->Width = desktop_w;
+                mdinfo->Height = desktop_h;
+            }
         }
         else
         {
@@ -378,24 +302,27 @@ static TbBool LbHwCheckIsModeAvailable(TbScreenMode mode, unsigned short display
         //int screenArray[columnCount*rowCount] = {1, 0, 2};
         mdinfo->Width = mdinfo->Height = mdinfo->window_pos_x = mdinfo->window_pos_y = 0;
         // Get the total number of displays
-        int numDisplays = SDL_GetNumVideoDisplays();
+        int numDisplays = PlatformManager_GetNumVideoDisplays();
         if (numDisplays <= 0)
         {
-            ERRORLOG("SDL_GetNumVideoDisplays failed: %s", SDL_GetError());
+            ERRORLOG("PlatformManager_GetNumVideoDisplays failed: %s", SDL_GetError());
             return false; // for some reason we can't get the number of displays!
         }
         for (int d = 0; d < numDisplays; d++)
         {
-            SDL_Rect rect = {0, 0, 0, 0};
-            if (SDL_GetDisplayBounds(d, &rect) != 0)
+            int rect_x = 0;
+            int rect_y = 0;
+            int rect_w = 0;
+            int rect_h = 0;
+            if (PlatformManager_GetDisplayBounds(d, &rect_x, &rect_y, &rect_w, &rect_h) != 0)
             {
-                ERRORLOG("SDL_GetDisplayBounds failed: %s", SDL_GetError());
+                ERRORLOG("PlatformManager_GetDisplayBounds failed: %s", SDL_GetError());
                 return false; // for some reason we can't get the current display bounds!
             }
-            left = min(left, rect.x);
-            top = min(top, rect.y);
-            right = max(right, rect.x + rect.w);
-            bottom = max(bottom, rect.y + rect.h);
+            left = min(left, rect_x);
+            top = min(top, rect_y);
+            right = max(right, rect_x + rect_w);
+            bottom = max(bottom, rect_y + rect_h);
         }
         mdinfo->Width = abs(left - right);
         mdinfo->Height = abs(top - bottom);
@@ -412,29 +339,30 @@ static TbBool LbHwCheckIsModeAvailable(TbScreenMode mode, unsigned short display
     {
         // We actually need to setup this mode now, as it is flexible to the user's setup
         // Get current desktop display width and height (after DPI scaling)
-        SDL_DisplayMode desktop;
-        if (SDL_GetDesktopDisplayMode(display, &desktop) != 0)
+        int desktop_w = 0;
+        int desktop_h = 0;
+        if (PlatformManager_GetDesktopDisplayMode(display, &desktop_w, &desktop_h) != 0)
         {
-            ERRORLOG("SDL_GetDesktopDisplayMode failed: %s", SDL_GetError());
+            ERRORLOG("PlatformManager_GetDesktopDisplayMode failed: %s", SDL_GetError());
             return false; // for some reason we can't get the current desktop resolution!
         }
         // update the mode's width and height to the desktop resolution of the current monitor
-        mdinfo->Width = desktop.w;
-        mdinfo->Height = desktop.h;
+        mdinfo->Width = desktop_w;
+        mdinfo->Height = desktop_h;
     }
     // else if this is a specific fullscreen mode
     else
     {
+        int closest_w = 0;
+        int closest_h = 0;
         // See if the desired fullscreen mode is a valid mode for the current display
-        SDL_DisplayMode desired = {SDL_PIXELFORMAT_UNKNOWN, (int)mdinfo->Width, (int)mdinfo->Height, 0, 0}; // maybe there is a better/more accurate way to describe the display mode...
-        SDL_DisplayMode closest = desired;
-        if (SDL_GetClosestDisplayMode(display, &desired, &closest) == NULL)
+        if (PlatformManager_GetClosestDisplayMode(display, (int)mdinfo->Width, (int)mdinfo->Height, &closest_w, &closest_h) == 0)
         {
             return false; // all available fullscreen modes are too small for the desired mode to fit
         }
         // Accept the mode if the physical display can contain it, even if not an exact match
         // (the renderer will scale the logical framebuffer up to fill the physical display).
-        if (closest.w < desired.w || closest.h < desired.h)
+        if (closest_w < (int)mdinfo->Width || closest_h < (int)mdinfo->Height)
         {
             return false; // physical display is smaller than requested mode
         }
@@ -494,7 +422,7 @@ static void LbRegisterModernVideoModes(void)
     LbRegisterVideoMode("DESKTOP",      0, 0, 32, Lb_VF_RGBCOLOR|Lb_VF_BORDERLESS|Lb_VF_DESKTOP); // borderless fullscreen window mode
     LbRegisterVideoMode("DESKTOP_FULL", 0, 0, 32, Lb_VF_RGBCOLOR|Lb_VF_DESKTOP); // normal fullscreen mode (at desktop resolution)
     //LbRegisterVideoMode("WINDOW",       0, 0, 32, Lb_VF_RGBCOLOR|Lb_VF_WINDOWED); // normal bordered window at any resolution, remebers previous set size (defaults to 640x480?)
-    //LbRegisterVideoMode("BORDERLESS",   0, 0, 32, Lb_VF_RGBCOLOR|Lb_VF_BORDERLESS|Lb_VF_WINDOWED); // borderless window at any resolution
+    LbRegisterVideoMode("BORDERLESS",   0, 0, 32, Lb_VF_RGBCOLOR|Lb_VF_BORDERLESS|Lb_VF_WINDOWED); // borderless window at desktop resolution
     LbRegisterVideoMode("ALL",          0, 0, 32, Lb_VF_RGBCOLOR|Lb_VF_FILLALL); // span all displays with a borderless window
 }
 
@@ -502,26 +430,14 @@ TbResult LbScreenInitialize(void)
 {
     // Clear global variables
     lbScreenInitialised = false;
-    lbScreenSurface = NULL;
     lbDrawSurface = NULL;
     lbHasSecondSurface = false;
     lbDoubleBufferingRequested = false;
-    lbAppActive = true;
     LbMouseChangeMoveRatio(256, 256);
     // Register default video modes
     if (lbScreenModeInfoNum == 0) {
         LbRegisterStandardVideoModes();
         LbRegisterModernVideoModes(); // register modern and flexible custom modes
-    }
-    // SDL_Init(VIDEO|JOYSTICK) was already called by VideoInit() on all platforms.
-    // On platforms that own the display (Vita: vitaGL/GXM), skip SDL video init
-    // entirely; on others (desktop, 3DS, Switch) it is performed here.
-    if (!PlatformManager_OwnsDisplay()) {
-        if (SDL_Init(SDL_INIT_VIDEO|SDL_INIT_JOYSTICK) < 0) {
-            ERRORLOG("SDL init: %s",SDL_GetError());
-            return Lb_FAIL;
-        }
-        atexit(SDL_Quit);
     }
     return Lb_SUCCESS;
 }
@@ -540,21 +456,9 @@ TbResult LbScreenSetup(TbScreenMode mode, TbScreenCoord width, TbScreenCoord hei
         msspr = lbDisplay.MouseSprite;
         GetPointerHotspot(&hot_x,&hot_y);
     }
-    SDL_Surface* prevScreenSurf = lbScreenSurface;
     LbMouseChangeSprite(NULL);
-
-    if (lbHasSecondSurface) {
-        SDL_FreeSurface(lbDrawSurface);
-    }
-    if (lbScaleSurface != NULL) {
-        SDL_FreeSurface(lbScaleSurface);
-        lbScaleSurface = NULL;
-    }
-    lbDrawSurface = NULL;
+    LbScreenFreeDrawSurface();
     lbScreenInitialised = false;
-
-    if (prevScreenSurf != NULL) {
-    }
 
     TbScreenModeInfo* mdinfo = LbScreenGetModeInfo(mode); // The desired mode has already been checked
     // Note:
@@ -562,17 +466,16 @@ TbResult LbScreenSetup(TbScreenMode mode, TbScreenCoord width, TbScreenCoord hei
     // We set the DisplayMode for real fullscreen mode
     // We set the window size, position, and border for a window
     // The FILL ALL mode is a borderless window
-    if (lbWindow != NULL)
+    if (PlatformManager_HasWindow())
     {
-        Uint32 current_fullscreen_flags = SDL_GetWindowFlags(lbWindow) & SDL_WINDOW_FULLSCREEN_DESKTOP; // SDL_WINDOW_FULLSCREEN is already flagged in SDL_WINDOW_FULLSCREEN_DESKTOP
+        Uint32 current_fullscreen_flags = PlatformManager_GetWindowFlags() & SDL_WINDOW_FULLSCREEN_DESKTOP; // SDL_WINDOW_FULLSCREEN is already flagged in SDL_WINDOW_FULLSCREEN_DESKTOP
         Uint32 new_fullscreen_flags = mdinfo->sdlFlags & SDL_WINDOW_FULLSCREEN_DESKTOP;
         // If the new mode is a real fullscreen mode, then set the new mode
         if (new_fullscreen_flags == SDL_WINDOW_FULLSCREEN)
         {
-            SDL_DisplayMode dm = { SDL_PIXELFORMAT_UNKNOWN, (int)mdinfo->Width, (int)mdinfo->Height, 0, 0}; // this works in a modern setting (we get WxH at 32 bpp), but I'm not sure if this provides true 8-bit color mode (e.g. if we request 320x200x8 mode)
-            if (SDL_SetWindowDisplayMode(lbWindow, &dm) != 0) // set display mode for fullscreen
+            if (PlatformManager_SetWindowDisplayMode((int)mdinfo->Width, (int)mdinfo->Height) != 0) // set display mode for fullscreen
             {
-                ERRORLOG("SDL_SetWindowDisplayMode failed for mode %d (%s): %s", (int)mode, mdinfo->Desc, SDL_GetError());
+                ERRORLOG("PlatformManager_SetWindowDisplayMode failed for mode %d (%s): %s", (int)mode, mdinfo->Desc, SDL_GetError());
                 return Lb_FAIL;
             }
             // If we change to a fullscreen mode that is a higher res than the previous fullscreen mode (after having already changed
@@ -582,33 +485,49 @@ TbResult LbScreenSetup(TbScreenMode mode, TbScreenCoord width, TbScreenCoord hei
             // said issue was supposedly fixed in https://github.com/libsdl-org/SDL/pull/4392
             // but that is either not the case, or said pull has been reverted (I cannot find evidence of it in the sdl2 codebase).
             // The issue is fixed by running the following line (after SDL_SetWindowDisplayMode above):
-            SDL_SetWindowSize(lbWindow, mdinfo->Width, mdinfo->Height);
+            PlatformManager_SetWindowSize(mdinfo->Width, mdinfo->Height);
         }
         // If mode has changed between fullscreen/windowed/fake fullscreen, set the new mode
         if (current_fullscreen_flags != new_fullscreen_flags)
         {
-            if (SDL_SetWindowFullscreen(lbWindow, new_fullscreen_flags) != 0)
+            if (PlatformManager_SetWindowFullscreen(new_fullscreen_flags) != 0)
             {
-                ERRORLOG("SDL_SetWindowFullscreen failed for mode %d (%s): %s", (int)mode, mdinfo->Desc, SDL_GetError());
+                ERRORLOG("PlatformManager_SetWindowFullscreen failed for mode %d (%s): %s", (int)mode, mdinfo->Desc, SDL_GetError());
                 return Lb_FAIL;
             }
         }
-        SDL_SetWindowBordered(lbWindow, (mdinfo->sdlFlags & SDL_WINDOW_BORDERLESS) ? SDL_FALSE : SDL_TRUE);
+        // Guard against redundant SDL_SetWindow* calls: on 10-bit HDR displays each call
+        // can trigger a DWM composition pipeline reconfiguration which causes a visible flash.
+        // Only apply changes that differ from the window's current state.
+        {
+            int new_bordered = (mdinfo->sdlFlags & SDL_WINDOW_BORDERLESS) ? 0 : 1;
+            int cur_bordered = (PlatformManager_GetWindowFlags() & SDL_WINDOW_BORDERLESS) ? 0 : 1;
+            if (cur_bordered != new_bordered)
+            {
+                PlatformManager_SetWindowBordered(new_bordered);
+            }
+        }
         // if the new mode is windowed mode (including the special FILL ALL mode)
         if (new_fullscreen_flags == 0)
         {
-            SDL_SetWindowSize(lbWindow, mdinfo->Width, mdinfo->Height);
-            SDL_SetWindowPosition(lbWindow, mdinfo->window_pos_x, mdinfo->window_pos_y);
+            int cur_w = 0, cur_h = 0;
+            PlatformManager_GetWindowSize(&cur_w, &cur_h);
+            if (cur_w != (int)mdinfo->Width || cur_h != (int)mdinfo->Height)
+            {
+                PlatformManager_SetWindowSize(mdinfo->Width, mdinfo->Height);
+                PlatformManager_SetWindowPosition(mdinfo->window_pos_x, mdinfo->window_pos_y);
+            }
         }
     }
     // If the game window doesn't yet exists
     if (!PlatformManager_OwnsDisplay())
     {
-        if (lbWindow == NULL) {
-            lbWindow = SDL_CreateWindow(lbDrawAreaTitle, mdinfo->window_pos_x, mdinfo->window_pos_y, mdinfo->Width, mdinfo->Height, mdinfo->sdlFlags);
+        if (!PlatformManager_HasWindow()) {
+            // I'm a lazy POS, but right now we only ever try to set an OpenGL surface.
+            PlatformManager_CreateWindow(lbDrawAreaTitle, mdinfo->window_pos_x, mdinfo->window_pos_y, mdinfo->Width, mdinfo->Height, mdinfo->sdlFlags | SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN);
         }
-        if (lbWindow == NULL) {
-            ERRORLOG("SDL_CreateWindow failed for mode %d (%s): %s", (int)mode, mdinfo->Desc, SDL_GetError());
+        if (!PlatformManager_HasWindow()) {
+            ERRORLOG("PlatformManager_CreateWindow failed for mode %d (%s): %s", (int)mode, mdinfo->Desc, SDL_GetError());
             return Lb_FAIL;
         }
     }
@@ -616,13 +535,11 @@ TbResult LbScreenSetup(TbScreenMode mode, TbScreenCoord width, TbScreenCoord hei
     // The active renderer's Init() is responsible for connecting it to the display
     // (either via SDL_GetWindowSurface for software, or SDL_CreateRenderer for hardware).
     // This keeps SDL's surface and renderer APIs from conflicting on the same window.
-    lbDrawSurface = SDL_CreateRGBSurface(0, mdinfo->Width, mdinfo->Height, lbEngineBPP, 0, 0, 0, 0);
-    if (lbDrawSurface == NULL) {
-        ERRORLOG("Failed to create draw surface for mode %d (%s): %s", (int)mode, mdinfo->Desc, SDL_GetError());
+    if (LbScreenCreateDrawSurface((int)mdinfo->Width, (int)mdinfo->Height, (int)lbEngineBPP) != Lb_SUCCESS) {
+        ERRORLOG("Failed to create draw surface for mode %d (%s)", (int)mode, mdinfo->Desc);
         return Lb_FAIL;
     }
     lbHasSecondSurface = true;
-    lbScreenSurface = lbDrawSurface; // placeholder; renderer Init() sets the real screen surface
 
     lbDisplay.DrawFlags = 0;
     lbDisplay.DrawColour = 0;
@@ -642,7 +559,7 @@ TbResult LbScreenSetup(TbScreenMode mode, TbScreenCoord width, TbScreenCoord hei
     {
         LbPaletteSet(palette);
     }
-    LbScreenSetGraphicsWindow(0, 0, mdinfo->Width, mdinfo->Height);
+    RendererSetViewport(0, 0, mdinfo->Width, mdinfo->Height);
     LbTextSetWindow(0, 0, mdinfo->Width, mdinfo->Height);
     SYNCDBG(8,"Done filling display properties struct");
     if ( LbMouseIsInstalled() )
@@ -654,8 +571,8 @@ TbResult LbScreenSetup(TbScreenMode mode, TbScreenCoord width, TbScreenCoord hei
         }
         if (!IsMouseInsideWindow())
         {
-            if (lbWindow != NULL)
-                SDL_WarpMouseInWindow(lbWindow, mdinfo->Width / 2, mdinfo->Height / 2);
+            if (PlatformManager_HasWindow())
+                PlatformManager_WarpCursor(mdinfo->Width / 2, mdinfo->Height / 2);
         }
     }
 
@@ -719,8 +636,8 @@ TbResult LbPaletteSet(unsigned char *palette)
         srcColors += 3;
         bufColors += 3;
     }
-    //if (SDL_SetPalette(lbDrawSurface, SDL_LOGPAL | SDL_PHYSPAL,
-    SDL_SetPaletteColors(lbDrawSurface->format->palette, lbPaletteColors, 0, PALETTE_COLORS);
+    if (lbDrawSurface != NULL && lbDrawSurface->format != NULL && lbDrawSurface->format->palette != NULL)
+        SDL_SetPaletteColors(lbDrawSurface->format->palette, lbPaletteColors, 0, PALETTE_COLORS);
     //KfxFree(destColors);
     lbDisplay.Palette = lbPalette;
     return ret;
@@ -783,28 +700,13 @@ TbScreenModeInfo *LbScreenGetModeInfo(TbScreenMode mode)
     return &lbScreenModeInfo[0];
 }
 
-TbBool LbScreenIsLocked(void)
-{
-    return (lbDisplay.WScreen != NULL);
-}
-
 TbResult LbScreenReset(TbBool exiting_application)
 {
     if (!lbScreenInitialised)
       return Lb_FAIL;
     LbMouseChangeSprite(NULL);
-    if (lbHasSecondSurface) {
-        SDL_FreeSurface(lbDrawSurface);
-    }
-    if (lbScaleSurface != NULL) {
-        SDL_FreeSurface(lbScaleSurface);
-        lbScaleSurface = NULL;
-    }
-    //do not free screen surface, it is freed automatically on SDL_Quit or next call to set video mode
+    LbScreenFreeDrawSurface();
     lbHasSecondSurface = false;
-    lbDrawSurface = NULL;
-    lbScreenSurface = NULL;
-    // Mark as not initialized
     lbScreenInitialised = false;
     if (exiting_application)
     {
@@ -812,91 +714,6 @@ TbResult LbScreenReset(TbBool exiting_application)
         finish_bflib_render();
     }
     return Lb_SUCCESS;
-}
-
-/**
- * Stores the current graphics window coords into TbGraphicsWindow structure.
- * Intended to use with LbScreenLoadGraphicsWindow() when changing the window
- * temporary.
- */
-TbResult LbScreenStoreGraphicsWindow(TbGraphicsWindow *grwnd)
-{
-  grwnd->x = lbDisplay.GraphicsWindowX;
-  grwnd->y = lbDisplay.GraphicsWindowY;
-  grwnd->width = lbDisplay.GraphicsWindowWidth;
-  grwnd->height = lbDisplay.GraphicsWindowHeight;
-  grwnd->ptr = NULL;
-  return Lb_SUCCESS;
-}
-
-/**
- * Sets the current graphics window coords from those in TbGraphicsWindow structure.
- * Use it only with TbGraphicsWindow which was filled using function
- * LbScreenStoreGraphicsWindow(), because the values are not checked for sanity!
- * To set values from other sources, use LbScreenSetGraphicsWindow() instead.
- */
-TbResult LbScreenLoadGraphicsWindow(TbGraphicsWindow *grwnd)
-{
-  lbDisplay.GraphicsWindowX = grwnd->x;
-  lbDisplay.GraphicsWindowY = grwnd->y;
-  lbDisplay.GraphicsWindowWidth = grwnd->width;
-  lbDisplay.GraphicsWindowHeight = grwnd->height;
-  if (lbDisplay.WScreen != NULL)
-  {
-      lbDisplay.GraphicsWindowPtr = lbDisplay.WScreen
-        + lbDisplay.GraphicsScreenWidth*lbDisplay.GraphicsWindowY + lbDisplay.GraphicsWindowX;
-  } else
-  {
-      lbDisplay.GraphicsWindowPtr = NULL;
-  }
-  return Lb_SUCCESS;
-}
-
-TbResult LbScreenSetGraphicsWindow(long x, long y, long width, long height)
-{
-    long i;
-    long right_edge = x + width;
-    long bottom_edge = y + height;
-    if (right_edge < x)  //Alarm! Voodoo magic detected!
-    {
-        i = (x ^ right_edge);
-        x = x ^ i;
-        right_edge = x ^ i ^ i;
-  }
-  if (bottom_edge < y)
-  {
-    i = (y^bottom_edge);
-    y = y^i;
-    bottom_edge = y^i^i;
-  }
-  if (x < 0)
-    x = 0;
-  if (right_edge < 0)
-    right_edge = 0;
-  if (y < 0)
-    y = 0;
-  if (bottom_edge < 0)
-    bottom_edge = 0;
-  if (x > lbDisplay.GraphicsScreenWidth)
-    x = lbDisplay.GraphicsScreenWidth;
-  if (right_edge > lbDisplay.GraphicsScreenWidth)
-    right_edge = lbDisplay.GraphicsScreenWidth;
-  if (y > lbDisplay.GraphicsScreenHeight)
-    y = lbDisplay.GraphicsScreenHeight;
-  if (bottom_edge > lbDisplay.GraphicsScreenHeight)
-    bottom_edge = lbDisplay.GraphicsScreenHeight;
-  lbDisplay.GraphicsWindowX = x;
-  lbDisplay.GraphicsWindowY = y;
-  lbDisplay.GraphicsWindowWidth = right_edge - x;
-  lbDisplay.GraphicsWindowHeight = bottom_edge - y;
-  if (lbDisplay.WScreen != NULL)
-  {
-    lbDisplay.GraphicsWindowPtr = lbDisplay.WScreen + lbDisplay.GraphicsScreenWidth*y + x;
-  } else
-  {
-    lbDisplay.GraphicsWindowPtr = NULL;
-  }
-  return Lb_SUCCESS;
 }
 
 TbBool LbScreenIsModeAvailable(TbScreenMode mode, unsigned short display)
@@ -980,16 +797,13 @@ TbScreenMode LbRegisterVideoMode(const char *desc, TbScreenCoord width, TbScreen
     mdinfo->VideoFlags = flags;
     // SDL flags
     mdinfo->sdlFlags = 0; // default to an normal window
+
     if ((mdinfo->VideoFlags & Lb_VF_WINDOWED))
     {
         if (mdinfo->VideoFlags & Lb_VF_BORDERLESS)
         {
             mdinfo->sdlFlags |= SDL_WINDOW_BORDERLESS; // borderless window
         }
-        /* else
-        {
-            sdlFlags |= SDL_WINDOW_RESIZABLE; // todo (allow window to be freely scaled) - needs window resize function triggered by SDL_WINDOWEVENT_SIZE_CHANGED
-        } */
     }
     else
     {
@@ -1037,6 +851,11 @@ TbScreenMode LbRegisterVideoModeString(const char *desc)
     if (strncasecmp(desc, "DESKTOP", 7) == 0)
     {
         return LbRecogniseVideoModeString("DESKTOP");
+    }
+    // check for the borderless windowed mode
+    if (strncasecmp(desc, "BORDERLESS", 10) == 0)
+    {
+        return LbRecogniseVideoModeString("BORDERLESS");
     }
     // modern patterns not matched - maybe it's fullscreen mode
     width = 0; height = 0; bpp = 0; flags = Lb_VF_DEFAULT;

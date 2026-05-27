@@ -188,6 +188,13 @@ TbResult LbSpriteDrawUsingScalingData(long posx, long posy, const struct TbSourc
 TbResult LbSpriteDrawRemapUsingScalingData(long posx, long posy, const struct TbSourceBuffer *, const TbPixel *cmap);
 TbResult LbSpriteDrawOneColourUsingScalingData(long posx, long posy, const struct TbSprite *sprite, TbPixel colour);
 void LbSpriteSetScalingData(long x, long y, long swidth, long sheight, long dwidth, long dheight);
+/** Last parameters saved by LbSpriteSetScalingData \u2014 read by the GPU keeper-sprite hook. */
+extern long g_sprite_scale_dst_x;
+extern long g_sprite_scale_dst_y;
+extern long g_sprite_scale_dst_w;
+extern long g_sprite_scale_dst_h;
+extern long g_sprite_scale_src_w;
+extern long g_sprite_scale_src_h;
 TbResult DrawAlphaSpriteUsingScalingData(long posx, long posy, const struct TbSourceBuffer *);
 void LbSpriteSetScalingWidthSimpleArray(int32_t * xsteps_arr, long x, long swidth, long dwidth);
 void LbSpriteSetScalingWidthClippedArray(int32_t * xsteps_arr, long x, long swidth, long dwidth, long gwidth);

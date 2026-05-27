@@ -107,7 +107,7 @@ TbResult VitaGPUBackend::SubmitSpriteRemap(long x, long y, const struct TbSprite
     // They could be handled by:
     //   1. Pre-rendered with remap in software before frame
     //   2. Uploaded to a separate remap texture atlas  
-    //   3. Left to software rendering (Phase 3 integration)
+    //   3. Left to software rendering (TODO)
     // For now, return success but log that this is stubbed.
     SYNCDBG(19, "VitaGPUBackend::SubmitSpriteRemap: Not implemented, stub returns OK");
     return Lb_OK;

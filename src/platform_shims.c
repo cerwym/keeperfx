@@ -29,6 +29,7 @@
 #include "scrcapt.h"
 #include "audio/audio_interface.h"
 #include "input/input_interface.h"
+#include "platform.h"
 
 /* api.c stubs (SDL_net removed) */
 int api_init_server(void) { return 0; }
@@ -49,6 +50,14 @@ TbBool play_music_track(int t) { (void)t; return 0; }
 void resume_music(void) {}
 void stop_music(void) {}
 #endif /* !PLATFORM_VITA */
+
+/* bflib_sndlib.cpp — async preload stub (Vita only; uses std::thread unavailable on Vita SDK) */
+#ifdef PLATFORM_VITA
+void SoundBanks_StartAsyncLoad(void) {}
+#endif /* PLATFORM_VITA */
+
+/* platform_gl_sdl2.cpp — SDL window accessor stub (excluded on all homebrew; no desktop GL context) */
+void* platform_get_sdl_window(void) { return NULL; }
 
 /* steam_api.cpp stubs — steam_api.hpp uses extern "C" so define in C */
 int steam_api_init(void) { return 0; }
@@ -104,12 +113,14 @@ TbBool cumulative_screen_shot(void) { return 0; }
 // PlatformVita/3DS/Switch SystemInit. On PC it is a static array in custom_sprites.c.
 unsigned char *big_scratch = NULL;
 
+// Sprite table arrays used on all platforms (also referenced by Vita sprite cache).
+short iso_td_add[KEEPERSPRITE_ADD_NUM];
+short td_iso_add[KEEPERSPRITE_ADD_NUM];
+
 #ifndef PLATFORM_VITA
 struct TbSpriteSheet *gui_panel_sprites = NULL;
 short bad_icon_id = INT16_MAX;
 int total_sprite_zip_count = 0;
-short iso_td_add[KEEPERSPRITE_ADD_NUM];
-short td_iso_add[KEEPERSPRITE_ADD_NUM];
 TbSpriteData keepersprite_add[KEEPERSPRITE_ADD_NUM] = { 0 };
 struct KeeperSprite creature_table_add[KEEPERSPRITE_ADD_NUM] = { {0} };
 

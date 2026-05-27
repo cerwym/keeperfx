@@ -28,6 +28,7 @@
 #include "engine_redraw.h"
 #include "engine_textures.h"
 #include "frontend.h"
+#include "front_network.h"
 #include "frontmenu_ingame_tabs.h"
 #include "frontmenu_ingame_map.h"
 #include "kfx/sprite_resources.h"
@@ -39,6 +40,9 @@
 #include "lvl_filesdk1.h"
 #include "lua_base.h"
 #include "lua_triggers.h"
+#include "net_exchange_common.h"
+#include "net_game.h"
+#include "frontmenu_ingame_evnt.h"
 #include "net_resync.h"
 #include "room_library.h"
 #include "room_list.h"
@@ -49,6 +53,7 @@
 #include "vidfade.h"
 #include "vidmode.h"
 #include "custom_sprites.h"
+#include "renderer/RendererManager.h"
 #include "gui_boxmenu.h"
 #include "sounds.h"
 #include "api.h"
@@ -168,13 +173,23 @@ static void init_level(void)
     game_flags2 &= (GF2_PERSISTENT_FLAGS | GF2_Timer);
     clear_game();
     reset_heap_manager();
+    // Invalidate the keeper-sprite decode atlas: sprite data pointers are
+    // tied to the heap which is reset above, so cached entries are stale.
+    WorldViewRenderer_ClearKeeperSpriteAtlas();
     lens_mode = 0;
     setup_heap_manager();
 
+    wait_for_all_players();
+    init_seeds();
+    sync_initial_network_seed();
+
+    recheck_all_mod_exist();
+
     luascript_loaded = open_lua_script(get_selected_level_number());
     // Load configs which may have per-campaign part, and can even be modified within a level
-    recheck_all_mod_exist();
     init_custom_sprites(get_selected_level_number());
+    RendererNotifyCustomSpritesReloaded();
+    WorldViewRenderer_PreloadKeeperSpriteAtlas();
     load_stats_files();
     check_and_auto_fix_stats();
 
@@ -195,9 +210,6 @@ static void init_level(void)
     setup_panel_colors();
     init_map_size(get_selected_level_number());
     clear_messages();
-    init_seeds();
-    
-    sync_various_data();
     
     // Load the actual level files
     TbBool script_preloaded = preload_script(get_selected_level_number());
@@ -216,7 +228,7 @@ static void init_level(void)
         }
     }
     init_navigation();
-    snprintf(game.campaign_fname, sizeof(game.campaign_fname), "%s", campaign.fname);
+    snprintf(game.campaign_fname, sizeof(game.campaign_fname), "%.*s", (int)(sizeof(game.campaign_fname) - 1), campaign.fname);
     light_set_lights_on(1);
     {
         for (size_t i = 0; i < PLAYERS_COUNT; i++)
@@ -288,8 +300,7 @@ void startup_saved_packet_game(void)
     struct CatalogueEntry centry;
     clear_packets();
     open_packet_file_for_load(game.packet_fname,&centry);
-    
-    if (!change_campaign(centry.campaign_fname))
+    if (!change_campaign(CampgnT_Default, centry.campaign_fname))
     {
         ERRORLOG("Unable to load campaign associated with packet file");
     }
@@ -374,13 +385,10 @@ void startup_network_game(CoroutineLoop *context, TbBool local)
     } else
     {
         game.game_kind = GKind_MultiGame;
-        init_players_network_game(context);
-
-        // Fix desyncs when two players have a different zoom distance cfg setting
-        // This temporary solution just disregards their cfg value and sets it here
-        int max_zoom_in_multiplayer = 60;
-        zoom_distance_setting = LbLerp(4100, CAMERA_ZOOM_MIN, (float)max_zoom_in_multiplayer/100.0);
-        frontview_zoom_distance_setting = LbLerp(16384, FRONTVIEW_CAMERA_ZOOM_MIN, (float)max_zoom_in_multiplayer/100.0);
+        if (!init_players_network_game()) {
+            coroutine_clear(context, true);
+            return;
+        }
     }
     setup_count_players(); // It is reset by init_level
     int args[COROUTINE_ARGS] = {ShouldAssignCpuKeepers, 0};
@@ -390,6 +398,9 @@ void startup_network_game(CoroutineLoop *context, TbBool local)
 static CoroutineLoopState startup_network_game_tail(CoroutineLoop *context)
 {
     TbBool ShouldAssignCpuKeepers = coroutine_args(context)[0];
+    if (game.game_kind == GKind_MultiGame) {
+        setup_alliances();
+    }
     if (fe_computer_players || ShouldAssignCpuKeepers)
     {
         SYNCDBG(5,"Setting up uninitialized players as computer players");
@@ -422,7 +433,7 @@ void faststartup_network_game(CoroutineLoop *context)
     game.game_kind = GKind_LocalGame;
     if (!is_campaign_loaded())
     {
-        if (!change_campaign(""))
+        if (!change_campaign(CampgnT_Default,""))
             ERRORLOG("Unable to load campaign");
     }
     player = get_my_player();
@@ -473,10 +484,10 @@ void clear_complete_game(void)
         set_selected_level_number(start_params.selected_level_number);
     else
         set_selected_level_number(first_singleplayer_level());
-    game_num_fps = start_params.num_fps;
-    game_num_fps_draw_current = 0;
-    game_num_fps_draw_main = start_params.num_fps_draw_main;
-    game_num_fps_draw_secondary = start_params.num_fps_draw_secondary;
+    turns_per_second = start_params.num_fps;
+    turns_per_second_draw_current = 0;
+    turns_per_second_draw_main = start_params.num_fps_draw_main;
+    turns_per_second_draw_secondary = start_params.num_fps_draw_secondary;
     game.mode_flags = start_params.mode_flags;
     game.easter_eggs_enabled = start_params.easter_egg;
     set_flag_value(game.system_flags, GSF_AllowOnePlayer, start_params.one_player);
@@ -514,6 +525,5 @@ void init_seeds()
         game.player_random_seed = game.action_random_seed * 9473 + 9479;
         
         initial_replay_seed = game.action_random_seed;
-        lua_set_random_seed(game.action_random_seed);
     }
 }

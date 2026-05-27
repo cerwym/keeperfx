@@ -19,6 +19,8 @@
 #include "kfx_memory.h"
 #include "pre_inc.h"
 #include "light_data.h"
+#include "local_camera.h"
+#include "kfx/engine/cameras.h"
 
 #include "globals.h"
 #include "bflib_basics.h"
@@ -33,6 +35,7 @@
 #include "game_legacy.h"
 #include "value_util.h"
 
+#include "kfx/profiling/KfxProfilingC.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -1970,7 +1973,7 @@ static char light_render_light(struct Light* lgt)
 {
   int remember_original_lgt_mappos_x = lgt->mappos.x.val;
   int remember_original_lgt_mappos_y = lgt->mappos.y.val;
-  if ((lgt->interp_has_been_initialized == false) || (game.play_gameturn - lgt->last_turn_drawn > 1)) {
+  if ((lgt->interp_has_been_initialized == false) || (get_gameturn() - lgt->last_turn_drawn > 1)) {
     lgt->interp_has_been_initialized = true;
     lgt->interp_mappos.x.val = lgt->mappos.x.val;
     lgt->interp_mappos.y.val = lgt->mappos.y.val;
@@ -1980,7 +1983,7 @@ static char light_render_light(struct Light* lgt)
     lgt->interp_mappos.x.val = interpolate(lgt->interp_mappos.x.val, lgt->previous_mappos.x.val, lgt->mappos.x.val);
     lgt->interp_mappos.y.val = interpolate(lgt->interp_mappos.y.val, lgt->previous_mappos.y.val, lgt->mappos.y.val);
   }
-  lgt->last_turn_drawn = game.play_gameturn;
+  lgt->last_turn_drawn = get_gameturn();
   lgt->mappos.x.val = lgt->interp_mappos.x.val;
   lgt->mappos.y.val = lgt->interp_mappos.y.val;
   TbBool is_dynamic = lgt->flags & LgtF_Dynamic;
@@ -2259,6 +2262,7 @@ static void light_render_area(MapSubtlCoord startx, MapSubtlCoord starty, MapSub
 
 void update_light_render_area(void)
 {
+    KFX_C_ZONE_BEGIN_COLOR(ctx, "Light/Update", KFX_COLOR_LIGHTING);
     int subtile_x;
     int subtile_y;
     int startx;
@@ -2277,10 +2281,10 @@ void update_light_render_area(void)
     int delta_x = abs(game.something_light_x);
     int delta_y = abs(game.something_light_y);
     // Prepare the area constraints
-    if (player->acamera != NULL)
+    if (camera_is_active(player->id_number))
     {
-      subtile_y = player->acamera->mappos.y.stl.num;
-      subtile_x = player->acamera->mappos.x.stl.num;
+      subtile_y = camera_get_active(player->id_number)->mappos.y.stl.num;
+      subtile_x = camera_get_active(player->id_number)->mappos.x.stl.num;
     } else
     {
       subtile_y = 0;
@@ -2307,6 +2311,7 @@ void update_light_render_area(void)
     if (endx > game.map_subtiles_x) endx = game.map_subtiles_x;
     // Set the area
     light_render_area(startx, starty, endx, endy);
+    KFX_C_ZONE_END(ctx);
 }
 
 void light_set_light_minimum_size_to_cache(long lgt_id, long min_radius, long min_intensity)

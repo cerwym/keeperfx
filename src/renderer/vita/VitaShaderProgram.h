@@ -9,8 +9,7 @@
  *     Vita-specific GL shader objects should be managed through this class.
  */
 /******************************************************************************/
-#ifndef VITA_SHADER_PROGRAM_H
-#define VITA_SHADER_PROGRAM_H
+#pragma once
 
 #ifdef PLATFORM_VITA
 
@@ -75,4 +74,3 @@ private:
 };
 
 #endif // PLATFORM_VITA
-#endif // VITA_SHADER_PROGRAM_H

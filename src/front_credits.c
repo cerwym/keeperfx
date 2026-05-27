@@ -29,6 +29,7 @@
 #include "bflib_keybrd.h"
 #include "bflib_filelst.h"
 #include "bflib_datetm.h"
+#include "renderer/RendererManager.h"
 
 #include "gui_frontbtns.h"
 #include "front_simple.h"
@@ -64,7 +65,7 @@ void frontstory_load(void)
     } else
     {
         LbDataLoadSetModifyFilenameFunction(defaultModifyDataLoadFilename);
-        LbPaletteSet(frontend_palette);
+        RendererPaletteSet(frontend_palette);
         srand(LbTimerClock());
 #if FUNCTESTING
         ftest_srand();
@@ -99,14 +100,14 @@ void frontcredits_draw(void)
     frontend_copy_background();
 
     lbDisplay.DrawFlags = Lb_SPRITE_OUTLINE | Lb_TEXT_HALIGN_CENTER;
-    LbTextSetWindow(0, 0, lbDisplay.PhysicalScreenWidth, lbDisplay.PhysicalScreenHeight);
+    LbTextSetWindow(0, 0, RendererPhysicalWidth(), RendererPhysicalHeight());
     int fontid = 1;
     LbTextSetFont(frontend_font[fontid]);
     long h = credits_offset;
     TbBool did_draw = h > 0;
     for (long i = 0; campaign.credits[i].kind != CIK_None; i++)
     {
-        if (h >= lbDisplay.PhysicalScreenHeight)
+        if (h >= RendererPhysicalHeight())
           break;
         struct CreditsItem* credit = &campaign.credits[i];
         if (credit->font != fontid)
@@ -138,7 +139,7 @@ void frontcredits_draw(void)
     if (!did_draw)
     {
         credits_end = 1;
-        credits_offset = lbDisplay.PhysicalScreenHeight;
+        credits_offset = RendererPhysicalHeight();
     }
 }
 

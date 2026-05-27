@@ -4,19 +4,30 @@
         "sdl2-image",
         "sdl2-mixer",
         "sdl2-net",
-        {
-            "name": "ffmpeg",
-            "features": ["avcodec", "avformat", "swresample"]
-        },
         "openal-soft",
         "enet6",
-        "astronomy",
-        "libnatpmp",
         "libspng",
-        "zlib",
+        "centijson",
+        "astronomy",
         "minizip",
-        "luajit",
         "miniupnpc",
-        "centijson"
+        "libnatpmp",
+        "ffmpeg",
+        "luajit",
+        "zlib",
+        "curl",
+        "glad",
+        {
+            "name": "vulkan",
+            "platform": "windows"
+        },
+        {
+            "name": "vk-bootstrap",
+            "platform": "windows"
+        },
+        {
+            "name": "vulkan-memory-allocator",
+            "platform": "windows"
+        }
     ]
 }

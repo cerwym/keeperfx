@@ -21,8 +21,8 @@ There is also one local-only image that is **never pushed to any registry**:
 
 | Image | Purpose |
 |---|---|
-| `keeperfx-dk-originals:local` | Caches the 16 original Dungeon Keeper files required by KeeperFX. Built once per machine by `tools/init-deploy.ps1`. |
-| `keeperfx-runtime-assets:local` | Caches KeeperFX runtime assets (`config/`, `campgns/`, `levels/`, SDL DLLs, and generated `pkg/*` runtime content). Rebuilt locally when asset inputs change. |
+| `keeperfx/dk-originals:local` | Caches the 16 original Dungeon Keeper files required by KeeperFX. Built once per machine by `tools/init-deploy.ps1`. |
+| `keeperfx/runtime-assets:local` | Caches KeeperFX runtime assets (`config/`, `campgns/`, `levels/`, SDL DLLs, and generated `pkg/*` runtime content). Rebuilt locally when asset inputs change. |
 
 ---
 

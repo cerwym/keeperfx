@@ -1034,7 +1034,7 @@ TbBool parse_named_field_blocks(char *buf, long len, const char *config_textname
 {
     int32_t pos = 0;
     // Initialize the array
-    if ((flags & CnfLd_AcceptPartial) == 0)
+    if ((flags & (CnfLd_AcceptPartial|CnfLd_PreListed)) == 0)
     {
         set_defaults(named_fields_set,config_textname);
     }
@@ -1368,6 +1368,10 @@ static char *_resolve_file_path_internal(char *dst, size_t dst_size,
       mdir=keeper_runtime_directory;
       sdir="creatrs";
       break;
+  case FGrp_MpLevels:
+      mdir=keeper_runtime_directory;
+      sdir="multiplayer";
+      break;
   default:
       mdir=keeper_runtime_directory;
       sdir=NULL;
@@ -1384,29 +1388,10 @@ static char *_resolve_file_path_internal(char *dst, size_t dst_size,
       if (fname == NULL)
           fname = "";
 
-      /* SAFETY: Validate component lengths before string concatenation */
-      /* Use safe strnlen with max 4KB per component (generous but bounded) */
-      int len_mdir = strnlen(mdir, 4096);
-      int len_mod_dir = strnlen(mod_dir, 4096);
-      int len_sdir = strnlen(sdir, 4096);
-      int len_fname = strnlen(fname, 4096);
-      
-      /* Check for invalid string lengths (detected by strnlen returning max) */
-      if (len_mdir >= 4096 || len_mod_dir >= 4096 || len_sdir >= 4096 || len_fname >= 4096) {
-          ERRORMSG("CORRUPTED STRING: mdir_len=%d, mod_dir_len=%d, sdir_len=%d, fname_len=%d (possibly unterminated or unmapped)",
-                   len_mdir, len_mod_dir, len_sdir, len_fname);
-          dst[0] = '\0';
-          return dst;
-      }
-      
-      /* Sanity check: strings should be reasonable length */
-      if (len_mdir >= 4096 || len_mod_dir >= 4096 || 
-          len_sdir >= 4096 || len_fname >= 4096) {
-          ERRORMSG("INSANE STRING LENGTH: mdir=%d, mod_dir=%d, sdir=%d, fname=%d bytes",
-                   len_mdir, len_mod_dir, len_sdir, len_fname);
-          dst[0] = '\0';
-          return dst;
-      }
+      int len_mdir = (int)strlen(mdir);
+      int len_mod_dir = (int)strlen(mod_dir);
+      int len_sdir = (int)strlen(sdir);
+      int len_fname = (int)strlen(fname);
       
       int total_len = len_mdir + len_mod_dir + len_sdir + len_fname + 3; /* +3 for separators */
       
@@ -2206,9 +2191,9 @@ TbBool is_level_in_current_campaign(LevelNumber lvnum)
 
 
 /* @comment
- *     The loading items of load_config and load_config_for_mod_one need to be consistent.
+ *     The loading items of load_config and load_config_for_mod need to be consistent.
  */
-static void load_config_for_mod_one(const struct ConfigFileData* file_data, unsigned short flags, const struct ModConfigItem *mod_item)
+static void load_config_for_mod(const struct ConfigFileData* file_data, unsigned short flags, const struct ModConfigItem *mod_item)
 {
     set_flag(flags, (CnfLd_AcceptPartial | CnfLd_IgnoreErrors));
 
@@ -2254,12 +2239,12 @@ static void load_config_for_mod_list(const struct ConfigFileData* file_data, uns
         if (mod_item->state.mod_dir == 0)
             continue;
 
-        load_config_for_mod_one(file_data, flags, mod_item);
+        load_config_for_mod(file_data, flags, mod_item);
     }
 }
 
 /* @comment
- *     The loading items of load_config and load_config_for_mod_one need to be consistent.
+ *     The loading items of load_config and load_config_for_mod need to be consistent.
  */
 TbBool load_config(const struct ConfigFileData* file_data, unsigned short flags)
 {

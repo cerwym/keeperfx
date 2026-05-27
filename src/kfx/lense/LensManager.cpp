@@ -262,7 +262,7 @@ void LensManager::Draw(unsigned char* srcbuf, unsigned char* dstbuf,
             // renderer handles it in EndFrame().  GetGPUPass() returns nullptr
             // and SupportsGPUPasses() returns false on all CPU-only platforms,
             // so this condition is always false there at zero cost.
-            if (effect->GetGPUPass() != nullptr && RendererGetActive()->SupportsGPUPasses()) {
+            if (effect->GetGPUPass() != nullptr && RendererGetActive()->GetCapabilities().supportsGPUPasses) {
                 rendered = true; // treat as rendered so fallback copy is suppressed
                 continue;
             }
@@ -463,7 +463,7 @@ TbBool LensManager::AllocateBuffers()
     m_spare_screen_memory = (unsigned char*)KfxCalloc(buffer_size, sizeof(unsigned char));
     
     if (m_lens_memory == nullptr || m_spare_screen_memory == nullptr) {
-        ERRORLOG("Failed to allocate lens buffers (%lu bytes)", buffer_size * sizeof(uint32_t));
+        ERRORLOG("Failed to allocate lens buffers (%llu bytes)", (unsigned long long)(buffer_size * sizeof(uint32_t)));
         FreeBuffers();
         return false;
     }

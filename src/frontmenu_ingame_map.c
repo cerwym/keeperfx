@@ -50,6 +50,8 @@
 #include "engine_render.h"
 #include "gui_draw.h"
 #include "local_camera.h"
+#include "kfx/engine/cameras.h"
+#include "renderer/RendererManager.h"
 #include "post_inc.h"
 
 // Local constants
@@ -101,6 +103,15 @@ enum TbPixelsColours
 static unsigned char *MapBackground = NULL;
 static int32_t *MapShapeStart = NULL;
 static int32_t *MapShapeEnd = NULL;
+/**
+ * Frame-scoped pointer to the renderer-owned minimap pixel buffer.
+ * Set by panel_map_draw_slabs() via UIRenderer_AcquireMinimapBuffer() and
+ * cleared by panel_map_submit_to_renderer() after the data is handed off.
+ * Non-NULL only when the GPU renderer successfully allocated a buffer; NULL in
+ * software mode (or if allocation failed). Always test this pointer directly —
+ * not RendererGetActiveType() — before writing minimap pixels into it.
+ */
+static unsigned char *s_minimap_pixels = NULL;
 
 static long PanelMapY;
 static long PanelMapX;
@@ -122,14 +133,21 @@ TbBool reset_all_minimap_interpolation = false;
 
 /******************************************************************************/
 
-// RENDER-BYPASS: direct write to lbDisplay.WScreen for minimap rendering — pending IMinimapRenderer migration.
+// Writes a single minimap pixel.
+// If the renderer provided a pixel buffer (s_minimap_pixels != NULL), writes
+// into it at (x, y) with stride = MapDiagonalLength.
+// Otherwise writes directly to lbDisplay.WScreen (software mode).
 void panel_map_draw_pixel(RealScreenCoord x, RealScreenCoord y, TbPixel col)
 {
     if ((y >= 0) && (y < MapDiagonalLength))
     {
         if ((x >= MapShapeStart[y]) && (x < MapShapeEnd[y]))
         {
-            lbDisplay.WScreen[(PanelMapY + y) * lbDisplay.GraphicsScreenWidth + (PanelMapX + x)] = col;
+            if (s_minimap_pixels != NULL) {
+                s_minimap_pixels[y * MapDiagonalLength + x] = col;
+            } else {
+                lbDisplay.WScreen[(PanelMapY + y) * lbDisplay.GraphicsScreenWidth + (PanelMapX + x)] = col;
+            }
         }
     }
 }
@@ -162,9 +180,9 @@ void draw_call_to_arms_circle(unsigned char owner, long x1, long y1, long x2, lo
     long long cscale;
     float circle_time;
     if ((game.operation_flags & GOF_Paused) == 0) {
-        circle_time = ((game.play_gameturn + owner) & 7) + game.process_turn_time;
+        circle_time = ((get_gameturn() + owner) & 7) + game.process_turn_time;
     } else {
-        circle_time = ((game.play_gameturn + owner) & 7);
+        circle_time = ((get_gameturn() + owner) & 7);
     }
     cscale = circle_time * powerst->strength[dungeon->cta_power_level];
     int dxq1;
@@ -248,8 +266,8 @@ void interpolate_minimap_thing(struct Thing *thing, struct Camera *cam)
         thing->interp_minimap_pos_x = interpolate(thing->interp_minimap_pos_x, thing->previous_minimap_pos_x, current_minimap_x);
         thing->interp_minimap_pos_y = interpolate(thing->interp_minimap_pos_y, thing->previous_minimap_pos_y, current_minimap_y);
     }
-    if ((thing->interp_minimap_update_turn != game.play_gameturn) || (game.operation_flags & GOF_Paused) != 0) {
-        thing->interp_minimap_update_turn = game.play_gameturn;
+    if ((thing->interp_minimap_update_turn != get_gameturn()) || (game.operation_flags & GOF_Paused) != 0) {
+        thing->interp_minimap_update_turn = get_gameturn();
         thing->previous_minimap_pos_x = current_minimap_x;
         thing->previous_minimap_pos_y = current_minimap_y;
     }
@@ -267,9 +285,9 @@ int draw_overlay_call_to_arms(struct PlayerInfo *player, long units_per_px, long
     int i;
     int n;
     SYNCDBG(18,"Starting");
-    if (player->acamera == NULL)
+    if (!camera_is_active(player->id_number))
         return 0;
-    struct Camera *cam = get_local_camera(player->acamera);
+    struct Camera *cam = get_local_active_camera(player->id_number);
     n = 0;
     const struct StructureList *slist = get_list_for_thing_class(TCls_Object);
     k = 0;
@@ -326,9 +344,9 @@ int draw_overlay_traps(struct PlayerInfo *player, long units_per_px, long scaled
     int i;
     int n;
     SYNCDBG(18,"Starting");
-    if (player->acamera == NULL)
+    if (!camera_is_active(player->id_number))
         return 0;
-    struct Camera *cam = get_local_camera(player->acamera);
+    struct Camera *cam = get_local_active_camera(player->id_number);
     n = 0;
     k = 0;
     const struct StructureList *slist = get_list_for_thing_class(TCls_Trap);
@@ -362,7 +380,7 @@ int draw_overlay_traps(struct PlayerInfo *player, long units_per_px, long scaled
             if ((thing->trap.revealed) || (player->id_number == thing->owner))
             {
                 TbPixel col;
-                if ((thing->model == gui_trap_type_highlighted) && ((game.play_gameturn % (2 * gui_blink_rate)) >= gui_blink_rate)) {
+                if ((thing->model == gui_trap_type_highlighted) && ((get_gameturn() % (2 * gui_blink_rate)) >= gui_blink_rate)) {
                     col = player_highlight_colours[thing->owner];
                 } else {
                     col = 60;
@@ -404,9 +422,9 @@ int draw_overlay_spells_and_boxes(struct PlayerInfo *player, long units_per_px, 
     int i;
     int n;
     SYNCDBG(18,"Starting");
-    if (player->acamera == NULL)
+    if (!camera_is_active(player->id_number))
         return 0;
-    struct Camera *cam = get_local_camera(player->acamera);
+    struct Camera *cam = get_local_active_camera(player->id_number);
     n = 0;
     const struct StructureList *slist = get_list_for_thing_class(TCls_Object);
     k = 0;
@@ -440,7 +458,7 @@ int draw_overlay_spells_and_boxes(struct PlayerInfo *player, long units_per_px, 
                 basepos = MapDiagonalLength/2;
 
                 // Do the drawing
-                if (((game.play_gameturn % (4 * gui_blink_rate)) / gui_blink_rate) == 1) {
+                if (((get_gameturn() % (4 * gui_blink_rate)) / gui_blink_rate) == 1) {
                     if (thing_is_special_box(thing) || thing_is_spellbook(thing))
                     {
                         short pixel_end = get_pixels_scaled_and_zoomed(basic_zoom);
@@ -493,12 +511,12 @@ void panel_map_draw_creature_dot(long mapos_x, long mapos_y, RealScreenCoord bas
 int draw_overlay_possessed_thing(struct PlayerInfo* player, long mapos_x, long mapos_y, RealScreenCoord basepos, TbPixel col, long basic_zoom, TbBool isLowRes)
 {
     const struct Camera* cam;
-    cam = get_local_camera(player->acamera);
+    cam = get_local_active_camera(player->id_number);
     if (cam == NULL)
         return 0;
     if (cam->view_mode != PVM_CreatureView)
         return 0;
-    if ((game.play_gameturn % (8 * gui_blink_rate)) >= 4 * gui_blink_rate)
+    if ((get_gameturn() % (8 * gui_blink_rate)) >= 4 * gui_blink_rate)
     {
         col = colours[15][15][15];
     }
@@ -533,9 +551,9 @@ int draw_overlay_creatures(struct PlayerInfo *player, long units_per_px, long zo
     int i;
     int n;
     SYNCDBG(18,"Starting");
-    if (player->acamera == NULL)
+    if (!camera_is_active(player->id_number))
         return 0;
-    struct Camera *cam = get_local_camera(player->acamera);
+    struct Camera *cam = get_local_active_camera(player->id_number);
     n = 0;
     k = 0;
     const struct StructureList *slist = get_list_for_thing_class(TCls_Creature);
@@ -560,7 +578,7 @@ int draw_overlay_creatures(struct PlayerInfo *player, long units_per_px, long zo
             interpolate_minimap_thing(thing, cam);
             if (thing_revealed(thing, player->id_number))
             {
-                if ((game.play_gameturn % (8 * gui_blink_rate)) < 4 * gui_blink_rate)
+                if ((get_gameturn() % (8 * gui_blink_rate)) < 4 * gui_blink_rate)
                 {
                     col1 = player_room_colours[get_player_color_idx(thing->owner)];
                     col2 = player_room_colours[get_player_color_idx(thing->owner)];
@@ -580,7 +598,7 @@ int draw_overlay_creatures(struct PlayerInfo *player, long units_per_px, long zo
                 // Do the drawing
                 if (thing->owner == player->id_number)
                 {
-                    if ((thing->model == gui_creature_type_highlighted) && ((game.play_gameturn % (4 * gui_blink_rate)) >= 2 * gui_blink_rate))
+                    if ((thing->model == gui_creature_type_highlighted) && ((get_gameturn() % (4 * gui_blink_rate)) >= 2 * gui_blink_rate))
                     {
                         short pixels_amount = scale_pixel(basic_zoom * 4);
                         panel_map_draw_creature_dot(mapos_x + pixels_amount, mapos_y, basepos, col2, basic_zoom, isLowRes);
@@ -602,7 +620,7 @@ int draw_overlay_creatures(struct PlayerInfo *player, long units_per_px, long zo
                 } else
                 {
                     if (thing->owner == game.neutral_player_num) {
-                        col = player_room_colours[get_player_color_idx(((game.play_gameturn + 1) % (4 * neutral_flash_rate)) / neutral_flash_rate)];
+                        col = player_room_colours[get_player_color_idx(((get_gameturn() + 1) % (4 * neutral_flash_rate)) / neutral_flash_rate)];
                     } else {
                         col = col1;
                     }
@@ -621,7 +639,7 @@ int draw_overlay_creatures(struct PlayerInfo *player, long units_per_px, long zo
                     memberpos = cctrl->party.member_pos_stl[m];
                     if (memberpos == 0)
                         break;
-                    if ((game.play_gameturn % (8 * gui_blink_rate)) < 4 * gui_blink_rate)
+                    if ((get_gameturn() % (8 * gui_blink_rate)) < 4 * gui_blink_rate)
                     {
                         col1 = player_room_colours[get_player_color_idx((int)(cctrl->party.target_plyr_idx >= 0 ? cctrl->party.target_plyr_idx : 0))];
                         col2 = player_room_colours[get_player_color_idx(thing->owner)];
@@ -668,9 +686,9 @@ int draw_overlay_creatures(struct PlayerInfo *player, long units_per_px, long zo
  */
 int draw_line_to_heart(struct PlayerInfo *player, long units_per_px, long zoom)
 {
-    if (player->acamera == NULL)
+    if (!camera_is_active(player->id_number))
         return 0;
-    struct Camera *cam = get_local_camera(player->acamera);
+    struct Camera *cam = get_local_active_camera(player->id_number);
     struct Thing *thing = get_player_soul_container(player->id_number);
 
     if (!thing_exists(thing)) {
@@ -700,7 +718,7 @@ int draw_line_to_heart(struct PlayerInfo *player, long units_per_px, long zoom)
     delta_x = scale_ui_value(MAP_ARROW_DISTANCE) * LbSinL(angle) >> 16;
     delta_y = scale_ui_value(MAP_ARROW_DISTANCE) * LbCosL(angle) >> 16;
     long frame;
-    frame = (game.play_gameturn & 3) + 1;
+    frame = (get_gameturn() & 3) + 1;
     int draw_x;
     int draw_y;
     draw_x = -delta_x / 2 + (frame * delta_x) / 4 + (basepos << 8);
@@ -851,7 +869,7 @@ static void do_map_rotate_stuff(long relpos_x, long relpos_y, int32_t *stl_x, in
 {
     const struct PlayerInfo *player = get_my_player();
     const struct Camera *cam;
-    cam = get_local_camera(player->acamera);
+    cam = get_local_active_camera(player->id_number);
     int angle;
     angle = cam->rotation_angle_x & ANGLE_MASK_4;
     int shift_x;
@@ -877,7 +895,7 @@ short do_left_map_drag(long begin_x, long begin_y, int32_t curr_x, int32_t curr_
   }
   x = (curr_x - (MyScreenWidth >> 1)) / 2;
   y = (curr_y - (MyScreenHeight >> 1)) / 2;
-  if ((abs(curr_x - old_mx) < 2) && (abs(curr_y - old_my) < 2))
+  if ((labs(curr_x - old_mx) < 2) && (labs(curr_y - old_my) < 2))
     return 0;
   if (!grabbed_small_map)
   {
@@ -987,51 +1005,60 @@ void setup_background(long units_per_px)
         MapShapeEnd[i] = radius + LbSqrL(n);
     }
 
-    int num_colours;
-    num_colours = 0;
-    long out_scanline;
-    out_scanline = lbDisplay.GraphicsScreenWidth;
-    long bkgnd_pos;
-    bkgnd_pos = 0;
-    TbPixel *out;
-    out = &lbDisplay.WScreen[PanelMapX + out_scanline * PanelMapY];
-    int w;
-    int h;
-    for (h=0; h < MapDiagonalLength; h++)
-    {
-        for (w = MapShapeStart[h]; w < MapShapeEnd[h]; w++)
+    if (RendererHasGPURenderPath()) {
+        // GPU mode: WScreen is the CPU staging buffer — not a composited background.
+        // MapBackground[] is already zeroed by KfxCalloc; bkcol=0 is the only entry
+        // needed because s_minimap_pixels is pre-zeroed by AcquireMinimapBuffer.
+        // Skip the WScreen read/write that would corrupt the staging buffer.
+        NumBackColours = 1;
+        MapBackColours[0] = 0;
+    } else {
+        int num_colours;
+        num_colours = 0;
+        long out_scanline;
+        out_scanline = lbDisplay.GraphicsScreenWidth;
+        long bkgnd_pos;
+        bkgnd_pos = 0;
+        TbPixel *out;
+        out = &lbDisplay.WScreen[PanelMapX + out_scanline * PanelMapY];
+        int w;
+        int h;
+        for (h=0; h < MapDiagonalLength; h++)
         {
-            if (w < 0) continue;
+            for (w = MapShapeStart[h]; w < MapShapeEnd[h]; w++)
+            {
+                if (w < 0) continue;
 
-            TbPixel orig;
-            orig = out[w];
-            out[w] = 255;
-            int colour;
-            for (colour=0; colour < num_colours; colour++)
-            {
-                if (MapBackColours[colour] == orig) {
-                    break;
+                TbPixel orig;
+                orig = out[w];
+                out[w] = 255;
+                int colour;
+                for (colour=0; colour < num_colours; colour++)
+                {
+                    if (MapBackColours[colour] == orig) {
+                        break;
+                    }
                 }
+                if (num_colours == colour)
+                {
+                    MapBackColours[num_colours] = orig;
+                    num_colours++;
+                }
+                MapBackground[bkgnd_pos+w] = colour;
             }
-            if (num_colours == colour)
-            {
-                MapBackColours[num_colours] = orig;
-                num_colours++;
-            }
-            MapBackground[bkgnd_pos+w] = colour;
+            bkgnd_pos += MapDiagonalLength;
+            out += out_scanline;
         }
-        bkgnd_pos += MapDiagonalLength;
-        out += out_scanline;
+        NumBackColours = num_colours;
     }
-    NumBackColours = num_colours;
 }
 
 void setup_panel_colors(void)
 {
     int frame;
-    frame = (game.play_gameturn % (4 * gui_blink_rate)) / gui_blink_rate;
+    frame = (get_gameturn() % (4 * gui_blink_rate)) / gui_blink_rate;
     unsigned int frcol;
-    frcol = player_room_colours[(game.play_gameturn % (4 * neutral_flash_rate)) / neutral_flash_rate];
+    frcol = player_room_colours[(get_gameturn() % (4 * neutral_flash_rate)) / neutral_flash_rate];
     int bkcol_idx;
     int pncol_idx;
     pncol_idx = 0;
@@ -1061,6 +1088,31 @@ void setup_panel_colors(void)
         PanelColours[n + PnC_purplePath]    = 255;
         PanelColours[n + PnC_Gems]      = 102 + (pixmap.ghost[bkcol] >> 6);
         PanelColours[n + PnC_RockFloor] = 145;
+        if (RendererHasGPURenderPath()) {
+            // GPU sprite shader discards palette index 0 (transparent); ensure all
+            // visible terrain types map to a non-zero entry.
+            // For rock: it should appear as black on the minimap. Palette index 0
+            // IS black, but 0 is the discard sentinel. Find the darkest non-zero
+            // palette entry (lbPalette is 6-bit, values 0-63) to use instead.
+            {
+                uint8_t black_idx = 1;
+                uint32_t best_lum = UINT32_MAX;
+                for (int i = 1; i < 256; i++)
+                {
+                    uint32_t r = lbPalette[i * 3 + 0];
+                    uint32_t g = lbPalette[i * 3 + 1];
+                    uint32_t b = lbPalette[i * 3 + 2];
+                    uint32_t lum = r * r + g * g + b * b;
+                    if (lum < best_lum) { best_lum = lum; black_idx = (uint8_t)i; }
+                }
+                PanelColours[n + PnC_Rock] = black_idx;
+            }
+            if (PanelColours[n + PnC_Wall]        == 0) PanelColours[n + PnC_Wall]        = 1;
+            if (PanelColours[n + PnC_Unexplored]  == 0) PanelColours[n + PnC_Unexplored]  = 1;
+            if (PanelColours[n + PnC_Tagged_Gold] == 0) PanelColours[n + PnC_Tagged_Gold] = 1;
+            if (PanelColours[n + PnC_Gold]        == 0) PanelColours[n + PnC_Gold]        = 1;
+            if (PanelColours[n + PnC_Gems]        == 0) PanelColours[n + PnC_Gems]        = 1;
+        }
 
         n = pncol_idx + PnC_RoomsStart;
         int i;
@@ -1134,9 +1186,9 @@ void update_panel_color_player_color(PlayerNumber plyr_idx, unsigned char color_
 void update_panel_colors(void)
 {
     int frame;
-    frame = (game.play_gameturn % (4 * gui_blink_rate)) / gui_blink_rate;
+    frame = (get_gameturn() % (4 * gui_blink_rate)) / gui_blink_rate;
     unsigned int frcol;
-    frcol = player_room_colours[(game.play_gameturn % (4 * neutral_flash_rate)) / neutral_flash_rate];
+    frcol = player_room_colours[(get_gameturn() % (4 * neutral_flash_rate)) / neutral_flash_rate];
     int bkcol_idx;
     int pncol_idx;
     pncol_idx = 0;
@@ -1169,7 +1221,7 @@ void update_panel_colors(void)
 
     int highlight;
     highlight = gui_room_type_highlighted;
-    frame = game.play_gameturn % (2 * gui_blink_rate);
+    frame = get_gameturn() % (2 * gui_blink_rate);
     if (frame >= gui_blink_rate)
         highlight = -1;
     if (PrevRoomHighlight != highlight)
@@ -1272,14 +1324,19 @@ void panel_map_draw_slabs(long x, long y, long units_per_px, long zoom)
 {
     PanelMapX = scale_value_for_resolution_with_upp(x,units_per_px);
     PanelMapY = scale_value_for_resolution_with_upp(y,units_per_px);
+    // auto_gen_tables sets MapDiagonalLength; acquire the GPU buffer afterwards so
+    // AcquireMinimapBuffer receives the correct (non-zero) size on the very first frame.
     auto_gen_tables(units_per_px);
+    // In GPU mode, acquire a renderer-owned pixel buffer for this frame.
+    // In software mode, AcquireMinimapBuffer returns NULL and pixels go directly to WScreen.
+    s_minimap_pixels = UIRenderer_AcquireMinimapBuffer(MapDiagonalLength);
     update_panel_colors();
     struct PlayerInfo *player = get_my_player();
-    struct Camera *cam = get_local_camera(player->acamera);
+    struct Camera *cam = get_local_active_camera(player->id_number);
 
     if ((cam == NULL) || (MapDiagonalLength < 1))
         return;
-    if (game.play_gameturn <= 1) {reset_all_minimap_interpolation = true;} //Fixes initial minimap frame being purple
+    if (get_gameturn() <= 1) {reset_all_minimap_interpolation = true;} //Fixes initial minimap frame being purple
 
     long shift_x;
     long shift_y;
@@ -1302,8 +1359,8 @@ void panel_map_draw_slabs(long x, long y, long units_per_px, long zoom)
             interp_minimap.x = interpolate(interp_minimap.x, interp_minimap.previous_x, current_minimap_x);
             interp_minimap.y = interpolate(interp_minimap.y, interp_minimap.previous_y, current_minimap_y);
         }
-        if ((interp_minimap.get_previous != game.play_gameturn) || (game.operation_flags & GOF_Paused) != 0) {
-            interp_minimap.get_previous = game.play_gameturn;
+        if ((interp_minimap.get_previous != get_gameturn()) || (game.operation_flags & GOF_Paused) != 0) {
+            interp_minimap.get_previous = get_gameturn();
             interp_minimap.previous_x = current_minimap_x;
             interp_minimap.previous_y = current_minimap_y;
         }
@@ -1314,7 +1371,15 @@ void panel_map_draw_slabs(long x, long y, long units_per_px, long zoom)
     TbPixel *bkgnd_line;
     bkgnd_line = MapBackground;
     TbPixel *out_line;
-    out_line = &lbDisplay.WScreen[PanelMapX + lbDisplay.GraphicsScreenWidth * PanelMapY];
+    long out_stride;
+    if (s_minimap_pixels != NULL) {
+        // Buffer was already zeroed by AcquireMinimapBuffer; use it as output.
+        out_line   = s_minimap_pixels;
+        out_stride = MapDiagonalLength;
+    } else {
+        out_line   = &lbDisplay.WScreen[PanelMapX + lbDisplay.GraphicsScreenWidth * PanelMapY];
+        out_stride = lbDisplay.GraphicsScreenWidth;
+    }
     int h;
     for (h = 0; h < MapDiagonalLength; h++)
     {
@@ -1358,18 +1423,37 @@ void panel_map_draw_slabs(long x, long y, long units_per_px, long zoom)
             int pnmap_idx;
             pnmap_idx = ((precor_x>>16)) + (((precor_y>>16)) * (game.map_subtiles_x + 1) );
             int pncol_idx;
-            //TODO reenable background
-            pncol_idx = PanelMap[pnmap_idx] + (*bkgnd * PnC_End);
+            if (s_minimap_pixels != NULL) {
+                // GPU mode: MapBackground is all-zeros; skip the multiply entirely.
+                pncol_idx = PanelMap[pnmap_idx];
+            } else {
+                pncol_idx = PanelMap[pnmap_idx] + (*bkgnd * PnC_End);
+                bkgnd++;
+            }
             *out = PanelColours[pncol_idx];
             precor_x += shift_y;
             precor_y -= shift_x;
             out++;
-            bkgnd++;
         }
-        out_line += lbDisplay.GraphicsScreenWidth;
+        out_line += out_stride;
         bkgnd_line += MapDiagonalLength;
         shift_stl_x += shift_x;
         shift_stl_y += shift_y;
     }
+}
+
+/**
+ * After panel_map_draw_slabs + panel_map_draw_overlay_things have finished
+ * writing into the renderer-owned pixel buffer (GPU mode) or lbDisplay.WScreen (software mode),
+ * submit the minimap data to the UIRenderer so it appears in the frame.
+ *
+ * In GPU mode: triggers GLUIRenderer to upload the buffer to a GL_R8 texture and
+ * queue a palette-lookup quad at (PanelMapX, PanelMapY).
+ * In software mode: no-op — the draws already went directly to WScreen.
+ */
+void panel_map_submit_to_renderer(void)
+{
+    UIRenderer_SubmitMinimap(PanelMapX, PanelMapY, MapDiagonalLength);
+    s_minimap_pixels = NULL;
 }
 /******************************************************************************/

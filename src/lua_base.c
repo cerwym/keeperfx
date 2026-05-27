@@ -10,6 +10,7 @@
 #include "bflib_basics.h"
 #include "bflib_fileio.h"
 #include "config_keeperfx.h"
+#include "game_legacy.h"
 #include "globals.h"
 #include "gui_msgs.h"
 
@@ -19,6 +20,8 @@
 #include "config_effects.h"
 #include "config_objects.h"
 #include "config_trapdoor.h"
+#include "kfx/profiling/KfxProfilingC.h"
+#include "config_crtrstates.h"
 
 #include "post_inc.h"
 
@@ -76,7 +79,7 @@ int setLuaPath( lua_State* L)
     lua_getglobal(L, "package");
     lua_getfield(L, -1, "path"); // get field "path" from table at top of stack (-1)
     const char *cur_path = lua_tostring(L, -1); // grab path string from top of stack
-    char new_path[PATH_LENGTH];
+    char new_path[PATH_LENGTH * 4];
     snprintf(new_path, sizeof(new_path), "%s;%s;%s;%s", levelpath,campaignpath,fx_data_path,cur_path);
     lua_pop(L, 1); // get rid of the string on the stack we just pushed on line 5
     lua_pushstring(L, new_path); // push the new one
@@ -161,30 +164,138 @@ void lua_set_random_seed(unsigned int seed)
     lua_pop(Lvl_script, 1); // Pop math table or nil
 }
 
+
+/* @comment
+ *     The loading items of open_lua_script and open_lua_script_for_mod need to be consistent.
+ * @note
+ *     We do not setLuaPath for mod, so can load only a single lua file without dependencies.
+ */
+static TbBool open_lua_script_for_mod(lua_State* L, LevelNumber lvnum, const struct ModConfigItem *mod_item)
+{
+    TbBool result = false;
+    const struct ModExistState *mod_state = &mod_item->state;
+    char* fname = NULL;
+    char mod_dir[256] = {0};
+    sprintf(mod_dir, "%s/%s", MODS_DIR_NAME, mod_item->name);
+
+    // If the mod name contains characters that the identifier does not support, ignore it.
+    if (strpbrk(mod_item->name, " -") != NULL)
+        return false;
+
+    if (mod_state->fx_data)
+    {
+        fname = prepare_file_fmtpath_mod(mod_dir, FGrp_FxData, "lua/init.lua");
+        if (LbFileExists(fname))
+        {
+            if (CheckLua(L, luaL_dofile(L, fname), "mod_fxdata_lua_file"))
+            {
+                result = true;
+            }
+            else
+            {
+                ERRORLOG("failed to load mod fxdata lua script for %s", mod_item->name);
+            }
+        }
+    }
+
+    if (mod_state->cmpg_config)
+    {
+        fname = prepare_file_fmtpath_mod(mod_dir, FGrp_CmpgConfig, "lua/init.lua");
+        if (LbFileExists(fname))
+        {
+            if (CheckLua(L, luaL_dofile(L, fname), "mod_campaign_lua_file"))
+            {
+                result = true;
+            }
+            else
+            {
+                ERRORLOG("failed to load mod campaign lua script for %s", mod_item->name);
+            }
+        }
+    }
+
+    if (mod_state->cmpg_lvls)
+    {
+        short fgroup = get_level_fgroup(lvnum);
+        fname = prepare_file_fmtpath_mod(mod_dir, fgroup, "map%05lu.lua", (unsigned long)lvnum);
+        if (LbFileExists(fname))
+        {
+            if(CheckLua(L, luaL_dofile(L, fname), "mod_level_script_loading"))
+            {
+                result = true;
+            }
+            else
+            {
+                ERRORLOG("failed to load mod level lua script for %s", mod_item->name);
+            }
+        }
+    }
+
+    return result;
+}
+
+static void open_lua_script_for_mod_list(lua_State* L, LevelNumber lvnum, const struct ModConfigItem *mod_items, long mod_cnt)
+{
+    for (long i=0; i<mod_cnt; i++)
+    {
+        const struct ModConfigItem *mod_item = mod_items + i;
+        if (open_lua_script_for_mod(L, lvnum, mod_item))
+        {
+            // If lua_on_start_for_mod_list has performance issues, a variable can be used to record the state here.
+        }
+    }
+}
+
+static void open_lua_script_for_mod_all(lua_State* L, LevelNumber lvnum)
+{
+    if (mods_conf.after_base_cnt > 0)
+    {
+        open_lua_script_for_mod_list(L, lvnum, mods_conf.after_base_item, mods_conf.after_base_cnt);
+    }
+
+    if (mods_conf.after_campaign_cnt > 0)
+    {
+        open_lua_script_for_mod_list(L, lvnum, mods_conf.after_campaign_item, mods_conf.after_campaign_cnt);
+    }
+
+    if (mods_conf.after_map_cnt > 0)
+    {
+        open_lua_script_for_mod_list(L, lvnum, mods_conf.after_map_item, mods_conf.after_map_cnt);
+    }
+}
+
+
+/* @comment
+ *     The loading items of open_lua_script and open_lua_script_for_mod need to be consistent.
+ */
 TbBool open_lua_script(LevelNumber lvnum)
 {
-	Lvl_script = luaL_newstate();
+	KFX_C_ZONE_BEGIN(_kfx_ctx, "Lua::LoadScripts");
+    Lvl_script = luaL_newstate();
 
-	luaL_openlibs(Lvl_script);
+    luaL_openlibs(Lvl_script);
+    lua_set_random_seed(game.action_random_seed);
 
-	reg_host_functions(Lvl_script);
+    reg_host_functions(Lvl_script);
 
     setLuaPath(Lvl_script);
-    
+
     char* fname = get_game_file_path_fmt(FGrp_FxData, "lua/init.lua");
 
-	// Load and parse the Lua File
+    // Load and parse the Lua File
     if ( !fname || !LbFileExists(fname) )
     {
         ERRORLOG("file %s missing", fname != NULL ? fname : "lua/init.lua");
+        KFX_C_ZONE_END(_kfx_ctx);
         return false;
     }
-	if(!CheckLua(Lvl_script, luaL_dofile(Lvl_script, fname),"global_lua_file"))
-	{
+    if(!CheckLua(Lvl_script, luaL_dofile(Lvl_script, fname), "global_lua_file"))
+    {
         ERRORLOG("failed to load global lua script");
         close_lua_script();
+		KFX_C_ZONE_END(_kfx_ctx);
         return false;
-	}
+    }
 
     fname = get_game_file_path_fmt(FGrp_CmpgConfig, "lua/init.lua");
     if (fname && LbFileExists(fname))
@@ -197,16 +308,17 @@ TbBool open_lua_script(LevelNumber lvnum)
 
     short fgroup = get_level_fgroup(lvnum);
     fname = get_game_file_path_fmt(fgroup, "map%05lu.lua", (unsigned long)lvnum);
-	// Load and parse the Lua File
-    if ( !fname || !LbFileExists(fname) )
-      return false;
+    if (fname && LbFileExists(fname))
+    {
+        if(!CheckLua(Lvl_script, luaL_dofile(Lvl_script, fname), "level_script_loading"))
+        {
+            ERRORLOG("failed to load level lua script");
+        }
+    }
 
-    if(!CheckLua(Lvl_script, luaL_dofile(Lvl_script, fname),"level_script_loading"))
-	{
-        ERRORLOG("failed to load lua script");
-        return false;
-	}
+    open_lua_script_for_mod_all(Lvl_script, lvnum);
 
+	KFX_C_ZONE_END(_kfx_ctx);
     return true;
 }
 
@@ -280,7 +392,7 @@ void cleanup_serialized_data() {
 
 void generate_lua_types_file()
 {
-    char filepath[DISKPATH_SIZE];
+    char filepath[DISKPATH_SIZE + 32];
     snprintf(filepath, sizeof(filepath), "%s/native_types.lua", keeper_runtime_directory);
     TbFileHandle out = LbFileOpen(filepath, Lb_FILE_MODE_NEW);
     if (!out) {
@@ -338,6 +450,8 @@ void generate_lua_types_file()
     GENERATE_ALIAS("effect_type", effect_desc);
     GENERATE_ALIAS("spell_type", spell_desc);
     GENERATE_ALIAS("slab_type", slab_desc);
+    GENERATE_ALIAS("creature_state", creatrstate_desc);
+    GENERATE_ALIAS("shot_type", shot_desc);
     lb_fprintf(out, "\n");
 
     GENERATE_FIELDS("roomfields", room_desc);

@@ -193,9 +193,6 @@ struct PlayerInfo {
     short thing_under_hand;
     TbBool possession_lock;
     unsigned char view_mode;
-    /** Pointer to the currently active camera. */
-    struct Camera *acamera;
-    struct Camera cameras[4];
     MapCoord zoom_to_pos_x;
     MapCoord zoom_to_pos_y;
     struct Wander wandr_within;

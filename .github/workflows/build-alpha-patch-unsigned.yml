@@ -34,6 +34,7 @@ jobs:
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
+        submodules: recursive
 
     - name: Mark git directory as safe
       run: git config --global --add safe.directory '*'
@@ -43,7 +44,25 @@ jobs:
         set -eux
         apt-get update -qq
         apt-get install -y --no-install-recommends 7zip make
-        pip3 install dkfans-setup-cpp 2>/dev/null || true
+
+    - name: Export vcpkg binary-cache env vars
+      run: |
+        echo "ACTIONS_CACHE_URL=${ACTIONS_CACHE_URL}" >> $GITHUB_ENV
+        echo "ACTIONS_RUNTIME_TOKEN=${ACTIONS_RUNTIME_TOKEN}" >> $GITHUB_ENV
+
+    - name: Bootstrap vcpkg
+      run: |
+        chmod +x ./external/vcpkg/bootstrap-vcpkg.sh
+        ./external/vcpkg/bootstrap-vcpkg.sh -disableMetrics
+
+    - name: Install vcpkg packages
+      run: |
+        ./external/vcpkg/vcpkg install \
+          --triplet x86-mingw-cross \
+          --overlay-triplets build/vcpkg-triplets \
+          --x-install-root=vcpkg_installed
+      env:
+        VCPKG_BINARY_SOURCES: "clear"
 
     - uses: dkfans/setup-cpp@master
 
@@ -55,29 +74,33 @@ jobs:
     - name: Build (CMake)
       run: |
         set -eux
-        cmake --preset windows-x86-release
+        cmake --preset windows-x86-release -DBUILD_NUMBER=$BUILD_NUMBER -DPACKAGE_SUFFIX=$PACKAGE_SUFFIX
         cmake --build --preset windows-x86-release
       env:
         CMAKE_BUILD_PARALLEL_LEVEL: 4
 
+    - name: Get gfx submodule SHA for cache key
+      id: gfx-sha
+      run: echo "sha=$(git ls-tree HEAD gfx | awk '{print $3}')" >> $GITHUB_OUTPUT
+
+    - name: Restore pkg-enginegfx cache
+      id: pkg-cache
+      uses: actions/cache@v4
+      with:
+        path: pkg/
+        key: pkg-enginegfx-${{ hashFiles('build/make/pkg_gfx.mk') }}-${{ steps.gfx-sha.outputs.sha }}
+
     - name: Package graphics data
+      if: steps.pkg-cache.outputs.cache-hit != 'true'
       run: |
         set -eux
         make BUILD_NUMBER=$BUILD_NUMBER PACKAGE_SUFFIX=$PACKAGE_SUFFIX pkg-enginegfx
 
-    - name: Copy SDL2 DLLs for packaging
-      run: |
-        set -eux
-        mkdir -p sdl/for_final_package
-        cp /usr/i686-w64-mingw32/bin/SDL2.dll       sdl/for_final_package/
-        cp /usr/i686-w64-mingw32/bin/SDL2_mixer.dll  sdl/for_final_package/
-        cp /usr/i686-w64-mingw32/bin/SDL2_image.dll  sdl/for_final_package/
-        cp /usr/i686-w64-mingw32/bin/SDL2_net.dll    sdl/for_final_package/
-
     - name: Create release package
       run: |
         set -eux
-        make BUILD_NUMBER=$BUILD_NUMBER PACKAGE_SUFFIX=$PACKAGE_SUFFIX package
+        make BUILD_NUMBER=$BUILD_NUMBER PACKAGE_SUFFIX=$PACKAGE_SUFFIX pkg-assemble
+        cmake --build --preset windows-x86-release --target package
         echo "ZIP_NAME=$(basename -s .7z pkg/keeperfx*.7z)" >> "$GITHUB_ENV"
         rm pkg/keeperfx*.7z
 

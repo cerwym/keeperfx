@@ -366,8 +366,8 @@ void draw_gpoly_sub14();
  */
 static void wireframe_line(long x0, long y0, long x1, long y1, TbPixel colour)
 {
-    long dx = abs(x1 - x0), sx = (x0 < x1) ? 1 : -1;
-    long dy = -abs(y1 - y0), sy = (y0 < y1) ? 1 : -1;
+    long dx = labs(x1 - x0), sx = (x0 < x1) ? 1 : -1;
+    long dy = -labs(y1 - y0), sy = (y0 < y1) ? 1 : -1;
     long err = dx + dy;
     for (;;) {
         if (x0 >= 0 && x0 < vec_window_width && y0 >= 0 && y0 < vec_window_height)

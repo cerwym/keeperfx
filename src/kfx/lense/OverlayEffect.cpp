@@ -278,6 +278,18 @@ TbBool OverlayEffect::Setup(long lens_idx)
     m_gpu_pass.Configure(renderer->GetData(), renderer->GetWidth(),
                          renderer->GetHeight(), renderer->GetAlphaF());
     m_gpu_pass.Init();
+#else
+    if (!m_gl_pass_ready)
+    {
+        if (m_gl_pass.Init())
+        {
+            m_gl_pass.UploadOverlay(renderer->GetData(), renderer->GetWidth(), renderer->GetHeight());
+            m_gl_pass.SetOverlayAlpha(renderer->GetAlphaF());
+            m_gl_pass_ready = true;
+        }
+        else
+            { SYNCDBG(7, "GL overlay pass init failed — CPU fallback"); }
+    }
 #endif
 
     SYNCDBG(7, "Overlay effect ready");
@@ -296,6 +308,9 @@ void OverlayEffect::Cleanup()
         m_current_lens = -1;
 #ifdef PLATFORM_VITA
         m_gpu_pass.Free();
+#else
+        m_gl_pass.Free();
+        m_gl_pass_ready = false;
 #endif
         SYNCDBG(9, "Overlay effect cleaned up");
     }

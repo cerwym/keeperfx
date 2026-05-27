@@ -5,8 +5,7 @@
  *     CPU software implementation of IMapFadePass.
  */
 /******************************************************************************/
-#ifndef SOFTWARE_MAP_FADE_PASS_H
-#define SOFTWARE_MAP_FADE_PASS_H
+#pragma once
 
 #include "renderer/IMapFadePass.h"
 
@@ -24,11 +23,10 @@ public:
     SoftwareMapFadePass()  = default;
     ~SoftwareMapFadePass() = default;
 
-    long StepFadeIn(long step) override;
-    long StepFadeOut(long step) override;
+    int32_t StepFadeIn(int32_t step) override;
+    int32_t StepFadeOut(int32_t step) override;
 
     const char* GetName() const override { return "SOFTWARE"; }
 };
 
 /******************************************************************************/
-#endif // SOFTWARE_MAP_FADE_PASS_H

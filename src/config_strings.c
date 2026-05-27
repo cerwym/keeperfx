@@ -128,7 +128,7 @@ static TbBool load_gui_strings_data_from_file(const char *fname, unsigned short 
   return true;
 }
 
-static void load_gui_strings_data_for_mod_one(const struct ModConfigItem *mod_item)
+static void load_gui_strings_data_for_mod(const struct ModConfigItem *mod_item)
 {
   char mod_dir[256] = {0};
   sprintf(mod_dir, "%s/%s", MODS_DIR_NAME, mod_item->name);
@@ -157,7 +157,7 @@ static void load_gui_strings_data_for_mod_list(const struct ModConfigItem *mod_i
     if (mod_item->state.mod_dir == 0)
       continue;
 
-    load_gui_strings_data_for_mod_one(mod_item);
+    load_gui_strings_data_for_mod(mod_item);
   }
 }
 
@@ -256,7 +256,7 @@ TbBool load_campaign_strings_data_from_file(const char *fname, unsigned short fl
   return true;
 }
 
-static void load_campaign_strings_data_for_mod_one(struct GameCampaign *campgn, const struct ModConfigItem *mod_item)
+static void load_campaign_strings_data_for_mod(struct GameCampaign *campgn, const struct ModConfigItem *mod_item)
 {
   char mod_dir[256] = {0};
   sprintf(mod_dir, "%s/%s", MODS_DIR_NAME, mod_item->name);
@@ -281,7 +281,7 @@ static void load_campaign_strings_data_for_mod_list(struct GameCampaign *campgn,
     if (mod_item->state.mod_dir == 0)
       continue;
 
-    load_campaign_strings_data_for_mod_one(campgn, mod_item);
+    load_campaign_strings_data_for_mod(campgn, mod_item);
   }
 }
 

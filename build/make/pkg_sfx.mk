@@ -109,22 +109,9 @@ convert-campaign-sfx-%: sfx/campgns/%/filelist.txt
 	-$(ECHO) 'Finished converting list: $<'
 	-$(ECHO) ' '
 
-# ============================================================================
-# MODULAR ASSET ARCHITECTURE: Submodule-based sfx/ directory
-# ============================================================================
-# The sfx/ directory is now a git submodule, not an ephemeral clone.
-# To initialize: git submodule update --init --recursive
-# Original clone rule commented out below:
-#
-# sfx/%/filelist.txt sfx/campgns/%/filelist.txt:
-# 	git clone --depth=1 https://github.com/dkfans/FXsounds.git sfx
 
-# Submodule existence check
-sfx/%/filelist.txt sfx/campgns/%/filelist.txt: | sfx/.git
+sfx/%/filelist.txt sfx/campgns/%/filelist.txt:
+	git clone --depth=1 https://github.com/dkfans/FXsounds.git sfx
 
-sfx/.git:
-	@echo "ERROR: sfx/ submodule not initialized"
-	@echo "Run: git submodule update --init --recursive"
-	@exit 1
 
 #******************************************************************************

@@ -30,6 +30,7 @@ static HMODULE steam_lib;
 #include "bflib_fileio.h"
 #include "post_inc.h"
 
+#ifdef _WIN32
 // Result from the dynamically loaded SteamAPI_Init function
 enum ESteamAPIInitResult
 {
@@ -52,8 +53,9 @@ union SteamApiInitUnion
 };
 
 // Variables
-SteamApiInitFunc SteamAPI_Init;
-SteamApiShutdownFunc SteamAPI_Shutdown;
+static SteamApiInitFunc SteamAPI_Init = nullptr;
+static SteamApiShutdownFunc SteamAPI_Shutdown = nullptr;
+#endif
 
 /**
  * @brief Initializes the Steam API in KeeperFX.
@@ -143,15 +145,24 @@ int steam_api_init()
     SteamErrMsg error;
     ESteamAPIInitResult result = SteamAPI_Init(&error);
 
-    // Check if initialization is successful
-    if (result != ESteamAPIInitResult::k_ESteamAPIInitResult_OK)
-    {
-        JUSTLOG("Steam API Failure: %s", error);
+    // Check if initialization was successful
+    if(result == ESteamAPIInitResult::k_ESteamAPIInitResult_OK) {
+        JUSTLOG("Steam API connected");
+    } else {
+        if(result == ESteamAPIInitResult::k_ESteamAPIInitResult_NoSteamClient) {
+            JUSTLOG("Cannot connect to the Steam client. Steam is probably not running");
+        } else if(result == ESteamAPIInitResult::k_ESteamAPIInitResult_VersionMismatch) {
+            WARNLOG("Steam API version mismatch. Steam client appears to be out of date");
+        } else {
+            ERRORLOG("Steam API Failure: %s", error);
+        }
         FreeLibrary(steam_lib);
+        steam_lib = nullptr;
+        SteamAPI_Init = nullptr;
+        SteamAPI_Shutdown = nullptr;
         return 1;
     }
 
-    FreeLibrary(steam_lib);
     return 0;
 
 #endif
@@ -165,18 +176,21 @@ int steam_api_init()
 void steam_api_shutdown()
 {
 #ifdef _WIN32
-    if (SteamAPI_Shutdown != NULL)
-    {
+
+    if (SteamAPI_Shutdown != nullptr) {
+        JUSTLOG("Shutting down Steam API");
         SteamAPI_Shutdown();
     }
 
-    SteamAPI_Shutdown = NULL;
-    SteamAPI_Init = NULL;
-
-    if (steam_lib != NULL)
-    {
+    // Unload the Steam DLL
+    if (steam_lib != nullptr) {
         FreeLibrary(steam_lib);
-        steam_lib = NULL;
+        steam_lib = nullptr;
     }
+
+    // Reset function pointers
+    SteamAPI_Init = nullptr;
+    SteamAPI_Shutdown = nullptr;
+
 #endif
 }

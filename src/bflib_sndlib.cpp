@@ -23,6 +23,9 @@
 #include <mutex>
 #include <atomic>
 #include <set>
+#include <thread>
+#include <exception>
+#include "kfx/profiling/KfxProfiling.h"
 #include "post_inc.h"
 
 namespace {
@@ -325,30 +328,27 @@ protected:
 	std::vector<uint8_t> m_pcm;
 };
 
+// Holds decoded PCM for one sample — no OpenAL objects; safe to fill from any thread.
+struct decoded_sample {
+	std::string name;
+	SoundSFXID sfx_id;
+	ALenum format = 0;
+	int samplerate = 0;
+	std::vector<uint8_t> pcm;
+};
+
 struct sound_sample {
 
 	std::string name;
 	SoundSFXID sfx_id;
 	openal_buffer buffer;
 
-	sound_sample(const char * _name, SoundSFXID _sfx_id, const wave_file & wav) {
-		name = _name;
-		sfx_id = _sfx_id;
-		const auto & pcm = wav.pcm();
-		const auto format = wav.format();
-		if (format == AL_FORMAT_MONO_MSADPCM_SOFT) {
-			// Needed for heart6a.wav
-			std::vector<uint8_t> converted(pcm.size() * 2);
-			for (size_t i = 0; i < pcm.size(); ++i) {
-				converted[(i * 2) + 0] = (pcm[i] >> 4) * 2;
-				converted[(i * 2) + 1] = (pcm[i] & 0x7) * 2;
-			}
-			alBufferData(buffer.id, AL_FORMAT_MONO8, converted.data(), converted.size(), wav.samplerate());
-		} else if (format == AL_FORMAT_STEREO_MSADPCM_SOFT) {
-			throw std::runtime_error("Format not implemented");
-		} else {
-			alBufferData(buffer.id, format, pcm.data(), pcm.size(), wav.samplerate());
-		}
+	// Upload pre-decoded PCM data into an OpenAL buffer.
+	// Must be called with a current OpenAL context on this thread.
+	sound_sample(decoded_sample && d) {
+		name = std::move(d.name);
+		sfx_id = d.sfx_id;
+		alBufferData(buffer.id, d.format, d.pcm.data(), (ALsizei)d.pcm.size(), d.samplerate);
 		const auto errcode = alGetError();
 		if (errcode != AL_NO_ERROR) {
 			throw openal_error("Cannot buffer sample data", errcode);
@@ -386,7 +386,9 @@ struct SoundBankEntry { // sizeof = 16
 };
 #pragma pack()
 
-std::vector<sound_sample> load_sound_bank(const char * filename) {
+// Reads and decodes all samples from a sound bank file into raw PCM structs.
+// No OpenAL calls — safe to run on any thread before a context exists.
+std::vector<decoded_sample> decode_sound_bank(const char * filename) {
 	const int directory_index = 2; // a5 was always 1622
 	std::ifstream stream(filename, std::ios::in | std::ios::binary);
 	if (!stream.is_open()) {
@@ -418,7 +420,7 @@ if (sample_count <= 0 || sample_count > 65535) {
         " total_samples_size=" + std::to_string(directory.total_samples_size));
 }
 	stream.seekg(directory.first_sample_offset, std::ios::beg);
-	std::vector<sound_sample> buffers;
+	std::vector<decoded_sample> buffers;
 	buffers.reserve(sample_count);
 	SoundBankSample sample;
     for (int i = 0; i < sample_count; ++i) {
@@ -427,19 +429,93 @@ if (sample_count <= 0 || sample_count > 65535) {
         const uint32_t data_seek = directory.first_data_offset + sample.data_offset;
         stream.seekg(data_seek, std::ios::beg);
         try {
-            buffers.emplace_back(sample.filename, sample.sfxid, wave_file(stream, sample.data_size));
+            wave_file wav(stream, sample.data_size);
+            decoded_sample d;
+            d.name = sample.filename;
+            d.sfx_id = sample.sfxid;
+            d.samplerate = wav.samplerate();
+            const auto fmt = wav.format();
+            if (fmt == AL_FORMAT_MONO_MSADPCM_SOFT) {
+                // Needed for heart6a.wav
+                const auto & raw = wav.pcm();
+                d.pcm.resize(raw.size() * 2);
+                for (size_t j = 0; j < raw.size(); ++j) {
+                    d.pcm[(j * 2) + 0] = (raw[j] >> 4) * 2;
+                    d.pcm[(j * 2) + 1] = (raw[j] & 0x7) * 2;
+                }
+                d.format = AL_FORMAT_MONO8;
+            } else if (fmt == AL_FORMAT_STEREO_MSADPCM_SOFT) {
+                throw std::runtime_error("Format not implemented");
+            } else {
+                d.pcm = wav.pcm();
+                d.format = fmt;
+            }
+            buffers.push_back(std::move(d));
         } catch (const std::exception& ex) {
             ERRORLOG("Sample %d '%s' from '%s' failed at offset %u (data_size=%u): %s", i, sample.filename, filename,
                      data_seek, sample.data_size, ex.what());
             throw;
         }
     }
-	JUSTLOG("Loaded %d sound samples from %s", (int) buffers.size(), filename);
+	JUSTLOG("Decoded %d sound samples from %s", (int) buffers.size(), filename);
 	return buffers;
 }
 
 std::vector<openal_source> g_sources;
 std::array<std::vector<sound_sample>, 2> g_banks;
+// Filled by decode_sound_bank on the preload thread; consumed by upload_decoded_bank on the main thread.
+static std::array<std::vector<decoded_sample>, 2> g_pending_banks;
+
+// Background thread for async sound bank preloading.
+static std::thread        g_sound_preload_thread;
+static std::exception_ptr g_sound_preload_exception;
+
+extern "C" void SoundBanks_StartAsyncLoad(void)
+{
+    if (SoundDisabled) return;
+    if (g_sound_preload_thread.joinable()) return; // already started
+
+    // Compute file paths on the main thread — static-buffer helpers are not thread-safe.
+    char snd_fname[2048] = {};
+    char spc_fname[2048] = {};
+    prepare_file_path_buf(snd_fname, sizeof(snd_fname), FGrp_LrgSound, "sound.dat");
+    {
+        char* spc = get_game_file_path_fmt(FGrp_LrgSound, "speech_%s.dat", get_language_lwrstr(install_info.lang_id));
+        if (!spc || !LbFileExists(spc))
+            spc = prepare_file_path(FGrp_LrgSound, "speech.dat");
+        if (!spc || !LbFileExists(spc))
+            spc = get_game_file_path_fmt(FGrp_LrgSound, "speech_%s.dat", get_language_lwrstr(1));
+        if (spc)
+            snprintf(spc_fname, sizeof(spc_fname), "%s", spc);
+    }
+
+    g_sound_preload_thread = std::thread(
+        [s = std::string(snd_fname), p = std::string(spc_fname)]()
+        {
+            try {
+#ifdef TRACY_ENABLE
+                tracy::SetThreadName("SoundPreload");
+#endif
+                {
+                    KFX_ZONE_COLOR("SoundPreload::decode_sound_bank(sound.dat)", KFX_COLOR_RENDER_CPU);
+                    g_pending_banks[0] = decode_sound_bank(s.c_str());
+                }
+                try {
+                    if (!p.empty()) {
+                        KFX_ZONE_COLOR("SoundPreload::decode_sound_bank(speech)", KFX_COLOR_RENDER_CPU);
+                        g_pending_banks[1] = decode_sound_bank(p.c_str());
+                    }
+                } catch (const std::exception& e) {
+                    WARNLOG("Speech bank async preload failed: %s", e.what());
+                    g_pending_banks[1].clear();
+                }
+            } catch (const std::exception&) {
+                g_sound_preload_exception = std::current_exception();
+            }
+        }
+    );
+    SYNCLOG("SoundBanks_StartAsyncLoad: preloading sound banks on background thread");
+}
 
 void load_sound_banks() {
 	char snd_fname[2048];
@@ -454,13 +530,23 @@ void load_sound_banks() {
 	if (!spc_fname || !LbFileExists(spc_fname)) {
 		spc_fname = get_game_file_path_fmt(FGrp_LrgSound, "speech_%s.dat", get_language_lwrstr(1));
 	}
-	g_banks[0] = load_sound_bank(snd_fname);
+	g_pending_banks[0] = decode_sound_bank(snd_fname);
 	try {
-	    g_banks[1] = load_sound_bank(spc_fname);
+	    g_pending_banks[1] = decode_sound_bank(spc_fname);
 	} catch (const std::exception & e) {
 	    WARNLOG("Speech bank failed to load, speech will be unavailable: %s", e.what());
-	    g_banks[1].clear();
+	    g_pending_banks[1].clear();
 	}
+}
+
+// Upload decoded PCM banks into OpenAL buffers. Must be called with a current context.
+std::vector<sound_sample> upload_decoded_bank(std::vector<decoded_sample> decoded) {
+	std::vector<sound_sample> result;
+	result.reserve(decoded.size());
+	for (auto & d : decoded) {
+		result.emplace_back(std::move(d));
+	}
+	return result;
 }
 
 void print_device_info() {
@@ -501,11 +587,61 @@ void SDLCALL on_music_finished() {
 } // local
 
 extern "C" void FreeAudio() {
+	SYNCDBG(6, "Starting audio cleanup");
+
+	// Check if SDL_mixer audio device is open before attempting to halt playback
+	int frequency = 0;
+	int channels = 0;
+	unsigned short format = 0;
+	int audio_opened = Mix_QuerySpec(&frequency, &format, &channels);
+
+	if (audio_opened > 0) {
+		// Stop playback before freeing chunks, so the audio thread isn't reading them
+		SYNCDBG(7, "SDL_mixer audio device is open, halting playback");
+		Mix_HaltMusic();
+		Mix_HaltChannel(-1);
+	} else {
+		SYNCDBG(7, "SDL_mixer audio device already closed, skipping Mix_Halt calls");
+	}
+
+	// Free SDL_mixer resources
+	{
+		std::lock_guard<std::mutex> guard(g_mix_mutex);
+		if (auto music = g_mix_music.exchange(nullptr)) {
+			Mix_FreeMusic(music);
+			SYNCDBG(8, "Freed SDL_mixer music");
+		}
+		if (g_streamed_sample) {
+			Mix_FreeChunk(g_streamed_sample);
+			g_streamed_sample = nullptr;
+			SYNCDBG(8, "Freed SDL_mixer streamed sample");
+		}
+	}
+
+    // Sanity check again to see if the audio device is still open. If it is, then shut it down. If not, then it was already closed by SDL's inner workings or elsewhere and we can skip the shutdown to avoid double-freeing resources.
+    audio_opened = Mix_QuerySpec(&frequency, &format, &channels);
+	if (audio_opened > 0) {
+		ShutDownSDLAudio();
+		SYNCDBG(7, "SDL_mixer shutdown complete");
+	} else {
+		while (Mix_Init(0) != 0) {
+			Mix_Quit();
+		}
+		SYNCDBG(7, "SDL_mixer audio device already closed, skipped duplicate shutdown");
+	}
+
+	// Clear OpenAL sources and buffers while context is still current
 	g_sources.clear();
 	g_banks[0].clear();
 	g_banks[1].clear();
+	g_pending_banks[0].clear();
+	g_pending_banks[1].clear();
+	SYNCDBG(7, "Cleared OpenAL sources and sound banks");
+
+	// Now destroy OpenAL context and device (unique_ptr handles proper cleanup)
 	g_openal_context = nullptr;
 	g_openal_device = nullptr;
+	SYNCDBG(6, "Audio cleanup complete");
 }
 
 extern "C" void SetSoundMasterVolume(SoundVolume volume) {
@@ -531,7 +667,9 @@ extern "C" void set_music_volume(SoundVolume value) {
 
 extern "C" TbBool play_music(const char * fname) {
 	std::lock_guard<std::mutex> guard(g_mix_mutex);
-	game.music_track = -1;
+    if (strcmp(game.music_fname, fname) == 0)
+        return false;
+    game.music_track = -1;
 	snprintf(game.music_fname, sizeof(game.music_fname), "%s", fname);
 	// Mix_PlayMusic will stop anything currently playing and eventually
 	// calls on_music_finished so theres no need to call Mix_FreeMusic first.
@@ -667,7 +805,26 @@ extern "C" TbBool InitAudio(const SoundSettings * settings) {
 		for (size_t i = 0; i < g_sources.size(); ++i) {
 			g_sources[i].mss_id = i + 1;
 		}
-		load_sound_banks();
+		if (g_sound_preload_thread.joinable()) {
+			SYNCLOG("InitAudio: joining async sound preload thread");
+			KFX_ZONE_COLOR("InitAudio::join_preload", KFX_COLOR_RENDER_CPU);
+			g_sound_preload_thread.join();
+			if (g_sound_preload_exception) {
+				// Async decode failed — retry synchronously.
+				ERRORLOG("InitAudio: async sound preload failed, retrying synchronously");
+				g_sound_preload_exception = nullptr;
+				g_pending_banks[0].clear();
+				g_pending_banks[1].clear();
+				load_sound_banks();
+			}
+		} else {
+			load_sound_banks();
+		}
+		KFX_ZONE_COLOR("InitAudio::upload_banks", KFX_COLOR_RENDER_CPU);
+		g_banks[0] = upload_decoded_bank(std::move(g_pending_banks[0]));
+		g_banks[1] = upload_decoded_bank(std::move(g_pending_banks[1]));
+		SYNCLOG("InitAudio: sound banks ready (banks: %u + %u samples)",
+			(unsigned)g_banks[0].size(), (unsigned)g_banks[1].size());
 		g_openal_device = std::move(device);
 		g_openal_context = std::move(context);
 		return true;
@@ -892,7 +1049,7 @@ extern "C" void stop_streamed_samples()
 	std::lock_guard<std::mutex> guard(g_mix_mutex);
 	const auto old_sample = std::exchange(g_streamed_sample, nullptr);
 	if (old_sample) {
-		Mix_FreeChunk(g_streamed_sample);
+		Mix_FreeChunk(old_sample);
 	}
 }
 

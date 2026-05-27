@@ -34,6 +34,8 @@
 #include "bflib_sprite.h"
 #include "bflib_mouse.h"
 #include "bflib_render.h"
+#include "renderer/RenderPass_C.h"  // g_render_pass_active (also set for UIRenderer path)
+#include "renderer/RendererManager.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -58,11 +60,23 @@ unsigned char *vec_screen;
 unsigned char *vec_map;
 unsigned long vec_screen_width;
 long vec_window_width;
+
+/** Set to 1 while a backend submit is in-flight to prevent re-entry from SoftwareBackend. */
+static int lb_in_sprite_submit = 0;
 long vec_window_height;
 unsigned char *dither_map;
 unsigned char *dither_end;
 unsigned char *lbSpriteReMapPtr;
 long scale_up;
+
+/** Last parameters passed to LbSpriteSetScalingData — read by the GPU keeper-sprite hook
+ *  in engine_render.c to reconstruct the screen destination rect. */
+long g_sprite_scale_dst_x = 0;
+long g_sprite_scale_dst_y = 0;
+long g_sprite_scale_dst_w = 0;
+long g_sprite_scale_dst_h = 0;
+long g_sprite_scale_src_w = 0;
+long g_sprite_scale_src_h = 0;
 /******************************************************************************/
 /**  Prints horizontal or vertical line on current graphics window.
  *  Does no screen locking - screen must be lock before and unlocked
@@ -76,6 +90,7 @@ long scale_up;
  */
 void LbDrawHVLine(long xpos1, long ypos1, long xpos2, long ypos2, TbPixel colour)
 {
+  assert(!RendererHasGPURenderPath() && "LbDrawHVLine: CPU pixel write in GL mode");
   long width_max = lbDisplay.GraphicsWindowWidth - 1;
   long height_max = lbDisplay.GraphicsWindowHeight - 1;
   if ( xpos1 > xpos2 )
@@ -219,6 +234,7 @@ void LbDrawHVLine(long xpos1, long ypos1, long xpos2, long ypos2, TbPixel colour
  */
 void LbDrawBoxClip(long x, long y, unsigned long width, unsigned long height, TbPixel colour)
 {
+  assert(!RendererHasGPURenderPath() && "LbDrawBoxClip: CPU pixel write in GL mode");
   long ypos = y;
   //Checking and clipping coordinates
   if ( y >= lbDisplay.GraphicsWindowHeight )
@@ -257,9 +273,11 @@ void LbDrawBoxClip(long x, long y, unsigned long width, unsigned long height, Tb
       do {
           unsigned long idxw = width;
           do {
-                glass_idx&=0xff00;
-                glass_idx |= *screen_ptr;
-                *screen_ptr = lbDisplay.GlassMap[glass_idx];
+                if (*screen_ptr != 0) {
+                    glass_idx&=0xff00;
+                    glass_idx |= *screen_ptr;
+                    *screen_ptr = lbDisplay.GlassMap[glass_idx];
+                }
                 screen_ptr++;
                 idxw--;
           } while ( idxw>0 );
@@ -273,9 +291,11 @@ void LbDrawBoxClip(long x, long y, unsigned long width, unsigned long height, Tb
       do {
             unsigned long idxw = width;
             do {
-              glass_idx&=0x00ff;
-              glass_idx |= (((unsigned short)*screen_ptr)<<8);
-              *screen_ptr = lbDisplay.GlassMap[glass_idx];
+              if (*screen_ptr != 0) {
+                  glass_idx&=0x00ff;
+                  glass_idx |= (((unsigned short)*screen_ptr)<<8);
+                  *screen_ptr = lbDisplay.GlassMap[glass_idx];
+              }
               screen_ptr++;
               idxw--;
             } while ( idxw>0 );
@@ -310,6 +330,22 @@ void LbDrawBoxClip(long x, long y, unsigned long width, unsigned long height, Tb
  */
 TbResult LbDrawBox(long x, long y, unsigned long width, unsigned long height, TbPixel colour)
 {
+    if (g_render_pass_active)
+    {
+        if (lbDisplay.DrawFlags & Lb_SPRITE_OUTLINE)
+        {
+            UIRenderer_SubmitOutlineBox((int32_t)x, (int32_t)y, (int32_t)width, (int32_t)height, colour);
+        }
+        else if (lbDisplay.DrawFlags & (Lb_SPRITE_TRANSPAR4 | Lb_SPRITE_TRANSPAR8))
+        {
+            UIRenderer_SubmitSolidBoxAlpha((int32_t)x, (int32_t)y, (int32_t)width, (int32_t)height, colour, 0.333f);
+        }
+        else
+        {
+            UIRenderer_SubmitSolidBox((int32_t)x, (int32_t)y, (int32_t)width, (int32_t)height, colour);
+        }
+        return Lb_SUCCESS;
+    }
     if (lbDisplay.DrawFlags & Lb_SPRITE_OUTLINE)
     {
         if ((width < 1) || (height < 1))
@@ -998,6 +1034,17 @@ TbResult LbSpriteDraw(long x, long y, const struct TbSprite *spr)
     struct TbSpriteDrawData spd;
     TbResult ret;
     SYNCDBG(19,"At (%ld,%ld)",x,y);
+    if (g_render_pass_active && !lb_in_sprite_submit) {
+        lb_in_sprite_submit = 1;
+#ifdef RENDERER_OPENGL_ENABLED
+        ret = UIRenderer_SubmitRawSprite(x, y, spr, lbDisplay.DrawFlags);
+#else
+        ret = RenderPass_SubmitSprite(x, y, spr, lbDisplay.DrawFlags);
+#endif
+        lb_in_sprite_submit = 0;
+        if (ret == Lb_OK) return ret;
+        // Atlas miss or no renderer: fall through to software path.
+    }
     ret = LbSpriteDrawPrepare(&spd, x, y, spr);
     if (ret != Lb_SUCCESS)
         return ret;
@@ -1286,6 +1333,16 @@ TbResult LbSpriteDrawOneColour(long x, long y, const struct TbSprite *spr, const
     struct TbSpriteDrawData spd;
     TbResult ret;
     SYNCDBG(19,"At (%ld,%ld)",x,y);
+    if (g_render_pass_active && !lb_in_sprite_submit) {
+        lb_in_sprite_submit = 1;
+#ifdef RENDERER_OPENGL_ENABLED
+        ret = UIRenderer_SubmitRawSpriteOneColour(x, y, spr, colour, lbDisplay.DrawFlags);
+#else
+        ret = RenderPass_SubmitSpriteOneColour(x, y, spr, colour, lbDisplay.DrawFlags);
+#endif
+        lb_in_sprite_submit = 0;
+        if (ret == Lb_OK) return ret;
+    }
     ret = LbSpriteDrawPrepare(&spd, x, y, spr);
     if (ret != Lb_SUCCESS)
         return ret;
@@ -1521,6 +1578,12 @@ void LbSpriteClearScalingHeightArray(int32_t * ysteps_arr, long sheight)
  */
 void LbSpriteSetScalingData(long x, long y, long swidth, long sheight, long dwidth, long dheight)
 {
+    g_sprite_scale_dst_x = x;
+    g_sprite_scale_dst_y = y;
+    g_sprite_scale_dst_w = dwidth;
+    g_sprite_scale_dst_h = dheight;
+    g_sprite_scale_src_w = swidth;
+    g_sprite_scale_src_h = sheight;
     long gwidth = lbDisplay.GraphicsWindowWidth;
     long gheight = lbDisplay.GraphicsWindowHeight;
     scale_up = true;
@@ -1554,6 +1617,10 @@ TbResult LbSpriteDrawScaled(long xpos, long ypos, const struct TbSprite *sprite,
     SYNCDBG(19,"At (%ld,%ld) size (%ld,%ld)",xpos,ypos,dest_width,dest_height);
     if ((dest_width <= 0) || (dest_height <= 0))
       return 1;
+    if (g_render_pass_active && !lb_in_sprite_submit) {
+        UIRenderer_SubmitScaledSprite((int32_t)xpos, (int32_t)ypos, (int32_t)dest_width, (int32_t)dest_height, sprite);
+        return Lb_SUCCESS;
+    }
     if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLNSHADOW) != 0)
         lbSpriteReMapPtr = lbDisplay.FadeTable + ((lbDisplay.FadeStep & 0x3F) << 8);
     LbSpriteSetScalingData(xpos, ypos, sprite->SWidth, sprite->SHeight, dest_width, dest_height);
@@ -1582,6 +1649,16 @@ int LbSpriteDrawScaledRemap(long xpos, long ypos, const struct TbSprite *sprite,
     SYNCDBG(19,"At (%ld,%ld) size (%ld,%ld)",xpos,ypos,dest_width,dest_height);
     if ((dest_width <= 0) || (dest_height <= 0))
       return 1;
+    if (g_render_pass_active && !lb_in_sprite_submit) {
+        lb_in_sprite_submit = 1;
+#ifdef RENDERER_OPENGL_ENABLED
+        TbResult ret = UIRenderer_SubmitRawSpriteRemap(xpos, ypos, sprite, cmap, lbDisplay.DrawFlags);
+#else
+        TbResult ret = RenderPass_SubmitSpriteRemap(xpos, ypos, sprite, cmap, lbDisplay.DrawFlags);
+#endif
+        lb_in_sprite_submit = 0;
+        if (ret == Lb_OK) return ret;
+    }
     if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLNSHADOW) != 0)
         lbSpriteReMapPtr = lbDisplay.FadeTable + ((lbDisplay.FadeStep & 0x3F) << 8);
     LbSpriteSetScalingData(xpos, ypos, sprite->SWidth, sprite->SHeight, dest_width, dest_height);
@@ -1801,11 +1878,13 @@ int LbTiledSpriteHeight(struct TiledSprite *bigspr)
 
 void LbDrawPixel(long x, long y, TbPixel colour)
 {
+    assert(!RendererHasGPURenderPath() && "LbDrawPixel: CPU pixel write in GL mode");
     lbDisplay.GraphicsWindowPtr[x + lbDisplay.GraphicsScreenWidth * y] = colour;
 }
 
 void LbDrawPixelClip(long x, long y, TbPixel colour)
 {
+    assert(!RendererHasGPURenderPath() && "LbDrawPixelClip: CPU pixel write in GL mode");
     if ( (x < 0) || (x >= lbDisplay.GraphicsWindowWidth) )
         return;
     if ( (y < 0) || (y >= lbDisplay.GraphicsWindowHeight) )
@@ -1831,6 +1910,7 @@ void LbDrawPixelClip(long x, long y, TbPixel colour)
 
 void LbDrawCircleFilled(long x, long y, long radius, TbPixel colour)
 {
+    assert(!RendererHasGPURenderPath() && "LbDrawCircleFilled: CPU pixel write in GL mode");
     long r;
     long i;
     long n;
@@ -1929,6 +2009,7 @@ static inline void LbDrawPixelClipSolid(long x, long y, TbPixel colour)
 
 void LbDrawCircleOutline(long x, long y, long radius, TbPixel colour)
 {
+    assert(!RendererHasGPURenderPath() && "LbDrawCircleOutline: CPU pixel write in GL mode");
     int na;
     int nb;
     int n;
@@ -2099,3 +2180,4 @@ void setup_outbuf(const int32_t *xstep, const int32_t *ystep, uchar **outbuf, in
 #ifdef __cplusplus
 }
 #endif
+

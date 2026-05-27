@@ -118,8 +118,10 @@ void update_busy_doing_gui_on_menu(void)
 void turn_off_menu(MenuID mnu_idx)
 {
     SYNCDBG(8,"Menu ID %d",(int)mnu_idx);
+    /* TODO : really not sure why this is calling save_settings, so investifate this for later.
     if ((mnu_idx == GMnu_VIDEO) || (mnu_idx == GMnu_SOUND))
         save_settings();
+    */
     long menu_num = menu_id_to_number(mnu_idx);
     SYNCDBG(8,"Menu number %d",(int)menu_num);
     if (menu_num >= 0)

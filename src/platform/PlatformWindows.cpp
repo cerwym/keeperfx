@@ -14,10 +14,12 @@
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>
+#include <sstream>
 #include <malloc.h>
 #include <errno.h>
 #include "bflib_crash.h"
 #include "bflib_video.h"
+#include "renderer/RendererManager.h"
 #include "post_inc.h"
 
 // TbFileFind is defined here; it is an opaque type to all callers.
@@ -29,6 +31,21 @@ struct TbFileFind {
 
 // TbFileInfo is defined here; it is an opaque type to all callers.
 struct TbFileInfo { FILE* fp; };
+
+void DebugPrint(const std::string& msg) {
+#ifdef UNICODE
+    // Convert UTF-8/ANSI string to wide string
+    int len = MultiByteToWideChar(CP_UTF8, 0, msg.c_str(), -1, nullptr, 0);
+    if (len > 0) {
+        std::wstring wmsg(len, L'\0');
+        MultiByteToWideChar(CP_UTF8, 0, msg.c_str(), -1, &wmsg[0], len);
+        OutputDebugStringW(wmsg.c_str());
+    }
+#else
+    OutputDebugStringA(msg.c_str());
+#endif
+}
+
 
 // ----- OS information -----
 
@@ -93,11 +110,7 @@ _backtrace(int depth, LPCONTEXT context)
     int64_t keeperFxBaseAddr = 0x00000000;
     char mapFileLine[512];
 
-    #if (BFDEBUG_LEVEL > 7)
-        FILE *mapFile = fopen("keeperfx_hvlog.map", "r");
-    #else
-        FILE *mapFile = fopen("keeperfx.map", "r");
-    #endif
+    FILE *mapFile = fopen("keeperfx.map", "r");
 
     if (mapFile)
     {
@@ -243,7 +256,7 @@ static LONG CALLBACK ctrl_handler_w32(LPEXCEPTION_POINTERS info)
     {
         LbErrorLog("Failed to init symbol context\n");
     }
-    LbScreenReset(true);
+    RendererResetScreen(true);
     LbErrorLogClose();
     return EXCEPTION_EXECUTE_HANDLER;
 }
@@ -261,9 +274,35 @@ void PlatformWindows::ErrorParachuteUpdate()
 
 void PlatformWindows::VideoInit()
 {
+    // Allow the screensaver: SDL2 by default disables it via
+    // SystemParametersInfo(SPI_SETSCREENSAVEACTIVE, FALSE), which tells Windows
+    // the app wants exclusive display handling and can disrupt the HDR compositor.
+    SDL_SetHint(SDL_HINT_VIDEO_ALLOW_SCREENSAVER, "1");
+
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK) < 0)
         fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
     atexit(SDL_Quit);
+
+    // Set GL pixel-format attributes BEFORE the first SDL_CreateWindow call.
+    // On Windows, SDL2 calls SetPixelFormat inside SDL_CreateWindow itself
+    // (WIN_GL_SetupWindow), so these values must be established here, not in
+    // platform_create_gl_context which runs after the window already exists.
+    // DOUBLEBUFFER and DEPTH_SIZE are critical: failure means single-buffered or
+    // depthless rendering, both of which cause severe visual artefacts.
+    struct { int attr; int value; const char* name; } gl_attrs[] = {
+        { SDL_GL_RED_SIZE,     10, "SDL_GL_RED_SIZE"     },
+        { SDL_GL_GREEN_SIZE,   10, "SDL_GL_GREEN_SIZE"   },
+        { SDL_GL_BLUE_SIZE,    10, "SDL_GL_BLUE_SIZE"    },
+        { SDL_GL_ALPHA_SIZE,    2, "SDL_GL_ALPHA_SIZE"   },
+        { SDL_GL_DOUBLEBUFFER,  1, "SDL_GL_DOUBLEBUFFER" },
+        { SDL_GL_DEPTH_SIZE,   24, "SDL_GL_DEPTH_SIZE"   },
+    };
+    for (int i = 0; i < (int)(sizeof(gl_attrs)/sizeof(gl_attrs[0])); ++i)
+    {
+        if (SDL_GL_SetAttribute((SDL_GLattr)gl_attrs[i].attr, gl_attrs[i].value) != 0)
+            fprintf(stderr, "PlatformWindows::VideoInit: %s=%d failed: %s\n",
+                    gl_attrs[i].name, gl_attrs[i].value, SDL_GetError());
+    }
 }
 
 // ----- File system helpers -----
@@ -436,7 +475,12 @@ int PlatformWindows::FileRead(TbFileHandle handle, void* buf, unsigned long len)
 
 long PlatformWindows::FileWrite(TbFileHandle handle, const void* buf, unsigned long len)
 {
-    if (!handle) return -1;
+    if (!handle) {
+        return -1;
+    }
+
+    DebugPrint(std::string(static_cast<const char*>(buf), len));
+
     return (long)fwrite(buf, 1, len, static_cast<TbFileInfo*>(handle)->fp);
 }
 

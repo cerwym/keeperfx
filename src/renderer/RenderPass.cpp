@@ -11,6 +11,11 @@
 // Static instance
 RenderPassSystem* RenderPassSystem::s_instance = nullptr;
 
+// C-visible flag read by bflib_vidraw.c — 1 when a backend is active, 0 otherwise
+extern "C" {
+    int g_render_pass_active = 0;
+}
+
 RenderPassSystem::RenderPassSystem()
     : m_backend(nullptr)
 {
@@ -59,7 +64,7 @@ bool RenderPassSystem::Initialize(BackendType backend)
             m_backend = new SoftwareBackend();
 #endif
             break;
-            
+
         default:
             ERRORLOG("RenderPassSystem: Unknown backend type: %d", backend);
             return false;
@@ -83,11 +88,13 @@ bool RenderPassSystem::Initialize(BackendType backend)
     }
 #endif
     
+    g_render_pass_active = 1;
     return true;
 }
 
 void RenderPassSystem::Shutdown()
 {
+    g_render_pass_active = 0;
     if (m_backend) {
         delete m_backend;
         m_backend = nullptr;
@@ -158,6 +165,29 @@ void RenderPassSystem::EndFrame()
     }
     m_backend->EndFrame();
     RenderPassProfiler::GetInstance().EndFrame();
+}
+
+void RenderPassSystem::DrawNow()
+{
+    static int flush_debug_count = 0;
+    if (flush_debug_count < 5) {
+        SYNCLOG("RenderPassSystem::DrawNow: backend=%s active=%d", 
+                m_backend ? m_backend->GetName() : "nullptr", g_render_pass_active);
+        flush_debug_count++;
+    }
+
+    if (!m_backend) {
+        return;
+    }
+    m_backend->DrawNow();
+}
+
+void RenderPassSystem::SetScreenSize(int w, int h)
+{
+    if (!m_backend) {
+        return;
+    }
+    m_backend->SetScreenSize(w, h);
 }
 
 void RenderPassSystem::OnSpriteSheetLoaded(const struct TbSpriteSheet* sheet)
@@ -244,6 +274,11 @@ void RenderPass_EndFrame(void)
     RenderPassSystem::GetInstance().EndFrame();
 }
 
+void RenderPass_DrawNow(void)
+{
+    RenderPassSystem::GetInstance().DrawNow();
+}
+
 void RenderPass_OnSpriteSheetLoaded(const struct TbSpriteSheet* sheet)
 {
     RenderPassSystem::GetInstance().OnSpriteSheetLoaded(sheet);
@@ -257,6 +292,18 @@ void RenderPass_OnSpriteSheetFreed(const struct TbSpriteSheet* sheet)
 void RenderPass_OnPaletteSet(const unsigned char* palette)
 {
     RenderPassSystem::GetInstance().OnPaletteSet(palette);
+}
+
+void RenderPass_Suspend(void)
+{
+    g_render_pass_active = 0;
+}
+
+void RenderPass_Resume(void)
+{
+    // Only re-enable if the system was initialised (has a backend).
+    if (RenderPassSystem::GetInstance().IsInitialised())
+        g_render_pass_active = 1;
 }
 
 } // extern "C"

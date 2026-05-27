@@ -6,8 +6,7 @@
  * Can be compiled in/out with RENDERPASS_PROFILING define.
  */
 
-#ifndef RENDER_PASS_PROFILER_H
-#define RENDER_PASS_PROFILER_H
+#pragma once
 
 #include "bflib_basics.h"
 
@@ -100,5 +99,3 @@ private:
   #define RENDERPASS_TIMER(name)
   #define RENDERPASS_RECORD_SUBMISSION()
 #endif
-
-#endif // RENDER_PASS_PROFILER_H

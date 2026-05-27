@@ -49,6 +49,7 @@
 #include "game_legacy.h"
 #include "keeperfx.hpp"
 #include "bflib_planar.h"
+#include "kfx/profiling/KfxProfilingC.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -981,6 +982,7 @@ TngUpdateRet switch_object_on_destoyed_slab_to_new_owner(struct Thing *thing, Mo
  */
 void update_things_in_list(struct StructureList *list)
 {
+    KFX_C_ZONE_BEGIN_COLOR(ctx, "Sim/ThingList", KFX_COLOR_SIMULATION);
     SYNCDBG(18,"Starting");
     unsigned long k = 0;
     int i = list->index;
@@ -1012,6 +1014,7 @@ void update_things_in_list(struct StructureList *list)
       }
     }
     SYNCDBG(19,"Finished, %d items",(int)k);
+    KFX_C_ZONE_END(ctx);
 }
 
 /**
@@ -1119,6 +1122,7 @@ unsigned long update_creatures_not_in_list(void)
 
 void update_things(void)
 {
+    KFX_C_ZONE_BEGIN_COLOR(ctx, "Sim/UpdateThings", KFX_COLOR_SIMULATION);
     SYNCDBG(7,"Starting");
     optimised_lights = 0;
     total_lights = 0;
@@ -1135,7 +1139,9 @@ void update_things(void)
     update_things_in_list(&game.thing_lists[TngList_Doors]);
     update_things_sounds_in_list(&game.thing_lists[TngList_AmbientSnds]);
     update_cave_in_things();
-    game.map_changed_for_nagivation = 0;
+    game.map_changed_for_navigation = 0;
+    KFX_C_PLOT("Sim/CreatureCount", (double)game.thing_lists[TngList_Creatures].count);
+    KFX_C_ZONE_END(ctx);
     SYNCDBG(9,"Finished");
 }
 
@@ -1981,7 +1987,7 @@ TbBool lord_of_the_land_in_prison_or_tortured(void)
 {
     for (long crtr_model = 0; crtr_model < game.conf.crtr_conf.model_count; crtr_model++)
     {
-        struct CreatureModelConfig* crconf = &game.conf.crtr_conf.model[crtr_model];
+        struct CreatureModelConfig* crconf = creature_stats_get(crtr_model);
         if ((crconf->model_flags & CMF_IsLordOfLand) != 0)
         {
             struct Thing* thing = creature_of_model_in_prison_or_tortured(crtr_model);
@@ -2001,7 +2007,7 @@ struct Thing *lord_of_the_land_find(void)
 {
     for (long crtr_model = 1; crtr_model < game.conf.crtr_conf.model_count; crtr_model++)
     {
-        struct CreatureModelConfig* crconf = &game.conf.crtr_conf.model[crtr_model];
+        struct CreatureModelConfig* crconf = creature_stats_get(crtr_model);
         if ((crconf->model_flags & CMF_IsLordOfLand) != 0)
         {
             int i = creature_of_model_find_first(crtr_model);
@@ -4114,7 +4120,7 @@ long count_creatures_in_dungeon_of_model_flags(const struct Dungeon *dungeon, un
     long count = 0;
     for (ThingModel crmodel = 1; crmodel < game.conf.crtr_conf.model_count; crmodel++)
     {
-        struct CreatureModelConfig* crconf = &game.conf.crtr_conf.model[crmodel];
+        struct CreatureModelConfig* crconf = creature_stats_get(crmodel);
         if (((crconf->model_flags & need_mdflags) == need_mdflags) &&
            ((crconf->model_flags & excl_mdflags) == 0))
         {
@@ -4129,7 +4135,7 @@ long count_creatures_in_dungeon_controlled_and_of_model_flags(const struct Dunge
     long count = 0;
     for (ThingModel crmodel = 1; crmodel < game.conf.crtr_conf.model_count; crmodel++)
     {
-        struct CreatureModelConfig* crconf = &game.conf.crtr_conf.model[crmodel];
+        struct CreatureModelConfig* crconf = creature_stats_get(crmodel);
         if (((crconf->model_flags & need_mdflags) == need_mdflags) &&
            ((crconf->model_flags & excl_mdflags) == 0))
         {

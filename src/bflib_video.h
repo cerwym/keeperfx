@@ -24,8 +24,6 @@
 
 #include "globals.h"
 
-#include <SDL2/SDL.h>
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -100,7 +98,8 @@ enum TbDrawFlags {
     Lb_TEXT_HALIGN_JUSTIFY = 0x0200,
     Lb_TEXT_UNDERLINE      = 0x0400,
     Lb_TEXT_UNDERLNSHADOW  = 0x0800,
-    Lb_SPRITE_GPU_BATCH_UI = 0x1000,
+    Lb_SPRITE_GPU_BATCH_UI   = 0x1000,
+    Lb_SPRITE_ALPHA_ADDITIVE = 0x2000, // EngineSpriteDrawUsingAlpha — additive (glow/fire) GPU blend
 };
 
 enum TbVideoModeFlags {
@@ -139,7 +138,7 @@ struct ScreenModeInfo {
      /** Window position Y. */
     int window_pos_y;
     /** SDL window flags. */
-    Uint32 sdlFlags;
+    unsigned int sdlFlags;
     /** Text description of the mode. */
     char Desc[23];
 };
@@ -245,9 +244,11 @@ typedef struct SSurface TSurface;
 /******************************************************************************/
 extern volatile TbBool lbScreenInitialised;
 extern volatile TbBool lbUseSdk;
-extern volatile TbBool lbInteruptMouse;
 extern volatile TbDisplayStructEx lbDisplayEx;
 extern unsigned char lbPalette[PALETTE_SIZE];
+
+#define VGA6_MAX                                63.0f // VGA 6-bit palette component range (0–63)
+#define UPP_BASE                                16   // units_per_pixel_best value at base resolution (640x400)
 
 #define DEFAULT_UI_SCALE                       128 // is equivilent to size 1 or 100%
 #define DEFAULT_ASPECT_RATIO_FACTOR            160 // is equivilent to 16/10 * 100
@@ -284,14 +285,7 @@ extern unsigned short units_per_pixel;
 extern unsigned short display_id;
 
 extern TbDisplayStruct lbDisplay;
-extern SDL_Window *lbWindow;
 /******************************************************************************/
-TbResult LbScreenInitialize(void);
-TbResult LbScreenSetDoubleBuffering(TbBool state);
-TbResult LbScreenSetup(TbScreenMode mode, TbScreenCoord width, TbScreenCoord height,
-    unsigned char *palette, short buffers_count, TbBool wscreen_vid);
-TbResult LbScreenReset(TbBool exiting_application);
-
 TbBool LbScreenIsModeAvailable(TbScreenMode mode, unsigned short display);
 TbScreenMode LbRecogniseVideoModeString(const char *desc);
 TbScreenMode LbRegisterVideoMode(const char *desc, TbScreenCoord width, TbScreenCoord height,
@@ -299,37 +293,20 @@ TbScreenMode LbRegisterVideoMode(const char *desc, TbScreenCoord width, TbScreen
 TbScreenMode LbRegisterVideoModeString(const char *desc);
 TbScreenModeInfo *LbScreenGetModeInfo(TbScreenMode mode);
 
-TbScreenMode LbScreenActiveMode(void);
 TbScreenCoord LbScreenWidth(void);
 TbScreenCoord LbScreenHeight(void);
 unsigned short LbGraphicsScreenBPP(void);
 TbScreenCoord LbGraphicsScreenWidth(void);
 TbScreenCoord LbGraphicsScreenHeight(void);
 
-TbResult LbScreenLock(void);
-TbResult LbScreenUnlock(void);
-TbBool LbScreenIsLocked(void);
-
-TbResult LbScreenSwap(void);
-TbResult LbScreenClear(TbPixel colour);
-TbResult LbScreenWaitVbi(void);
 unsigned short LbGetCurrentDisplayIndex();
 
-long LbPaletteFade(unsigned char *pal, long n, enum TbPaletteFadeFlag flg);
-TbResult LbPaletteStopOpenFade(void);
+TbPixel LbPaletteFindColour(const unsigned char *pal, unsigned char r, unsigned char g, unsigned char b);
+TbResult LbScreenWaitVbi(void);
 TbResult LbPaletteSet(unsigned char *palette);
 TbResult LbPaletteGet(unsigned char *palette);
-TbPixel LbPaletteFindColour(const unsigned char *pal, unsigned char r, unsigned char g, unsigned char b);
 TbResult LbPaletteDataFillBlack(unsigned char *palette);
 TbResult LbPaletteDataFillWhite(unsigned char *palette);
-
-TbResult LbScreenStoreGraphicsWindow(TbGraphicsWindow *grwnd);
-TbResult LbScreenLoadGraphicsWindow(TbGraphicsWindow *grwnd);
-TbResult LbScreenSetGraphicsWindow(TbScreenCoord x, TbScreenCoord y,
-    TbScreenCoord width, TbScreenCoord height);
-
-TbResult LbSetTitle(const char *title);
-TbResult LbSetIcon(unsigned short nicon);
 
 long scale_value_for_resolution(long base_value);
 long scale_value_for_resolution_with_upp(long base_value, long units_per_px);

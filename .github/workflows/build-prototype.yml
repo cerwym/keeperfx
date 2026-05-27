@@ -30,14 +30,17 @@ jobs:
           - name: Windows x86
             image: mingw32
             preset: windows-x86-release
+            vcpkg-triplet: x86-mingw-cross
 
           - name: Windows x64
             image: mingw64
             preset: windows-x64-release
+            vcpkg-triplet: x64-mingw-cross
 
           - name: Linux x64
             image: linux
             preset: linux-x64-release
+            vcpkg-triplet: x64-linux-keeperfx
 
     steps:
       - name: Checkout code
@@ -48,6 +51,51 @@ jobs:
 
       - name: Mark git directory as safe
         run: git config --global --add safe.directory '*'
+
+      - name: Install vcpkg prerequisites
+        run: apt-get update -qq && apt-get install -y --no-install-recommends zip unzip python3 python3-venv nasm autoconf autoconf-archive automake libtool libltdl-dev gcc-multilib libc6-dev-i386 pkg-config
+
+      - name: Cache vcpkg binary packages
+        uses: actions/cache@v4
+        with:
+          path: /tmp/vcpkg-cache
+          key: vcpkg-bin-${{ matrix.vcpkg-triplet }}-${{ hashFiles('vcpkg.json', 'build/vcpkg-triplets/**', 'build/vcpkg-ports/**') }}
+          restore-keys: |
+            vcpkg-bin-${{ matrix.vcpkg-triplet }}-
+
+      - name: Enable vcpkg binary caching (files)
+        run: echo "VCPKG_BINARY_SOURCES=clear;files,/tmp/vcpkg-cache,readwrite" >> $GITHUB_ENV
+
+      - name: Cache vcpkg bootstrap binary
+        id: cache-vcpkg-bootstrap
+        uses: actions/cache@v4
+        with:
+          path: external/vcpkg/vcpkg
+          key: vcpkg-bootstrap-linux-${{ hashFiles('external/vcpkg/CMakeLists.txt') }}
+
+      - name: Bootstrap vcpkg
+        if: steps.cache-vcpkg-bootstrap.outputs.cache-hit != 'true'
+        run: |
+          chmod +x ./external/vcpkg/bootstrap-vcpkg.sh
+          ./external/vcpkg/bootstrap-vcpkg.sh -disableMetrics
+
+      - name: Cache vcpkg downloads
+        uses: actions/cache@v4
+        with:
+          path: external/vcpkg/downloads
+          key: vcpkg-downloads-${{ matrix.vcpkg-triplet }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-downloads-${{ matrix.vcpkg-triplet }}-
+            vcpkg-downloads-
+
+      - name: Install vcpkg packages
+        run: |
+          ./external/vcpkg/vcpkg install \
+            --triplet ${{ matrix.vcpkg-triplet }} \
+            --overlay-triplets build/vcpkg-triplets \
+            --overlay-ports build/vcpkg-ports \
+            --x-install-root=vcpkg_installed \
+            --allow-unsupported
 
       - name: Set prototype suffix
         run: |

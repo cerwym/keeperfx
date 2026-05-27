@@ -143,7 +143,7 @@ int LbDirectoryCurrent(char *buf, unsigned long buflen)
   if ( PlatformManager_GetCurrentDirectory(buf, buflen) >= 0 )
   {
     if ( buf[1] == ':' )
-      strcpy(buf, buf+2);
+      memmove(buf, buf+2, strlen(buf+2) + 1);
     int len = strlen(buf);
     if ( len>1 )
     {

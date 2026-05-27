@@ -28,7 +28,6 @@
 #include "bflib_mouse.h"
 #include "bflib_dernc.h"
 #include "lvl_script.h"
-#include "engine_arrays.h"
 #include "player_data.h"
 #include "dungeon_data.h"
 #include "player_instances.h"
@@ -49,6 +48,7 @@
 #include "frontend.h"
 #include "ui_init.h"
 #include "frontmenu_ingame_tabs.h"
+#include "kfx/engine/cameras.h"
 #include "frontmenu_ingame_evnt.h"
 #include "frontmenu_ingame_map.h"
 #include "creature_graphics.h"
@@ -67,6 +67,8 @@
 #include "custom_sprites.h"
 #include "keeperfx.hpp"
 #include "renderer/RendererManager.h"
+#include "kfx/profiling/KfxProfilingC.h"
+#include "gui/gui_bridge.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -77,9 +79,6 @@ extern "C" {
 #ifdef __cplusplus
 }
 #endif
-/******************************************************************************/
-void redraw_isometric_view(void);
-void redraw_frontview(void);
 /******************************************************************************/
 int32_t xtab[640][2];
 int32_t ytab[480][2];
@@ -102,10 +101,14 @@ static void draw_creature_view_icons(struct Thing* creatng)
         y = MyScreenHeight - scale_ui_value_lofi(spr->SHeight * 2);
     }
     struct CreatureControl *cctrl = creature_control_get_from_thing(creatng);
-    struct SpellConfig *spconf;
     for (SpellKind spell_idx = 0; spell_idx < CREATURE_MAX_SPELLS_CASTED_AT; spell_idx++)
     {
-        spconf = get_spell_config(cctrl->casted_spells[spell_idx].spkind);
+        struct CastedSpellData* cspell = &cctrl->casted_spells[spell_idx];
+        if (cspell->spkind == 0)
+        {
+            continue;
+        }
+        struct SpellConfig *spconf = get_spell_config(cspell->spkind);
         long spridx = spconf->medsym_sprite_idx;
         if (flag_is_set(spconf->spell_flags, CSAfF_Invisibility))
         {
@@ -128,10 +131,10 @@ static void draw_creature_view_icons(struct Thing* creatng)
             }
             LbTextSetWindow(x + scale_ui_value_lofi(spr->SWidth / 2), y - scale_ui_value_lofi(spr->SHeight), w, h);
             lbDisplay.DrawFlags = Lb_TEXT_HALIGN_CENTER;
-            lbDisplay.DrawColour = LbTextGetFontFaceColor();
-            lbDisplayEx.ShadowColour = LbTextGetFontBackColor();
+            lbDisplay.DrawColour = LbTextGetFontFaceColor(winfont);
+            lbDisplayEx.ShadowColour = LbTextGetFontBackColor(winfont);
             char text[16];
-            snprintf(text, sizeof(text), "%u", (cctrl->timebomb_countdown / game_num_fps));
+            snprintf(text, sizeof(text), "%u", (cctrl->timebomb_countdown / turns_per_second));
             LbTextDrawResized(0, 0, tx_units_per_px, text);
         }
         draw_gui_panel_sprite_left(x, y, ps_units_per_px, spridx);
@@ -202,8 +205,18 @@ void setup_engine_window(long x, long y, long width, long height)
     {
       if (x > MyScreenWidth)
         x = MyScreenWidth;
-      if (x < status_panel_width)
-        x = status_panel_width;
+      // GPU renderers draw the world fullscreen and paint the sidebar on top,
+      // so the engine window is NOT clamped to status_panel_width.
+      if (!RendererWantsFullscreenViewport())
+      {
+        if (x < status_panel_width)
+          x = status_panel_width;
+      }
+      else
+      {
+        if (x < 0)
+          x = 0;
+      }
     } else
     {
       if (x > MyScreenWidth)
@@ -246,15 +259,6 @@ void store_engine_window(TbGraphicsWindow *ewnd,int divider)
         ewnd->height = player->engine_window_height/divider;
     }
     ewnd->ptr = NULL;
-}
-
-void load_engine_window(TbGraphicsWindow *ewnd)
-{
-    struct PlayerInfo* player = get_my_player();
-    player->engine_window_x = ewnd->x;
-    player->engine_window_y = ewnd->y;
-    player->engine_window_width = ewnd->width;
-    player->engine_window_height = ewnd->height;
 }
 
 // RENDER-SW-IMPL: software implementation of IMapFadePass — per-pixel wipe into lbDisplay.WScreen.
@@ -396,6 +400,7 @@ int get_place_door_pointer_graphics(ThingModel drmodel) {
 // Hardware path would replace with render-to-texture; both captures would be GPU framebuffers.
 void prepare_map_fade_buffers(unsigned char *fade_src, unsigned char *fade_dest, int scanline, int height)
 {
+    if (RendererHasGPURenderPath()) return;
     struct PlayerInfo* player = get_my_player();
     // render the 3D screen
     if (player->view_mode_restore == PVM_IsoWibbleView || player->view_mode_restore == PVM_IsoStraightView)
@@ -407,10 +412,10 @@ void prepare_map_fade_buffers(unsigned char *fade_src, unsigned char *fade_dest,
     int fadebuf_pos = 0;
     for (i = 0; i < height; i++)
     {
-        unsigned char* src = lbDisplay.WScreen + lbDisplay.GraphicsScreenWidth * i;
+        unsigned char* src = RendererGetWScreen() + lbDisplay.GraphicsScreenWidth * i;
         unsigned char* dst = &fade_src[fadebuf_pos];
         fadebuf_pos += scanline;
-        memcpy(dst, src, MyScreenWidth/pixel_size);
+        memcpy(dst, src, RendererScreenWidth());
     }
     // create the parchment screen
     load_parchment_file();
@@ -419,111 +424,45 @@ void prepare_map_fade_buffers(unsigned char *fade_src, unsigned char *fade_dest,
     fadebuf_pos = 0;
     for (i = 0; i < height; i++)
     {
-        unsigned char* src = lbDisplay.WScreen + lbDisplay.GraphicsScreenWidth * i;
+        unsigned char* src = RendererGetWScreen() + lbDisplay.GraphicsScreenWidth * i;
         unsigned char* dst = &fade_dest[fadebuf_pos];
         fadebuf_pos += scanline;
-        memcpy(dst, src, MyScreenWidth/pixel_size);
+        memcpy(dst, src, RendererScreenWidth());
     }
 }
 
-long map_fade_in(long a)
+long map_fade_in(long palette_fade_step)
 {
     SYNCDBG(6,"Starting");
-    if (a == 0)
+    if (RendererHasGPURenderPath()) return (8 - get_my_player()->instance_remain_turns) * 4;
+    if (palette_fade_step == 0)
     {
         map_fade_ghost_table = poly_pool;
         map_fade_src = poly_pool + PALETTE_COLORS*PALETTE_COLORS;
         map_fade_dest = map_fade_src + 320*200;
-        prepare_map_fade_buffers(map_fade_src, map_fade_dest, 320, MyScreenHeight/pixel_size);
+        prepare_map_fade_buffers(map_fade_src, map_fade_dest, 320, RendererScreenHeight());
         generate_map_fade_ghost_table("data/mapfadeg.dat", engine_palette, map_fade_ghost_table);
     }
-    map_fade(lbDisplay.WScreen, map_fade_dest, map_fade_src, pixmap.fade_tables, map_fade_ghost_table,
-      a, 320, 200, lbDisplay.GraphicsScreenWidth);
-    long nxamount =  a + 4;
-    if (nxamount > 32)
-        nxamount = 32;
-    return nxamount;
+    map_fade(RendererGetWScreen(), map_fade_dest, map_fade_src, pixmap.fade_tables, map_fade_ghost_table,
+        palette_fade_step, 320, 200, lbDisplay.GraphicsScreenWidth);
+    return (8 - get_my_player()->instance_remain_turns) * 4;
 }
 
-long map_fade_out(long a)
+long map_fade_out(long palette_fade_step)
 {
     SYNCDBG(6,"Starting");
-    if (a == 32)
+    if (RendererHasGPURenderPath()) return get_my_player()->instance_remain_turns * 4;
+    if (palette_fade_step == 32)
     {
         map_fade_ghost_table = poly_pool;
         map_fade_src = poly_pool + PALETTE_COLORS*PALETTE_COLORS;
         map_fade_dest = map_fade_src + 320*200;
-        prepare_map_fade_buffers(map_fade_src, map_fade_dest, 320, MyScreenHeight/pixel_size);
+        prepare_map_fade_buffers(map_fade_src, map_fade_dest, 320, RendererScreenHeight());
         generate_map_fade_ghost_table("data/mapfadeg.dat", engine_palette, map_fade_ghost_table);
     }
-    map_fade(lbDisplay.WScreen, map_fade_dest, map_fade_src, pixmap.fade_tables, map_fade_ghost_table,
-      a, 320, 200, lbDisplay.GraphicsScreenWidth);
-    long nxamount =  a - 4;
-    if (a < 0)
-        nxamount = 0;
-    return nxamount;
-}
-
-void set_sprite_view_3d(void)
-{
-    for (long i = 1; i < THINGS_COUNT; i++)
-    {
-        struct Thing* thing = thing_get(i);
-        if (thing_exists(thing))
-        {
-            if (thing_is_creature(thing) || ((thing->rendering_flags & TRF_Invisible) == 0))
-            {
-                int n = straight_iso_td(thing->anim_sprite);
-                if (n >= 0)
-                {
-                    thing->anim_sprite = n;
-                    long nframes = keepersprite_frames(thing->anim_sprite);
-                    if (nframes != thing->max_frames)
-                    {
-                        ERRORLOG("No frames different between views C%u, M%d, A%u, B%ld",thing->class_id,thing->model,thing->max_frames,nframes);
-                        thing->max_frames = nframes;
-                        n = thing->max_frames - 1;
-                        if (n > thing->current_frame) {
-                            n = thing->current_frame;
-                        }
-                        thing->current_frame = n;
-                        thing->anim_time = n << 8;
-                    }
-                }
-            }
-        }
-    }
-}
-
-void set_sprite_view_isometric(void)
-{
-    for (long i = 1; i < THINGS_COUNT; i++)
-    {
-        struct Thing* thing = thing_get(i);
-        if (thing_exists(thing))
-        {
-            if (thing_is_creature(thing) || ((thing->rendering_flags & TRF_Invisible) == 0))
-            {
-                int n = straight_td_iso(thing->anim_sprite);
-                if (n >= 0)
-                {
-                    thing->anim_sprite = n;
-                    long nframes = keepersprite_frames(thing->anim_sprite);
-                    if (nframes != thing->max_frames)
-                    {
-                        ERRORLOG("No frames different between views C%u, M%d, A%u, B%ld",thing->class_id,thing->model,thing->max_frames,nframes);
-                        thing->max_frames = nframes;
-                        n = thing->max_frames - 1;
-                        if (n > thing->current_frame) {
-                            n = thing->current_frame;
-                        }
-                        thing->current_frame = n;
-                        thing->anim_time = n << 8;
-                    }
-                }
-            }
-        }
-    }
+    map_fade(RendererGetWScreen(), map_fade_dest, map_fade_src, pixmap.fade_tables, map_fade_ghost_table,
+      palette_fade_step, 320, 200, lbDisplay.GraphicsScreenWidth);
+    return get_my_player()->instance_remain_turns * 4;
 }
 
 long dummy_sound_line_of_sight(long a1, long a2, long a3, long a4, long a5, long a6)
@@ -536,7 +475,7 @@ void set_engine_view(struct PlayerInfo *player, long val)
     switch ( val )
     {
     case PVM_EmptyView:
-        player->acamera = &player->cameras[CamIV_Isometric];
+        camera_set_active(player->id_number, CamIV_Isometric);
         // Allow view mode 0 only for non-local-human players
         if (!is_my_player(player))
             break;
@@ -547,31 +486,29 @@ void set_engine_view(struct PlayerInfo *player, long val)
         val = PVM_CreatureView;
         // fall through
     case PVM_CreatureView:
-        player->acamera = &player->cameras[CamIV_FirstPerson];
+        camera_set_active(player->id_number, CamIV_FirstPerson);
         sync_local_camera(player);
         if (!is_my_player(player))
             break;
         lens_mode = 2;
-        set_sprite_view_3d();
         S3DSetLineOfSightFunction(dummy_sound_line_of_sight);
         S3DSetDeadzoneRadius(0);
-        LbMouseSetPosition((MyScreenWidth/pixel_size) >> 1,(MyScreenHeight/pixel_size) >> 1);
+        LbMouseSetPosition(RendererScreenWidth() >> 1, RendererScreenHeight() >> 1);
         break;
     case PVM_IsoWibbleView:
     case PVM_IsoStraightView:
-        player->acamera = &player->cameras[CamIV_Isometric];
-        player->acamera->view_mode = val;
+        camera_set_active(player->id_number, CamIV_Isometric);
+        camera_get_active(player->id_number)->view_mode = val;
         sync_local_camera(player);
         if (!is_my_player(player))
             break;
         lens_mode = 0;
         // no need to set temp_cluedo_mode here; it's done in update_engine_settings
-        set_sprite_view_isometric();
         S3DSetLineOfSightFunction(dummy_sound_line_of_sight);
         S3DSetDeadzoneRadius(1280);
         break;
     case PVM_ParchmentView:
-        player->acamera = &player->cameras[CamIV_Parchment];
+        camera_set_active(player->id_number, CamIV_Parchment);
         sync_local_camera(player);
         if (!is_my_player(player))
             break;
@@ -583,13 +520,12 @@ void set_engine_view(struct PlayerInfo *player, long val)
         // In fade states, keep the settings unchanged
         break;
     case PVM_FrontView:
-        player->acamera = &player->cameras[CamIV_FrontView];
+        camera_set_active(player->id_number, CamIV_FrontView);
         sync_local_camera(player);
         if (!is_my_player(player))
             break;
         lens_mode = 0;
         temp_cluedo_mode = 0;
-        set_sprite_view_isometric();
         S3DSetLineOfSightFunction(dummy_sound_line_of_sight);
         S3DSetDeadzoneRadius(1280);
         break;
@@ -600,37 +536,31 @@ void set_engine_view(struct PlayerInfo *player, long val)
 void draw_overlay_compass(long base_x, long base_y)
 {
     struct PlayerInfo* player = get_my_player();
-    struct Camera* cam = get_local_camera(player->acamera);
+    struct Camera* cam = get_local_active_camera(player->id_number);
     unsigned short flg_mem = lbDisplay.DrawFlags;
     LbTextSetFont(winfont);
     lbDisplay.DrawFlags |= Lb_SPRITE_TRANSPAR4;
     LbTextSetWindow(0, 0, MyScreenWidth, MyScreenHeight);
     int units_per_px = (16 * status_panel_width + 140 / 2) / 140;
     int tx_units_per_px = (22 * units_per_px) / LbTextLineHeight();
-    int w = (LbSprFontCharWidth(lbFontPtr, '/') * tx_units_per_px / 16) / 2;
-    int h = (LbSprFontCharHeight(lbFontPtr, '/') * tx_units_per_px / 16) / 2 + 2 * units_per_px / 16;
+    int w = (LbSprFontCharWidth(winfont, '/') * tx_units_per_px / 16) / 2;
+    int h = (LbSprFontCharHeight(winfont, '/') * tx_units_per_px / 16) / 2 + 2 * units_per_px / 16;
     int center_x = base_x * units_per_px / 16 + MapDiagonalLength / 2;
     int center_y = base_y * units_per_px / 16 + MapDiagonalLength / 2;
     int shift_x = (-(MapDiagonalLength * 7 / 16) * LbSinL(cam->rotation_angle_x)) >> LbFPMath_TrigmBits;
     int shift_y = (-(MapDiagonalLength * 7 / 16) * LbCosL(cam->rotation_angle_x)) >> LbFPMath_TrigmBits;
-    if (LbScreenIsLocked()) {
+    if (RendererIsScreenLocked()) {
         LbTextDrawResized(center_x + shift_x - w, center_y + shift_y - h, tx_units_per_px, get_string(GUIStr_MapN));
     }
     shift_x = ( (MapDiagonalLength*7/16) * LbSinL(cam->rotation_angle_x)) >> LbFPMath_TrigmBits;
     shift_y = ( (MapDiagonalLength*7/16) * LbCosL(cam->rotation_angle_x)) >> LbFPMath_TrigmBits;
-    if (LbScreenIsLocked()) {
-        LbTextDrawResized(center_x + shift_x - w, center_y + shift_y - h, tx_units_per_px, get_string(GUIStr_MapS));
-    }
+    LbTextDrawResized(center_x + shift_x - w, center_y + shift_y - h, tx_units_per_px, get_string(GUIStr_MapS));
     shift_x = ( (MapDiagonalLength*7/16) * LbCosL(cam->rotation_angle_x)) >> LbFPMath_TrigmBits;
     shift_y = (-(MapDiagonalLength*7/16) * LbSinL(cam->rotation_angle_x)) >> LbFPMath_TrigmBits;
-    if (LbScreenIsLocked()) {
-        LbTextDrawResized(center_x + shift_x - w, center_y + shift_y - h, tx_units_per_px, get_string(GUIStr_MapE));
-    }
+    LbTextDrawResized(center_x + shift_x - w, center_y + shift_y - h, tx_units_per_px, get_string(GUIStr_MapE));
     shift_x = (-(MapDiagonalLength*7/16) * LbCosL(cam->rotation_angle_x)) >> LbFPMath_TrigmBits;
     shift_y = ( (MapDiagonalLength*7/16) * LbSinL(cam->rotation_angle_x)) >> LbFPMath_TrigmBits;
-    if (LbScreenIsLocked()) {
-        LbTextDrawResized(center_x + shift_x - w, center_y + shift_y - h, tx_units_per_px, get_string(GUIStr_MapW));
-    }
+    LbTextDrawResized(center_x + shift_x - w, center_y + shift_y - h, tx_units_per_px, get_string(GUIStr_MapW));
     lbDisplay.DrawFlags = flg_mem;
 }
 
@@ -638,6 +568,7 @@ void draw_overlay_compass(long base_x, long base_y)
 // understand the setup required for the fly-in and how to make it work with the new rendering system.
 void redraw_creature_view(void)
 {
+    KFX_C_ZONE_BEGIN_COLOR(ctx, "Render/CreatureView", KFX_COLOR_RENDER_CPU);
     SYNCDBG(6, "Starting");
     struct PlayerInfo* player = get_my_player();
     update_explored_flags_for_power_sight(player);
@@ -647,7 +578,9 @@ void redraw_creature_view(void)
         draw_creature_view(thing);
     remove_explored_flags_for_power_sight(player);
     if ((game.operation_flags & GOF_ShowGui) != 0) {
+        UIRenderer_SetLayer(0);  // sidebar background must land before the staging blit
         draw_whole_status_panel();
+        UIRenderer_SetLayer(1);  // restore front layer for all other GUI draws
     }
     draw_gui();
     if ((game.operation_flags & GOF_ShowGui) != 0) {
@@ -667,40 +600,46 @@ void redraw_creature_view(void)
             }
         }
     }
-
+    KFX_C_ZONE_END(ctx);
 }
 
 // The default angled view.
 void redraw_isometric_view(void)
 {
+    KFX_C_ZONE_BEGIN_COLOR(ctx, "Render/IsometricView", KFX_COLOR_RENDER_CPU);
     struct PlayerInfo* player = get_my_player();
-    if (player->acamera == NULL)
+    if (!camera_is_active(player->id_number))
         return;
     TbGraphicsWindow ewnd;
     memset(&ewnd, 0, sizeof(TbGraphicsWindow));
-    struct Camera* render_cam = get_local_camera(&player->cameras[CamIV_Isometric]);
+    struct Camera* render_cam = get_local_camera(CamIV_Isometric);
     update_explored_flags_for_power_sight(player);
     engine(player,render_cam);
     remove_explored_flags_for_power_sight(player);
     draw_2d_elements(player);
+    KFX_C_ZONE_END(ctx);
 }
 
 void redraw_frontview(void)
 {
+    KFX_C_ZONE_BEGIN_COLOR(ctx, "Render/FrontView", KFX_COLOR_RENDER_CPU);
     SYNCDBG(6,"Starting");
     struct PlayerInfo* player = get_my_player();
-    struct Camera* render_cam = get_local_camera(&player->cameras[CamIV_FrontView]);
+    struct Camera* render_cam = get_local_camera(CamIV_FrontView);
     update_explored_flags_for_power_sight(player);
     draw_frontview_engine(render_cam);
     remove_explored_flags_for_power_sight(player);
     draw_2d_elements(player);
+    KFX_C_ZONE_END(ctx);
 }
 
 // Draws 2D elements on top of 3D view, like spell cursor. Called from redraw_isometric_view() and redraw_frontview()
 // after 3D rendering is done.  
 void draw_2d_elements(struct PlayerInfo* player) {
     if (flag_is_set(game.operation_flags, GOF_ShowGui)) {
+        UIRenderer_SetLayer(0);  // sidebar background must land before the staging blit
         draw_whole_status_panel();
+        UIRenderer_SetLayer(1);  // restore front layer for all other GUI draws
     }
     draw_gui();
     if (flag_is_set(game.operation_flags, GOF_ShowGui)) {
@@ -758,7 +697,7 @@ TbBool draw_spell_cursor(ThingIndex tng_idx, MapSubtlCoord stl_x, MapSubtlCoord 
         }
     }
     i = get_player_colored_pointer_icon_idx(powerst->pointer_sprite_idx,my_player_number);
-    set_pointer_graphic_spell(i, game.play_gameturn);
+    set_pointer_graphic_spell(i, get_gameturn());
     return true;
 }
 
@@ -877,7 +816,7 @@ void process_dungeon_top_pointer_graphic(struct PlayerInfo *player)
             }
             break;
         default:
-            if (player->hand_busy_until_turn <= game.play_gameturn)
+            if (player->hand_busy_until_turn <= get_gameturn())
               set_pointer_graphic(MousePG_Arrow);
             else
               set_pointer_graphic(MousePG_Invisible);
@@ -984,18 +923,22 @@ void redraw_display(void)
         break;
     case PVM_CreatureView:
         redraw_creature_view();
+        GUIBridge_LeaveParchmentView();
         parchment_loaded = 0;
         break;
     case PVM_IsoWibbleView:
     case PVM_IsoStraightView:
         redraw_isometric_view();
+        GUIBridge_DrawGameViewPiP();
+        GUIBridge_LeaveParchmentView();
         parchment_loaded = 0;
         break;
     case PVM_ParchmentView:
-        redraw_parchment_view();
+        GUIBridge_DrawParchmentView();
         break;
     case PVM_FrontView:
         redraw_frontview();
+        GUIBridge_LeaveParchmentView();
         parchment_loaded = 0;
         break;
     case PVM_ParchFadeIn:
@@ -1036,7 +979,7 @@ void redraw_display(void)
         LbTextSetWindow(0, 0, MyScreenWidth, MyScreenHeight);
         lbDisplay.DrawFlags = 0;
         LbTextSetFont(winfont);
-        char text[16];
+        char text[32];
         if (draw_spell_cost > 0)
             snprintf(text, sizeof(text), "%ld", draw_spell_cost);
 	else
@@ -1071,7 +1014,7 @@ void redraw_display(void)
     {
         draw_frametime();
     }
-    if (network_stats_enabled())
+    if (debug_display_network_stats != 0)
     {
         draw_network_stats();
     }
@@ -1112,21 +1055,23 @@ void redraw_display(void)
                   text_x -= 12;
               }
           }
+          UIRenderer_BeginTopOverlay();
           LbTextSetWindow(text_x, pos_y, text_w, h);
           draw_slab64k(pos_x, pos_y, units_per_pixel, w, h);
-          LbTextDrawResized(0/pixel_size, 0/pixel_size, tx_units_per_px, text);
-          LbTextSetWindow(0/pixel_size, 0/pixel_size, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
+          LbTextDrawResized(0, 0, tx_units_per_px, text);
+          UIRenderer_EndTopOverlay();
+          LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
     }
     if (game.armageddon_cast_turn != 0)
     {
         int i = 0;
-        if (game.armageddon_cast_turn + game.conf.rules[game.armageddon_caster_idx].magic.armageddon_count_down <= game.play_gameturn)
+        if (game.armageddon_cast_turn + game.conf.rules[game.armageddon_caster_idx].magic.armageddon_count_down <= get_gameturn())
         {
-            if (game.armageddon_over_turn - game.conf.rules[game.armageddon_caster_idx].magic.armageddon_duration <= game.play_gameturn)
-                i = game.armageddon_over_turn - game.play_gameturn;
+            if (game.armageddon_over_turn - game.conf.rules[game.armageddon_caster_idx].magic.armageddon_duration <= get_gameturn())
+                i = game.armageddon_over_turn - get_gameturn();
         } else
         {
-            i = game.play_gameturn - game.armageddon_cast_turn - game.conf.rules[game.armageddon_caster_idx].magic.armageddon_count_down;
+            i = get_gameturn() - game.armageddon_cast_turn - game.conf.rules[game.armageddon_caster_idx].magic.armageddon_count_down;
         }
         LbTextSetFont(winfont);
         char text[64];
@@ -1143,10 +1088,12 @@ void redraw_display(void)
         }
         long pos_x = MyScreenWidth - w - 16 * units_per_pixel / 16;
         long pos_y = 16 * units_per_pixel / 16;
+        UIRenderer_BeginTopOverlay();
         LbTextSetWindow(pos_x, pos_y, w, h);
         draw_slab64k(pos_x, pos_y, units_per_pixel, w, h);
-        LbTextDrawResized(0/pixel_size, 0/pixel_size, tx_units_per_px, text);
-        LbTextSetWindow(0/pixel_size, 0/pixel_size, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
+        LbTextDrawResized(0, 0, tx_units_per_px, text);
+        UIRenderer_EndTopOverlay();
+        LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
     }
     draw_eastegg();
   //show_onscreen_msg(8, "Physical(%d,%d) Graphics(%d,%d) Lens(%d,%d)", (int)lbDisplay.PhysicalScreenWidth, (int)lbDisplay.PhysicalScreenHeight, (int)lbDisplay.GraphicsScreenWidth, (int)lbDisplay.GraphicsScreenHeight, (int)eye_lens_width, (int)eye_lens_height);
@@ -1161,16 +1108,16 @@ TbBool keeper_screen_redraw(void)
     SYNCDBG(5,"Starting");
     struct PlayerInfo* player = get_my_player();
     if (lens_mode != 0) {
-        LbScreenClear(144); // Very dark green
+        RendererClearScreen(144); // Very dark green
     } else {
-        LbScreenClear(0);
+        RendererClearScreen(0);
     }
-    if (LbScreenLock() == Lb_SUCCESS)
+    if (RendererLockScreen())
     {
         setup_engine_window(player->engine_window_x, player->engine_window_y,
             player->engine_window_width, player->engine_window_height);
         redraw_display();
-        LbScreenUnlock();
+        RendererUnlockScreen();
         return true;
     }
     return false;

@@ -35,6 +35,7 @@
 #include "game_legacy.h"
 #include "game_loop.h"
 #include "lua_triggers.h"
+#include "kfx/profiling/KfxProfilingC.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -160,7 +161,7 @@ void process_dungeon_destroy(struct Thing* heartng)
             else if (dungeon->heart_destroy_turn == 30)
             {
                 dungeon->free_soul_idx = 0;
-                delete_thing_structure(soultng, 0);
+                destroy_object(soultng);
             }
         }
         dungeon->heart_destroy_turn++;
@@ -216,7 +217,7 @@ void process_dungeon_destroy(struct Thing* heartng)
         if (!thing_is_invalid(efftng))
             efftng->shot_effect.hit_type = THit_HeartOnlyNotOwn;
         destroy_dungeon_heart_room(plyr_idx, heartng);
-        delete_thing_structure(heartng, 0);
+        destroy_object(heartng);
     }
     { // If there is another heart owned by this player, set it to "working" heart
         struct PlayerInfo* player;
@@ -234,7 +235,7 @@ void process_dungeon_destroy(struct Thing* heartng)
                 if (is_my_player_number(dungeon->owner))
                 {
                     const char* objective = (game.heart_lost_quick_message) ? game.quick_messages[game.heart_lost_message_id] : get_string(game.heart_lost_message_id);
-                    process_objective(objective, game.heart_lost_message_target, 0, 0);
+                    process_objective(objective,dungeon->owner, game.heart_lost_message_target, 0, 0);
                 }
             }
             // If this is the last heart the player had, finish him
@@ -252,6 +253,7 @@ void process_dungeon_destroy(struct Thing* heartng)
 
 void update_research(void)
 {
+    KFX_C_ZONE_BEGIN_COLOR(ctx, "Sim/Research", KFX_COLOR_SIMULATION);
     int i;
     struct PlayerInfo *player;
     SYNCDBG(6,"Starting");
@@ -263,10 +265,12 @@ void update_research(void)
             process_player_research(i);
         }
     }
+    KFX_C_ZONE_END(ctx);
 }
 
 void update_manufacturing(void)
 {
+    KFX_C_ZONE_BEGIN_COLOR(ctx, "Sim/Manufacturing", KFX_COLOR_SIMULATION);
     int i;
     struct PlayerInfo *player;
     SYNCDBG(16,"Starting");
@@ -278,6 +282,7 @@ void update_manufacturing(void)
             process_player_manufacturing(i);
         }
     }
+    KFX_C_ZONE_END(ctx);
 }
 
 /******************************************************************************/

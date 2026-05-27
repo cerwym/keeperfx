@@ -39,6 +39,10 @@ void MonitorStreamedSoundTrack(void);
 void * GetSoundDriver(void);
 void StopAllSamples(void);
 TbBool InitAudio(const struct SoundSettings *);
+/** Start loading sound banks on a background I/O thread.
+ *  Must be called after install paths are ready (load_configuration).
+ *  InitAudio() will join the thread before using the banks. */
+void SoundBanks_StartAsyncLoad(void);
 TbBool IsSamplePlaying(SoundMilesID);
 SoundVolume GetCurrentSoundMasterVolume(void);
 void SetSampleVolume(SoundEmitterID, SoundSmplTblID, SoundVolume);

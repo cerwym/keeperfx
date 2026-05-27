@@ -10,8 +10,7 @@
  *     is treated as transparent (matching the CPU path).
  */
 /******************************************************************************/
-#ifndef VITA_OVERLAY_PASS_H
-#define VITA_OVERLAY_PASS_H
+#pragma once
 
 #ifdef PLATFORM_VITA
 
@@ -56,4 +55,3 @@ private:
 };
 
 #endif // PLATFORM_VITA
-#endif // VITA_OVERLAY_PASS_H

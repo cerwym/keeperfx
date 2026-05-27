@@ -35,9 +35,7 @@ struct SSurface {
     long pitch;
 };
 /******************************************************************************/
-extern struct SDL_Surface * lbScreenSurface;
 extern struct SDL_Surface * lbDrawSurface;
-extern struct SDL_Surface * lbScaleSurface;
 extern volatile TbBool lbHasSecondSurface;
 /******************************************************************************/
 void LbScreenSurfaceInit(struct SSurface *surf);
@@ -47,6 +45,15 @@ TbResult LbScreenSurfaceBlit(struct SSurface *surf, unsigned long x, unsigned lo
     struct TbRect *rect, unsigned long blflags);
 void *LbScreenSurfaceLock(struct SSurface *surf);
 TbResult LbScreenSurfaceUnlock(struct SSurface *surf);
+
+/** Create the engine draw surface (lbDrawSurface) at w×h pixels, bpp bits per pixel.
+ *  Any previously existing draw surface must have been freed first.
+ *  Returns Lb_SUCCESS on success or Lb_FAIL on allocation failure. */
+TbResult LbScreenCreateDrawSurface(int w, int h, int bpp);
+
+/** Free lbDrawSurface if it was dynamically allocated (lbHasSecondSurface is true),
+ *  then null the pointer.  Safe to call when lbDrawSurface is already NULL. */
+void LbScreenFreeDrawSurface(void);
 /******************************************************************************/
 #ifdef __cplusplus
 }

@@ -26,6 +26,7 @@
 #include "bflib_basics.h"
 #include "bflib_keybrd.h"
 #include "bflib_mouse.h"
+#include "bflib_joyst.h"
 #include "bflib_video.h"
 #include "bflib_planar.h"
 #include "bflib_sndlib.h"
@@ -47,7 +48,6 @@ using namespace std;
 extern "C" {
 #endif
 /******************************************************************************/
-volatile TbBool lbAppActive;
 volatile int lbUserQuit = 0;
 
 unsigned char last_used_input_device = 0;
@@ -59,11 +59,8 @@ static TbBool firstTimeMouseInit = true;
 
 std::map<int, TbKeyCode> keymap_sdl_to_bf;
 
-static uint16_t num_keys_down = 0;
-
-void init_controller_input();
+//defined here instead of bflib_joyst.h to avoid making header depend on SDL
 void JEvent(const SDL_Event *ev);
-void poll_controller();
 /******************************************************************************/
 
 /**
@@ -282,7 +279,8 @@ static TbKeyMods keyboard_mods_mapping(const SDL_KeyboardEvent * key)
 
 TbBool LbIsFrozenOrPaused(void)
 {
-    return ((freeze_game_on_focus_lost() && !LbIsActive()) || ((game.operation_flags & GOF_Paused) != 0));
+    return ((freeze_game_on_focus_lost() && !PlatformManager::Get()->GetWindowSystem()->IsAppActive()) ||
+            ((game.operation_flags & GOF_Paused) != 0));
 }
 
 static TbKeyCode mousebutton_to_keycode(const Uint8 *button)
@@ -304,9 +302,6 @@ static void process_event(const SDL_Event *ev)
         x = keyboard_keys_mapping(&ev->key);
         if (x != KC_UNASSIGNED)
         {
-            if (ev->key.repeat == 0)
-                num_keys_down++;
-            
             keyboardControl(KActn_KEYDOWN,x,keyboard_mods_mapping(&ev->key), ev->key.keysym.sym);
         }
         last_used_input_device = ID_Keyboard_Mouse;
@@ -316,8 +311,6 @@ static void process_event(const SDL_Event *ev)
         x = keyboard_keys_mapping(&ev->key);
         if (x != KC_UNASSIGNED)
         {
-            if (num_keys_down > 0)
-                num_keys_down--;
             keyboardControl(KActn_KEYUP,x,keyboard_mods_mapping(&ev->key), ev->key.keysym.sym);
         }
         last_used_input_device = ID_Keyboard_Mouse;
@@ -392,7 +385,6 @@ static void process_event(const SDL_Event *ev)
             case SDL_WINDOWEVENT_FOCUS_GAINED:
             {
                 PlatformManager::Get()->GetWindowSystem()->OnFocusGained();
-                lbAppActive = true;
                 isMouseActive = true;
                 isMouseActivated = true;
                 LbGrabMouseCheck(MG_OnFocusGained);
@@ -410,7 +402,6 @@ static void process_event(const SDL_Event *ev)
             case SDL_WINDOWEVENT_FOCUS_LOST:
             {
                 PlatformManager::Get()->GetWindowSystem()->OnFocusLost();
-                lbAppActive = false;
                 isMouseActive = false;
                 isMouseActivated = false;
                 LbGrabMouseCheck(MG_OnFocusLost);
@@ -426,7 +417,7 @@ static void process_event(const SDL_Event *ev)
             }
             case SDL_WINDOWEVENT_ENTER:
             {
-                if (lbAppActive)
+                if (PlatformManager::Get()->GetWindowSystem()->IsAppActive())
                 {
                     isMouseActive = true;
                     isMouseActivated = true;
@@ -476,6 +467,11 @@ static void process_event(const SDL_Event *ev)
 /******************************************************************************/
 TbBool LbWindowsControl(void)
 {
+    return LbPollInputs();
+}
+
+TbBool LbPollInputs(void)
+{
     // Let the platform window system inject any non-SDL input (e.g. Vita
     // virtual cursor from analog stick / touch) before processing events.
     PlatformManager::Get()->GetWindowSystem()->PollInput();
@@ -485,20 +481,13 @@ TbBool LbWindowsControl(void)
     while (SDL_PollEvent(&ev)) {
         process_event(&ev);
     }
-    
-    if (num_keys_down == 0)
-        poll_controller();
 
     return (lbUserQuit < 1);
 }
 
 TbBool LbIsActive(void)
 {
-  // On error, let's assume the window is active.
-    if (!lbScreenInitialised)
-        return true;
-
-    return lbAppActive;
+    return PlatformManager::Get()->GetWindowSystem()->IsAppActive();
 }
 
 TbBool LbIsMouseActive(void)
@@ -508,7 +497,7 @@ TbBool LbIsMouseActive(void)
 
 void LbMouseCheckPosition(TbBool grab_state_changed)
 {
-    if (!lbAppActive)
+    if (!PlatformManager::Get()->GetWindowSystem()->IsAppActive())
     {
         if (IsMouseInsideWindow())
         {
@@ -537,14 +526,14 @@ void LbMouseCheckPosition(TbBool grab_state_changed)
             if (firstTimeMouseInit) // if start no-grab, move cursor appropriately
             {
                 firstTimeMouseInit = false;
-                if (IsMouseInsideWindow() && lbAppActive)
+                if (IsMouseInsideWindow() && PlatformManager::Get()->GetWindowSystem()->IsAppActive())
                 {
                     LbMoveGameCursorToHostCursor();
                 }
             }
             else if (grab_state_changed) // if release grab, move cursor appropriately
             {
-                if (IsMouseInsideWindow() && lbAppActive)
+                if (IsMouseInsideWindow() && PlatformManager::Get()->GetWindowSystem()->IsAppActive())
                 {
                     LbMoveHostCursorToGameCursor();
                 }
@@ -572,7 +561,7 @@ void LbSetMouseGrab(TbBool grab_mouse)
         LbMouseCheckPosition((previousGrabState != lbMouseGrabbed));
     }
     // Show host-OS cursor only when the game window does not have focus.
-    ws->SetCursorVisible(!lbAppActive);
+    ws->SetCursorVisible(!PlatformManager::Get()->GetWindowSystem()->IsAppActive());
 }
 
 void LbGrabMouseCheck(long grab_event)
@@ -583,12 +572,11 @@ void LbGrabMouseCheck(long grab_event)
     if (!PlatformManager::Get()->GetWindowSystem()->HasOSCursor())
         return;
 
-    TbBool window_has_focus = lbAppActive;
      // ensure the game is not paused, to avoid confusion about the grab state when the player is in possession mode and has set the option to unlock cursor when paused
     TbBool paused = (game.operation_flags & GOF_Paused) != 0;
     TbBool possession_mode = (get_my_player()->view_type == PVT_CreatureContrl) && ((game.view_mode_flags & GNFldD_CreaturePasngr) == 0);
     TbBool grab_cursor = lbMouseGrabbed;
-    if (!window_has_focus)
+    if (!PlatformManager::Get()->GetWindowSystem()->IsAppActive())
     {
         grab_cursor = false;
     }

@@ -26,6 +26,7 @@ res/keeperfx_icon.ico
 .header_checksum
 /deps/enet
 /deps/enet6
+/deps/libcurl
 /deps/zlib
 /deps/spng
 /deps/astronomy
@@ -60,3 +61,4 @@ __pycache__/
 *_SECURITY_AUDIT.md
 VITAGL_SECURITY_AUDIT.md
 .vscode/.sonar-token
+/docs/rendering/

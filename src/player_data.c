@@ -29,6 +29,7 @@
 #include "config_players.h"
 #include "game_legacy.h"
 #include "engine_redraw.h"
+#include "renderer/RendererManager.h"
 #include "frontend.h"
 #include "thing_objects.h"
 #include "power_hand.h"
@@ -457,7 +458,12 @@ void set_player_mode(struct PlayerInfo *player, unsigned short nview)
       if (is_my_player(player))
         toggle_status_menu((game.operation_flags & GOF_ShowPanel) != 0);
       if ((game.operation_flags & GOF_ShowGui) != 0)
-        setup_engine_window(status_panel_width, 0, MyScreenWidth, MyScreenHeight);
+      {
+        if (RendererWantsFullscreenViewport())
+          setup_engine_window(0, 0, MyScreenWidth, MyScreenHeight);
+        else
+          setup_engine_window(status_panel_width, 0, MyScreenWidth, MyScreenHeight);
+      }
       else
         setup_engine_window(0, 0, MyScreenWidth, MyScreenHeight);
       break;
@@ -467,7 +473,17 @@ void set_player_mode(struct PlayerInfo *player, unsigned short nview)
       set_engine_view(player, PVM_CreatureView);
       if (is_my_player(player))
         game.view_mode_flags &= ~GNFldD_CreatureViewMode;
-      setup_engine_window(0, 0, MyScreenWidth, MyScreenHeight);
+      // Possession clips the 3D view to the area beside the sidebar panel,
+      // even for GPU renderers.  Re-apply the sidebar-aware engine window.
+      if (is_my_player(player))
+        set_gui_visible((game.operation_flags & GOF_ShowGui) != 0);
+      else
+        // Possession clips the 3D view to the area beside the sidebar panel,
+      // even for GPU renderers.  Re-apply the sidebar-aware engine window.
+      if (is_my_player(player))
+        set_gui_visible((game.operation_flags & GOF_ShowGui) != 0);
+      else
+        setup_engine_window(0, 0, MyScreenWidth, MyScreenHeight);
       break;
   case PVT_MapScreen:
       player->continue_work_state = player->work_state;

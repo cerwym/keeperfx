@@ -47,48 +47,82 @@ or [Steam](https://store.steampowered.com/app/1996630/Dungeon_Keeper_Gold/).
 
 ## Development
 
-### Building with CMake (Recommended)
+### Building with CMake + vcpkg
 
-KeeperFX uses CMake as its primary build system. To build the project:
+KeeperFX uses CMake with vcpkg for all dependency management. All platforms are built
+via Docker-based CI or locally using the same CMake presets.
 
 #### Prerequisites
 - CMake 3.20 or later
-- MinGW-w64 (for Windows builds)
-- vcpkg (optional, for dependency management)
-- Git
+- Git (with submodule support)
+- A C++20-capable compiler:
+  - **Windows (native):** Visual Studio 2022 or later (MSVC)
+  - **Windows (cross):** MinGW-w64 cross-compiler (inside the Docker image)
+  - **Linux:** GCC or Clang
+- Docker (optional, for cross-compile — uses the same images as CI)
 
-#### Build Steps
+#### Clone
 ```bash
-# Clone the repository
-git clone https://github.com/dkfans/keeperfx.git
+git clone --recursive https://github.com/dkfans/keeperfx.git
 cd keeperfx
-
-# Configure with CMake preset
-cmake --preset windows-x64-release
-
-# Build
-cmake --build --preset windows-x64-release
 ```
 
-This will:
-1. Download all required dependencies (SDL2, ffmpeg, OpenAL, etc.)
-2. Download build tools (png2ico, po2ngdat, sndbanker, etc.)
-3. Compile keeperfx.exe and keeperfx_hvlog.exe
-4. Build the test suite
-
-**Available presets:**
-- `windows-x64-release` - Release build with standard logging
-- `x86-MinGW32-Debug` - Debug build
-- `x86-MinGW32-Release` - Release build
-
-To build the test executable:
+#### Build — Windows x64 (MSVC, native)
 ```bash
-cmake --build --preset windows-x64-release --target tests
+# Bootstrap vcpkg (first time only)
+.\external\vcpkg\bootstrap-vcpkg.bat -disableMetrics
+
+# Configure & build
+cmake --preset x64-windows-static-debug
+cmake --build --preset x64-windows-static-debug
 ```
+
+#### Build — Windows x64 (cross-compile via Docker)
+```bash
+# Pull the pre-built Docker image
+docker pull ghcr.io/cerwym/keeperfx-build-mingw64:latest
+
+# Run the build inside the container
+docker run --rm -v $(pwd):/src ghcr.io/cerwym/keeperfx-build-mingw64:latest bash -c "
+  external/vcpkg/bootstrap-vcpkg.sh -disableMetrics
+  external/vcpkg/vcpkg install --triplet x64-mingw-cross \
+    --overlay-triplets build/vcpkg-triplets --x-install-root=vcpkg_installed
+  cmake --preset windows-x64-release
+  cmake --build --preset windows-x64-release
+"
+```
+
+#### Build — Linux x64
+```bash
+docker run --rm -v $(pwd):/src ghcr.io/cerwym/keeperfx-build-linux:latest bash -c "
+  external/vcpkg/bootstrap-vcpkg.sh -disableMetrics
+  external/vcpkg/vcpkg install --triplet x64-linux-keeperfx \
+    --overlay-triplets build/vcpkg-triplets --x-install-root=vcpkg_installed
+  cmake --preset linux-x64-release
+  cmake --build --preset linux-x64-release
+"
+```
+
+#### Available CMake presets
+
+| Preset | Compiler | Target |
+|--------|----------|--------|
+| `x64-windows-static-debug` | MSVC x64 | Windows debug |
+| `x64-windows-static-release` | MSVC x64 | Windows release |
+| `x86-windows-static-debug` | MSVC x86 | Windows x86 debug |
+| `windows-x64-release` | MinGW-w64 x64 | Windows x64 release (Docker) |
+| `windows-x86-release` | MinGW-w64 x86 | Windows x86 release (Docker) |
+| `linux-x64-release` | GCC x64 | Linux release (Docker) |
+| `linux-x64-asan` | GCC x64 | Linux + AddressSanitizer |
+
+#### Notes
+- vcpkg provides **all** external dependencies (SDL2, FFmpeg, OpenAL, LuaJIT, etc.)
+- All libraries are built as **static** — no DLLs to distribute
+- The binary cache warms on first run; subsequent builds skip unchanged packages
 
 ### Building with Make (Legacy)
 
-> ⚠️ **DEPRECATION WARNING**: The Makefile build system is being phased out in favor of CMake. 
+> ⚠️ **DEPRECATION WARNING**: The Makefile build system is being phased out in favor of CMake.
 > Please use CMake for new development.
 
 For legacy Make-based builds, see the [legacy build documentation](https://github.com/dkfans/keeperfx/wiki/Building-KeeperFX).

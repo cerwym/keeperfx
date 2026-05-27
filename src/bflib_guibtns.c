@@ -55,10 +55,42 @@ TbBool check_if_pos_is_over_button(const struct GuiButton *gbtn, TbScreenPos pos
 {
     TbScreenPos x = gbtn->pos_x;
     TbScreenPos y = gbtn->pos_y;
-    if ( (pos_x >= x) && (pos_x < x + gbtn->width)
-      && (pos_y >= y) && (pos_y < y + gbtn->height) )
-        return true;
-    return false;
+    // Per-pixel mask takes priority when available
+    if (gbtn->hit_mask)
+    {
+        // Use the sprite's actual draw position (scr_pos) and rendered size
+        TbScreenPos sx0 = gbtn->scr_pos_x;
+        TbScreenPos sy0 = gbtn->scr_pos_y;
+        int rw = (gbtn->hit_mask_render_w > 0) ? gbtn->hit_mask_render_w : gbtn->width;
+        int rh = (gbtn->hit_mask_render_h > 0) ? gbtn->hit_mask_render_h : gbtn->height;
+        // Fast AABB reject against rendered sprite rect
+        if (pos_x < sx0 || pos_x >= sx0 + rw || pos_y < sy0 || pos_y >= sy0 + rh)
+            return false;
+        int bx = (int)(pos_x - sx0);
+        int by = (int)(pos_y - sy0);
+        // Map rendered-pixel coords to native sprite coords
+        int sx = (gbtn->hit_mask_w > 0) ? bx * gbtn->hit_mask_w / rw : 0;
+        int sy = (gbtn->hit_mask_h > 0) ? by * gbtn->hit_mask_h / rh : 0;
+        if (sx < 0 || sy < 0 || sx >= gbtn->hit_mask_w || sy >= gbtn->hit_mask_h) return false;
+        int byte_idx = sy * gbtn->hit_mask_stride + (sx >> 3);
+        return (gbtn->hit_mask[byte_idx] >> (sx & 7)) & 1;
+    }
+    if (gbtn->hit_shape == -1)
+    {
+        // Inscribed ellipse: (nx/a)^2 + (ny/b)^2 <= 1, evaluated with fixed-point scale
+        int32_t a = gbtn->width / 2;
+        int32_t b = gbtn->height / 2;
+        if (a <= 0 || b <= 0)
+            return false;
+        int32_t nx = (int32_t)pos_x - (x + a);
+        int32_t ny = (int32_t)pos_y - (y + b);
+        int32_t snx = nx * 256 / a;
+        int32_t sny = ny * 256 / b;
+        return (snx * snx + sny * sny) <= (256 * 256);
+    }
+    TbScreenPos inset = (gbtn->hit_shape > 0) ? (TbScreenPos)gbtn->hit_shape : 0;
+    return (pos_x >= x + inset) && (pos_x < x + gbtn->width - inset)
+        && (pos_y >= y + inset) && (pos_y < y + gbtn->height - inset);
 }
 
 void do_sound_menu_click(void)

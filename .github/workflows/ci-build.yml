@@ -5,6 +5,8 @@ on:
     branches: [ "**" ]
   pull_request:
     branches: [ "**" ]
+  workflow_dispatch:
+
 
 jobs:
   prepare:
@@ -31,22 +33,14 @@ jobs:
           - name: Windows x86
             image: mingw32
             preset: windows-x86-release
+            vcpkg-triplet: x86-mingw-cross
             artifact-name: keeperfx-windows-x86
-
-          - name: Windows x64
-            image: mingw64
-            preset: windows-x64-release
-            artifact-name: keeperfx-windows-x64
 
           - name: Linux x64
             image: linux
             preset: linux-x64-release
+            vcpkg-triplet: x64-linux-keeperfx
             artifact-name: keeperfx-linux-x64
-
-          - name: Linux x64 (ASAN)
-            image: linux
-            preset: linux-x64-asan
-            artifact-name: keeperfx-linux-x64-asan
 
     steps:
       - name: Checkout code
@@ -57,6 +51,63 @@ jobs:
 
       - name: Mark git directory as safe
         run: git config --global --add safe.directory '*'
+
+      # Safety-net installs for packages not yet baked into the Docker images.
+      # autoconf-archive: needed by libxcrypt vcpkg port (m4 macros)
+      # autoconf/automake/libtool: needed by alsa/libxcrypt (autotools-based ports)
+      # libltdl-dev: libxcrypt configure checks for ltdl development files
+      # gcc-multilib/libc6-dev-i386: needed for luajit buildvm-32 on x64 host
+      # pkg-config: needed by vcpkg_fixup_pkgconfig for mingw cross-builds
+      # python3-venv: needed by libsystemd vcpkg port (creates a Python venv)
+      - name: Install vcpkg prerequisites
+        run: apt-get update -qq && apt-get install -y --no-install-recommends zip unzip python3 python3-venv nasm autoconf autoconf-archive automake libtool libltdl-dev gcc-multilib libc6-dev-i386 pkg-config
+
+      - name: Cache vcpkg binary packages
+        uses: actions/cache@v4
+        with:
+          path: /tmp/vcpkg-cache
+          key: vcpkg-bin-${{ matrix.vcpkg-triplet }}-${{ hashFiles('vcpkg.json', 'build/vcpkg-triplets/**', 'build/vcpkg-ports/**') }}
+          restore-keys: |
+            vcpkg-bin-${{ matrix.vcpkg-triplet }}-
+
+      - name: Enable vcpkg binary caching (files)
+        run: echo "VCPKG_BINARY_SOURCES=clear;files,/tmp/vcpkg-cache,readwrite" >> $GITHUB_ENV
+
+      - name: Cache vcpkg bootstrap binary
+        id: cache-vcpkg-bootstrap
+        uses: actions/cache@v4
+        with:
+          path: external/vcpkg/vcpkg
+          key: vcpkg-bootstrap-linux-${{ hashFiles('external/vcpkg/CMakeLists.txt') }}
+
+      - name: Bootstrap vcpkg
+        if: steps.cache-vcpkg-bootstrap.outputs.cache-hit != 'true'
+        run: |
+          chmod +x ./external/vcpkg/bootstrap-vcpkg.sh
+          ./external/vcpkg/bootstrap-vcpkg.sh -disableMetrics
+
+      - name: Cache vcpkg downloads
+        uses: actions/cache@v4
+        with:
+          path: external/vcpkg/downloads
+          key: vcpkg-downloads-${{ matrix.vcpkg-triplet }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-downloads-${{ matrix.vcpkg-triplet }}-
+            vcpkg-downloads-
+
+      - name: Install vcpkg packages
+        run: |
+          ./external/vcpkg/vcpkg install \
+            --triplet ${{ matrix.vcpkg-triplet }} \
+            --overlay-triplets build/vcpkg-triplets \
+            --overlay-ports build/vcpkg-ports \
+            --x-install-root=vcpkg_installed \
+            --allow-unsupported \
+          || {
+            echo "=== vcpkg install failed; printing build error logs ==="
+            find external/vcpkg/buildtrees -name "*-err.log" -newer external/vcpkg/buildtrees -exec sh -c 'echo "--- $1 ---"; cat "$1"' _ {} \; 2>/dev/null | tail -200
+            exit 1
+          }
 
       - name: Configure CMake
         run: cmake --preset ${{ matrix.preset }}
@@ -86,16 +137,93 @@ jobs:
             out/build/${{ matrix.preset }}/*.dll
           if-no-files-found: warn
 
+  build-msvc:
+    name: Build Windows x64 (MSVC)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Cache vcpkg binary packages
+        uses: actions/cache@v4
+        with:
+          path: C:\vcpkg-cache
+          key: vcpkg-bin-x64-windows-static-${{ hashFiles('vcpkg.json', 'build/vcpkg-triplets/**', 'build/vcpkg-ports/**') }}
+          restore-keys: |
+            vcpkg-bin-x64-windows-static-
+
+      - name: Enable vcpkg binary caching (files)
+        shell: bash
+        run: echo "VCPKG_BINARY_SOURCES=clear;files,C:/vcpkg-cache,readwrite" >> $GITHUB_ENV
+
+      - name: Cache vcpkg bootstrap binary
+        id: cache-vcpkg-bootstrap
+        uses: actions/cache@v4
+        with:
+          path: external/vcpkg/vcpkg.exe
+          key: vcpkg-bootstrap-windows-${{ hashFiles('external/vcpkg/CMakeLists.txt') }}
+
+      - name: Bootstrap vcpkg
+        if: steps.cache-vcpkg-bootstrap.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          cd external/vcpkg
+          .\bootstrap-vcpkg.bat -disableMetrics
+
+      - name: Cache vcpkg downloads
+        uses: actions/cache@v4
+        with:
+          path: external/vcpkg/downloads
+          key: vcpkg-downloads-x64-windows-static-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-downloads-x64-windows-static-
+            vcpkg-downloads-
+
+      - name: Setup MSVC Developer Environment
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vsPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          $vcvars = Join-Path $vsPath "VC\Auxiliary\Build\vcvars64.bat"
+          $output = cmd /c "`"$vcvars`" > nul 2>&1 && set"
+          foreach ($line in $output) {
+            if ($line -match '^([^=]+)=(.*)$') {
+              "$($Matches[1])=$($Matches[2])" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
+            }
+          }
+
+      - name: Configure CMake
+        shell: pwsh
+        run: cmake --preset x64-windows-static-debug
+
+      - name: Build
+        shell: pwsh
+        run: cmake --build --preset x64-windows-static-debug
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: keeperfx-windows-x64-msvc-debug
+          path: |
+            out/build/x64-windows-static-debug/keeperfx*.exe
+            out/build/x64-windows-static-debug/*.pdb
+            out/build/x64-windows-static-debug/*.map
+          if-no-files-found: warn
+
   summary:
     name: Build Summary
     runs-on: ubuntu-latest
-    needs: build
+    needs: [build, build-msvc]
     if: always()
 
     steps:
       - name: Check build status
         run: |
-          if [ "${{ needs.build.result }}" == "success" ]; then
+          if [ "${{ needs.build.result }}" == "success" ] && [ "${{ needs.build-msvc.result }}" == "success" ]; then
             echo "✅ All builds passed!"
             exit 0
           else

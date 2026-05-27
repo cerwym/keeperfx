@@ -29,8 +29,8 @@ $requiredDkList = Join-Path $ws "docs\files_required_from_original_dk.txt"
 $dkDockerfile = Join-Path $ws "docker\dk-originals\Dockerfile"
 $runtimeDockerfile = Join-Path $ws "docker\kfx-runtime-assets\Dockerfile"
 
-$dkImage = "keeperfx-dk-originals:local"
-$runtimeImage = "keeperfx-runtime-assets:local"
+$dkImage = "keeperfx/dk-originals:local"
+$runtimeImage = "keeperfx/runtime-assets:local"
 
 function Test-DockerImageExists {
     param([string]$ImageName)
@@ -176,7 +176,7 @@ function Build-RuntimeAssetsInDocker {
     param([string]$ComposeFilePath)
 
     Write-Host "Generating pkg runtime assets in docker/linux ..." -ForegroundColor Cyan
-    docker compose -f $ComposeFilePath run --rm linux bash -lc "make pkg-gfx && make pkg-sfx && make pkg-languages"
+    docker compose -f $ComposeFilePath run --rm --remove-orphans linux bash -lc "make pkg-gfx && make pkg-sfx && make pkg-languages"
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to generate pkg assets (pkg-gfx/pkg-sfx/pkg-languages)."
     }

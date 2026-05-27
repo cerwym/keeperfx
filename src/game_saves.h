@@ -37,7 +37,8 @@ enum SaveGameChunks {
      SGC_PacketHeader   = 0x52444850, //"PHDR"
      SGC_PacketData     = 0x544B4350, //"PCKT"
      SGC_IntralevelData = 0x4C564C49, //"ILVL"
-     SGC_LuaData        = 0x2041554C  //"LUA "
+     SGC_LuaData        = 0x2041554C, //"LUA "
+     SGC_CameraState    = 0x4D414341, //"ACAM"
 };
 
 enum SaveGameChunkFlags {
@@ -47,8 +48,9 @@ enum SaveGameChunkFlags {
      SGF_PacketData     = 0x0200,
      SGF_IntralevelData = 0x0400,
      SGF_LuaData        = 0x0800,
+     SGF_CameraState    = 0x1000,
 };
-#define SGF_SavedGame      (SGF_InfoBlock|SGF_GameOrig|SGF_IntralevelData|SGF_LuaData)
+#define SGF_SavedGame      (SGF_InfoBlock|SGF_GameOrig|SGF_IntralevelData|SGF_LuaData|SGF_CameraState)
 #define SGF_PacketStart    (SGF_PacketHeader|SGF_PacketData|SGF_InfoBlock)
 #define SGF_PacketContinue (SGF_PacketHeader|SGF_PacketData|SGF_InfoBlock|SGF_GameOrig)
 

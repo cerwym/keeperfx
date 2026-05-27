@@ -1,0 +1,130 @@
+/******************************************************************************/
+// Dungeon Keeper - Renderer Abstraction Layer
+/******************************************************************************/
+/** @file SWCursorLayer.cpp
+ *     Software (CPU) implementation of ICursorLayer.
+ *
+ *     The pointer sprite is drawn into lbDisplay.WScreen immediately in
+ *     Flush() — no backup/restore is needed because WScreen is fully
+ *     rebuilt from scratch on every frame before EndFrame() is called.
+ *
+ *     Keeper-hand sprites call process_keeper_sprite() immediately at submit
+ *     time (same as the old IUIRenderer::SubmitKeeperSprite default).
+ */
+/******************************************************************************/
+#include "pre_inc.h"
+#include "renderer/backends/SWCursorLayer.h"
+
+#include "bflib_basics.h"
+#include "bflib_sprite.h"      // TbSprite
+#include "bflib_video.h"       // lbDisplay
+#include "bflib_sprfnt.h"      // scale_ui_value_lofi
+#include "bflib_vidraw.h"      // LbSpriteDrawUsingScalingUpDataSolidLR, LbSpriteSetScaling*
+#include "engine_render.h"     // process_keeper_sprite
+#include "globals.h"
+
+#include "post_inc.h"
+
+/******************************************************************************/
+
+// ---------------------------------------------------------------------------
+// Internal sprite scaler state (was lbPointerAdvancedDraw/cursor_*steps* in
+// bflib_mspointer.cpp; now private to the cursor layer).
+// ---------------------------------------------------------------------------
+
+#define SW_CURSOR_XSTEPS (MAX_SUPPORTED_SCREEN_WIDTH  / 10)
+#define SW_CURSOR_YSTEPS (MAX_SUPPORTED_SCREEN_HEIGHT / 10)
+
+static int32_t s_xsteps[2 * SW_CURSOR_XSTEPS];
+static int32_t s_ysteps[2 * SW_CURSOR_YSTEPS];
+
+static void set_scaling_w_clipped(long x, long sw, long dw, long gw)
+{
+    if (sw > SW_CURSOR_XSTEPS) sw = SW_CURSOR_XSTEPS;
+    LbSpriteSetScalingWidthClippedArray(s_xsteps, x, sw, dw, gw);
+}
+
+static void set_scaling_w_simple(long x, long sw, long dw)
+{
+    if (sw > SW_CURSOR_XSTEPS) sw = SW_CURSOR_XSTEPS;
+    LbSpriteSetScalingWidthSimpleArray(s_xsteps, x, sw, dw);
+}
+
+static void set_scaling_h_clipped(long y, long sh, long dh, long gh)
+{
+    if (sh > SW_CURSOR_YSTEPS) sh = SW_CURSOR_YSTEPS;
+    LbSpriteSetScalingHeightClippedArray(s_ysteps, y, sh, dh, gh);
+}
+
+static void set_scaling_h_simple(long y, long sh, long dh)
+{
+    if (sh > SW_CURSOR_YSTEPS) sh = SW_CURSOR_YSTEPS;
+    LbSpriteSetScalingHeightSimpleArray(s_ysteps, y, sh, dh);
+}
+
+/** Draw cursor sprite directly into outbuf (lbDisplay.WScreen). */
+static void draw_pointer_sprite(int32_t x, int32_t y, const TbSprite* spr,
+                                 TbPixel* outbuf, unsigned long scanline)
+{
+    int dw = scale_ui_value_lofi(spr->SWidth);
+    int dh = scale_ui_value_lofi(spr->SHeight);
+    if (dw <= 0 || dh <= 0) return;
+    if (lbDisplay.MouseWindowWidth <= 0 || lbDisplay.MouseWindowHeight <= 0) return;
+
+    if (x < 0 || (dw + spr->SWidth + x) >= lbDisplay.MouseWindowWidth)
+        set_scaling_w_clipped(x, spr->SWidth, dw, lbDisplay.MouseWindowWidth);
+    else
+        set_scaling_w_simple(x, spr->SWidth, dw);
+
+    if (y < 0 || (dh + spr->SHeight + y) >= lbDisplay.MouseWindowHeight)
+        set_scaling_h_clipped(y, spr->SHeight, dh, lbDisplay.MouseWindowHeight);
+    else
+        set_scaling_h_simple(y, spr->SHeight, dh);
+
+    outbuf = &outbuf[s_xsteps[0] + scanline * s_ysteps[0]];
+    const struct TbSourceBuffer buf = {
+        spr->Data, spr->SWidth, spr->SHeight, spr->SWidth,
+    };
+    LbSpriteDrawUsingScalingUpDataSolidLR(outbuf, scanline,
+                                           lbDisplay.MouseWindowHeight,
+                                           s_xsteps, s_ysteps, &buf);
+}
+
+/******************************************************************************/
+
+void SWCursorLayer::SubmitPointerSprite(const TbSprite* spr, int32_t x, int32_t y, int /*units_per_px*/)
+{
+    m_pointer_spr = spr;
+    m_pointer_x   = x;
+    m_pointer_y   = y;
+}
+
+void SWCursorLayer::SubmitKeeperHandSprite(short x, short y,
+                                           unsigned short kspr_base,
+                                           short angle,
+                                           unsigned char sprgroup,
+                                           int32_t scale)
+{
+    // Software renderer has no frame-setup concept — execute immediately.
+    process_keeper_sprite(x, y, kspr_base, angle, sprgroup, scale);
+}
+
+void SWCursorLayer::Draw()
+{
+    // Draw the pointer sprite into WScreen right before the SDL blit.
+    // WScreen is fully rebuilt each frame so no backup/restore is needed.
+    if (m_pointer_spr && lbDisplay.WScreen)
+    {
+        draw_pointer_sprite(m_pointer_x, m_pointer_y,
+                            m_pointer_spr,
+                            lbDisplay.WScreen,
+                            (unsigned long)lbDisplay.GraphicsScreenWidth);
+    }
+}
+
+void SWCursorLayer::Clear()
+{
+    m_pointer_spr = nullptr;
+    m_pointer_x   = 0;
+    m_pointer_y   = 0;
+}

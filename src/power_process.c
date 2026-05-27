@@ -18,6 +18,7 @@
 /******************************************************************************/
 #include "kfx_memory.h"
 #include "pre_inc.h"
+#include "kfx/engine/cameras.h"
 #include "power_process.h"
 
 #include "globals.h"
@@ -48,6 +49,7 @@
 #include "player_instances.h"
 #include "local_camera.h"
 
+#include "renderer/RendererManager.h"
 #include "keeperfx.hpp"
 #include "post_inc.h"
 
@@ -113,7 +115,7 @@ void process_armageddon(void)
     GameTurnDelta countdown = game.conf.rules[game.armageddon_caster_idx].magic.armageddon_count_down;
     if (game.armageddon_cast_turn == 0)
         return;
-    if ((game.armageddon_cast_turn + countdown) > game.play_gameturn)
+    if ((game.armageddon_cast_turn + countdown) > get_gameturn())
     {
         if (player_cannot_win(game.armageddon_caster_idx))
         {
@@ -121,7 +123,7 @@ void process_armageddon(void)
             game.armageddon_cast_turn = 0;
         }
     } else
-    if ((game.armageddon_cast_turn + countdown) == game.play_gameturn)
+    if ((game.armageddon_cast_turn + countdown) == get_gameturn())
     {
         for (i=0; i < PLAYERS_COUNT; i++)
         {
@@ -133,7 +135,7 @@ void process_armageddon(void)
             }
         }
     } else
-    if ((game.armageddon_cast_turn + countdown) < game.play_gameturn)
+    if ((game.armageddon_cast_turn + countdown) < get_gameturn())
     {
         for (i=0; i < PLAYERS_COUNT; i++)
         {
@@ -146,7 +148,7 @@ void process_armageddon(void)
                     event_kill_all_players_events(i);
                     set_player_as_lost_level(player);
                     if (is_my_player_number(i))
-                        LbPaletteSet(engine_palette);
+                        RendererPaletteSet(engine_palette);
                     struct Thing* heartng = get_player_soul_container(player->id_number);
                     if (thing_exists(heartng)) {
                         heartng->health = -1;
@@ -173,7 +175,7 @@ void process_armageddon_influencing_creature(struct Thing *creatng)
     {
         struct CreatureControl* cctrl = creature_control_get_from_thing(creatng);
         // If Armageddon is on, teleport creature to its position
-        if ((cctrl->armageddon_teleport_turn != 0) && (cctrl->armageddon_teleport_turn <= game.play_gameturn))
+        if ((cctrl->armageddon_teleport_turn != 0) && (cctrl->armageddon_teleport_turn <= get_gameturn()))
         {
             teleport_armageddon_influenced_creature(creatng);
         }
@@ -229,7 +231,7 @@ void process_disease(struct Thing *creatng)
             }
         }
     }
-    if (((game.play_gameturn - cctrl->disease_start_turn) % game.conf.rules[creatng->owner].magic.disease_lose_health_time) == 0)
+    if (((get_gameturn() - cctrl->disease_start_turn) % game.conf.rules[creatng->owner].magic.disease_lose_health_time) == 0)
     {
         apply_damage_to_thing_and_display_health(creatng, game.conf.rules[creatng->owner].magic.disease_lose_percentage_health * cctrl->max_health / 100, cctrl->disease_caster_plyridx);
     }
@@ -245,7 +247,7 @@ void lightning_modify_palette(struct Thing *thing)
       myplyr->additional_flags &= ~PlaAF_LightningPaletteIsActive;
       return;
     }
-    if (myplyr->acamera == NULL)
+    if (!camera_is_active(myplyr->id_number))
     {
         ERRORLOG("No active camera");
         return;
@@ -254,7 +256,7 @@ void lightning_modify_palette(struct Thing *thing)
     {
         if ((myplyr->additional_flags & PlaAF_LightningPaletteIsActive) != 0)
         {
-            if (get_chessboard_distance(&myplyr->acamera->mappos, &thing->mappos) < 11520)
+            if (get_chessboard_distance(&camera_get_active(myplyr->id_number)->mappos, &thing->mappos) < 11520)
             {
                 PaletteSetPlayerPalette(myplyr, engine_palette);
                 myplyr->additional_flags &= ~PlaAF_LightningPaletteIsActive;
@@ -266,7 +268,7 @@ void lightning_modify_palette(struct Thing *thing)
     {
         if ((myplyr->additional_flags & PlaAF_LightningPaletteIsActive) == 0)
         {
-            if (get_chessboard_distance(&myplyr->acamera->mappos, &thing->mappos) < 11520)
+            if (get_chessboard_distance(&camera_get_active(myplyr->id_number)->mappos, &thing->mappos) < 11520)
             {
               PaletteSetPlayerPalette(myplyr, lightning_palette);
               myplyr->additional_flags |= PlaAF_LightningPaletteIsActive;
@@ -283,7 +285,7 @@ void update_god_lightning_ball(struct Thing *thing)
         return;
     }
     struct ShotConfigStats* shotst;
-    long i = (game.play_gameturn - thing->creation_turn) % 16;
+    long i = (get_gameturn() - thing->creation_turn) % 16;
     struct Thing* target;
     switch (i)
     {
@@ -373,7 +375,7 @@ void god_lightning_choose_next_creature(struct Thing *shotng)
 void draw_god_lightning(struct Thing *shotng)
 {
     struct PlayerInfo* player = get_player(shotng->owner);
-    const struct Camera* cam = get_local_camera(player->acamera);
+    const struct Camera* cam = get_local_active_camera(player->id_number);
     if (cam == NULL) {
         return;
     }
@@ -686,9 +688,9 @@ void process_timebomb(struct Thing *creatng)
     struct Thing* timetng = thing_get(cctrl->timebomb_countdown_id);
     if (!thing_exists(timetng))
     {
-        if ((cctrl->timebomb_countdown % game_num_fps) == 0)
+        if ((cctrl->timebomb_countdown % turns_per_second) == 0)
         {
-            long time = (cctrl->timebomb_countdown / game_num_fps);
+            long time = (cctrl->timebomb_countdown / turns_per_second);
             timetng = create_price_effect(&creatng->mappos, creatng->owner, time);
             cctrl->timebomb_countdown_id = timetng->index;
             thing_play_sample(creatng, 853, NORMAL_PITCH, 0, 3, 0, 2, FULL_LOUDNESS); // 853 is hardcoded ticking sound, could be configurable.

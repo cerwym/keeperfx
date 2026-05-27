@@ -35,6 +35,7 @@
 #include "config.h"
 #include "kjm_input.h"
 #include "scrcapt.h"
+#include "platform/PlatformManager.h"
 #include "renderer/RendererManager.h"
 #include "gui_draw.h"
 #include "vidfade.h"
@@ -214,8 +215,8 @@ TbBool copy_raw8_image_to_screen_center(const unsigned char *buf, const int img_
         return false;
 
     // Get screen dimensions
-    int screen_width = LbScreenWidth();
-    int screen_height = LbScreenHeight();
+    int screen_width = RendererPhysicalWidth();
+    int screen_height = RendererPhysicalHeight();
 
     // Get the scaling ratios
     float width_ratio = (float)screen_width / (float)img_width;
@@ -239,7 +240,7 @@ TbBool copy_raw8_image_to_screen_center(const unsigned char *buf, const int img_
         (int)coord_x,  (int)coord_y);
 
     // Lock the screen
-    if (LbScreenLock() != Lb_SUCCESS)
+    if (!RendererLockScreen())
         return false;
 
     // Copy image buffer to screen buffer
@@ -249,17 +250,17 @@ TbBool copy_raw8_image_to_screen_center(const unsigned char *buf, const int img_
     perform_any_screen_capturing();
 
     // Unlock the screen
-    LbScreenUnlock();
+    RendererUnlockScreen();
 
     // Swap video buffers to make the image visible
-    LbScreenSwap();
+    RendererPresentFrame();
 
     return true;
 }
 
 TbBool show_rawimage_screen(unsigned char *raw,unsigned char *pal,int width,int height,TbClockMSec tmdelay)
 {
-    LbPaletteSet(pal);
+    RendererPaletteSet(pal);
     TbClockMSec end_time = LbTimerClock() + tmdelay;
     TbClockMSec tmdelta = tmdelay / 100;
     if (tmdelta > 100)
@@ -268,7 +269,7 @@ TbBool show_rawimage_screen(unsigned char *raw,unsigned char *pal,int width,int 
         tmdelta = 10;
     while (LbTimerClock() < end_time)
     {
-        LbWindowsControl();
+        poll_inputs();
         copy_raw8_image_to_screen_center(raw, width, height);
         if (is_key_pressed(KC_SPACE, KMod_DONTCARE)
          || is_key_pressed(KC_ESCAPE, KMod_DONTCARE)
@@ -316,9 +317,9 @@ TbBool init_bitmap_screen(struct ActiveBitmap *actv_bmp,int stype)
   struct RawBitmap *rbmp;
 
   // Decide best image to show based on the width of the screen
-  if (LbGraphicsScreenWidth() >= 1280)
+  if (RendererScreenWidth() >= 1280)
     rbmp = &bitmaps_1280[stype];
-  else if (LbGraphicsScreenWidth() >= 640)
+  else if (RendererScreenWidth() >= 640)
     rbmp = &bitmaps_640[stype];
   else
     rbmp = &bitmaps_320[stype];
@@ -363,7 +364,7 @@ TbBool draw_bitmap_screen(struct ActiveBitmap *actv_bmp)
 {
     if (actv_bmp->pal_data == NULL)
       return false;
-    LbPaletteSet(actv_bmp->pal_data);
+    RendererPaletteSet(actv_bmp->pal_data);
     if (actv_bmp->raw_data == NULL)
       return false;
     copy_raw8_image_to_screen_center(actv_bmp->raw_data,actv_bmp->width,actv_bmp->height);
@@ -404,9 +405,9 @@ short show_bitmap_screen(struct ActiveBitmap *actv_bmp,TbClockMSec tmdelay)
 TbBool draw_clear_screen(void)
 {
     LbPaletteDataFillBlack(palette_buf);
-    LbPaletteSet(palette_buf);
-    LbScreenClear(0);
-    LbScreenSwap();
+    RendererPaletteSet(palette_buf);
+    RendererClearScreen(0);
+    RendererPresentFrame();
     return true;
 }
 
@@ -450,7 +451,7 @@ TbBool display_loading_screen(void)
     if (done)
     {
       redraw_bitmap_screen(&astd_bmp);
-      LbPaletteStopOpenFade();
+      RendererPaletteStopFade();
       ProperForcedFadePalette(astd_bmp.pal_data, 8, Lb_PALETTE_FADE_CLOSED);
     }
     if (done)
@@ -461,12 +462,12 @@ TbBool display_loading_screen(void)
 TbBool wait_for_installation_files(void)
 {
   char ffullpath[2048];
-  short was_locked = LbScreenIsLocked();
+  short was_locked = RendererIsScreenLocked();
   prepare_file_path_buf(ffullpath, sizeof(ffullpath), FGrp_StdData, "bluepal.dat");
   if ( LbFileExists(ffullpath) )
     return true;
   if ( was_locked )
-    LbScreenUnlock();
+    RendererUnlockScreen();
   SYNCMSG("Installation file not found, waiting");
   if (!init_bitmap_screen(&nocd_bmp,RBmp_WaitNoCD))
   {
@@ -484,11 +485,11 @@ TbBool wait_for_installation_files(void)
         redraw_bitmap_screen(&nocd_bmp);
         do
         {
-            if (!LbWindowsControl())
+            if (!poll_inputs())
                 exit_keeper = 1;
             if ((exit_keeper) || (quit_game))
               break;
-        } while (!LbIsActive());
+        } while (! PlatformManager_GetIsAppActive());
         if (is_key_pressed(KC_Q,KMod_DONTCARE) || is_key_pressed(KC_X,KMod_DONTCARE) || is_key_pressed(KC_ESCAPE, KMod_DONTCARE))
         {
           ERRORLOG("User requested quit, giving up");
@@ -511,7 +512,7 @@ TbBool wait_for_installation_files(void)
   SYNCMSG("Finished waiting for installation after %lu seconds",counter);
   free_bitmap_screen(&nocd_bmp);
   if ( was_locked )
-    LbScreenLock();
+    RendererLockScreen();
   return (!exit_keeper);
 }
 

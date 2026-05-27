@@ -34,6 +34,7 @@
 #include "lvl_script_value.h"
 #include "lvl_script_commands_old.h"
 #include "lvl_script_commands.h"
+#include "kfx/profiling/KfxProfilingC.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -923,6 +924,7 @@ TbBool preload_script(long lvnum)
 
 short load_script(long lvnum)
 {
+    KFX_C_ZONE_BEGIN_COLOR(ctx, "Script/Load", KFX_COLOR_SCRIPT);
     SYNCDBG(7,"Starting");
 
     // Clear script data
@@ -980,6 +982,7 @@ short load_script(long lvnum)
         (int)game.script.values_num,SCRIPT_VALUES_COUNT,
         (int)game.script.conditions_num,CONDITIONS_COUNT,
         (int)game.script.creature_partys_num,CREATURE_PARTYS_COUNT);
+    KFX_C_ZONE_END(ctx);
     return true;
 }
 
@@ -1130,9 +1133,18 @@ void process_level_script(void)
   SYNCDBG(6,"Starting");
   struct PlayerInfo *player;
   player = get_my_player();
-  // Do NOT stop executing scripts after winning if the RUN_AFTER_VICTORY(1) script command has been issued
-  if ((player->victory_state == VicS_Undecided) || (game.system_flags & GSF_RunAfterVictory))
-  {
+  TbBool process_script = false;
+  if ((game.system_flags & GSF_NetworkActive) != 0) {
+      process_script = true;
+  }
+  if (player->victory_state == VicS_Undecided) {
+      process_script = true;
+  }
+  if ((game.system_flags & GSF_RunAfterVictory) != 0) {
+      process_script = true;
+  }
+  // In network games every peer must keep executing scripts after the local player's defeat.
+  if (process_script) {
       process_conditions();
       process_check_new_creature_parties();
     //script_process_messages(); is not here, but it is in beta - check why

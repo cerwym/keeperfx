@@ -32,7 +32,7 @@ PKG_FXDATA_FILES = \
 	$(patsubst config/fxdata/%,pkg/fxdata/%,$(wildcard config/fxdata/*.toml)) \
 	$(patsubst config/fxdata/%,pkg/fxdata/%,$(wildcard config/fxdata/*.txt)) \
 	$(patsubst config/%,pkg/%,$(wildcard config/fxdata/lua/**/*.lua)) \
-	pkg/fxdata/lua/init.lua
+	$(patsubst config/%,pkg/%,$(wildcard config/fxdata/lua/*.lua))
 PKG_FXDATA_DIRS = $(sort $(dir $(PKG_FXDATA_FILES)))
 PKG_MOD_FILES := $(patsubst config/%,pkg/%,$(shell find config/mods -type f))
 PKG_MOD_DIRS := $(sort $(dir $(PKG_MOD_FILES)))
@@ -48,36 +48,35 @@ PKG_MAPPACK_FILES = \
 	$(patsubst %,pkg/%,$(foreach mappack,$(MAPPACKS),$(wildcard levels/$(mappack)_cfgs/*.cfg))) \
 	$(patsubst %,pkg/%,$(foreach mappack,$(MAPPACKS),$(wildcard levels/$(mappack)_cfgs/*.toml)))
 PKG_MAPPACK_DIRS = $(sort $(dir $(PKG_MAPPACK_FILES)))
+PKG_MP_MAPPACK_FILES := $(patsubst multiplayer/%,pkg/multiplayer/%,$(shell find multiplayer -type f))
+PKG_MP_MAPPACK_DIRS = $(sort $(dir $(PKG_MP_MAPPACK_FILES)))
 PKG_BIN = pkg/$(notdir $(BIN))
 PKG_BIN_MAP = $(PKG_BIN:%.exe=%.map)
-PKG_HVLOGBIN = pkg/$(notdir $(HVLOGBIN))
-PKG_HVLOGBIN_MAP = $(PKG_HVLOGBIN:%.exe=%.map)
-PKG_DOCS = pkg/keeperfx_readme.txt
-PKG_DLL = \
-	pkg/SDL2_net.dll \
-	pkg/SDL2_mixer.dll \
-	pkg/SDL2_image.dll \
-	pkg/SDL2.dll
+
+# All files except the binary itself (binary is installed by cmake/CPack)
+PKG_DATA_FILES = $(filter-out $(PKG_BIN), $(PKG_FILES))
+
+PKG_DOCS = \
+	pkg/keeperfx_readme.txt \
+	pkg/launcher-auto-file-removal.txt
 PKG_FILES = \
 	$(PKG_CAMPAIGN_FILES) \
 	$(PKG_CREATURE_FILES) \
 	$(PKG_FXDATA_FILES) \
 	$(PKG_MOD_FILES) \
 	$(PKG_MAPPACK_FILES) \
+	$(PKG_MP_MAPPACK_FILES) \
 	$(NGTEXTDATS) \
 	$(NCTEXTDATS) \
 	$(MPTEXTDATS) \
 	pkg/keeperfx.cfg \
 	$(PKG_BIN) \
 	$(PKG_BIN_MAP) \
-	$(PKG_HVLOGBIN) \
-	$(PKG_HVLOGBIN_MAP) \
-	$(PKG_DOCS) \
-	$(PKG_DLL)
+	$(PKG_DOCS)
 
-.PHONY: package
+.PHONY: package pkg-assemble clean-package
 
-pkg pkg/creatrs pkg/fxdata pkg/campgns pkg/fxdata/lua $(PKG_MAPPACK_DIRS) $(PKG_CAMPAIGN_DIRS) $(PKG_FXDATA_DIRS) $(PKG_MOD_DIRS):
+pkg pkg/creatrs pkg/fxdata pkg/campgns pkg/fxdata/lua $(PKG_MAPPACK_DIRS) $(PKG_MP_MAPPACK_DIRS)  $(PKG_CAMPAIGN_DIRS) $(PKG_FXDATA_DIRS) $(PKG_MOD_DIRS):
 	$(MKDIR) $@
 	
 pkg/fxdata/lua/%.lua: config/fxdata/lua/%.lua
@@ -94,14 +93,8 @@ pkg/keeperfx.cfg: config/keeperfx.cfg | pkg
 $(PKG_BIN): $(BIN) | pkg
 	$(CP) $^ $@
 
-$(PKG_HVLOGBIN): $(HVLOGBIN) | pkg
-	$(CP) $^ $@
-
 $(PKG_BIN_MAP): $(BIN) | pkg
 	$(CP) $(BIN:%.exe=%.map) $@
-
-$(PKG_HVLOGBIN_MAP): $(HVLOGBIN) | pkg
-	$(CP) $(HVLOGBIN:%.exe=%.map) $@
 
 pkg/%.txt: docs/%.txt | pkg
 	$(CP) $^ $@
@@ -142,22 +135,16 @@ pkg/levels/%.cfg: levels/%.cfg | $(PKG_MAPPACK_DIRS)
 pkg/levels/%.txt: levels/%.txt | $(PKG_MAPPACK_DIRS)
 	$(CP) $^ $@
 
-pkg/SDL2_net.dll: sdl/for_final_package/SDL2_net.dll | pkg
-	$(CP) $^ $@
-
-pkg/SDL2_mixer.dll: sdl/for_final_package/SDL2_mixer.dll | pkg
-	$(CP) $^ $@
-
-pkg/SDL2_image.dll: sdl/for_final_package/SDL2_image.dll | pkg
-	$(CP) $^ $@
-
-pkg/SDL2.dll: sdl/for_final_package/SDL2.dll | pkg
-	$(CP) $^ $@
+pkg/multiplayer/%: multiplayer/% | $(PKG_MP_MAPPACK_DIRS)
+	$(CP) $< $@
 
 $(PKG_NAME): $(PKG_FILES) | pkg
 	$(RM) $@ && cd $(dir $(PKG_NAME)) && 7z a $(notdir $(PKG_NAME)) $(patsubst pkg/%,%,$^) >/dev/null
 
 package: $(PKG_NAME)
+
+pkg-assemble: $(PKG_DATA_FILES)
+	@echo "Game data assembled into pkg/ — run 'cmake --build --target package' to create the archive"
 
 clean-package:
 	$(RM) -r pkg

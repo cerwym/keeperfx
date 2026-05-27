@@ -24,6 +24,7 @@
 #include "bflib_basics.h"
 #include "globals.h"
 #include "bflib_planar.h"
+#include "bflib_video.h"
 #include <SDL2/SDL.h>
 #include "post_inc.h"
 
@@ -32,14 +33,9 @@ extern "C" {
 #endif
 /******************************************************************************/
 
-/** Internal screen surface structure. */
-SDL_Surface * lbScreenSurface;
-/** Internal drawing surface structure.
- *  Sometimes may be same as screen surface. */
+
+/** Internal drawing surface structure — the engine's off-screen draw target. */
 SDL_Surface * lbDrawSurface;
-/** Intermediate surface used when the draw surface needs format conversion before
- *  being scaled up to the physical window surface (e.g. 8bpp→16bpp on Vita). */
-SDL_Surface * lbScaleSurface;
 
 /******************************************************************************/
 void LbScreenSurfaceInit(struct SSurface *surf)
@@ -186,6 +182,29 @@ TbResult LbScreenSurfaceUnlock(struct SSurface *surf)
     surf->locks_count--;
     return Lb_SUCCESS;
 }
+
+/******************************************************************************/
+/* Draw surface lifecycle helpers (called from bflib_video)                   */
+/******************************************************************************/
+
+TbResult LbScreenCreateDrawSurface(int w, int h, int bpp)
+{
+    lbDrawSurface = SDL_CreateRGBSurface(0, w, h, bpp, 0, 0, 0, 0);
+    if (lbDrawSurface == NULL) {
+        ERRORLOG("Failed to create draw surface (%dx%dx%d): %s", w, h, bpp, SDL_GetError());
+        return Lb_FAIL;
+    }
+    return Lb_SUCCESS;
+}
+
+void LbScreenFreeDrawSurface(void)
+{
+    if (lbHasSecondSurface && lbDrawSurface != NULL) {
+        SDL_FreeSurface(lbDrawSurface);
+    }
+    lbDrawSurface = NULL;
+}
+
 /******************************************************************************/
 #ifdef __cplusplus
 }

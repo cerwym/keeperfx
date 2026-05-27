@@ -49,7 +49,7 @@ void LbSetRect(struct TbRect *rect, long xLeft, long yTop, long xRight, long yBo
  */
 long get_angle_difference(long angle_a, long angle_b)
 {
-    long diff = abs((angle_a & ANGLE_MASK) - (angle_b & ANGLE_MASK));
+    long diff = labs((angle_a & ANGLE_MASK) - (angle_b & ANGLE_MASK));
     if (diff > DEGREES_180)
         diff = (DEGREES_360 - diff);
     return diff;
@@ -60,7 +60,7 @@ long get_angle_sign(long angle_a, long angle_b)
     long diff = (angle_b & ANGLE_MASK) - (angle_a & ANGLE_MASK);
     if (diff == 0)
         return 0;
-    if (abs(diff) > DEGREES_180)
+    if (labs(diff) > DEGREES_180)
     {
       if (diff >= 0)
           diff -= DEGREES_360;
@@ -69,7 +69,7 @@ long get_angle_sign(long angle_a, long angle_b)
     }
     if (diff == 0)
         return 0;
-    return diff / abs(diff);
+    return diff / labs(diff);
 }
 
 /**
@@ -96,8 +96,8 @@ long distance_with_angle_to_coord_y(long distance, long angle)
 
 long get_distance_xy(long x1, long y1, long x2, long y2)
 {
-    long dx = abs(x1 - x2);
-    long dy = abs(y1 - y2);
+    long dx = labs(x1 - x2);
+    long dy = labs(y1 - y2);
     return LbDiagonalLength(dx, dy);
 }
 

@@ -34,6 +34,7 @@
 #include "player_instances.h"
 #include "keeperfx.hpp"
 #include "config_keeperfx.h"
+#include "renderer/RendererManager.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -46,6 +47,7 @@ static int lbFadeDelay = 25;
 unsigned char fade_palette_in;
 unsigned char frontend_palette[768];
 TbRGBColorTable colours;
+float g_palette_possession_tint = 0.0f;
 /******************************************************************************/
 void fade_in(void)
 {
@@ -55,7 +57,7 @@ void fade_in(void)
 void fade_out(void)
 {
     ProperFadePalette(NULL, 8, Lb_PALETTE_FADE_CLOSED);
-    LbScreenClear(0);
+    RendererClearScreen(0);
 }
 
 void compute_fade_tables(struct TbColorTables *coltbl,unsigned char *spal,unsigned char *dpal)
@@ -223,13 +225,15 @@ void ProperFadePalette(unsigned char *pal, long fade_steps, enum TbPaletteFadeFl
 {
 /*    if (flg != Lb_PALETTE_FADE_CLOSED)
     {
-        LbPaletteFade(pal, fade_steps, flg);
+        RendererPaletteFade(pal, fade_steps, flg);
     } else*/
     if (lbAdvancedFade)
     {
+        RendererPreserveFadeCache(1);
         TbClockMSec latest_loop_time = LbTimerClock();
-        while (LbPaletteFade(pal, fade_steps, Lb_PALETTE_FADE_OPEN) < fade_steps)
+        while (RendererPaletteFade(pal, fade_steps, Lb_PALETTE_FADE_OPEN) < fade_steps)
         {
+          RendererPresentFrame();
           if (!is_key_pressed(KC_SPACE,KMod_DONTCARE) &&
               !is_key_pressed(KC_ESCAPE,KMod_DONTCARE) &&
               !is_key_pressed(KC_RETURN,KMod_DONTCARE) &&
@@ -239,14 +243,15 @@ void ProperFadePalette(unsigned char *pal, long fade_steps, enum TbPaletteFadeFl
             LbSleepUntil(latest_loop_time);
           }
         }
+        RendererPreserveFadeCache(0);
     } else
     if (pal != NULL)
     {
-        LbPaletteSet(pal);
+        RendererPaletteSet(pal);
     } else
     {
         LbPaletteDataFillBlack(palette_buf);
-        LbPaletteSet(palette_buf);
+        RendererPaletteSet(palette_buf);
     }
 }
 
@@ -254,35 +259,37 @@ void ProperForcedFadePalette(unsigned char *pal, long fade_steps, enum TbPalette
 {
     if (flg == Lb_PALETTE_FADE_OPEN)
     {
-        LbPaletteFade(pal, fade_steps, flg);
+        RendererPaletteFade(pal, fade_steps, flg);
         return;
     }
     if (lbAdvancedFade)
     {
+        RendererPreserveFadeCache(1);
         TbClockMSec latest_loop_time = LbTimerClock();
-        while (LbPaletteFade(pal, fade_steps, Lb_PALETTE_FADE_OPEN) < fade_steps)
+        while (RendererPaletteFade(pal, fade_steps, Lb_PALETTE_FADE_OPEN) < fade_steps)
         {
+          RendererPresentFrame();
           latest_loop_time += lbFadeDelay;
 
           if (flag_is_set(start_params.startup_flags, (SFlg_Legal|SFlg_FX))) {
               LbSleepUntil(latest_loop_time);
           }
         }
+        RendererPreserveFadeCache(0);
     } else
     if (pal != NULL)
     {
-        LbPaletteSet(pal);
+        RendererPaletteSet(pal);
     } else
     {
         memset(palette_buf, 0, sizeof(palette_buf));
-        LbPaletteSet(palette_buf);
+        RendererPaletteSet(palette_buf);
     }
 }
 
 long PaletteFadePlayer(struct PlayerInfo *player)
 {
     long i;
-    unsigned char palette[PALETTE_SIZE];
     // Find the fade step
     if ((player->palette_fade_step_pain != 0) && (player->palette_fade_step_possession != 0))
     {
@@ -297,29 +304,15 @@ long PaletteFadePlayer(struct PlayerInfo *player)
     i = 4 * (3 * (player->palette_fade_step_pain-1));
   } else
   { // both are == 0 - no fade
+    g_palette_possession_tint = 0.0f;
+    RendererSetScreenTint(0.0f, 0.0f, 0.0f, 0.0f);
     return 0;
   }
   if (i >= 120)
     i = 120;
+  g_palette_possession_tint = (float)i / 120.0f;
+  RendererSetScreenTint(1.0f, 0.0f, 0.0f, g_palette_possession_tint);
   long step = 120 - i;
-  // Create the new palette
-  for (i=0; i < PALETTE_COLORS; i++)
-  {
-      unsigned char* src = &player->main_palette[3 * i];
-      unsigned char* dst = &palette[3 * i];
-      unsigned long pix = ((step * (((long)src[0]) - 63)) / 120) + 63;
-      if (pix > 63)
-          pix = 63;
-      dst[0] = pix;
-      pix = (step * ((long)src[1])) / 120;
-      if (pix > 63)
-          pix = 63;
-      dst[1] = pix;
-      pix = (step * ((long)src[2])) / 120;
-      if (pix > 63)
-          pix = 63;
-      dst[2] = pix;
-  }
   // Update the fade step
   if (player->palette_fade_step_pain > 0)
     player->palette_fade_step_pain--;
@@ -335,9 +328,33 @@ long PaletteFadePlayer(struct PlayerInfo *player)
     if (player->palette_fade_step_possession > 0)
       player->palette_fade_step_possession--;
   }
-  // Set the palette to screen
-  LbScreenWaitVbi();
-  LbPaletteSet(palette);
+  // GPU renderers use the screen tint overlay for possession/pain effects;
+  // skip the per-pixel SW palette manipulation to avoid double-tinting.
+  if (RendererHasGPURenderPath())
+    return step;
+  // SW path: compute per-channel palette fade and set to screen.
+  {
+    unsigned char palette[PALETTE_SIZE];
+    for (i=0; i < PALETTE_COLORS; i++)
+    {
+        unsigned char* src = &player->main_palette[3 * i];
+        unsigned char* dst = &palette[3 * i];
+        unsigned long pix = ((step * (((long)src[0]) - 63)) / 120) + 63;
+        if (pix > 63)
+            pix = 63;
+        dst[0] = pix;
+        pix = (step * ((long)src[1])) / 120;
+        if (pix > 63)
+            pix = 63;
+        dst[1] = pix;
+        pix = (step * ((long)src[2])) / 120;
+        if (pix > 63)
+            pix = 63;
+        dst[2] = pix;
+    }
+    RendererWaitVbi();
+    RendererPaletteSet(palette);
+  }
   return step;
 }
 

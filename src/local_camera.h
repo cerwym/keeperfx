@@ -22,6 +22,7 @@
 #include "globals.h"
 #include "bflib_basics.h"
 #include "engine_camera.h"
+#include "kfx/engine/cameras.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -50,7 +51,10 @@ void update_local_cameras(void);
 void interpolate_local_cameras(void);
 void sync_local_camera(struct PlayerInfo *player);
 void set_local_camera_destination(struct PlayerInfo *player);
-struct Camera* get_local_camera(struct Camera* cam);
+/** Return the interpolated local camera for the given slot index (CamIV_*). */
+struct Camera* get_local_camera(int cam_idx);
+/** Convenience: return the interpolated local camera for the player's active slot. */
+struct Camera* get_local_active_camera(int plyr_idx);
 void send_camera_catchup_packets(struct PlayerInfo *player);
 
 /******************************************************************************/

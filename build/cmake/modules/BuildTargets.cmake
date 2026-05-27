@@ -1,10 +1,10 @@
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# BuildTargets.cmake — Target definitions (keeperfx, keeperfx_hvlog, tests)
+# BuildTargets.cmake — Target definitions (keeperfx, tests)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 # ━━━ Source File Collection ━━━
-file(GLOB_RECURSE KEEPERFX_SOURCES_C "src/*.c")
-file(GLOB_RECURSE KEEPERFX_SOURCES_CXX "src/*.cpp")
+file(GLOB_RECURSE KEEPERFX_SOURCES_C   CONFIGURE_DEPENDS "src/*.c")
+file(GLOB_RECURSE KEEPERFX_SOURCES_CXX CONFIGURE_DEPENDS "src/*.cpp")
 
 # Exclude stub files — added back explicitly when needed
 list(FILTER KEEPERFX_SOURCES_C EXCLUDE REGEX ".*/bflib_cpu_stub\\.c$")
@@ -28,6 +28,15 @@ list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/platform/WindowSystemVita\\.c
 if(NOT KEEPERFX_RENDERER_OPENGL)
     list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/renderer/RendererOpenGL\\.cpp$")
     list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/platform_gl_sdl2\\.cpp$")
+    list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/renderer/opengl/.*\\.cpp$")
+    list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/renderer/backends/OpenGLSpriteBackend\\.cpp$")
+endif()
+
+# Vulkan renderer exclusion
+if(NOT KEEPERFX_RENDERER_VULKAN)
+    list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/renderer/RendererVulkan\\.cpp$")
+    list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/platform_vk_sdl2\\.cpp$")
+    list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/renderer/vulkan/.*\\.cpp$")
 endif()
 
 # ━━━ Networking Exclusions ━━━
@@ -50,6 +59,12 @@ if(NOT KEEPERFX_NETWORKING)
     list(FILTER KEEPERFX_SOURCES_C EXCLUDE REGEX ".*/net_checksums\\.c$")
     list(FILTER KEEPERFX_SOURCES_C EXCLUDE REGEX ".*/net_game\\.c$")
     list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/bflib_enet\\.cpp$")
+    list(FILTER KEEPERFX_SOURCES_C EXCLUDE REGEX ".*/net_holepunch\\.c$")
+    list(FILTER KEEPERFX_SOURCES_C EXCLUDE REGEX ".*/net_lan\\.c$")
+    list(FILTER KEEPERFX_SOURCES_C EXCLUDE REGEX ".*/net_lobby\\.c$")
+    list(FILTER KEEPERFX_SOURCES_C EXCLUDE REGEX ".*/net_main\\.c$")
+    list(FILTER KEEPERFX_SOURCES_C EXCLUDE REGEX ".*/net_exchange_common\\.c$")
+    list(FILTER KEEPERFX_SOURCES_C EXCLUDE REGEX ".*/net_exchange_gameplay\\.c$")
     list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/bflib_base_tcp\\.cpp$")
     list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/bflib_client_tcp\\.cpp$")
     list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/bflib_server_tcp\\.cpp$")
@@ -58,7 +73,11 @@ if(NOT KEEPERFX_NETWORKING)
     list(APPEND KEEPERFX_SOURCES_C "src/bflib_network_stub.c")
 endif()
 
-# ━━━ Homebrew Platform Exclusions & Stubs ━━━
+# ━━━ Matchmaking Exclusion ━━━
+if(NOT KEEPERFX_MATCHMAKING)
+    list(FILTER KEEPERFX_SOURCES_C EXCLUDE REGEX ".*/net_matchmaking\\.c$")
+endif()
+
 if(PLATFORM_VITA OR PLATFORM_3DS OR PLATFORM_SWITCH)
     list(FILTER KEEPERFX_SOURCES_C EXCLUDE REGEX ".*/audio/audio_openal\\.c$")
     list(FILTER KEEPERFX_SOURCES_C EXCLUDE REGEX ".*/input/input_sdl\\.c$")
@@ -138,11 +157,13 @@ if(WIN32 OR MINGW)
 elseif(UNIX AND NOT APPLE)
     list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/platform/PlatformWindows\\.cpp$")
     list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/src/windows\\.cpp$")
+    list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/cdrom\\.cpp$")
 elseif(APPLE)
     list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/platform/PlatformLinux\\.cpp$")
     list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/platform/PlatformWindows\\.cpp$")
     list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/src/linux\\.cpp$")
     list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/src/windows\\.cpp$")
+    list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/cdrom\\.cpp$")
 endif()
 
 # ━━━ Add Library for centijson (homebrew only) ━━━
@@ -159,7 +180,7 @@ if(PLATFORM_VITA OR PLATFORM_3DS OR PLATFORM_SWITCH)
     target_link_libraries(centitoml PUBLIC centijson_static)
 endif()
 
-# ━━━ Main Targets: keeperfx & keeperfx_hvlog ━━━
+# ━━━ Main Target: keeperfx ━━━
 add_executable(keeperfx ${KEEPERFX_SOURCES_C} ${KEEPERFX_SOURCES_CXX})
 if(MSVC)
     set_target_properties(keeperfx PROPERTIES
@@ -168,11 +189,18 @@ if(MSVC)
     )
 endif()
 target_include_directories(keeperfx PRIVATE src deps/centitoml deps/centijson/include)
-target_compile_definitions(keeperfx PUBLIC BFDEBUG_LEVEL=0)
+if(KEEPERFX_HVLOG)
+    target_compile_definitions(keeperfx PUBLIC BFDEBUG_LEVEL=10)
+else()
+    target_compile_definitions(keeperfx PUBLIC BFDEBUG_LEVEL=0)
+endif()
 if(WIN32)
     target_sources(keeperfx PRIVATE "res/keeperfx_stdres.rc")
 endif()
 apply_keeperfx_warnings(keeperfx)
+if(PLATFORM_VITA)
+    target_compile_options(keeperfx PRIVATE -Wno-format-truncation)
+endif()
 apply_keeperfx_link_flags(keeperfx)
 apply_windows_system_libs(keeperfx)
 
@@ -205,39 +233,23 @@ macro(kfx_link_sdl2_target TARGET_NAME)
 endmacro()
 kfx_link_sdl2_target(keeperfx)
 
-add_executable(keeperfx_hvlog ${KEEPERFX_SOURCES_C} ${KEEPERFX_SOURCES_CXX})
-target_include_directories(keeperfx_hvlog PRIVATE src deps/centitoml deps/centijson/include)
-target_compile_definitions(keeperfx_hvlog PUBLIC BFDEBUG_LEVEL=10)
-if(WIN32)
-    target_sources(keeperfx_hvlog PRIVATE "res/keeperfx_stdres.rc")
+# Link glad for OpenGL renderer (MSVC/vcpkg path; MinGW deferred to keeperfx-deps)
+if(KEEPERFX_RENDERER_OPENGL AND TARGET glad::glad)
+    target_link_libraries(keeperfx PRIVATE glad::glad)
 endif()
-apply_keeperfx_warnings(keeperfx_hvlog)
-apply_keeperfx_link_flags(keeperfx_hvlog)
-apply_windows_system_libs(keeperfx_hvlog)
 
-kfx_link_sdl2_target(keeperfx_hvlog)
-
-# ━━━ Dependent Platform Libraries ━━━
-# Linked AFTER targets are created (see `add_subdirectory(deps)` in root CMakeLists.txt)
-
-# ━━━ Test Target (desktop only) ━━━
-if(NOT PLATFORM_VITA AND NOT PLATFORM_3DS AND NOT PLATFORM_SWITCH)
-    file(GLOB TEST_SOURCES "tests/*.cpp")
-    add_library(cunit_static STATIC
-        "deps/CUnit-2.1-3/CUnit/Sources/Basic/Basic.c"
-        "deps/CUnit-2.1-3/CUnit/Sources/Framework/TestDB.c"
-        "deps/CUnit-2.1-3/CUnit/Sources/Framework/CUError.c"
-        "deps/CUnit-2.1-3/CUnit/Sources/Framework/TestRun.c"
-        "deps/CUnit-2.1-3/CUnit/Sources/Framework/Util.c"
-    )
-    target_include_directories(cunit_static PUBLIC "deps/CUnit-2.1-3/CUnit/Headers")
-
-    add_executable(tests ${TEST_SOURCES} ${KEEPERFX_SOURCES_C} ${KEEPERFX_SOURCES_CXX})
-    target_compile_definitions(tests PUBLIC BFDEBUG_LEVEL=0)
-    target_link_libraries(tests PRIVATE cunit_static)
-    apply_keeperfx_warnings(tests)
-    apply_keeperfx_link_flags(tests)
-    apply_windows_system_libs(tests)
+# Link Tracy profiler (FetchContent target — compiled from source, matches CRT)
+if(KEEPERFX_TRACY AND TARGET TracyClient)
+    target_link_libraries(keeperfx PRIVATE TracyClient)
 endif()
+
+# ━━━ All main KeeperFX targets — used by Platform*.cmake modules ━━━
+set(KFX_TARGETS keeperfx)
+
+# ━━━ OpenGL shaders are now embedded in the executable ━━━
+# Previously copied from src/renderer/opengl/shaders/ but now included as constants
+# in src/renderer/opengl/GLShaders.h for easier distribution.
+
+# Remove the crap that comes with pulling in the packages.
 
 message(STATUS "Compiler: ${CMAKE_CXX_COMPILER_ID}")

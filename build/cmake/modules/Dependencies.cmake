@@ -6,12 +6,14 @@
 # Homebrew platforms (Vita, 3DS, Switch) use their own SDK bundled dependencies
 if(NOT PLATFORM_VITA AND NOT PLATFORM_3DS AND NOT PLATFORM_SWITCH)
     # ━━━ SDL2 & Graphics ━━━
-    # MinGW cross-compile: force static SDL2 libs (no runtime DLLs)
+    # MinGW cross-compile: force static SDL2 libs (no runtime DLLs) and enable
+    # POSIX-compatible printf (so %zu, %zd etc. work for size_t formatting).
     if(MINGW OR CMAKE_CROSSCOMPILING)
         set(SDL2_USE_STATIC_LIBS ON)
         set(SDL2IMAGE_STATIC ON)
         set(SDL2MIXER_STATIC ON)
         set(SDL2NET_STATIC ON)
+        add_compile_definitions(__USE_MINGW_ANSI_STDIO=1)
     endif()
     
     find_package(SDL2 CONFIG REQUIRED)
@@ -26,9 +28,31 @@ if(NOT PLATFORM_VITA AND NOT PLATFORM_3DS AND NOT PLATFORM_SWITCH)
         find_package(glad CONFIG QUIET)
         if(glad_FOUND)
             kfx_status("DEPS" "OpenGL renderer backend enabled (glad found)")
+            add_compile_definitions(RENDERER_OPENGL_ENABLED=1)
         else()
             kfx_status("DEPS" "OpenGL renderer backend disabled (glad not found; install via vcpkg)")
             set(KEEPERFX_RENDERER_OPENGL OFF)
+        endif()
+    endif()
+
+    # ━━━ Vulkan Renderer (optional) ━━━
+    if(KEEPERFX_RENDERER_VULKAN)
+        find_package(Vulkan QUIET)
+        find_package(vk-bootstrap CONFIG QUIET)
+        find_package(VulkanMemoryAllocator CONFIG QUIET)
+        if(Vulkan_FOUND AND vk-bootstrap_FOUND)
+            kfx_status("DEPS" "Vulkan renderer backend enabled (Vulkan + vk-bootstrap found)")
+            add_compile_definitions(RENDERER_VULKAN_ENABLED=1)
+            target_link_libraries(keeperfx    PUBLIC Vulkan::Vulkan vk-bootstrap::vk-bootstrap)
+            if(VulkanMemoryAllocator_FOUND)
+                target_link_libraries(keeperfx    PUBLIC GPUOpen::VulkanMemoryAllocator)
+                kfx_status("DEPS" "VulkanMemoryAllocator found and linked")
+            else()
+                kfx_status("DEPS" "VulkanMemoryAllocator not found — install via vcpkg for full Vulkan support")
+            endif()
+        else()
+            kfx_status("DEPS" "Vulkan renderer backend disabled (Vulkan=${Vulkan_FOUND} vk-bootstrap=${vk-bootstrap_FOUND})")
+            set(KEEPERFX_RENDERER_VULKAN OFF)
         endif()
     endif()
     
@@ -37,14 +61,14 @@ if(NOT PLATFORM_VITA AND NOT PLATFORM_3DS AND NOT PLATFORM_SWITCH)
     if(FFmpeg_FOUND)
         kfx_status("DEPS" "FFmpeg found (vcpkg)")
     else()
-        kfx_status("DEPS" "FFmpeg not yet in vcpkg — will use fallback from deps/ tarballs")
+        kfx_status("DEPS" "FFmpeg not found — ensure vcpkg is bootstrapped and triplet is configured")
     endif()
     
     find_package(OpenAL CONFIG QUIET)
     if(OpenAL_FOUND OR OPENAL_FOUND)
         kfx_status("DEPS" "OpenAL found (vcpkg)")
     else()
-        kfx_status("DEPS" "OpenAL not found — will use fallback from deps/ tarballs")
+        kfx_status("DEPS" "OpenAL not found — ensure vcpkg is bootstrapped and triplet is configured")
     endif()
     
     # ━━━ Networking ━━━
@@ -52,15 +76,46 @@ if(NOT PLATFORM_VITA AND NOT PLATFORM_3DS AND NOT PLATFORM_SWITCH)
     if(enet_FOUND)
         kfx_status("DEPS" "enet found (vcpkg)")
     else()
-        kfx_status("DEPS" "FFmpeg not yet in vcpkg — will use fallback from deps/ tarballs")
+        kfx_status("DEPS" "enet not found — ensure vcpkg is bootstrapped and triplet is configured")
     endif()
 
-    # ━━━ JSON (centijson) ━━━
+    # ━━━ Matchmaking (curl WebSocket) ━━━
+    option(KEEPERFX_MATCHMAKING "Enable matchmaking client (requires libcurl >= 7.86)" ON)
+    if(KEEPERFX_MATCHMAKING)
+        find_package(CURL CONFIG QUIET)
+
+        if(CURL_FOUND)
+            kfx_status("DEPS" "curl found: matchmaking enabled")
+        else()
+            kfx_status("DEPS" "curl not found: matchmaking disabled (net_matchmaking.c excluded)")
+            set(KEEPERFX_MATCHMAKING OFF CACHE BOOL "" FORCE)
+        endif()
+    endif()
+
     find_package(centijson CONFIG QUIET)
     if(centijson_FOUND)
         kfx_status("DEPS" "centijson found (vcpkg)")
     else()
-        kfx_status("DEPS" "centijson not found via vcpkg — will build from deps/ sources")
+        kfx_status("DEPS" "centijson not found — ensure vcpkg is bootstrapped and triplet is configured")
+    endif()
+
+    # ━━━ Tracy Profiler (optional) — built from source via FetchContent ━━━
+    # Using FetchContent instead of vcpkg so Tracy is compiled with the same CRT
+    # as the rest of the project (MTd in Debug, MT in Release). The vcpkg
+    # pre-built lib uses MT regardless, causing LNK2038 CRT mismatch in Debug.
+    if(KEEPERFX_TRACY)
+        include(FetchContent)
+        set(TRACY_ENABLE ON CACHE BOOL "" FORCE)
+        set(TRACY_ON_DEMAND ON CACHE BOOL "" FORCE)
+        FetchContent_Declare(
+            tracy
+            GIT_REPOSITORY https://github.com/wolfpld/tracy.git
+            GIT_TAG        v0.13.1
+            GIT_SHALLOW    TRUE
+            GIT_PROGRESS   TRUE
+        )
+        FetchContent_MakeAvailable(tracy)
+        kfx_status("PROFILER" "Tracy profiler v0.13.1 fetched from source (TRACY_ENABLE + TRACY_ON_DEMAND)")
     endif()
     
 else()

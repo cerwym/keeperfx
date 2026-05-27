@@ -19,8 +19,7 @@
  *         construct before a GL context exists.
  */
 /******************************************************************************/
-#ifndef UI_SPRITE_ATLAS_H
-#define UI_SPRITE_ATLAS_H
+#pragma once
 
 #ifdef PLATFORM_VITA
 
@@ -134,4 +133,3 @@ private:
 };
 
 #endif // PLATFORM_VITA
-#endif // UI_SPRITE_ATLAS_H

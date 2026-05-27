@@ -69,7 +69,7 @@ enum FrameFlags {
     FFL_NoShadows = 1,
 };
 
-struct KeeperSprite { // sizeof = 16
+struct KeeperSprite {
   uint32_t DataOffset;
 
   unsigned short SWidth;
@@ -105,6 +105,7 @@ struct KeeperSpriteDisk {
 /******************************************************************************/
 //extern unsigned short creature_graphics[][22];
 extern struct KeeperSprite *creature_table;
+extern size_t creature_table_length;
 extern struct KeeperSprite creature_table_add[];
 /******************************************************************************/
 

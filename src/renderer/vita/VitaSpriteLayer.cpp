@@ -14,9 +14,8 @@
 #include <string.h>
 #include "globals.h"
 #include "bflib_basics.h"
-#include "bflib_video.h"    // lbPalette, lbDisplay
+#include "bflib_video.h"    // lbPalette, lbDisplay, Lb_SPRITE_* flags
 #include "renderer/vita/VitaPassCommon.h"
-#include "sprite_batch.h"   // SB_FLAG_* constants
 #include "post_inc.h"
 
 // ---------------------------------------------------------------------------
@@ -258,10 +257,10 @@ TbResult VitaSpriteLayer::PushQuad(long virt_x, long virt_y,
     q.sc_h = (float)spr->SHeight * sy;
 
     // Handle horizontal/vertical flip: swap the UV corners.
-    q.u0 = (draw_flags & SB_FLAG_FLIP_HORIZ)  ? uv.u1 : uv.u0;
-    q.u1 = (draw_flags & SB_FLAG_FLIP_HORIZ)  ? uv.u0 : uv.u1;
-    q.v0 = (draw_flags & SB_FLAG_FLIP_VERTIC) ? uv.v1 : uv.v0;
-    q.v1 = (draw_flags & SB_FLAG_FLIP_VERTIC) ? uv.v0 : uv.v1;
+    q.u0 = (draw_flags & Lb_SPRITE_FLIP_HORIZ)  ? uv.u1 : uv.u0;
+    q.u1 = (draw_flags & Lb_SPRITE_FLIP_HORIZ)  ? uv.u0 : uv.u1;
+    q.v0 = (draw_flags & Lb_SPRITE_FLIP_VERTIC) ? uv.v1 : uv.v0;
+    q.v1 = (draw_flags & Lb_SPRITE_FLIP_VERTIC) ? uv.v0 : uv.v1;
 
     q.atlas_page  = (uint8_t)uv.page;
     q.mode        = mode;
@@ -363,7 +362,7 @@ void VitaSpriteLayer::Flush()
 
         // Determine blend alpha from draw_flags.
         float alpha = 1.0f;
-        if (q.draw_flags & (SB_FLAG_TRANSPAR4 | SB_FLAG_TRANSPAR8))
+        if (q.draw_flags & (Lb_SPRITE_TRANSPAR4 | Lb_SPRITE_TRANSPAR8))
             alpha = 0.5f;
 
         // Select the correct GPU program.

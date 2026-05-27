@@ -21,8 +21,7 @@
 #include "kfx_memory.h"
 #include "pre_inc.h"
 #include "front_torture.h"
-#include "bflib_network.h"
-#include "bflib_network_exchange.h"
+#include "net_lobby.h"
 #include "globals.h"
 #include "bflib_basics.h"
 #include "config_settings.h"
@@ -98,8 +97,8 @@ long torture_door_over_point(long x,long y)
     int w = img_width * units_per_px / 16;
     int h = img_height * units_per_px / 16;
     // Starting point coords
-    int spx = (LbScreenWidth() - w) >> 1;
-    int spy = (LbScreenHeight() - h) >> 1;
+    int spx = (RendererPhysicalWidth() - w) >> 1;
+    int spy = (RendererPhysicalHeight() - h) >> 1;
     for (long i = 0; i < torture_doors_available; i++)
     {
         struct DoorDesc* door = &doors[i];
@@ -186,8 +185,8 @@ TbBool fronttorture_draw(void)
   int w = img_width * units_per_px / 16;
   int h = img_height * units_per_px / 16;
   // Starting point coords
-  int spx = (LbScreenWidth() - w) >> 1;
-  int spy = (LbScreenHeight() - h) >> 1;
+  int spx = (RendererPhysicalWidth() - w) >> 1;
+  int spy = (RendererPhysicalHeight() - h) >> 1;
   RendererBlitRaw8(w, h, spx, spy, torture_background, img_width, img_height);
 
   for (int i = 0; i < torture_doors_available; i++)
@@ -244,7 +243,7 @@ void fronttorture_input(void)
     // Exchange packet with other players
     if ((game.system_flags & GSF_NetworkActive) != 0)
     {
-        if (LbNetwork_Exchange(NETMSG_FRONTEND, pckt, game.packets, sizeof(struct Packet)))
+        if (LbNetwork_ExchangeFrontend(pckt, game.packets, sizeof(struct Packet)))
             ERRORLOG("LbNetwork_Exchange failed");
     }
     // Determine the controlling player and get his mouse coords

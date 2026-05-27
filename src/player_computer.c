@@ -49,6 +49,7 @@
 #include "thing_navigate.h"
 #include "thing_traps.h"
 
+#include "kfx/profiling/KfxProfilingC.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -943,7 +944,7 @@ long computer_check_for_money(struct Computer2 *comp, struct ComputerCheck * che
             if (cproc->func_check == cpfl_computer_check_dig_to_gold)
             {
                 cproc->priority++;
-                if (game.play_gameturn - cproc->last_run_turn > 20) {
+                if (get_gameturn() - cproc->last_run_turn > 20) {
                     cproc->last_run_turn = 0;
                 }
             }
@@ -1195,7 +1196,7 @@ long check_call_to_arms(struct Computer2 *comp)
                         SYNCDBG(8,"Found existing CTA task");
                         ret = 0;
                     }
-                    if (ctask->delay + ctask->lastrun_turn - (long)game.play_gameturn < ctask->delay - ctask->delay/10) {
+                    if (ctask->delay + ctask->lastrun_turn - (long)get_gameturn() < ctask->delay - ctask->delay/10) {
                         SYNCDBG(8,"Less than 90 turns");
                         ret = -1;
                         break;
@@ -1223,11 +1224,13 @@ TbBool setup_a_computer_player(PlayerNumber plyr_idx, long comp_model)
         WARNLOG("Tried to setup player %d which can't be used this way",(int)plyr_idx);
         return false;
     }
+    struct PlayerInfo* player = get_player(plyr_idx);
     if(!player_is_keeper(plyr_idx))
     {
-        struct PlayerInfo* player = get_player(plyr_idx);
         player->player_type = PT_Keeper;
     }
+    if (player->generate_speed == 0)
+        player->generate_speed = game.conf.rules[player->id_number].rooms.default_generate_speed;
     struct Computer2* comp = get_computer_player(plyr_idx);
     if (computer_player_invalid(comp)) {
         ERRORLOG("Tried to setup player %d which has no computer capability",(int)plyr_idx);
@@ -1338,7 +1341,7 @@ TbBool script_support_setup_player_as_computer_keeper(PlayerNumber plyr_idx, lon
     }
     init_keeper_map_exploration_by_terrain(player);
     init_keeper_map_exploration_by_creatures(player);
-    if (game.play_gameturn > 0)
+    if (get_gameturn() > 0)
     {
         check_map_for_gold();
     }
@@ -1357,7 +1360,7 @@ void computer_check_events(struct Computer2 *comp)
         switch (cevent->cetype)
         {
         case 0:
-            if ((long)game.play_gameturn < (cevent->last_test_gameturn + cevent->test_interval))
+            if ((long)get_gameturn() < (cevent->last_test_gameturn + cevent->test_interval))
             {
                 break;
             }
@@ -1370,7 +1373,7 @@ void computer_check_events(struct Computer2 *comp)
                 {
                     if (computer_event_func_list[cevent->func_event](comp, cevent, event) == 1) {
                         SYNCDBG(5,"Player %d reacted on %s",(int)dungeon->owner,cevent->name);
-                        cevent->last_test_gameturn = game.play_gameturn;
+                        cevent->last_test_gameturn = get_gameturn();
                     }
                 }
             }
@@ -1379,7 +1382,7 @@ void computer_check_events(struct Computer2 *comp)
         case 2:
         case 3:
         case 4:
-            if ((long)game.play_gameturn < (cevent->last_test_gameturn + cevent->test_interval)) {
+            if ((long)get_gameturn() < (cevent->last_test_gameturn + cevent->test_interval)) {
                 break;
             }
             {
@@ -1387,7 +1390,7 @@ void computer_check_events(struct Computer2 *comp)
                     SYNCDBG(5,"Player %d reacted on %s",(int)dungeon->owner,cevent->name);
                 }
                 // Update test turn no matter if event triggered something
-                cevent->last_test_gameturn = game.play_gameturn;
+                cevent->last_test_gameturn = get_gameturn();
             }
             break;
         default:
@@ -1399,6 +1402,7 @@ void computer_check_events(struct Computer2 *comp)
 
 TbBool process_checks(struct Computer2 *comp)
 {
+    KFX_C_ZONE_BEGIN_COLOR(ctx, "AI/Checks", KFX_COLOR_AI);
     SYNCDBG(17,"Starting");
     for (long i = 0; i < COMPUTER_CHECKS_COUNT; i++)
     {
@@ -1409,15 +1413,16 @@ TbBool process_checks(struct Computer2 *comp)
             break;
         if ((ccheck->flags & ComChk_Unkn0001) == 0)
         {
-            long delta = (game.play_gameturn - ccheck->last_run_turn);
+            long delta = (get_gameturn() - ccheck->last_run_turn);
             if ((delta > ccheck->turns_interval) && (computer_check_func_list[ccheck->func] != NULL))
             {
                 SYNCDBG(8,"Executing check %ld, \"%s\"",i,ccheck->name);
                 computer_check_func_list[ccheck->func](comp, ccheck);
-                ccheck->last_run_turn = game.play_gameturn;
+                ccheck->last_run_turn = get_gameturn();
             }
         }
     }
+    KFX_C_ZONE_END(ctx);
     return true;
 }
 
@@ -1428,7 +1433,7 @@ TbBool process_processes_and_task(struct Computer2 *comp)
   {
     if (comp->tasks_did <= 0)
         return false;
-    if ((game.play_gameturn % comp->click_rate) == 0)
+    if ((get_gameturn() % comp->click_rate) == 0)
         process_tasks(comp);
     switch (comp->task_state)
     {
@@ -1488,7 +1493,7 @@ void process_computer_player2(PlayerNumber plyr_idx)
         ERRORLOG("Computer player %d has invalid dungeon",(int)plyr_idx);
         return;
     }
-    if ((comp->processes_time != 0) && (comp->turn_begin <= game.play_gameturn))
+    if ((comp->processes_time != 0) && (comp->turn_begin <= get_gameturn()))
       comp->tasks_did = 1;
     else
       comp->tasks_did = 0;
@@ -1540,7 +1545,7 @@ TbBool computer_player_demands_gold_check(PlayerNumber plyr_idx)
   }
   SYNCDBG(8,"Player %d wants to start digging.",(int)plyr_idx);
   // If the computer player needs to dig for gold
-  if (game.turn_last_checked_for_gold+GOLD_DEMAND_CHECK_INTERVAL < game.play_gameturn)
+  if (game.turn_last_checked_for_gold+GOLD_DEMAND_CHECK_INTERVAL < get_gameturn())
   {
       dig_process->flags &= ~ComProc_Unkn0004;
       return true;
@@ -1550,6 +1555,7 @@ TbBool computer_player_demands_gold_check(PlayerNumber plyr_idx)
 
 void process_computer_players2(void)
 {
+    KFX_C_ZONE_BEGIN_COLOR(ctx, "AI/AllComputerPlayers", KFX_COLOR_AI);
     TbBool needs_gold_check = false;
     for (int i = 0; i < PLAYERS_COUNT; i++)
     {
@@ -1574,12 +1580,13 @@ void process_computer_players2(void)
         SYNCDBG(0,"Computer players demand gold check.");
         check_map_for_gold();
     }
+    KFX_C_ZONE_END(ctx);
 }
 
 void setup_computer_players2(void)
 {
   int i;
-  game.turn_last_checked_for_gold = game.play_gameturn;
+  game.turn_last_checked_for_gold = get_gameturn();
   check_map_for_gold();
   for (i=0; i < COMPUTER_TASKS_COUNT; i++)
   {

@@ -1,18 +1,29 @@
-# Docker Compose for local KeeperFX development.
+# Docker Compose for local KeeperFX development and CI image testing.
 # All services mount the repository root as /src (read-write).
 # Build output lands in out/build/<preset>/ on the host.
 #
-# Usage:
-#   docker compose run mingw32 bash -c "cmake --preset windows-x86-release && cmake --build --preset windows-x86-release"
-#   docker compose run linux   bash -c "cmake --preset linux-x64-release   && cmake --build --preset linux-x64-release"
-#   docker compose run wasm    bash -c "cmake --preset wasm-release         && cmake --build --preset wasm-release"
-#   docker compose pull                          # Update all images
+# ── Build images locally (test Dockerfile changes before pushing) ───────────
+#   cd docker/
+#   docker compose build linux          # rebuild linux image
+#   docker compose build mingw64        # rebuild mingw64 image
+#   docker compose build mingw32        # rebuild mingw32 image
+#   docker compose build                # rebuild all
 #
-# Packaging (linux only — packaging tools are Linux-based):
+# ── Run a build inside a local image ────────────────────────────────────────
+#   docker compose run linux   bash -c "cmake --preset linux-x64-release && cmake --build --preset linux-x64-release"
+#   docker compose run mingw64 bash -c "cmake --preset windows-x64-release && cmake --build --preset windows-x64-release"
+#   docker compose run mingw32 bash -c "cmake --preset windows-x86-release && cmake --build --preset windows-x86-release"
+#   docker compose run linux-asan bash -c "cmake --preset linux-x64-asan && cmake --build --preset linux-x64-asan"
+#   docker compose run wasm    bash -c "cmake --preset wasm-release && cmake --build --preset wasm-release"
+#
+# ── Pull latest CI images (skip local build) ────────────────────────────────
+#   docker compose pull
+#
+# ── Packaging (linux only) ──────────────────────────────────────────────────
 #   docker compose run linux bash -c "make pkg-gfx"
 #   docker compose run linux bash -c "make pkg-lang"
 #
-# Vita crash parsing:
+# ── Vita crash parsing ───────────────────────────────────────────────────────
 #   docker compose run vitasdk bash -c "arm-vita-eabi-addr2line -e out/build/vita-debug/keeperfx -fCa 0x81XXXXXX"
 
 name: keeperfx
@@ -31,18 +42,30 @@ services:
   mingw32:
     <<: *build-base
     image: ghcr.io/${DOCKER_ORG:-cerwym}/keeperfx-build-mingw32:latest
+    build:
+      context: ..
+      dockerfile: docker/mingw32/Dockerfile
 
   mingw64:
     <<: *build-base
     image: ghcr.io/${DOCKER_ORG:-cerwym}/keeperfx-build-mingw64:latest
+    build:
+      context: ..
+      dockerfile: docker/mingw64/Dockerfile
 
   linux:
     <<: *build-base
     image: ghcr.io/${DOCKER_ORG:-cerwym}/keeperfx-build-linux:latest
+    build:
+      context: ..
+      dockerfile: docker/linux/Dockerfile
 
   linux-asan:
     <<: *build-base
     image: ghcr.io/${DOCKER_ORG:-cerwym}/keeperfx-build-linux:latest
+    build:
+      context: ..
+      dockerfile: docker/linux/Dockerfile
     environment:
       CMAKE_BUILD_PARALLEL_LEVEL: "${CMAKE_BUILD_PARALLEL_LEVEL:-4}"
       ASAN_OPTIONS: "detect_leaks=0:halt_on_error=1:print_stats=1"

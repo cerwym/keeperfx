@@ -135,4 +135,3 @@ add_custom_command(
 add_custom_target(generate_ico DEPENDS ${CMAKE_SOURCE_DIR}/res/keeperfx_icon.ico)
 
 add_dependencies( keeperfx generate_ico )
-add_dependencies( keeperfx_hvlog generate_ico )

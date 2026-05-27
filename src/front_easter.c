@@ -36,6 +36,7 @@
 #include "front_credits.h"
 #include "game_legacy.h"
 #include "keeperfx.hpp"
+#include "renderer/RendererManager.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -56,7 +57,6 @@ const struct TbBirthday team_birthdays[] = {
     {13,11,"Alex Peters"},
     { 1,12,"Dene Carter"},
     {25, 5,"Tomasz Lis"},
-    {29,11,"Michael Chateauneuf"},
     {0,0,NULL},
     };
 
@@ -216,13 +216,13 @@ void draw_eastegg(void)
       unsigned char pos;
       for (i = 0; i < 30; i += 2)
       {
-        pos = game.play_gameturn - i;
+        pos = get_gameturn() - i;
         lbDisplay.DrawColour = pos;
         LbTextDrawResized(scale_fixed_DK_value((LbCosL(16*(long)pos) / 512 + skeksis_x_offset) / pixel_size),
           scale_fixed_DK_value((LbSinL(32*(long)pos) / 512 + skeksis_y_offset) / pixel_size), ee_units_per_px, text);
       }
       clear_flag(lbDisplay.DrawFlags, Lb_TEXT_ONE_COLOR);
-      pos=game.play_gameturn;
+      pos=get_gameturn();
       LbTextDrawResized(scale_fixed_DK_value((LbCosL(16*(long)pos) / 512 + skeksis_x_offset) / pixel_size),
           scale_fixed_DK_value((LbSinL(32*(long)pos) / 512 + skeksis_y_offset) / pixel_size), ee_units_per_px, text);
       if (eastegg_skeksis_cntr >= 255)
@@ -231,7 +231,7 @@ void draw_eastegg(void)
 
   if (game.eastegg01_cntr >= eastegg_feckoff_codes.length)
   {
-    LbTextSetWindow(0/pixel_size, 0/pixel_size, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
+    LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
     lbDisplay.DrawFlags &= ~Lb_TEXT_ONE_COLOR;
     LbTextSetFont(winfont);
     i = 0;
@@ -260,7 +260,7 @@ void draw_eastegg(void)
       vy[i] = -vy[i];
       py[i] = height-k-1;
     }
-    if (LbScreenIsLocked())
+    if (RendererIsScreenLocked())
     {
       LbTextDrawResized(scale_fixed_DK_value(px[i]/pixel_size), scale_fixed_DK_value(py[i]/pixel_size), ee_units_per_px, text);
     }
@@ -271,7 +271,7 @@ void draw_eastegg(void)
 
   if (game.eastegg02_cntr >= eastegg_jlw_codes.length)
   {
-    LbTextSetWindow(0/pixel_size, 0/pixel_size, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
+    LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
     lbDisplay.DrawFlags &= ~Lb_TEXT_ONE_COLOR;
     LbTextSetFont(winfont);
     i = 1;
@@ -300,7 +300,7 @@ void draw_eastegg(void)
       vy[i] = -vy[i];
       py[i] = height-k-1;
     }
-    if (LbScreenIsLocked())
+    if (RendererIsScreenLocked())
     {
         LbTextDrawResized(scale_fixed_DK_value(px[i]/pixel_size), scale_fixed_DK_value(py[i]/pixel_size), ee_units_per_px, text);
     }

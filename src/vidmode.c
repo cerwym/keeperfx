@@ -48,6 +48,7 @@
 #include "game_legacy.h"
 #include "creature_graphics.h"
 #include "keeperfx.hpp"
+#include "renderer/RendererManager.h"
 #include "custom_sprites.h"
 #include "sprites.h"
 #include "post_inc.h"
@@ -128,6 +129,7 @@ short LoadVRes256Data(long scrbuf_size)
     if (!winfont || !font_sprites || !button_sprites || !gui_panel_sprites || LbDataLoadAll(gui_load_files_640)) {
         return 0;
     }
+    RendererNotifySpritesReloaded();
     return 1;
 }
 
@@ -200,7 +202,11 @@ short LoadMcgaData(void)
   winfont = load_font("data/font2-32.dat", "data/font2-32.tab");
   font_sprites = load_font("data/font1-32.dat", "data/font1-32.tab");
   gui_panel_sprites = load_spritesheet("data/gui2-32.dat", "data/gui2-32.tab");
-  return button_sprites && winfont && font_sprites && gui_panel_sprites && (ferror == 0);
+  if (button_sprites && winfont && font_sprites && gui_panel_sprites && (ferror == 0)) {
+      RendererNotifySpritesReloaded();
+      return 1;
+  }
+  return 0;
 }
 
 void FreeMcgaData(void)
@@ -271,6 +277,7 @@ void load_pointer_file(short hi_res)
     pointer_sprites = load_spritesheet("data/pointer64.dat", "data/pointer64.tab");
 #endif
     if (!pointer_sprites) ERRORLOG("Unable to load pointer sprites");
+    RendererNotifyPointerSpritesLoaded();
 }
 
 TbBool set_pointer_graphic_none(void)
@@ -593,7 +600,7 @@ TbScreenMode setup_screen_mode(TbScreenMode nmode, TbBool failsafe)
 {
   SYNCDBG(4,"Setting up mode %d",(int)nmode);
   TbScreenModeInfo* new_mdinfo = LbScreenGetModeInfo(nmode);
-  TbScreenMode old_mode = LbScreenActiveMode();
+  TbScreenMode old_mode = RendererActiveMode();
   TbScreenModeInfo* old_mdinfo = LbScreenGetModeInfo(old_mode);
   // we don't want to get the current display when using the "fill all" mode, we want to keep the old version
   if (!(old_mdinfo->VideoFlags & Lb_VF_FILLALL))
@@ -628,12 +635,12 @@ TbScreenMode setup_screen_mode(TbScreenMode nmode, TbBool failsafe)
       return nmode;
     }
   }
-  TbBool hi_res = ((LbGraphicsScreenHeight() < 400) ? false : true);
+  TbBool hi_res = ((RendererScreenHeight() < 400) ? false : true);
   long lens_mem = game.applied_lens_type;
   unsigned int flg_mem = lbDisplay.DrawFlags;
   TbBool was_minimal_res = (MinimalResolutionSetup || force_video_mode_reset);
   set_pointer_graphic_none();
-  if (LbGraphicsScreenHeight() < 200)
+  if (RendererScreenHeight() < 200)
   {
       WARNLOG("Unhandled previous Screen Mode %d, Reset skipped",(int)old_mode);
   } else
@@ -645,7 +652,7 @@ TbScreenMode setup_screen_mode(TbScreenMode nmode, TbBool failsafe)
       unload_pointer_file(hi_res);
     }
     if (nmode != old_mode)
-        LbScreenReset(false);
+        RendererResetScreen(false);
     if (MinimalResolutionSetup) {
       if (hi_res) {
         FreeVResMinimal();
@@ -689,7 +696,7 @@ TbScreenMode setup_screen_mode(TbScreenMode nmode, TbBool failsafe)
     }
     if ((nmode != old_mode) || (was_minimal_res))
     {
-        if (LbScreenSetup(nmode, new_mdinfo->Width, new_mdinfo->Height, engine_palette, (hi_res ? 1 : 2), 0) < Lb_SUCCESS)
+        if (RendererSetupScreen(nmode, new_mdinfo->Width, new_mdinfo->Height, engine_palette, (hi_res ? 1 : 2), 0) < Lb_SUCCESS)
         {
           ERRORLOG("Unable to setup screen resolution %s (mode %d)", new_mdinfo->Desc,(int)nmode);
           force_video_mode_reset = true;
@@ -698,8 +705,8 @@ TbScreenMode setup_screen_mode(TbScreenMode nmode, TbBool failsafe)
     }
     load_pointer_file(hi_res);
   }
-  LbScreenClear(0);
-  LbScreenSwap();
+  RendererClearScreen(0);
+  RendererPresentFrame();
   update_screen_mode_data(new_mdinfo->Width, new_mdinfo->Height);
   if (parchment_loaded)
     reload_parchment_file(hi_res);
@@ -757,8 +764,8 @@ TbBool update_screen_mode_data(long width, long height)
 
   LbMouseChangeMoveRatio(base_mouse_sensitivity*units_per_pixel/16, base_mouse_sensitivity*units_per_pixel/16);
   LbMouseSetPointerHotspot(0, 0);
-  LbScreenSetGraphicsWindow(0, 0, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
-  LbTextSetWindow(0, 0, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
+  RendererSetViewport(0, 0, RendererScreenWidth(), RendererScreenHeight());
+  LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
   LbMouseSetup(NULL);
   return true;
 }
@@ -774,7 +781,7 @@ TbScreenMode setup_screen_mode_minimal(TbScreenMode nmode)
   SYNCDBG(4,"Setting up mode %d",(int)nmode);
   TbScreenModeInfo* new_mdinfo = LbScreenGetModeInfo(nmode);
   // we don't want to get the current display when using the "fill all" mode, we want to keep the old version
-  TbScreenMode old_mode = LbScreenActiveMode();
+  TbScreenMode old_mode = RendererActiveMode();
   TbScreenModeInfo* old_mdinfo = LbScreenGetModeInfo(old_mode);
   if (!(old_mdinfo->VideoFlags & Lb_VF_FILLALL))
   {
@@ -800,9 +807,9 @@ TbScreenMode setup_screen_mode_minimal(TbScreenMode nmode)
       return nmode;
     }
   }
-  TbBool hi_res = ((LbGraphicsScreenHeight() < 400) ? false : true);
+  TbBool hi_res = ((RendererScreenHeight() < 400) ? false : true);
   ushort flg_mem = lbDisplay.DrawFlags;
-  if (LbGraphicsScreenHeight() < 200)
+  if (RendererScreenHeight() < 200)
   {
     WARNLOG("Unhandled previous Screen Mode %d, Reset skipped",(int)old_mode);
   } else
@@ -815,7 +822,7 @@ TbScreenMode setup_screen_mode_minimal(TbScreenMode nmode)
     if ((!MinimalResolutionSetup && !hi_res) || (MinimalResolutionSetup && hi_res))
       unload_pointer_file(hi_res);
     if ((nmode != old_mode) || (force_video_mode_reset))
-      LbScreenReset(false);
+      RendererResetScreen(false);
     if (hi_res)
     {
       if (MinimalResolutionSetup) {
@@ -854,7 +861,7 @@ TbScreenMode setup_screen_mode_minimal(TbScreenMode nmode)
 
     if ((nmode != old_mode) || (force_video_mode_reset))
     {
-        if (LbScreenSetup(nmode, new_mdinfo->Width, new_mdinfo->Height, engine_palette, (hi_res ? 1 : 2), 0) < Lb_SUCCESS)
+        if (RendererSetupScreen(nmode, new_mdinfo->Width, new_mdinfo->Height, engine_palette, (hi_res ? 1 : 2), 0) < Lb_SUCCESS)
         {
           ERRORLOG("Unable to setup screen resolution %s (mode %d)", new_mdinfo->Desc,(int)nmode);
           force_video_mode_reset = true;
@@ -862,8 +869,8 @@ TbScreenMode setup_screen_mode_minimal(TbScreenMode nmode)
         }
     }
   }
-  LbScreenClear(0);
-  LbScreenSwap();
+  RendererClearScreen(0);
+  RendererPresentFrame();
   update_screen_mode_data(new_mdinfo->Width, new_mdinfo->Height);
   lbDisplay.DrawFlags = flg_mem;
   force_video_mode_reset = false;
@@ -881,11 +888,18 @@ TbScreenMode setup_screen_mode_zero(TbScreenMode nmode)
   SYNCDBG(4,"Setting up mode %d",(int)nmode);
   TbScreenModeInfo* new_mdinfo = LbScreenGetModeInfo(nmode);
   // we don't want to get the current display when using the "fill all" mode, we want to keep the old version
-  TbScreenMode old_mode = LbScreenActiveMode();
+  TbScreenMode old_mode = RendererActiveMode();
   TbScreenModeInfo* old_mdinfo = LbScreenGetModeInfo(old_mode);
   if (!(old_mdinfo->VideoFlags & Lb_VF_FILLALL))
   {
     display_id = LbGetCurrentDisplayIndex(); // get current display
+  }
+  // Skip full setup when already in the requested mode to avoid redundant
+  // surface recreation and refresh-rate redetection on a visible window.
+  if (old_mode == nmode)
+  {
+    force_video_mode_reset = true;
+    return nmode;
   }
   // Check that the desired mode is available for the current display
   if (!LbScreenIsModeAvailable(nmode, display_id))
@@ -899,7 +913,7 @@ TbScreenMode setup_screen_mode_zero(TbScreenMode nmode)
       new_mdinfo = LbScreenGetModeInfo(nmode);
   }
   LbPaletteDataFillBlack(engine_palette);
-  if (LbScreenSetup(nmode, new_mdinfo->Width, new_mdinfo->Height, engine_palette, 2, 0) < Lb_SUCCESS)
+  if (RendererSetupScreen(nmode, new_mdinfo->Width, new_mdinfo->Height, engine_palette, 2, 0) < Lb_SUCCESS)
   {
       ERRORLOG("Unable to setup screen resolution %s (mode %d)", new_mdinfo->Desc,(int)nmode);
       return Lb_SCREEN_MODE_INVALID;
@@ -967,7 +981,7 @@ TbBool switch_to_next_video_mode(void)
     if (i == current)
     {
       // we have done a full loop of switching_vidmodes[]
-      if (get_game_vidmode(i) == LbScreenActiveMode())
+      if (get_game_vidmode(i) == RendererActiveMode())
       {
         SYNCLOG("No new mode to switch to; staying with %s (mode %d).", get_vidmode_name(scrmode),(int)scrmode);
         return true; // only 1 valid video mode, and we are already in it
@@ -989,12 +1003,12 @@ TbBool switch_to_next_video_mode(void)
   {
     if (failsafe)
     {
-      show_onscreen_msg(game_num_fps * 6, "%s", get_string(856));
+      show_onscreen_msg(turns_per_second * 6, "%s", get_string(856));
     }
     else
     {
       // we managed to switch to a new mode
-      show_onscreen_msg(game_num_fps * 6, "%s", get_vidmode_name(scrmode));
+      show_onscreen_msg(turns_per_second * 6, "%s", get_vidmode_name(scrmode));
       settings.switching_vidmodes_index = i;
       save_settings();
     }

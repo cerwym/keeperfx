@@ -10,8 +10,7 @@
  *     shader → 960×544 screen.  Zero CPU per-pixel cost.
  */
 /******************************************************************************/
-#ifndef RENDERER_VITA_H
-#define RENDERER_VITA_H
+#pragma once
 
 #ifdef PLATFORM_VITA
 
@@ -40,7 +39,20 @@ public:
 
     const char* GetName() const override { return "Vita (vitaGL palette shader)"; }
     bool SupportsRuntimeSwitch() const override { return false; }
-    bool SupportsGPUPasses() const override { return true; }
+
+    BackendCapabilities GetCapabilities() const override {
+        BackendCapabilities c = {};
+        c.hasGPURenderPath        = 1;
+        c.wantsFullscreenViewport = 1;
+        c.hasGPUSprites           = 1;
+        c.supportsGPUPasses       = 1;
+        return c;
+    }
+
+    IWorldViewRenderer* GetWorldViewRenderer() override { return nullptr; }
+    IMapFadePass*        GetMapFadePass()        override { return nullptr; }
+    ITextRenderer*       GetTextRenderer()       override { return nullptr; }
+    IUIRenderer*         GetUIRenderer()         override { return nullptr; }
 
 private:
     static const int k_gameW = 640;
@@ -66,4 +78,3 @@ private:
 };
 
 #endif // PLATFORM_VITA
-#endif // RENDERER_VITA_H

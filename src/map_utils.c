@@ -137,7 +137,7 @@ void init_spiral_steps(void)
           else
             x++;
       } else
-      if (abs(x) >= abs(y))
+      if (labs(x) >= labs(y))
       {
           if (x < 0)
             y++;

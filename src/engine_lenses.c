@@ -108,7 +108,7 @@ void flicker_fix(struct EngineCoord *epos) {
     // Set this value as high as possible without seeing flickers. Lower = more culling, higher = more flickers.
     int cull_must_have_distant_xy = 256*3;
 
-    if (epos->z-cull_nearby_z < 0 && abs(epos->x)+abs(epos->y) >= cull_must_have_distant_xy) {
+    if (epos->z-cull_nearby_z < 0 && labs(epos->x)+labs(epos->y) >= cull_must_have_distant_xy) {
         epos->clip_flags = 65535;
     }
 }
@@ -209,7 +209,7 @@ void rotpers_circular(struct EngineCoord *epos, const struct M33 *matx)
     long tx = epos->x;
     long ty = epos->y;
     long tz = epos->z;
-    epos->render_distance = abs(tx) + abs(ty) + tz;
+    epos->render_distance = labs(tx) + labs(ty) + tz;
     if (tz > fade_max) {
       epos->clip_flags |= 0x0080;
     }
@@ -247,8 +247,8 @@ void rotpers_fisheye(struct EngineCoord *epos, const struct M33 *matx)
     long tx = epos->x;
     long ty = epos->y;
     long tz = epos->z;
-    long txz = LbDiagonalLength(abs(tx), abs(tz));
-    epos->render_distance = abs(LbDiagonalLength(abs(txz), abs(ty)));
+    long txz = LbDiagonalLength(labs(tx), labs(tz));
+    epos->render_distance = labs(LbDiagonalLength(labs(txz), labs(ty)));
     if (epos->render_distance > fade_max) {
         epos->clip_flags |= 0x0080;
     }

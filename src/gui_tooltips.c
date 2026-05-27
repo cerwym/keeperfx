@@ -43,7 +43,9 @@
 #include "config_settings.h"
 #include "game_legacy.h"
 #include "local_camera.h"
+#include "kfx/engine/cameras.h"
 #include "keeperfx.hpp"
+#include "renderer/RendererManager.h"
 #include "post_inc.h"
 #include <math.h>
 
@@ -246,7 +248,7 @@ TbBool setup_object_tooltips(struct Coord3d *pos)
                 update_gui_tooltip_target(thing);
                 if ((help_tip_time > 20) || (player->work_state == PSt_CreatrQuery))
                 {
-                    struct CreatureModelConfig* crconf = &game.conf.crtr_conf.model[objst->related_creatr_model];
+                    struct CreatureModelConfig* crconf = creature_stats_get(objst->related_creatr_model);
                     const struct RoomConfigStats* roomst = get_room_kind_stats(RoK_LAIR);     //TODO use a separate string for creature lair object than for lair room
                     set_gui_tooltip_box_fmt(5, "%s %s", get_string(crconf->namestr_idx), get_string(roomst->name_stridx)); // (creature) Lair
                 }
@@ -374,7 +376,7 @@ void setup_gui_tooltip(struct GuiButton* gbtn)
             k = get_players_special_digger_model(my_player_number);
         if (k > 0)
         {
-            struct CreatureModelConfig* crconf = &game.conf.crtr_conf.model[k];
+            struct CreatureModelConfig* crconf = creature_stats_get(k);
             set_gui_tooltip_box_fmt(0, "%-6s: %s", get_string(crconf->namestr_idx), text);
         }
     }
@@ -449,13 +451,13 @@ TbBool input_gameplay_tooltips(TbBool gameplay_on)
     struct PlayerInfo* player = get_my_player();
     if ((gameplay_on) && (tool_tip_time == 0) && (!busy_doing_gui))
     {
-        if (player->acamera == NULL)
+        if (!camera_is_active(player->id_number))
         {
             ERRORLOG("No active camera");
             return false;
         }
         struct Coord3d mappos;
-        if (screen_to_map(get_local_camera(player->acamera), GetMouseX(), GetMouseY(), &mappos))
+        if (screen_to_map(get_local_active_camera(player->id_number), GetMouseX(), GetMouseY(), &mappos))
         {
             if (subtile_revealed(mappos.x.stl.num,mappos.y.stl.num, player->id_number))
             {
@@ -482,7 +484,7 @@ void toggle_tooltips(void)
   {
     statstr = "off";
   }
-  show_onscreen_msg(2*game_num_fps, "Tooltips %s", statstr);
+  show_onscreen_msg(2*turns_per_second, "Tooltips %s", statstr);
   save_settings();
 }
 
@@ -543,7 +545,7 @@ void draw_tooltip_slab64k(char *tttext, long pos_x, long pos_y, long ttwidth, lo
             LbTextDrawResized(tx, ty, tx_units_per_px, tttext);
         }
     }
-    LbTextSetWindow(0/pixel_size, 0/pixel_size, MyScreenHeight/pixel_size, MyScreenWidth/pixel_size);
+    LbTextSetWindow(0, 0, RendererScreenHeight(), RendererScreenWidth());
     lbDisplay.DrawFlags = flg_mem;
 }
 
@@ -634,9 +636,11 @@ void draw_tooltip(void)
           long y_offset = scale_ui_value(86);
           tool_tip_box.pos_y = GetMouseY() + y_offset;
         }
+        UIRenderer_BeginTopOverlay();
         draw_tooltip_at(tool_tip_box.pos_x,tool_tip_box.pos_y,tool_tip_box.text);
+        UIRenderer_EndTopOverlay();
     }
-    LbTextSetWindow(0/pixel_size, 0/pixel_size, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
+    LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
 }
 
 /******************************************************************************/

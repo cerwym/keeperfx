@@ -46,6 +46,11 @@ if(PLATFORM_VITA OR PLATFORM_3DS OR PLATFORM_SWITCH OR PLATFORM_WII_U)
     set(KEEPERFX_RENDERER_OPENGL OFF CACHE BOOL "OpenGL not available on homebrew" FORCE)
 endif()
 
+option(KEEPERFX_RENDERER_VULKAN "Enable the Vulkan renderer backend (desktop only)" OFF)
+if(PLATFORM_VITA OR PLATFORM_3DS OR PLATFORM_SWITCH OR PLATFORM_WII_U)
+    set(KEEPERFX_RENDERER_VULKAN OFF CACHE BOOL "Vulkan not available on homebrew" FORCE)
+endif()
+
 option(KFX_DEBUG_MEMORY "Enable KfxAlloc guard zones and per-site tracking" OFF)
 
 # Vita-specific options
@@ -83,8 +88,24 @@ if(NOT PLATFORM_VITA AND NOT PLATFORM_3DS AND NOT PLATFORM_SWITCH AND NOT PLATFO
 endif()
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# MSVC Hot Reload (Edit and Continue)
+# Replace CMake's default /Zi with /ZI so the VS debugger can apply code changes
+# without a full restart.  Only affects Debug; Release keeps /Zi via RelWithDebInfo.
+# Skipped when ASAN is enabled: /ZI (Edit and Continue) is incompatible with
+# /fsanitize=address — ASAN requires /Zi and /INCREMENTAL:NO.
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+if(MSVC AND NOT KEEPERFX_SANITIZERS)
+    foreach(lang C CXX)
+        string(REPLACE "/Zi" "/ZI" CMAKE_${lang}_FLAGS_DEBUG "${CMAKE_${lang}_FLAGS_DEBUG}")
+        set(CMAKE_${lang}_FLAGS_DEBUG "${CMAKE_${lang}_FLAGS_DEBUG}" CACHE STRING "" FORCE)
+    endforeach()
+endif()
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Sanitizers (AddressSanitizer + UndefinedBehaviorSanitizer)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+option(KEEPERFX_TRACY "Enable Tracy profiler instrumentation (MSVC debug builds)" OFF)
+
 option(KEEPERFX_SANITIZERS "Enable AddressSanitizer (+ UBSan on GCC/Clang)" OFF)
 # ASan requires shadow memory (~1:8 address space ratio). On constrained 32-bit
 # platforms (Vita/3DS/Switch) the ~32 MB shadow region would exhaust the process

@@ -358,24 +358,10 @@ pkg/data/%.jty:
 	$(BUILD_JONTY_SPRITES_CMD)
 
 
-# ============================================================================
-# MODULAR ASSET ARCHITECTURE: Submodule-based gfx/ directory
-# ============================================================================
-# The gfx/ directory is now a git submodule, not an ephemeral clone.
-# To initialize: git submodule update --init --recursive
-# Original clone rule commented out below:
-#
-# gfx/%:: | gfx/LICENSE ;
-# gfx/LICENSE:
-# 	git clone --depth=1 https://github.com/dkfans/FXGraphics.git gfx
+gfx/%:: | gfx/LICENSE ;
 
-# Submodule existence check
-gfx/%:: | gfx/.git ;
-
-gfx/.git:
-	@echo "ERROR: gfx/ submodule not initialized"
-	@echo "Run: git submodule update --init --recursive"
-	@exit 1
+gfx/LICENSE:
+	git clone --depth=1 https://github.com/dkfans/FXGraphics.git gfx
 
 # The package is extracted only if targets does not exits; the "|" causes file dates to be ignored
 # Note that ignoring timestamp means it is possible to have outadated files after a new

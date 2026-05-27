@@ -24,6 +24,7 @@
 #include "bflib_math.h"
 #include "bflib_planar.h"
 #include "bflib_sound.h"
+#include "bflib_joyst.h"
 #include "config_creature.h"
 #include "config_effects.h"
 #include "creature_battle.h"
@@ -50,6 +51,7 @@
 #include "thing_stats.h"
 #include <math.h>
 #include "bflib_inputctrl.h"
+#include "renderer/RendererManager.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -126,7 +128,7 @@ struct Thing *create_effect_element(const struct Coord3d *pos, ThingModel eelmod
     thing->inertia_air = eestat->inertia_air;
     thing->movement_flags |= TMvF_ZeroVerticalVelocity;
     set_flag_value(thing->movement_flags, TMvF_GoThroughWalls, eestat->through_walls);
-    thing->creation_turn = game.play_gameturn;
+    thing->creation_turn = get_gameturn();
 
     if (eestat->lifespan > 0)
     {
@@ -198,13 +200,13 @@ void process_spells_affected_by_effect_elements(struct Thing *thing)
     if (creature_under_spell_effect(thing, CSAfF_Rebound))
     {
         int diamtr = 4 * thing->clipbox_size_xy / 2;
-        dturn = game.play_gameturn - thing->creation_turn;
+        dturn = get_gameturn() - thing->creation_turn;
         MapCoord cor_z_max = thing->clipbox_size_z + (thing->clipbox_size_z * game.conf.crtr_conf.exp.size_increase_on_exp * cctrl->exp_level) / 80; //effect is 25% larger than unit
 
         struct EffectElementConfigStats* eestat = get_effect_element_model_stats(TngEffElm_FlashBall1);
-        unsigned short nframes = keepersprite_frames(eestat->sprite_idx);
+        unsigned char nframes = keepersprite_frames(eestat->sprite_idx);
         GameTurnDelta dtadd = 0;
-        unsigned short cframe = game.play_gameturn % nframes;
+        unsigned char cframe = get_gameturn() % nframes;
         pos.z.val = thing->mappos.z.val;
         int radius = diamtr / 2;
         while (pos.z.val < cor_z_max + thing->mappos.z.val)
@@ -231,7 +233,7 @@ void process_spells_affected_by_effect_elements(struct Thing *thing)
         int i = cor_z_max / 64; //64 is the vertical speed of the circle.
         if (i <= 1)
           i = 1;
-        dturn = game.play_gameturn - thing->creation_turn;
+        dturn = get_gameturn() - thing->creation_turn;
         int vrange = i;
         if (dturn % (2 * i) < vrange)
             pos.z.val = thing->mappos.z.val + cor_z_max / vrange * (dturn % vrange);
@@ -466,7 +468,7 @@ TngUpdateRet update_effect_element(struct Thing *elemtng)
     i = eestats->subeffect_delay;
     if (i > 0)
     {
-      if (((elemtng->creation_turn - game.play_gameturn) % i) == 0)
+      if (((get_gameturn() - elemtng->creation_turn) % i) == 0)
       {
           struct Thing *subeff = create_effect_element(&elemtng->mappos, eestats->subeffect_model, elemtng->owner);
           if (!thing_is_invalid(subeff))
@@ -568,7 +570,7 @@ struct Thing *create_effect_generator(struct Coord3d *pos, ThingModel model, uns
     effgentng->owner = owner;
     effgentng->effect_generator.range = range;
     effgentng->mappos = *pos;
-    effgentng->creation_turn = game.play_gameturn;
+    effgentng->creation_turn = get_gameturn();
     effgentng->health = -1;
     effgentng->rendering_flags |= TRF_Invisible;
     add_thing_to_its_class_list(effgentng);
@@ -758,24 +760,31 @@ void effect_generate_effect_elements(const struct Thing *thing)
         if (thing->health == effcst->start_health)
         {
             memset(temp_pal, 63, PALETTE_SIZE);
+            RendererSetScreenTint(1.0f, 1.0f, 1.0f, 0.0f);
         } else
         if (thing->health > i)
         {
-          LbPaletteFade(temp_pal, i, Lb_PALETTE_FADE_OPEN);
+          RendererPaletteFade(temp_pal, i, Lb_PALETTE_FADE_OPEN);
+          RendererSetScreenTint(1.0f, 1.0f, 1.0f,
+              (float)(effcst->start_health - thing->health) / (float)i);
         } else
         if (thing->health == i)
         {
-          LbPaletteStopOpenFade();
-          LbPaletteSet(temp_pal);
+          RendererPaletteStopFade();
+          RendererPaletteSet(temp_pal);
+          RendererSetScreenTint(1.0f, 1.0f, 1.0f, 1.0f);
         } else
         if (thing->health > 0)
         {
-            LbPaletteFade(engine_palette, 8, Lb_PALETTE_FADE_OPEN);
+            RendererPaletteFade(engine_palette, 8, Lb_PALETTE_FADE_OPEN);
+            RendererSetScreenTint(1.0f, 1.0f, 1.0f,
+                (float)thing->health / (float)i);
         } else
         {
             player = get_my_player();
             PaletteSetPlayerPalette(player, engine_palette);
-            LbPaletteStopOpenFade();
+            RendererPaletteStopFade();
+            RendererSetScreenTint(0.0f, 0.0f, 0.0f, 0.0f);
         }
         break;
     }
@@ -816,8 +825,7 @@ TngUpdateRet process_effect_generator(struct Thing *thing)
         long deviation_mag = UNSYNC_RANDOM(thing->effect_generator.range + 1);
         struct Coord3d pos;
         set_coords_to_cylindric_shift(&pos, &thing->mappos, deviation_mag, deviation_angle, 0);
-        SYNCDBG(18,"The %s creates effect at (%d,%d,%d)",
-            thing_model_name(thing),(int)pos.x.val,(int)pos.y.val,(int)pos.z.val);
+        SYNCDBG(18,"The %s creates effect %d at (%d,%d,%d)", thing_model_name(thing), egenstat->effect_model, (int)pos.x.val,(int)pos.y.val,(int)pos.z.val);
         struct Thing* elemtng = create_used_effect_or_element(&pos, egenstat->effect_model, thing->owner, thing->index);
         TRACE_THING(elemtng);
         if (thing_is_invalid(elemtng))
@@ -879,7 +887,7 @@ struct Thing *create_effect(const struct Coord3d *pos, ThingModel effmodel, Play
         ERRORDBG(8,"Should be able to allocate effect %d (%s) for player %d, but failed.",(int)effmodel,effect_code_name(effmodel),(int)owner);
         return INVALID_THING;
     }
-    thing->creation_turn = game.play_gameturn;
+    thing->creation_turn = get_gameturn();
     thing->class_id = TCls_Effect;
     thing->model = effmodel;
     thing->mappos.x.val = pos->x.val;
@@ -1215,7 +1223,7 @@ void word_of_power_affecting_area(struct Thing *efftng, struct Thing *tngsrc, st
     long stl_ymin;
     long stl_ymax;
     // Effect causes area damage only on its birth turn
-    if (efftng->creation_turn != game.play_gameturn) {
+    if (efftng->creation_turn != get_gameturn()) {
         return;
     }
 
@@ -1618,7 +1626,7 @@ struct Thing *create_price_effect(const struct Coord3d *pos, long plyr_idx, long
     struct Thing* elemtng = create_effect_element(pos, TngEffElm_Price, plyr_idx);
     TRACE_THING(elemtng);
     if (!thing_is_invalid(elemtng)) {
-        elemtng->price_effect.number = abs(price);
+        elemtng->price_effect.number = labs(price);
     }
     return elemtng;
 }

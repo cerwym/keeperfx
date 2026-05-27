@@ -178,6 +178,12 @@
             "xstring": "c"
         },
         "git.ignoreLimitWarning": true,
-        "powershell.cwd": "vita-hardware-acceleration"
+        "powershell.cwd": "vita-hardware-acceleration",
+        "chat.tools.terminal.autoApprove": {
+            "/^Set-Content -Path C:\\\\Temp\\\\build\\.bat -Value \"@call `\"C:\\\\Program Files\\\\Microsoft Visual Studio\\\\18\\\\Community\\\\VC\\\\Auxiliary\\\\Build\\\\vcvars32\\.bat`\" >nul 2>&1`r`ncmake --build --preset x86-windows-static-debug > C:\\\\Temp\\\\kfx_build\\.log 2>&1\" -Encoding ascii; Start-Process cmd\\.exe -ArgumentList \"/c C:\\\\Temp\\\\build\\.bat\" -Wait -NoNewWindow; \\$lines = Get-Content C:\\\\Temp\\\\kfx_build\\.log; \\$errors = \\$lines \\| Select-String \"error C\\|error LNK\\|fatal error\"; if \\(\\$errors\\) \\{ \\$errors \\| Select-Object -Last 12 \\} else \\{ \"BUILD OK\"; \\$lines \\| Select-Object -Last 3 \\}$/": {
+                "approve": true,
+                "matchCommandLine": true
+            }
+        }
     }
 }

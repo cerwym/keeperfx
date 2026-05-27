@@ -19,12 +19,21 @@
  *       StepFadeIn(step)  → engine_redraw_map_fade_in(step)   → map_fade_in(step)
  *       StepFadeOut(step) → engine_redraw_map_fade_out(step)  → map_fade_out(step)
  *
- * @par Future GPU implementation:
- *       StepFadeIn/Out → render-to-texture capture + UV-warp fragment shader
+ * @par GPU implementation (GLMapFadePass):
+ *       StepFadeIn/Out: on first call captures both views via prepare_map_fade_buffers(),
+ *       decodes palette to RGBA, uploads two GL_RGBA8 textures.  Sets a pending-step
+ *       flag so EndFrame() can call RenderGPUComposePass() to composite the wipe at
+ *       native resolution using MAP_FADE_FRAG_SHADER (UV-warp + additive RGB blend).
  */
 /******************************************************************************/
-#ifndef IMAP_FADE_PASS_H
-#define IMAP_FADE_PASS_H
+#pragma once
+
+#include <stdint.h>
+
+// Forward declarations — avoid pulling in RenderGraph and UICommands headers
+// into software/vita backends that don't use them.
+class RenderGraph;
+struct IRMapFadeCmd;
 
 /******************************************************************************/
 
@@ -36,16 +45,42 @@ public:
      *  On step == 0, captures the source and destination frames.
      *  @param step  Current step value in [0, 32].
      *  @return      Next step value (step + 4, capped at 32). */
-    virtual long StepFadeIn(long step) = 0;
+    virtual int32_t StepFadeIn(int32_t step) = 0;
 
     /** Render one fade-out frame (3D view → parchment).
      *  On step == 32, captures the source and destination frames.
      *  @param step  Current step value in [0, 32].
      *  @return      Next step value (step - 4, capped at 0). */
-    virtual long StepFadeOut(long step) = 0;
+    virtual int32_t StepFadeOut(int32_t step) = 0;
 
     virtual const char* GetName() const = 0;
+
+    /** Notify the pass of the current OS-window dimensions.
+     *  GPU backends update render target sizes here.
+     *  Default: no-op. */
+    virtual void SetScreenSize(int /*w*/, int /*h*/) {}
+
+    /** Called by RendererOpenGL::EndFrame() (game thread) after the FrameState
+     *  snapshot and before the RenderGraph flip.
+     *
+     *  GPU implementations push an IRMapFadeCmd to the graph's write slot so
+     *  the render thread can composite the wipe quad via ExecuteFromIR().
+     *  When no transition is active the implementation calls ClearMapFadeCmd().
+     *
+     *  Software implementations leave this as a no-op — they write directly
+     *  to WScreen inside StepFadeIn/StepFadeOut. */
+    virtual void FlushToRenderGraph(RenderGraph& /*graph*/) {}
+
+    /** Called by RendererOpenGL::EndFrame_GL() (render thread) when the
+     *  RenderGraph has a map-fade command for this frame.
+     *
+     *  GPU implementations capture both views (if cmd.capture_pending) and
+     *  draw the wipe quad.  Software implementations leave this as a no-op. */
+    virtual void ExecuteFromIR(const IRMapFadeCmd& /*cmd*/) {}
+
+    /** Returns true when this pass can run the transition at any resolution,
+     *  not just the original 320×200.  Software returns false; GPU returns true. */
+    virtual bool SupportsNativeResolution() const { return false; }
 };
 
 /******************************************************************************/
-#endif // IMAP_FADE_PASS_H

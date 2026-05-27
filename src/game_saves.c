@@ -19,6 +19,7 @@
 #include "kfx_memory.h"
 #include "pre_inc.h"
 #include "game_saves.h"
+#include "kfx/engine/cameras.h"
 
 #include "globals.h"
 #include "bflib_basics.h"
@@ -30,6 +31,7 @@
 #include "config_creature.h"
 #include "config_compp.h"
 #include "custom_sprites.h"
+#include "renderer/RendererManager.h"
 #include "front_simple.h"
 #include "frontend.h"
 #include "frontmenu_ingame_tabs.h"
@@ -125,6 +127,10 @@ TbBool save_game_chunks(TbFileHandle fhandle, struct CatalogueEntry *centry)
         cleanup_serialized_data();
     }
 
+    // Adding camera state chunk
+    if (camera_write_chunk(fhandle))
+        chunks_done |= SGF_CameraState;
+
     if (chunks_done != SGF_SavedGame)
         return false;
     return true;
@@ -151,7 +157,7 @@ TbBool save_packet_chunks(TbFileHandle fhandle,struct CatalogueEntry *centry)
             chunks_done |= SGF_InfoBlock;
     }
     // If it's not start of a level, save progress data too
-    if (game.play_gameturn != 0)
+    if (get_gameturn() != 0)
     {
         { // Game data chunk
             hdr.id = SGC_GameOrig;
@@ -188,7 +194,7 @@ int load_game_chunks(TbFileHandle fhandle, struct CatalogueEntry *centry)
             if (load_catalogue_entry(fhandle, &hdr, centry))
             {
                 chunks_done |= SGF_InfoBlock;
-                if (!change_campaign(centry->campaign_fname)) {
+                if (!change_campaign(CampgnT_Default, centry->campaign_fname)) {
                     ERRORLOG("Unable to load campaign");
                     return GLoad_Failed;
                 }
@@ -197,7 +203,10 @@ int load_game_chunks(TbFileHandle fhandle, struct CatalogueEntry *centry)
                 load_map_string_data(campgn, centry->level_num, get_level_fgroup(centry->level_num));
                 // Load configs which may have per-campaign part, and even be modified within a level
                 recheck_all_mod_exist();
+                WorldViewRenderer_ClearKeeperSpriteAtlas();
                 init_custom_sprites(centry->level_num);
+                RendererNotifyCustomSpritesReloaded();
+                WorldViewRenderer_PreloadKeeperSpriteAtlas();
                 load_stats_files();
                 check_and_auto_fix_stats();
                 init_creature_scores();
@@ -280,6 +289,12 @@ int load_game_chunks(TbFileHandle fhandle, struct CatalogueEntry *centry)
                 }
             }
             break;
+        case SGC_CameraState:
+            if (camera_read_chunk(fhandle, hdr.len))
+                chunks_done |= SGF_CameraState;
+            else
+                WARNLOG("Could not read CameraState chunk");
+            break;
         default:
             WARNLOG("Unrecognized chunk, ID = %08lx", hdr.id);
             if (LbFileSeek(fhandle, hdr.len, Lb_FILE_SEEK_CURRENT) < 0)
@@ -290,6 +305,19 @@ int load_game_chunks(TbFileHandle fhandle, struct CatalogueEntry *centry)
     if ((chunks_done & SGF_SavedGame) == SGF_SavedGame)
     {
         // Update interface items
+        update_trap_tab_to_config();
+        update_room_tab_to_config();
+        return GLoad_SavedGame;
+    }
+    // Fallback: if camera chunk missing (old save), reset cameras to defaults
+    if ((chunks_done & SGF_CameraState) == 0)
+    {
+        WARNLOG("CameraState chunk missing in save file; resetting cameras to defaults");
+        for (int pi = 0; pi < PLAYERS_COUNT; pi++)
+            camera_init_player(pi);
+    }
+    if ((chunks_done & (SGF_SavedGame & ~SGF_CameraState)) == (SGF_SavedGame & ~SGF_CameraState))
+    {
         update_trap_tab_to_config();
         update_room_tab_to_config();
         return GLoad_SavedGame;
@@ -407,7 +435,7 @@ TbBool load_game(long slot_num)
     }
     my_player_number = game.local_plyr_idx;
     LbFileClose(fh);
-    snprintf(game.campaign_fname, sizeof(game.campaign_fname), "%s", campaign.fname);
+    snprintf(game.campaign_fname, sizeof(game.campaign_fname), "%.*s", (int)(sizeof(game.campaign_fname) - 1), campaign.fname);
     reinit_level_after_load();
     output_message(SMsg_GameLoaded, 0);
     panel_map_update(0, 0, game.map_subtiles_x+1, game.map_subtiles_y+1);
@@ -596,7 +624,7 @@ TbBool continue_game_available(void)
         WARNLOG("Can't read continue game file head");
         return false;
     }
-    if (!change_campaign(cmpgn_fname))
+    if (!change_campaign(CampgnT_Campaign, cmpgn_fname))
     {
         ERRORLOG("Unable to load campaign");
         return false;
@@ -627,7 +655,7 @@ short load_continue_game(void)
         return false;
     }
     cmpgn_fname[CAMPAIGN_FNAME_LEN-1] = '\0';
-    if (!change_campaign(cmpgn_fname))
+    if (!change_campaign(CampgnT_Campaign, cmpgn_fname))
     {
         ERRORLOG("Unable to load campaign");
         return false;
@@ -646,7 +674,7 @@ short load_continue_game(void)
     // Restoring intralevel data
     read_continue_game_part((unsigned char *)&intralvl, sizeof(struct Game),
         sizeof(struct IntralevelData));
-    snprintf(game.campaign_fname, sizeof(game.campaign_fname), "%s", campaign.fname);
+    snprintf(game.campaign_fname, sizeof(game.campaign_fname), "%.*s", (int)(sizeof(game.campaign_fname) - 1), campaign.fname);
     update_extra_levels_visibility();
     JUSTMSG("Continued level %d from %s", lvnum, campaign.name);
     return true;
