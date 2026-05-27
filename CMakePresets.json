@@ -302,7 +302,8 @@
             "cacheVariables": {
                 "CMAKE_EXPORT_COMPILE_COMMANDS": "on",
                 "CMAKE_BUILD_TYPE": "Release",
-                "VCPKG_TARGET_TRIPLET": "x86-mingw-cross"
+                "VCPKG_TARGET_TRIPLET": "x86-mingw-cross",
+                "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/build/cmake/toolchains/mingw32.cmake"
             }
         },
 
@@ -314,7 +315,8 @@
             "inherits": [ "cross-base", "Debug" ],
             "cacheVariables": {
                 "CMAKE_EXPORT_COMPILE_COMMANDS": "on",
-                "VCPKG_TARGET_TRIPLET": "x86-mingw-cross"
+                "VCPKG_TARGET_TRIPLET": "x86-mingw-cross",
+                "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/build/cmake/toolchains/mingw32.cmake"
             }
         },
 
@@ -327,7 +329,8 @@
             "cacheVariables": {
                 "CMAKE_EXPORT_COMPILE_COMMANDS": "on",
                 "CMAKE_BUILD_TYPE": "Release",
-                "VCPKG_TARGET_TRIPLET": "x64-mingw-cross"
+                "VCPKG_TARGET_TRIPLET": "x64-mingw-cross",
+                "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/build/cmake/toolchains/mingw64.cmake"
             }
         },
 
@@ -339,7 +342,8 @@
             "inherits": [ "cross-base", "Debug" ],
             "cacheVariables": {
                 "CMAKE_EXPORT_COMPILE_COMMANDS": "on",
-                "VCPKG_TARGET_TRIPLET": "x64-mingw-cross"
+                "VCPKG_TARGET_TRIPLET": "x64-mingw-cross",
+                "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/build/cmake/toolchains/mingw64.cmake"
             }
         },
 

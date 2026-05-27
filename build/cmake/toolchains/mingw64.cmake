@@ -8,5 +8,9 @@ set(CMAKE_CXX_COMPILER ${TOOLCHAIN_PREFIX}-g++)
 set(CMAKE_RC_COMPILER  ${TOOLCHAIN_PREFIX}-windres)
 set(CMAKE_FIND_ROOT_PATH /usr/${TOOLCHAIN_PREFIX})
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
-set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
-set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+# BOTH for LIBRARY and INCLUDE: vcpkg cmake-wrappers use explicit absolute
+# paths to vcpkg_installed with NO_DEFAULT_PATH. With ONLY mode cmake re-roots
+# these absolute paths through the sysroot (producing invalid paths). BOTH lets
+# cmake also search the direct absolute path, so vcpkg package discovery works.
+set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY BOTH)
+set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE BOTH)
