@@ -228,7 +228,7 @@ extern "C" int platform_create_gl_context(void *sdl_window)
     }
 
     // Set no V-sync, it's fucking with frame ordering.
-    int vsync_result = SDL_GL_SetSwapInterval(0);
+    SDL_GL_SetSwapInterval(0);
 
     // The window was created with SDL_WINDOW_HIDDEN so that SDL2's internal
     // SetPixelFormat does not trigger a visible DWM composition-pipeline

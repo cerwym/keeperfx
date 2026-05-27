@@ -67,7 +67,20 @@ TARGET_TESTARCH_x86 =   \$(TARGET_TESTARCH_COMMON_32) LJ_TARGET_X86 1 LJ_ABI_WIN
 TARGET_TESTARCH_x64 =   \$(TARGET_TESTARCH_COMMON_64) LJ_TARGET_X64 'LJ_FR2 1'
 
 ifeq (${LJARCH},x86)
-PREBUILD_BUILDVM_CMD = \$(MAKE) -C src host/buildvm-x86\$(EXECUTABLE_SUFFIX) \$(COMMON_OPTIONS) \$(BUILD_OPTIONS) BUILDVM_T=host/buildvm-x86\$(EXECUTABLE_SUFFIX) "TARGET_TESTARCH=\$(TARGET_TESTARCH_x86)" "HOST_CC=gcc" "HOST_XCFLAGS=-I. -DLUAJIT_OS=LUAJIT_OS_WINDOWS -malign-double"
+# Build a PE-capable buildvm-x86 using the native host compiler.
+# We must NOT inherit TARGET_SYS=Windows, LDFLAGS, LIBS, CC, or CFLAGS from
+# the parent make invocation (MinGW cross-compile env) — those would cause the
+# native Linux ld to try to link Windows DLL stubs.
+# Do NOT pass LJARCH=x86 either: it triggers -march=i386 in CCOPTS which is
+# wrong for a native 64-bit host tool. Set HOST_CFLAGS explicitly instead.
+PREBUILD_BUILDVM_CMD = \$(MAKE) -C src host/buildvm-x86\$(EXECUTABLE_SUFFIX) \
+  BUILDVM_T=host/buildvm-x86\$(EXECUTABLE_SUFFIX) \
+  TARGET_SYS=Linux \
+  LDFLAGS= LIBS= CFLAGS= CPPFLAGS= CC=gcc \
+  "TARGET_TESTARCH=\$(TARGET_TESTARCH_x86)" \
+  "HOST_CC=gcc" \
+  "HOST_CFLAGS=-DLUAJIT_TARGET=LUAJIT_ARCH_x86" \
+  "HOST_XCFLAGS=-I. -DLUAJIT_OS=LUAJIT_OS_WINDOWS -malign-double"
 PREBUILD_BUILDVM_X_ARG = BUILDVM_X=src/host/buildvm-x86\$(EXECUTABLE_SUFFIX)
 else
 PREBUILD_BUILDVM_CMD = @:
