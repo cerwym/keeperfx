@@ -78,6 +78,8 @@ static bool                 s_rebuild_deferred    = false;
 // Software-mode sprite handle registry (GL mode uses s_spriteAtlas->GetHandle instead)
 static std::unordered_map<const TbSprite*, SpriteHandle> s_sprite_to_handle;
 static uint32_t             s_software_next_handle = 0;
+// Bumped whenever sprite/font sheet pointers can be invalidated by reload.
+static uint32_t             s_text_font_generation = 1;
 
 /******************************************************************************/
 
@@ -90,6 +92,7 @@ void RendererNotifyTexturesReloaded()
 void RendererNotifySpritesReloaded()
 {
     s_gui_sprites_dirty = true;
+    ++s_text_font_generation;
 #ifdef RENDERER_OPENGL_ENABLED
     // Schedule a deferred atlas rebuild.  The actual Rebuild() call is deferred to
     // RendererDrainDeferredAtlasRebuild(), which is called at the top of EndFrame()
@@ -134,6 +137,7 @@ void RendererDrainDeferredAtlasRebuild()
 /** Append pointer_sprites into the live atlas after load_pointer_file(). */
 void RendererNotifyPointerSpritesLoaded()
 {
+    ++s_text_font_generation;
 #ifdef RENDERER_OPENGL_ENABLED
     if (s_spriteAtlas && pointer_sprites && num_sprites(pointer_sprites) > 0) {
         int32_t before = (int32_t)s_spriteAtlas->GetRegisteredCount();
@@ -148,6 +152,7 @@ void RendererNotifyPointerSpritesLoaded()
 /** Append frontend_sprite into the live atlas after frontend_load_data(). */
 void RendererNotifyFrontendSpritesLoaded()
 {
+    ++s_text_font_generation;
 #ifdef RENDERER_OPENGL_ENABLED
     if (s_spriteAtlas && frontend_sprite && num_sprites(frontend_sprite) > 0) {
         int32_t before = (int32_t)s_spriteAtlas->GetRegisteredCount();
@@ -165,6 +170,7 @@ static void register_sheet_software(const struct TbSpriteSheet* sheet); // fwd
  *  Handles both GL (GLSpriteAtlas) and software (IUIRenderer handle table) modes. */
 void RendererNotifyLandviewFlagLoaded()
 {
+    ++s_text_font_generation;
 #ifdef RENDERER_OPENGL_ENABLED
     if (s_spriteAtlas && map_flag && num_sprites(map_flag) > 0) {
         int32_t before = (int32_t)s_spriteAtlas->GetRegisteredCount();
@@ -181,6 +187,7 @@ void RendererNotifyLandviewFlagLoaded()
 
 void RendererNotifySwipeSpritesLoaded()
 {
+    ++s_text_font_generation;
 #ifdef RENDERER_OPENGL_ENABLED
     if (s_spriteAtlas && swipe_sprites && num_sprites(swipe_sprites) > 0) {
         int32_t before = (int32_t)s_spriteAtlas->GetRegisteredCount();
@@ -310,6 +317,7 @@ void RendererSchedulePiPRender(struct Camera* cam, int x, int y, int w, int h)
  *  Call this after every init_custom_sprites() so per-level icons are available. */
 void RendererNotifyCustomSpritesReloaded()
 {
+    ++s_text_font_generation;
 #ifdef RENDERER_OPENGL_ENABLED
     if (s_spriteAtlas && custom_sprites && num_sprites(custom_sprites) > 0) {
         int32_t before = (int32_t)s_spriteAtlas->GetRegisteredCount();
@@ -686,6 +694,7 @@ void RendererShutdown()
 #endif
     s_sprite_to_handle.clear();
     s_software_next_handle = 0;
+    ++s_text_font_generation;
     if (s_textRenderer)
     {
         delete s_textRenderer;
@@ -1059,6 +1068,11 @@ void RendererFlushPendingSpriteAtlas(void)
     if (s_spriteAtlas)
         s_spriteAtlas->FlushPendingGL();
 #endif
+}
+
+uint32_t RendererGetTextFontGeneration(void)
+{
+    return s_text_font_generation;
 }
 
 /******************************************************************************/

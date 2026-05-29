@@ -252,6 +252,11 @@ void RendererNotifyTexturesReloaded(void);
  *  Safe to call at any time; no-op if no GL renderer is active. */
 void RendererNotifySpritesReloaded(void);
 
+/** Monotonic generation for text font pointer validity across IR frames.
+ *  Incremented when sprite/font sheets are reloaded so render-thread text
+ *  commands can reject stale non-owning font pointers captured pre-reload. */
+uint32_t RendererGetTextFontGeneration(void);
+
 /** Append per-level custom_sprites into the live atlas after init_custom_sprites().
  *  Does NOT reinit the atlas — existing gui_panel_sprites / button_sprites entries
  *  are preserved.  Safe to call whenever custom_sprites is rebuilt. */

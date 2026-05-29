@@ -806,29 +806,21 @@ void RendererOpenGL::EndFrame()
                 wui.cursor_pointers.Size(), wui.cursor_hands.Size());
     }
 
-    const bool has_ui_commands    = m_render_graph.GetWriteUIBuffers().HasAnyCommands();
-    const bool has_world_commands = m_world_renderer && m_world_renderer->HasPendingCommands();
-    const bool has_map_fade_cmd   = m_render_graph.HasWriteMapFadeCmd();
-
-    if (RendererIsFadeCachePreserved() ||
-        (!has_ui_commands && !has_world_commands && !has_map_fade_cmd))
+    if (RendererIsFadeCachePreserved())
     {
-        // Palette-fade loop OR a spurious second present with no UI submissions
-        // and no map-fade transition: preserve the render thread's read-side IR
-        // unchanged so it re-draws the same UI/world geometry as the last real
-        // frame.  Only update FrameState so palette darkening / tint changes
-        // are visible.
-        //
-        // Excluded when a map-fade cmd is pending: PVM_ParchFadeIn/Out frames
-        // submit no UI sprites, but we must Flip() with empty write buffers so
-        // the render thread reads fresh (empty) UI data.  Without this, stale
-        // quads from the last PVM_ParchmentView frame (sidebar background,
-        // minimap) would replay over the map-fade blend every transition frame.
+        // Palette-fade loop: preserve the render thread's read-side IR unchanged
+        // so it re-draws the same UI/world geometry as the last real frame.
+        // Only update FrameState so palette darkening / tint changes are visible.
         SYNCDBG(1, "EndFrame: UpdateFrameState (no flip) — preserving previous UI");
         m_render_graph.UpdateFrameState(m_rt_frame_state);
     }
     else
     {
+        // IMPORTANT: always flip on non-fade frames, even when write-side
+        // command buffers are empty. Preserving stale read-side IR across
+        // transitions can replay old text commands that carry dangling font
+        // pointers after resource reload/teardown (seen during quit).
+        //
         // Normal frame: flip sub-renderer command buffers so the render thread
         // reads from stable render-side copies while the game thread builds N+1.
         if (m_world_renderer)

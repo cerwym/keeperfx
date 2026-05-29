@@ -13,6 +13,7 @@
 #include "renderer/opengl/GLFontAtlas.h"
 #include "renderer/opengl/GLDbcFontAtlas.h"
 #include "renderer/opengl/GLShaders.h"
+#include "renderer/RendererManager.h"
 #include "bflib_sprfnt.h"
 #include "bflib_video.h"
 #include "frontend.h"       // frontend_font[], winfont, font_sprites, frontstory_font
@@ -308,6 +309,7 @@ TbBool GLTextRenderer::DrawTextResized(int32_t posx, int32_t posy, int32_t units
         cmd.font         = m_font;
         cmd.dbc_font     = m_dbc_font;
         cmd.dbc_enabled  = (uint8_t)m_dbc_enabled;
+        cmd.font_generation = RendererGetTextFontGeneration();
         cmd.dbc_colour0  = m_dbc_colour0;
         cmd.dbc_colour1  = m_dbc_colour1;
         cmd.SetText(text);
@@ -321,7 +323,9 @@ TbBool GLTextRenderer::DrawTextResized(int32_t posx, int32_t posy, int32_t units
                           lbDisplay.DrawColour, lbDisplay.DrawFlags,
                           text,
                           m_font,
-                          m_dbc_font, m_dbc_colour0, m_dbc_colour1, m_dbc_enabled });
+                          m_dbc_font,
+                          RendererGetTextFontGeneration(),
+                          m_dbc_colour0, m_dbc_colour1, m_dbc_enabled });
     return true;
 }
 
@@ -344,9 +348,15 @@ void GLTextRenderer::ExecuteTextFromIR(const TextCommandBuffers& cmds)
     // because an empty IR buffer does not mean m_pending is empty.
     if (cmds.draws.Size() > 0)
     {
+        const uint32_t current_gen = RendererGetTextFontGeneration();
         m_pending.reserve(m_pending.size() + cmds.draws.Size());
         for (const IRTextDrawCmd& c : cmds.draws)
         {
+            // Drop stale commands that captured non-owning font pointers before
+            // a sprite/font reload or renderer teardown transition.
+            if (c.font_generation != current_gen)
+                continue;
+
             m_pending.push_back({
                 c.pos_x, c.pos_y, c.units_per_px,
                 c.justify_x, c.justify_y, c.justify_w,
@@ -355,6 +365,7 @@ void GLTextRenderer::ExecuteTextFromIR(const TextCommandBuffers& cmds)
                 std::string(c.text),
                 reinterpret_cast<const struct TbSpriteSheet*>(c.font),
                 reinterpret_cast<const struct AsianFont*>(c.dbc_font),
+                c.font_generation,
                 c.dbc_colour0, c.dbc_colour1,
                 (TbBool)c.dbc_enabled
             });
@@ -553,8 +564,10 @@ void GLTextRenderer::Draw()
                   return a.font < b.font;
               });
 
+    const uint32_t current_gen = RendererGetTextFontGeneration();
     for (const DeferredDraw& d : m_pending)
     {
+        if (d.font_generation != current_gen) continue;
         if (!d.font) continue;
 
         if (d.dbc_enabled && d.dbc_font)

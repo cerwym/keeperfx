@@ -104,6 +104,7 @@ private:
         std::string text;
         const struct TbSpriteSheet* font;   // Active font captured at call time
         const struct AsianFont* dbc_font;   // DBC font (nullptr when DBC off)
+        uint32_t font_generation;           // RendererGetTextFontGeneration() snapshot
         long  dbc_colour0;                  // DBC face colour
         long  dbc_colour1;                  // DBC shadow colour
         TbBool dbc_enabled;                 // Whether DBC is active
