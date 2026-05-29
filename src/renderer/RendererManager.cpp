@@ -431,6 +431,18 @@ static IWorldViewRenderer* create_world_view_renderer(RendererType type)
         WARNLOG("RendererManager: GLWorldViewRenderer requested but no RendererOpenGL active");
     }
 #endif
+#ifdef RENDERER_VULKAN_ENABLED
+    if (type == RENDERER_VULKAN)
+    {
+        RendererVulkan* vkr = static_cast<RendererVulkan*>(s_activeRenderer);
+        if (vkr)
+        {
+            IWorldViewRenderer* wr = vkr->CreateVKWorldViewRenderer();
+            if (wr) return wr;
+        }
+        WARNLOG("RendererManager: VKWorldViewRenderer requested but none available");
+    }
+#endif
     (void)type;
     return new SoftwareWorldViewRenderer();
 }
@@ -523,6 +535,22 @@ static IUIRenderer* create_ui_renderer(RendererType type)
             // CreateGLUIRenderer returned nullptr — fall through to software
         }
         WARNLOG("RendererManager: GLUIRenderer requested but no RendererOpenGL active");
+    }
+#endif
+#ifdef RENDERER_VULKAN_ENABLED
+    if (type == RENDERER_VULKAN)
+    {
+        RendererVulkan* vkr = static_cast<RendererVulkan*>(s_activeRenderer);
+        if (vkr)
+        {
+            IUIRenderer* vkui = vkr->CreateVKUIRenderer();
+            if (vkui)
+            {
+                s_softwareUIRenderer = nullptr;
+                return vkui;
+            }
+        }
+        WARNLOG("RendererManager: VKUIRenderer requested but none available");
     }
 #endif
     (void)type;

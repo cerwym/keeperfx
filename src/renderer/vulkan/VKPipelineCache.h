@@ -89,6 +89,9 @@ public:
     /** Return the shared pipeline layout (all passes use the same push-constant layout). */
     VkPipelineLayout GetLayout() const { return m_layout; }
 
+    /** Return the shared descriptor set layout (one combined-image-sampler per set). */
+    VkDescriptorSetLayout GetDescriptorSetLayout() const { return m_desc_layout; }
+
     bool IsReady() const { return m_ready; }
 
 private:
