@@ -77,10 +77,6 @@ bool RendererVulkan::Init()
     }
     m_surface = VK_NULL_HANDLE; // now owned by VKDevice
 
-    // Dummy CPU framebuffer (software rasteriser writes here; ignored on GPU path).
-    m_dummy_pitch = m_width;
-    m_dummy_fb.assign((size_t)m_width * (size_t)m_height, 0);
-
 #ifdef RENDERER_VK_SHADERC_AVAILABLE
     // ---- GPU path init -------------------------------------------------------
 
@@ -224,7 +220,6 @@ void RendererVulkan::Shutdown()
 #endif
 
     m_device.Shutdown();
-    m_dummy_fb.clear();
     m_frame_begun  = false;
     m_needs_resize = false;
     SYNCLOG("RendererVulkan: shutdown");
@@ -247,8 +242,6 @@ bool RendererVulkan::BeginFrame()
             m_width  = w;
             m_height = h;
             m_device.RecreateSwapchain(w, h);
-            m_dummy_pitch = w;
-            m_dummy_fb.assign((size_t)w * (size_t)h, 0);
         }
         m_needs_resize = false;
     }
@@ -672,9 +665,11 @@ void RendererVulkan::shutdown_shared_textures()
 
 uint8_t* RendererVulkan::LockFramebuffer(int* out_pitch)
 {
-    if (out_pitch)
-        *out_pitch = m_dummy_pitch;
-    return m_dummy_fb.empty() ? nullptr : m_dummy_fb.data();
+    // VK always uses the GPU path (hasGPURenderPath=1); RendererLockScreen()
+    // never calls this. Return nullptr so any caller that bypasses the GPU-path
+    // check fails visibly rather than silently discarding pixel writes.
+    if (out_pitch) *out_pitch = 0;
+    return nullptr;
 }
 
 void RendererVulkan::UnlockFramebuffer()

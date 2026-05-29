@@ -33,7 +33,6 @@
 #endif
 
 #include <vulkan/vulkan.h>
-#include <vector>
 #include <atomic>
 
 /******************************************************************************/
@@ -107,8 +106,6 @@ private:
     uint32_t m_rt_image_index      = 0;
 
     // ---- Dummy CPU framebuffer (software rasteriser writes here, ignored) ----
-    std::vector<uint8_t> m_dummy_fb;
-    int                  m_dummy_pitch = 0;
 
 #ifdef RENDERER_VK_SHADERC_AVAILABLE
     // ---- shaderc runtime compiler ----
