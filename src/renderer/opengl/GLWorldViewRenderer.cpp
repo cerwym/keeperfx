@@ -937,6 +937,7 @@ bool GLWorldViewRenderer::init_flatpoly_shader()
 
 void GLWorldViewRenderer::BeginHandSpriteRendering()
 {
+    ASSERT_RENDER_THREAD();
     m_saved_screen_w   = m_draw_screen_w;
     m_saved_screen_h   = m_draw_screen_h;
     m_saved_sprite_z   = m_current_sprite_z;
@@ -952,6 +953,7 @@ void GLWorldViewRenderer::BeginHandSpriteRendering()
 
 void GLWorldViewRenderer::EndHandSpriteRendering()
 {
+    ASSERT_RENDER_THREAD();
     m_draw_screen_w    = m_saved_screen_w;
     m_draw_screen_h    = m_saved_screen_h;
     m_current_sprite_z = m_saved_sprite_z;
@@ -967,8 +969,35 @@ int GLWorldViewRenderer::SubmitKeeperSprite(
     const unsigned char* data, int src_w, int src_h,
     unsigned int draw_flags, const unsigned char* remap)
 {
-    return render_keepersprite_gpu(dst_x, dst_y, dst_w, dst_h,
-                                   data, src_w, src_h, draw_flags, remap);
+    ASSERT_GAME_THREAD();
+
+    if (src_w <= 0 || src_h <= 0 || src_w > k_kspr_decode_dim || src_h > k_kspr_decode_dim) {
+        static int s_dim = 0;
+        if (s_dim++ < 20)
+            WARNLOG("SubmitKeeperSprite: invalid sprite dimensions %dx%d (max %d) — dropped",
+                    src_w, src_h, k_kspr_decode_dim);
+        return 1;
+    }
+    if (dst_w <= 0 || dst_h <= 0) return 1;
+
+    // Choose the write target: PiP capture goes to m_pip_kspr_ir, normal to m_kspr_ir.
+    auto& kspr_buf = m_pip_capture ? m_pip_kspr_ir : m_kspr_ir;
+
+    IRWorldKeeperSpriteCmd cmd;
+    cmd.dst_x         = dst_x;
+    cmd.dst_y         = dst_y;
+    cmd.dst_w         = dst_w;
+    cmd.dst_h         = dst_h;
+    cmd.src_w         = src_w;
+    cmd.src_h         = src_h;
+    cmd.draw_flags    = draw_flags;
+    cmd.data          = data;
+    cmd.remap         = remap;
+    cmd.z_ndc         = m_current_sprite_z;
+    cmd.owner         = (int8_t)WorldViewRenderer_GetCurrentSpriteOwner();
+    cmd.wants_outline = (int8_t)WorldViewRenderer_GetCurrentSpriteWantsOutline();
+    kspr_buf.push_back(cmd);
+    return 1;
 }
 
 /******************************************************************************/
@@ -976,7 +1005,8 @@ int GLWorldViewRenderer::SubmitKeeperSprite(
 int GLWorldViewRenderer::render_keepersprite_gpu(
     int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
     const unsigned char* data, int src_w, int src_h,
-    unsigned int draw_flags, const unsigned char* remap)
+    unsigned int draw_flags, const unsigned char* remap,
+    float z_ndc, int sprite_owner, int sprite_wants_outline)
 {
     // GL resources must be ready before any sprite is submitted.  If they are
     // not, this is a hard initialisation failure — never fall back to the CPU
@@ -1124,12 +1154,12 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
     // peeking out from behind walls/columns.
     // Additive glow sprites are excluded (no meaningful silhouette).
     // The class-mask in RendererSettings controls which entity types are outlined.
-    const bool wants_outline = WorldViewRenderer_GetCurrentSpriteWantsOutline() != 0;
+    const bool wants_outline = sprite_wants_outline != 0;
     if (g_renderer_settings.creature_outline_enable && !additive && wants_outline)
     {
         // Resolve owner → player colour index → linear RGB from the palette.
         float oc_r = 0.9f, oc_g = 0.9f, oc_b = 0.9f;
-        int owner = WorldViewRenderer_GetCurrentSpriteOwner();
+        int owner = sprite_owner;
         if (owner >= 0)
         {
             unsigned char color_idx = get_player_color_idx((PlayerNumber)owner);
@@ -1149,7 +1179,7 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
         // Push the outline slightly farther from the camera so it only appears
         // when the sprite is meaningfully behind geometry, not at tile edges
         // where depth values are nearly equal (avoids stray corner pixels).
-        const float outline_z = m_current_sprite_z + 0.002f;
+        const float outline_z = z_ndc + 0.002f;
 
         if (atlas_layer >= 0 && m_kspr_atlas_outline_shader)
         {
@@ -1198,7 +1228,7 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
             // Additive glow via atlas: no CLUT needed, glow math in shader.
             glUseProgram(m_kspr_atlas_glow_shader);
             glUniform2f(m_kspr_atlas_glow_loc_viewport, (float)m_draw_screen_w, (float)m_draw_screen_h);
-            glUniform1f(m_kspr_atlas_glow_loc_z_ndc, m_current_sprite_z);
+            glUniform1f(m_kspr_atlas_glow_loc_z_ndc, z_ndc);
             glUniform1f(m_kspr_atlas_glow_loc_layer, (float)atlas_layer);
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D_ARRAY, m_kspr_sprite_array);
@@ -1208,7 +1238,7 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
             glUseProgram(m_kspr_atlas_shader);
             glUniform2f(m_kspr_atlas_loc_viewport, (float)m_draw_screen_w, (float)m_draw_screen_h);
             glUniform1f(m_kspr_atlas_loc_alpha, alpha);
-            glUniform1f(m_kspr_atlas_loc_z_ndc, m_current_sprite_z);
+            glUniform1f(m_kspr_atlas_loc_z_ndc, z_ndc);
             glUniform1f(m_kspr_atlas_loc_layer, (float)atlas_layer);
             glUniform1f(m_kspr_atlas_loc_clut_v, clut_v);
             glActiveTexture(GL_TEXTURE1);
@@ -1263,7 +1293,7 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
         // Pure additive blend: adds glow RGB delta to framebuffer contents.
         glUseProgram(m_kspr_glow_shader);
         glUniform2f(m_kspr_glow_loc_viewport, (float)m_draw_screen_w, (float)m_draw_screen_h);
-        glUniform1f(m_kspr_glow_loc_z_ndc,    m_current_sprite_z);
+        glUniform1f(m_kspr_glow_loc_z_ndc,    z_ndc);
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, m_kspr_sprite_tex);
@@ -1275,7 +1305,7 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
         glUseProgram(m_kspr_shader);
         glUniform2f(m_kspr_loc_viewport, (float)m_draw_screen_w, (float)m_draw_screen_h);
         glUniform1f(m_kspr_loc_alpha,    alpha);
-        glUniform1f(m_kspr_loc_z_ndc,    m_current_sprite_z);
+        glUniform1f(m_kspr_loc_z_ndc,    z_ndc);
 
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, m_palette_tex);
@@ -1298,7 +1328,17 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
 
 /******************************************************************************/
 
-// Simple bridge function to maintain existing sprite logic while using proper abstraction
+void GLWorldViewRenderer::DrawKeeperSpriteGL(const IRWorldKeeperSpriteCmd& cmd)
+{
+    ASSERT_RENDER_THREAD();
+    render_keepersprite_gpu(cmd.dst_x, cmd.dst_y, cmd.dst_w, cmd.dst_h,
+                            cmd.data, cmd.src_w, cmd.src_h, cmd.draw_flags, cmd.remap,
+                            cmd.z_ndc, (int)cmd.owner, (int)cmd.wants_outline);
+}
+
+/******************************************************************************/
+
+// Game-thread: sets m_current_sprite_z for SubmitKeeperSprite to capture into IR.
 void GLWorldViewRenderer::setup_world_sprite_processing(int32_t bucket_num)
 {
     if (!m_initialized) {
@@ -1319,16 +1359,10 @@ void GLWorldViewRenderer::BeginWorldPass(unsigned char* framebuf, int pitch,
                                           int w, int h, int vp_x, int vp_y)
 {
     KFX_ZONE("WVR::BeginWorldPass");
+    ASSERT_GAME_THREAD();
 
-    // Wait for the render thread to finish processing sprite commands from the
-    // previous frame before the game thread builds new poly_pool/bucket data.
-    // PiP captures (m_pip_capture==true) run on the render thread itself and
-    // never touch the main poly_pool — skip the wait for those.
-    if (!m_pip_capture)
-    {
-        while (!m_rt_sprites_done.load(std::memory_order_acquire))
-            std::this_thread::yield();
-    }
+    // Since the render thread no longer accesses poly_pool (bucket bucket-walks moved
+    // to the game thread in Phase 1), no fence wait is needed here.
 
     m_screen_w        = w;
     m_screen_h        = h;
@@ -1516,11 +1550,13 @@ void GLWorldViewRenderer::gpu_flush()
 
 void GLWorldViewRenderer::FlipBuffers()
 {
+    ASSERT_GAME_THREAD();
     // Move game-thread buffers into the render-thread shadow copies.
     // After the move, game-side containers are empty and ready for the next frame.
     m_rt_draw_cmds      = std::move(m_draw_cmds);
     m_rt_shadow_cmds    = std::move(m_shadow_cmds);
     m_rt_flatpoly_verts = std::move(m_flatpoly_verts);
+    m_rt_kspr_ir        = std::move(m_kspr_ir);
     m_rt_screen_w       = m_screen_w;
     m_rt_screen_h       = m_screen_h;
     m_rt_vp_x           = m_vp_x;
@@ -1536,22 +1572,12 @@ void GLWorldViewRenderer::FlipBuffers()
     m_rt_vert_count  = m_vert_count;
     m_vert_count     = 0;
     m_cmd_vert_start = 0;
-
-    // If this frame contains sprite commands the render thread will traverse
-    // poly_pool bucket linked-lists.  Clear the fence so BeginWorldPass on the
-    // game thread waits before overwriting poly_pool with new bucket data.
-    for (const auto& c : m_rt_draw_cmds)
-    {
-        if (c.type == DrawCmd::CMD_SPRITES || c.type == DrawCmd::CMD_FRONTVIEW_SPRITES)
-        {
-            m_rt_sprites_done.store(false, std::memory_order_release);
-            break;
-        }
-    }
+    // m_kspr_ir is already empty after std::move above.
 }
 
 void GLWorldViewRenderer::ExecuteWorldFromIR(const WorldCommandBuffers& /*cmds*/)
 {
+    ASSERT_RENDER_THREAD();
     // The world renderer already double-buffers its command stream via FlipBuffers()
     // into m_rt_draw_cmds / m_rt_shadow_cmds / m_rt_flatpoly_verts / m_rt_verts.
     // GPURenderNow() reads those buffers and issues all GL calls on the render thread.
@@ -1571,6 +1597,7 @@ void GLWorldViewRenderer::BeginPiPCapture()
     m_pip_draw_cmds.clear();
     m_pip_shadow_cmds.clear();
     m_pip_flatpoly_verts.clear();
+    m_pip_kspr_ir.clear();
 }
 
 void GLWorldViewRenderer::GPURenderNow()
@@ -1578,13 +1605,7 @@ void GLWorldViewRenderer::GPURenderNow()
     KFX_ZONE("WVR::GPURenderNow");
     KFX_GPU_ZONE("Frame::WorldPass");
     KFX_GL_SCOPE(world_pass_dbg, "WorldPass");
-
-    // RAII: release the poly_pool fence on every exit path so BeginWorldPass
-    // on the game thread is never permanently blocked.
-    struct SpriteDoneGuard {
-        std::atomic<bool>& flag;
-        ~SpriteDoneGuard() { flag.store(true, std::memory_order_release); }
-    } sprites_done_guard_{m_rt_sprites_done};
+    ASSERT_RENDER_THREAD();
 
     // Reset the per-frame active flag immediately — before any early returns.
     // This ensures m_world_pass_active is false on frames where no
@@ -1594,6 +1615,7 @@ void GLWorldViewRenderer::GPURenderNow()
     if (!m_initialized)
     {
         m_rt_draw_cmds.clear();
+        m_rt_kspr_ir.clear();
         m_rt_vert_count  = 0;
         m_cmd_vert_start = 0;
         return;
@@ -1603,16 +1625,19 @@ void GLWorldViewRenderer::GPURenderNow()
         return;
 
     const int vp_y_gl = m_full_screen_h - m_rt_vp_y - m_rt_screen_h;
-    gpu_execute_passes(m_rt_vp_x, vp_y_gl, m_rt_screen_w, m_rt_screen_h);
+    gpu_execute_passes(m_rt_vp_x, vp_y_gl, m_rt_screen_w, m_rt_screen_h, m_rt_kspr_ir);
+    m_rt_kspr_ir.clear();
 }
 
 void GLWorldViewRenderer::GPURenderToFBO(int pip_w, int pip_h)
 {
     KFX_ZONE("WVR::GPURenderToFBO");
+    ASSERT_RENDER_THREAD();
 
     if (!m_initialized)
     {
         m_pip_draw_cmds.clear();
+        m_pip_kspr_ir.clear();
         m_pip_vert_count     = 0;
         m_pip_cmd_vert_start = 0;
         m_pip_capture        = false;
@@ -1631,12 +1656,17 @@ void GLWorldViewRenderer::GPURenderToFBO(int pip_w, int pip_h)
     m_pip_capture        = false;
 
     if (m_rt_draw_cmds.empty())
+    {
+        m_pip_kspr_ir.clear();
         return;
+    }
 
-    gpu_execute_passes(0, 0, pip_w, pip_h);
+    gpu_execute_passes(0, 0, pip_w, pip_h, m_pip_kspr_ir);
+    m_pip_kspr_ir.clear();
 }
 
-void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl, int screen_w, int screen_h)
+void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl, int screen_w, int screen_h,
+                                             const std::vector<IRWorldKeeperSpriteCmd>& kspr_ir)
 {
     ensure_clut_valid();
     m_draw_screen_w = screen_w;
@@ -1865,7 +1895,7 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl, int screen_w
     // ── Pass 3: Sprites and world text ───────────────────────────────────────
     // Sprites depth-test against the tile z-buffer written in pass 1 (wall
     // occlusion).  Back-to-front bucket order is preserved because
-    // DrawIsometricView recorded CMD_SPRITES entries highest-bucket-first.
+    // DrawIsometricView recorded CMD_IR_KEEPER_SPRITES entries highest-bucket-first.
     //
     // Scissor-clip sprites to the world viewport so they can't be rasterised
     // into the sidebar region.  The sidebar is painted on top as UI quads,
@@ -1876,47 +1906,23 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl, int screen_w
 
     for (const auto& cmd : m_rt_draw_cmds)
     {
-        if (cmd.type == DrawCmd::CMD_SPRITES)
+        if (cmd.type == DrawCmd::CMD_IR_KEEPER_SPRITES)
         {
-            KFX_GL_PUSH("WorldPass/Sprites");
+            KFX_GL_PUSH("WorldPass/KeeperSprites");
             glBindVertexArray(0);
             glUseProgram(0);
 
             UIRenderer_SetScreenSize(screen_w, screen_h);
 
-            // setup_world_sprite_processing computes the half-bucket-biased NDC z that
-            // places sprites reliably in front of same-bucket tile geometry.  Call it
-            // first so both UIRenderer (JontySprites) and KSprite passes use the same z.
-            setup_world_sprite_processing(cmd.bucket_num);
-
-            draw_3d_sprites_for_bucket(cmd.bucket_num);
+            const int end = cmd.sprite_ir_start + cmd.sprite_ir_count;
+            for (int i = cmd.sprite_ir_start; i < end; ++i)
+                DrawKeeperSpriteGL(kspr_ir[i]);
 
             glUseProgram(m_shader);
             glBindVertexArray(m_vao);
             // Sprite pass leaves unit 1 bound to m_kspr_clut_tex (256×128).
             // The tile shader samples unit 1 as the 256×1 palette — restore it
             // so the next CMD_TILES doesn't sample the wrong row of the CLUT.
-            glActiveTexture(GL_TEXTURE1);
-            glBindTexture(GL_TEXTURE_2D, m_palette_tex);
-            glActiveTexture(GL_TEXTURE0);
-            atlas_bound = false;
-            KFX_GL_POP();
-        }
-        else if (cmd.type == DrawCmd::CMD_FRONTVIEW_SPRITES)
-        {
-            KFX_GL_PUSH("WorldPass/FrontViewSprites");
-            glBindVertexArray(0);
-            glUseProgram(0);
-
-            UIRenderer_SetScreenSize(screen_w, screen_h);
-
-            setup_world_sprite_processing(cmd.bucket_num);
-
-            draw_frontview_3d_sprites_for_bucket_current(cmd.bucket_num);
-
-            glUseProgram(m_shader);
-            glBindVertexArray(m_vao);
-            // Same palette restore as CMD_SPRITES — sprite pass contaminates unit 1.
             glActiveTexture(GL_TEXTURE1);
             glBindTexture(GL_TEXTURE_2D, m_palette_tex);
             glActiveTexture(GL_TEXTURE0);
@@ -1958,6 +1964,7 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl, int screen_w
 void GLWorldViewRenderer::DrawIsometricView()
 {
     KFX_ZONE("WVR::DrawIsometricView");
+    ASSERT_GAME_THREAD();
     if (!m_initialized) {
         ERRORLOG("GLWorldViewRenderer asked to draw ISO but not initialised — frame dropped");
         return;
@@ -2137,17 +2144,27 @@ void GLWorldViewRenderer::DrawIsometricView()
             q = q->next;
         }
 
-        // Commit accumulated tile geometry as a batch command, then record a
-        // sprite command for this bucket.  Both will be replayed in GPUFlushNow()
-        // after glClear(), preserving the painter's-algorithm depth order.
+        // Commit accumulated tile geometry as a batch command, then walk the
+        // bucket's sprite list on the game thread (Option A).
+        // The walk calls SubmitKeeperSprite() which appends IRWorldKeeperSpriteCmd
+        // entries to kspr_buf; we record a CMD_IR_KEEPER_SPRITES referencing those.
         if (bucket_has_3d_sprites)
         {
             gpu_flush();
 
-            DrawCmd cmd;
-            cmd.type       = DrawCmd::CMD_SPRITES;
-            cmd.bucket_num = bi;
-            draw_cmds.push_back(cmd);
+            auto& kspr_buf  = m_pip_capture ? m_pip_kspr_ir : m_kspr_ir;
+            setup_world_sprite_processing(bi);
+            const int ir_start = (int)kspr_buf.size();
+            draw_3d_sprites_for_bucket(bi);
+            const int ir_count = (int)kspr_buf.size() - ir_start;
+            if (ir_count > 0)
+            {
+                DrawCmd cmd;
+                cmd.type             = DrawCmd::CMD_IR_KEEPER_SPRITES;
+                cmd.sprite_ir_start  = ir_start;
+                cmd.sprite_ir_count  = ir_count;
+                draw_cmds.push_back(cmd);
+            }
         }
 
         // Flat-colour polygons: GPU triangle draw via flat-poly shader.
@@ -2224,6 +2241,7 @@ bool GLWorldViewRenderer::append_frontview_quad(const struct BucketKindTexturedQ
 void GLWorldViewRenderer::DrawFrontView(struct Camera* cam)
 {
     KFX_ZONE("WVR::DrawFrontView");
+    ASSERT_GAME_THREAD();
     if (!m_initialized)
         return;
 
@@ -2260,10 +2278,20 @@ void GLWorldViewRenderer::DrawFrontView(struct Camera* cam)
         if (bucket_has_sprites)
         {
             gpu_flush();
-            DrawCmd cmd;
-            cmd.type       = DrawCmd::CMD_FRONTVIEW_SPRITES;
-            cmd.bucket_num = bi;
-            draw_cmds.push_back(cmd);
+
+            auto& kspr_buf  = m_pip_capture ? m_pip_kspr_ir : m_kspr_ir;
+            setup_world_sprite_processing(bi);
+            const int ir_start = (int)kspr_buf.size();
+            draw_frontview_3d_sprites_for_bucket_current(bi);
+            const int ir_count = (int)kspr_buf.size() - ir_start;
+            if (ir_count > 0)
+            {
+                DrawCmd cmd;
+                cmd.type             = DrawCmd::CMD_IR_KEEPER_SPRITES;
+                cmd.sprite_ir_start  = ir_start;
+                cmd.sprite_ir_count  = ir_count;
+                draw_cmds.push_back(cmd);
+            }
         }
     }
 

@@ -13,6 +13,7 @@
 #include "pre_inc.h"
 #include "renderer/RendererOpenGL.h"
 #include "renderer/RendererManager.h"
+#include "renderer/RendererThread.h"
 #include "renderer/VecMath.h"
 #include "renderer/opengl/GLTileAtlas.h"
 #include "renderer/opengl/GLSpriteAtlas.h"
@@ -121,6 +122,8 @@ void APIENTRY DebugCallback(GLenum source, GLenum type, GLuint id, GLenum severi
 
 bool RendererOpenGL::Init()
 {
+    RendererThread_RegisterGameThread();
+
     // Create GL context (SDL2-based on desktop; see platform_gl_sdl2.cpp)
     if (!platform_create_gl_context(platform_get_sdl_window()))
     {

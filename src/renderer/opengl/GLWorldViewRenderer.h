@@ -27,6 +27,7 @@
 #include "renderer/WorldVertex.h"
 #include "renderer/opengl/IGLShaderCompilable.h"
 #include "renderer/ir/WorldCommands.h"
+#include "renderer/RendererThread.h"
 #include "bflib_render.h"   // PolyPoint (needed by ShadowCmd)
 
 class ITileAtlas;
@@ -164,9 +165,12 @@ private:
     bool init_keeper_sprite_shader();
     bool init_flatpoly_shader();
 
-     // Internal implementation used by SubmitKeeperSprite.
-    int render_keepersprite_gpu(int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h, const unsigned char* data,
-                                int src_w, int src_h, unsigned int draw_flags, const unsigned char* remap);
+    /** Render-thread: decode and GL-draw one keeper sprite.
+     *  Called by gpu_execute_passes() for CMD_IR_KEEPER_SPRITES. */
+    int render_keepersprite_gpu(int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
+                                const unsigned char* data, int src_w, int src_h,
+                                unsigned int draw_flags, const unsigned char* remap,
+                                float z_ndc, int sprite_owner, int sprite_wants_outline);
 
     // Append one triangle (3 PolyPoint vertices, integer screen pixels) to the staging array.
     // tile_id is the flat block_ptrs[] index from p->block;
@@ -196,27 +200,35 @@ private:
     /** Core GL draw pass shared by GPURenderNow() and GPURenderToFBO().
      *  Uploads the vertex buffer, sets the given viewport (already in GL
      *  bottom-origin coords), executes all three draw passes, then resets the
-     *  viewport to the full screen and clears the draw-command lists. */
-    void gpu_execute_passes(int vp_x, int vp_y_gl, int screen_w, int screen_h);
+     *  viewport to the full screen and clears the draw-command lists.
+     *  @p kspr_ir  The keeper-sprite IR buffer to use for CMD_IR_KEEPER_SPRITES. */
+    void gpu_execute_passes(int vp_x, int vp_y_gl, int screen_w, int screen_h,
+                            const std::vector<IRWorldKeeperSpriteCmd>& kspr_ir);
     void ensure_clut_valid();
     void execute_preload_atlas();  // render-thread: bulk decode+upload of all known sprites
 
-    // Setup world sprite processing for a bucket (replaces global hook approach)
+    /** Render-thread: draw one keeper sprite from an IR command (GL calls). */
+    void DrawKeeperSpriteGL(const IRWorldKeeperSpriteCmd& cmd);
+
+    // Setup world sprite processing for a bucket (sets m_current_sprite_z — GT only)
     void setup_world_sprite_processing(int32_t bucket_num);
 
     // Deferred draw command (built during DrawIsometricView/DrawFrontView, executed by GPURenderNow)
     struct DrawCmd {
-        enum Type { CMD_TILES, CMD_SPRITES, CMD_SHADOWS, CMD_FLAT_POLYS,
-                    CMD_FRONTVIEW_SPRITES,
+        enum Type { CMD_TILES,
+                    CMD_IR_KEEPER_SPRITES,  // keeper sprites captured on game thread
+                    CMD_SHADOWS,
+                    CMD_FLAT_POLYS,
                     CMD_PRELOAD_KSPR_ATLAS  // one-shot: bulk decode+upload on render thread
                   } type;
         // CMD_TILES fields
-        int vert_start  = 0;
-        int vert_count  = 0;
-        // CMD_SPRITES / CMD_FRONTVIEW_SPRITES field
-        int bucket_num  = 0;
+        int vert_start      = 0;
+        int vert_count      = 0;
+        // CMD_IR_KEEPER_SPRITES fields (indices into m_rt_kspr_ir / m_pip_kspr_ir)
+        int sprite_ir_start = 0;
+        int sprite_ir_count = 0;
         // CMD_SHADOWS field (index into m_shadow_cmds)
-        int shadow_idx  = 0;
+        int shadow_idx      = 0;
     };
 
     // Per-shadow data recorded during DrawIsometricView, consumed by GPURenderNow.
@@ -366,85 +378,69 @@ private:
 
     // Full OS-window dimensions — set by SetFullScreenSize(), used in
     // BeginHandSpriteRendering() and gpu_execute_passes() for full-screen viewport.
-    int            m_full_screen_w = 0;
-    int            m_full_screen_h = 0;
+    int            m_full_screen_w = 0;  // GT: (SetScreenSize is game-thread-only)
+    int            m_full_screen_h = 0;  // GT:
 
     // Active VGA palette (R,G,B × 256) — source pointer registered via SetPaletteSource by SetPaletteData(), eliminates lbPalette read.
-    const uint8_t* m_palette_data  = nullptr;
+    const uint8_t* m_palette_data  = nullptr;  // GT:
 
-    // Per-frame state
-    int            m_screen_w   = 0;
-    int            m_screen_h   = 0;
-    int            m_vp_x       = 0;  // viewport left edge in screen pixels
-    int            m_vp_y       = 0;  // viewport top edge in screen pixels
-    unsigned char* m_framebuf   = nullptr; // viewport start in staging buffer
-    int            m_pitch      = 0;       // staging buffer row stride (bytes)
-    int            m_current_bucket = 0;   // bucket index being processed (used for depth z)
-    float          m_current_sprite_z = 0.0f; // NDC depth for current bucket sprites
-    int            m_draw_screen_w = 0;    // render-thread-only active viewport width
-    int            m_draw_screen_h = 0;    // render-thread-only active viewport height
-
-    // Front-view state: when DrawFrontView() fills the draw list, sprites
-    // must use draw_frontview_3d_sprites_for_bucket() instead of draw_3d_sprites_for_bucket().
-    bool            m_frontview_active = false;
-    struct Camera*  m_frontview_cam    = nullptr;
+    // Per-frame state — game-thread write, snapshotted at FlipBuffers
+    int            m_screen_w   = 0;   // GT:
+    int            m_screen_h   = 0;   // GT:
+    int            m_vp_x       = 0;   // GT: viewport left edge in screen pixels
+    int            m_vp_y       = 0;   // GT: viewport top edge in screen pixels
+    unsigned char* m_framebuf   = nullptr; // GT: viewport start in staging buffer
+    int            m_pitch      = 0;       // GT: staging buffer row stride (bytes)
+    int            m_current_bucket   = 0;   // GT: bucket index being processed
+    float          m_current_sprite_z = 0.0f; // GT: NDC depth for current bucket's sprites
+    int            m_draw_screen_w = 0;   // RT: active viewport width for GL draw calls
+    int            m_draw_screen_h = 0;   // RT: active viewport height for GL draw calls
 
     // CPU-side vertex staging buffer (dynamic VBO)
     static const int k_max_verts = 65536;   // ~21000 triangles per frame
-    WorldVertex* m_verts      = nullptr;    // game-thread write buffer
-    int          m_vert_count = 0;          // game-thread vertex count
-    int          m_cmd_vert_start = 0;      // start index of current accumulating tile batch
+    WorldVertex* m_verts      = nullptr;    // GT: game-thread write buffer
+    int          m_vert_count = 0;          // GT: game-thread vertex count
+    int          m_cmd_vert_start = 0;      // GT: start index of current accumulating tile batch
 
-    // Deferred draw list — built during DrawIsometricView(), executed in GPURenderNow()
-    std::vector<DrawCmd>        m_draw_cmds;       // game-thread write buffer
-    std::vector<ShadowCmd>      m_shadow_cmds;     // game-thread write buffer
-    std::vector<FlatPolyVertex> m_flatpoly_verts;  // game-thread write buffer
+    // GT: Deferred draw list — built during DrawIsometricView(), executed in GPURenderNow()
+    std::vector<DrawCmd>             m_draw_cmds;
+    std::vector<ShadowCmd>           m_shadow_cmds;
+    std::vector<FlatPolyVertex>      m_flatpoly_verts;
+    std::vector<IRWorldKeeperSpriteCmd> m_kspr_ir;  // keeper sprite capture (game thread)
 
     // ── Double-buffer render copies ───────────────────────────────────────────
     // FlipBuffers() (called from RendererOpenGL::EndFrame before signalling the
     // render thread) std::moves the game-thread vectors here and swaps the
     // raw vertex pointers, so the game thread can start the next frame while
     // the render thread reads from these stable render-side copies.
-    WorldVertex* m_rt_verts       = nullptr;  // render-thread read buffer
-    int          m_rt_vert_count  = 0;
-    std::vector<DrawCmd>        m_rt_draw_cmds;
-    std::vector<ShadowCmd>      m_rt_shadow_cmds;
-    std::vector<FlatPolyVertex> m_rt_flatpoly_verts;
-    int                        m_rt_screen_w = 0;
-    int                        m_rt_screen_h = 0;
-    int                        m_rt_vp_x     = 0;
-    int                        m_rt_vp_y     = 0;
-    uint8_t                    m_rt_palette[768] = {};
-
-    // ── poly_pool safety fence ───────────────────────────────────────────────
-    // CMD_SPRITES / CMD_FRONTVIEW_SPRITES dispatch on the render thread reads
-    // from bucket linked-lists allocated in poly_pool.  With the async pipeline
-    // (m_frame_begun reset early), the game thread can reach DrawIsometricView
-    // for frame N+1 — resetting poly_pool — while the render thread is still
-    // traversing frame N's sprite entries.
-    //
-    // Protocol:
-    //   FlipBuffers()   (game thread) : stores false if sprite cmds exist.
-    //   GPURenderNow()  (render thread): stores true on every exit path.
-    //   BeginWorldPass()(game thread) : spins until true before building
-    //                                   new poly_pool data (non-PiP only).
-    std::atomic<bool> m_rt_sprites_done{true};
+    WorldVertex* m_rt_verts       = nullptr;  // RT: render-thread read buffer
+    int          m_rt_vert_count  = 0;        // RT:
+    std::vector<DrawCmd>             m_rt_draw_cmds;       // RT:
+    std::vector<ShadowCmd>           m_rt_shadow_cmds;     // RT:
+    std::vector<FlatPolyVertex>      m_rt_flatpoly_verts;  // RT:
+    std::vector<IRWorldKeeperSpriteCmd> m_rt_kspr_ir;      // RT: keeper sprites after FlipBuffers
+    int          m_rt_screen_w = 0;   // RT:
+    int          m_rt_screen_h = 0;   // RT:
+    int          m_rt_vp_x     = 0;   // RT:
+    int          m_rt_vp_y     = 0;   // RT:
+    uint8_t      m_rt_palette[768] = {};  // RT:
 
     // ── PiP-only buffers (render-thread write, never touched by game thread) ─
     // BeginPiPCapture() switches all geometry writes here so draw_view() called
     // from the render thread (PiP) never races with the game thread's m_verts.
-    WorldVertex* m_pip_verts           = nullptr;
-    int          m_pip_vert_count      = 0;
-    int          m_pip_cmd_vert_start  = 0;
-    std::vector<DrawCmd>        m_pip_draw_cmds;
-    std::vector<ShadowCmd>      m_pip_shadow_cmds;
-    std::vector<FlatPolyVertex> m_pip_flatpoly_verts;
-    bool         m_pip_capture         = false;
+    WorldVertex* m_pip_verts           = nullptr;  // RT(PiP):
+    int          m_pip_vert_count      = 0;         // RT(PiP):
+    int          m_pip_cmd_vert_start  = 0;         // RT(PiP):
+    std::vector<DrawCmd>             m_pip_draw_cmds;       // RT(PiP):
+    std::vector<ShadowCmd>           m_pip_shadow_cmds;     // RT(PiP):
+    std::vector<FlatPolyVertex>      m_pip_flatpoly_verts;  // RT(PiP):
+    std::vector<IRWorldKeeperSpriteCmd> m_pip_kspr_ir;      // RT(PiP): keeper sprites during PiP
+    bool         m_pip_capture         = false;             // RT:
 
     bool m_initialized = false;
     // Set to true in BeginWorldPass(); reset to false at the end of GPURenderNow().
     // Tracks whether the world renderer is actually being used this frame.
-    bool m_world_pass_active = false;
+    bool m_world_pass_active = false;  // GT:
 
     // IR write target — set by SetWorldCommandBuffers(); used as sentinel.
     WorldCommandBuffers* m_world_write_cmds = nullptr;

@@ -13,8 +13,10 @@
 
 #include "renderer/IUIRenderer.h"
 #include "renderer/opengl/IGLShaderCompilable.h"
+#include "renderer/RendererThread.h"
 #include <vector>
 #include <cstdint>
+#include <atomic>
 
 #ifdef RENDERER_OPENGL_ENABLED
 
@@ -279,9 +281,11 @@ private:
     // Slab background tile texture (64×64 R8, GL_REPEAT) — uploaded via UpdateSlabTexture()
     GLuint         m_slab_texture      = 0;
     int            m_slab_dim          = 0;
-    // Pending upload latched by UpdateSlabTexture(); consumed on the render thread.
-    const uint8_t* m_slab_pending_data = nullptr;
-    int            m_slab_pending_dim  = 0;
+    // Pending upload latched by UpdateSlabTexture() (GT); consumed on the render thread by FlushPendingInit().
+    // Stored as atomics to avoid a data race between the two threads.
+    // Write order: store dim (relaxed) then data (release). Read order: load data (acquire) then dim (relaxed).
+    std::atomic<const uint8_t*> m_slab_pending_data {nullptr};
+    std::atomic<int>            m_slab_pending_dim  {0};
 
     // PiP sprite watermarks: queue sizes per layer recorded at BeginPiPSprites() time.
     // Quads at indices [0..watermark[L]) in m_quads[L] were submitted before the PiP
