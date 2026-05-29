@@ -471,19 +471,11 @@ void RendererVulkan::EndFrame_VK()
     }
 
     // ---- Pre-pass: upload fade table (once, when game tables are ready) -----
-    if (!m_fade_uploaded && render_fade_tables[0] != nullptr)
+    // render_fade_tables is a flat 256×256 byte array (same layout used by GL).
+    if (!m_fade_uploaded && render_fade_tables != nullptr)
     {
-        uint8_t fade_flat[256 * 256];
-        for (int row = 0; row < 256; ++row)
-        {
-            if (render_fade_tables[row])
-                std::memcpy(fade_flat + row * 256, render_fade_tables[row], 256);
-            else
-                std::memset(fade_flat + row * 256, 0, 256);
-        }
-
         VKStagingAlloc sa;
-        if (m_staging.Alloc(fade_flat, sizeof(fade_flat), 4, sa))
+        if (m_staging.Alloc(render_fade_tables, 256u * 256u, 4, sa))
         {
             transition_image(cmd, m_fade_image,
                 VK_IMAGE_LAYOUT_UNDEFINED,
