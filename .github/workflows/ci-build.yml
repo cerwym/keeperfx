@@ -212,6 +212,7 @@ jobs:
             .deploy/keeperfx*.exe
             .deploy/*.pdb
           if-no-files-found: warn
+          include-hidden-files: true
 
   summary:
     name: Build Summary
