@@ -155,7 +155,6 @@ public:
     void SetPaletteSource(const uint8_t* palette) override { m_palette_data = palette; }
 
     const char* GetName()       const override { return "VKWorldViewRenderer"; }
-    const char* RendererName()  const override { return "VKWorldViewRenderer"; }
 
     bool HasPendingCommands() const
     {

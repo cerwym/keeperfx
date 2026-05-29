@@ -19,6 +19,11 @@
 
 extern "C" SDL_Window* lbWindow;
 
+extern "C" void* platform_get_sdl_window(void)
+{
+    return lbWindow;
+}
+
 int platform_vk_get_instance_extensions(unsigned int* count, const char** names)
 {
     SDL_Window* win = lbWindow;

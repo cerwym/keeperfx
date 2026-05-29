@@ -29,7 +29,7 @@
 #include <vector>
 #include <cstdint>
 #include "renderer/SpriteHandle.h"
-#include "renderer/opengl/GLSpriteAtlas.h"  // SpriteUV, shared struct
+#include "renderer/SpriteUV.h"
 
 struct TbSprite;
 struct TbSpriteSheet;

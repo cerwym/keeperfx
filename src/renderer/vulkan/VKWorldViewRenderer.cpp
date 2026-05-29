@@ -25,7 +25,7 @@
 #include "bflib_vidraw.h"      // vec_window_width, vec_window_height
 #include "bflib_basics.h"      // ERRORLOG / SYNCLOG / WARNLOG
 #include "bflib_sprite.h"
-#include "player_data.h"       // WorldViewRenderer_GetCurrentSpriteOwner etc.
+#include "renderer/RendererManager.h"  // WorldViewRenderer_GetCurrentSpriteOwner etc.
 #include "globals.h"           // game.lish.subtile_lightness, MAX_SUBTILES_*
 #include "renderer/RendererSettings.h"  // g_renderer_settings
 

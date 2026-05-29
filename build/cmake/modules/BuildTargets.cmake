@@ -238,6 +238,11 @@ if(KEEPERFX_RENDERER_OPENGL AND TARGET glad::glad)
     target_link_libraries(keeperfx PRIVATE glad::glad)
 endif()
 
+# Link Vulkan renderer libs (collected by Dependencies.cmake into KFX_VK_LINK_LIBS)
+if(KEEPERFX_RENDERER_VULKAN AND KFX_VK_LINK_LIBS)
+    target_link_libraries(keeperfx PRIVATE ${KFX_VK_LINK_LIBS})
+endif()
+
 # Link Tracy profiler (FetchContent target — compiled from source, matches CRT)
 if(KEEPERFX_TRACY AND TARGET TracyClient)
     target_link_libraries(keeperfx PRIVATE TracyClient)

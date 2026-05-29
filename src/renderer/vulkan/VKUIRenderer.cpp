@@ -27,7 +27,7 @@
 /******************************************************************************/
 
 static constexpr int   kVKFramesInFlight = 2;
-static constexpr float VGA6_MAX          = 63.0f;
+// VGA6_MAX (63.0f) is defined in bflib_video.h
 
 /******************************************************************************/
 // Construction / Init

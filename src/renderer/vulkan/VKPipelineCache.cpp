@@ -36,16 +36,16 @@ static void FillUIVertexInput(VkPipelineVertexInputStateCreateInfo& vi,
     binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
     attrs.resize(5);
-    // a_pos   (location 0): vec2
-    attrs[0] = {0, 0, VK_FORMAT_R32G32_SFLOAT,       (uint32_t)offsetof(UIVertex, x)};
-    // a_uv    (location 1): vec2
-    attrs[1] = {1, 0, VK_FORMAT_R32G32_SFLOAT,       (uint32_t)offsetof(UIVertex, u)};
-    // a_color (location 2): vec4
-    attrs[2] = {2, 0, VK_FORMAT_R32G32B32A32_SFLOAT,  (uint32_t)offsetof(UIVertex, r)};
-    // a_z     (location 3): float
-    attrs[3] = {3, 0, VK_FORMAT_R32_SFLOAT,           (uint32_t)offsetof(UIVertex, z)};
-    // a_mode  (location 4): float
-    attrs[4] = {4, 0, VK_FORMAT_R32_SFLOAT,           (uint32_t)offsetof(UIVertex, mode)};
+    // a_pos   (location 0): vec2  — UIVertex::x at byte 0
+    attrs[0].location = 0; attrs[0].binding = 0; attrs[0].format = VK_FORMAT_R32G32_SFLOAT;      attrs[0].offset = 0u;
+    // a_uv    (location 1): vec2  — UIVertex::u at byte 8
+    attrs[1].location = 1; attrs[1].binding = 0; attrs[1].format = VK_FORMAT_R32G32_SFLOAT;      attrs[1].offset = 8u;
+    // a_color (location 2): vec4  — UIVertex::r at byte 16
+    attrs[2].location = 2; attrs[2].binding = 0; attrs[2].format = VK_FORMAT_R32G32B32A32_SFLOAT; attrs[2].offset = 16u;
+    // a_z     (location 3): float — UIVertex::z at byte 32
+    attrs[3].location = 3; attrs[3].binding = 0; attrs[3].format = VK_FORMAT_R32_SFLOAT;          attrs[3].offset = 32u;
+    // a_mode  (location 4): float — UIVertex::mode at byte 36
+    attrs[4].location = 4; attrs[4].binding = 0; attrs[4].format = VK_FORMAT_R32_SFLOAT;          attrs[4].offset = 36u;
 
     vi.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
     vi.vertexBindingDescriptionCount   = 1;
@@ -63,12 +63,13 @@ static void FillWorldVertexInput(VkPipelineVertexInputStateCreateInfo& vi,
     binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
     attrs.resize(6);
-    attrs[0] = {0, 0, VK_FORMAT_R32G32B32_SFLOAT,    (uint32_t)offsetof(WorldVertex, x)};
-    attrs[1] = {1, 0, VK_FORMAT_R32G32_SFLOAT,        (uint32_t)offsetof(WorldVertex, u)};
-    attrs[2] = {2, 0, VK_FORMAT_R32_SFLOAT,            (uint32_t)offsetof(WorldVertex, shade)};
-    attrs[3] = {3, 0, VK_FORMAT_R32G32_SFLOAT,        (uint32_t)offsetof(WorldVertex, stl_x)};
-    attrs[4] = {4, 0, VK_FORMAT_R32_SFLOAT,            (uint32_t)offsetof(WorldVertex, camera_z)};
-    attrs[5] = {5, 0, VK_FORMAT_R32_SFLOAT,            (uint32_t)offsetof(WorldVertex, atlas_layer)};
+    // WorldVertex: x(0) y(4) z(8) u(12) v(16) shade(20) stl_x(24) stl_y(28) camera_z(32) atlas_layer(36)
+    attrs[0].location = 0; attrs[0].binding = 0; attrs[0].format = VK_FORMAT_R32G32B32_SFLOAT;   attrs[0].offset = 0u;
+    attrs[1].location = 1; attrs[1].binding = 0; attrs[1].format = VK_FORMAT_R32G32_SFLOAT;      attrs[1].offset = 12u;
+    attrs[2].location = 2; attrs[2].binding = 0; attrs[2].format = VK_FORMAT_R32_SFLOAT;          attrs[2].offset = 20u;
+    attrs[3].location = 3; attrs[3].binding = 0; attrs[3].format = VK_FORMAT_R32G32_SFLOAT;      attrs[3].offset = 24u;
+    attrs[4].location = 4; attrs[4].binding = 0; attrs[4].format = VK_FORMAT_R32_SFLOAT;          attrs[4].offset = 32u;
+    attrs[5].location = 5; attrs[5].binding = 0; attrs[5].format = VK_FORMAT_R32_SFLOAT;          attrs[5].offset = 36u;
 
     vi.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
     vi.vertexBindingDescriptionCount   = 1;
@@ -89,8 +90,9 @@ static void FillSpriteVertexInput(VkPipelineVertexInputStateCreateInfo& vi,
     binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
     attrs.resize(2);
-    attrs[0] = {0, 0, VK_FORMAT_R32G32_SFLOAT, 0};
-    attrs[1] = {1, 0, VK_FORMAT_R32G32_SFLOAT, (uint32_t)offsetof(SpriteVertex2D, u)};
+    // SpriteVertex2D: x(0) y(4) u(8) v(12)
+    attrs[0] = {0, 0, VK_FORMAT_R32G32_SFLOAT, 0u};
+    attrs[1] = {1, 0, VK_FORMAT_R32G32_SFLOAT, 8u};
 
     vi.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
     vi.vertexBindingDescriptionCount   = 1;
@@ -110,8 +112,9 @@ static void FillFlatPolyVertexInput(VkPipelineVertexInputStateCreateInfo& vi,
     binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
     attrs.resize(2);
-    attrs[0] = {0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0};
-    attrs[1] = {1, 0, VK_FORMAT_R32G32B32_SFLOAT, (uint32_t)offsetof(FlatPolyVertex3D, r)};
+    // FlatPolyVertex3D: x(0) y(4) z(8) r(12) g(16) b(20)
+    attrs[0] = {0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0u};
+    attrs[1] = {1, 0, VK_FORMAT_R32G32B32_SFLOAT, 12u};
 
     vi.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
     vi.vertexBindingDescriptionCount   = 1;
@@ -323,22 +326,44 @@ bool VKPipelineCache::Init(VkDevice device, VkRenderPass render_pass,
     const VkBlendFactor kMulSrc      = VK_BLEND_FACTOR_ZERO;
     const VkBlendFactor kMulDstColor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
 
-    // Compile all shader modules
-    VkShaderModule ui_vert = VK_NULL_HANDLE;
-    VkShaderModule blit_vert = VK_NULL_HANDLE;
-    VkShaderModule kspr_vert = VK_NULL_HANDLE;
-    VkShaderModule shadow_vert = VK_NULL_HANDLE;
-    VkShaderModule world_vert = VK_NULL_HANDLE;
-    VkShaderModule flatpoly_vert = VK_NULL_HANDLE;
-    VkShaderModule mapfade_vert = VK_NULL_HANDLE;
-    VkShaderModule screentint_vert = VK_NULL_HANDLE;
+    // Pre-declare all shader modules (MSVC requires declarations before any goto that skips them)
+    VkShaderModule ui_vert          = VK_NULL_HANDLE;
+    VkShaderModule blit_vert        = VK_NULL_HANDLE;
+    VkShaderModule kspr_vert        = VK_NULL_HANDLE;
+    VkShaderModule shadow_vert      = VK_NULL_HANDLE;
+    VkShaderModule world_vert       = VK_NULL_HANDLE;
+    VkShaderModule flatpoly_vert    = VK_NULL_HANDLE;
+    VkShaderModule mapfade_vert     = VK_NULL_HANDLE;
+    VkShaderModule screentint_vert  = VK_NULL_HANDLE;
+
+    VkShaderModule ui_sprite_frag    = VK_NULL_HANDLE;
+    VkShaderModule ui_solid_frag     = VK_NULL_HANDLE;
+    VkShaderModule ui_remap_frag     = VK_NULL_HANDLE;
+    VkShaderModule ui_font_frag      = VK_NULL_HANDLE;
+    VkShaderModule ui_colored_frag   = VK_NULL_HANDLE;
+    VkShaderModule ui_fbo_frag       = VK_NULL_HANDLE;
+    VkShaderModule blit_frag         = VK_NULL_HANDLE;
+    VkShaderModule rawblit_frag      = VK_NULL_HANDLE;
+    VkShaderModule world_frag        = VK_NULL_HANDLE;
+    VkShaderModule kspr_frag         = VK_NULL_HANDLE;
+    VkShaderModule kspr_array_frag   = VK_NULL_HANDLE;
+    VkShaderModule kspr_glow_frag    = VK_NULL_HANDLE;
+    VkShaderModule kspr_outline_frag = VK_NULL_HANDLE;
+    VkShaderModule shadow_frag       = VK_NULL_HANDLE;
+    VkShaderModule flatpoly_frag     = VK_NULL_HANDLE;
+    VkShaderModule passthrough_frag  = VK_NULL_HANDLE;
+    VkShaderModule lens_displace_frag= VK_NULL_HANDLE;
+    VkShaderModule lens_mist_frag    = VK_NULL_HANDLE;
+    VkShaderModule lens_flyeye_frag  = VK_NULL_HANDLE;
+    VkShaderModule lens_overlay_frag = VK_NULL_HANDLE;
+    VkShaderModule mapfade_frag      = VK_NULL_HANDLE;
+    VkShaderModule screentint_frag   = VK_NULL_HANDLE;
 
 #define COMPILE_VERT(handle, src, name) \
     if (!CreateShaderModule(compiler, src, shaderc_glsl_vertex_shader, name, handle)) \
         goto cleanup;
 
 #define COMPILE_FRAG(handle, src, name) \
-    VkShaderModule handle = VK_NULL_HANDLE; \
     if (!CreateShaderModule(compiler, src, shaderc_glsl_fragment_shader, name, handle)) \
         goto cleanup;
 

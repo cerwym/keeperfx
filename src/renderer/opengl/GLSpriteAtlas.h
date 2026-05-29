@@ -25,11 +25,7 @@
 #include <cstdint>
 #include "bflib_sprite.h"
 #include "renderer/SpriteHandle.h"
-
-struct SpriteUV {
-    float u0, v0, u1, v1;
-    uint16_t pixel_w, pixel_h;  // original sprite pixel dimensions
-};
+#include "renderer/SpriteUV.h"
 
 class GLSpriteAtlas {
 public:

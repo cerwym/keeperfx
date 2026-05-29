@@ -31,6 +31,36 @@ constexpr int  kMaxAtlasSide = 2048;
 
 /******************************************************************************/
 
+static bool DecodeRLESprite(unsigned char* dst, int dst_stride,
+                            const unsigned char* sprite_data, int w, int h)
+{
+    if (!dst || !sprite_data || w <= 0 || h <= 0)
+        return false;
+    for (int y = 0; y < h; ++y)
+        memset(dst + y * dst_stride, 0, w);
+    const signed char* sp = reinterpret_cast<const signed char*>(sprite_data);
+    for (int y = 0; y < h; ++y) {
+        unsigned char* row = dst + y * dst_stride;
+        int x = 0;
+        while (true) {
+            signed char cmd = *sp++;
+            if (cmd == 0) break;
+            if (cmd < 0) {
+                x += (int)(-cmd);
+            } else {
+                int count = (int)cmd;
+                for (int i = 0; i < count; ++i) {
+                    if (x < w) row[x] = (unsigned char)(*sp);
+                    ++sp; ++x;
+                }
+            }
+        }
+    }
+    return true;
+}
+
+/******************************************************************************/
+
 void VKFontAtlas::SetDevice(VkDevice device, VmaAllocator allocator)
 {
     m_device    = device;
