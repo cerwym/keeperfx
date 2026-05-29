@@ -25,6 +25,7 @@
 #endif
 #ifdef RENDERER_VULKAN_ENABLED
 #  include "renderer/RendererVulkan.h"
+#  include "renderer/vulkan/VKCursorLayer.h"
 #endif
 #ifdef PLATFORM_VITA
 #  include "renderer/RendererVita.h"
@@ -478,6 +479,10 @@ static ICursorLayer* create_cursor_layer(RendererType type)
             return glcur;
         }
     }
+#endif
+#ifdef RENDERER_VULKAN_ENABLED
+    if (type == RENDERER_VULKAN)
+        return new VKCursorLayer();
 #endif
     (void)type;
     return new SWCursorLayer();

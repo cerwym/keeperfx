@@ -16,6 +16,8 @@
 
 #include "renderer/IRenderer.h"
 #include "renderer/vulkan/VKDevice.h"
+#include "renderer/vulkan/VKMapFadePass.h"
+#include "renderer/vulkan/VKTextRenderer.h"
 #include <vulkan/vulkan.h>
 #include <vector>
 
@@ -46,10 +48,10 @@ public:
     bool               SupportsRuntimeSwitch() const override;
     BackendCapabilities GetCapabilities()      const override;
 
-    // ---- Sub-renderer access (all nullptr — fall through to software defaults) ----
+    // ---- Sub-renderer access ----
     IWorldViewRenderer* GetWorldViewRenderer() override { return nullptr; }
-    IMapFadePass*       GetMapFadePass()        override { return nullptr; }
-    ITextRenderer*      GetTextRenderer()       override { return nullptr; }
+    IMapFadePass*       GetMapFadePass()        override { return &m_mapfade; }
+    ITextRenderer*      GetTextRenderer()       override { return &m_text_renderer; }
     IUIRenderer*        GetUIRenderer()         override { return nullptr; }
 
 private:
@@ -57,6 +59,9 @@ private:
 
     VKDevice             m_device;
     VkSurfaceKHR         m_surface       = VK_NULL_HANDLE;
+
+    VKMapFadePass        m_mapfade;
+    VKTextRenderer       m_text_renderer;
 
     // Dummy CPU framebuffer — written by the software rasteriser, ignored.
     std::vector<uint8_t> m_dummy_fb;
