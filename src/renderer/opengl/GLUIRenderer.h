@@ -14,6 +14,7 @@
 #include "renderer/IUIRenderer.h"
 #include "renderer/opengl/IGLShaderCompilable.h"
 #include "renderer/RendererThread.h"
+#include "renderer/UIVertex.h"
 #include <vector>
 #include <cstdint>
 #include <atomic>
@@ -29,14 +30,9 @@ class GLFontAtlas;
 
 /******************************************************************************/
 
-/** GPU vertex for UI element quad corners. */
-struct GLUIVertex {
-    float x, y;       // Screen position (pixels)
-    float u, v;       // Texture UV coordinates
-    float r, g, b, a; // RGBA color/tint
-    float z;          // NDC depth for z-ordering
-    float mode;       // Render mode: 0=sprite, 1=text, 2=line, 3=solid_color
-};
+/** GPU vertex for UI element quad corners.
+ *  Alias for UIVertex — layout shared with the Vulkan backend. */
+using GLUIVertex = UIVertex;
 
 /** Batched UI element data before vertex expansion. */
 struct UIQuad {

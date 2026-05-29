@@ -15,6 +15,10 @@
 #include <vulkan/vulkan.h>
 #include <vector>
 
+#ifdef RENDERER_VULKAN_ENABLED
+#  include <vma/vk_mem_alloc.h>
+#endif
+
 // Maximum frames-in-flight.  Two lets the CPU prepare frame N+1 while the GPU
 // finishes frame N without stalling either side.
 static constexpr int kVKFramesInFlight = 2;
@@ -69,11 +73,17 @@ public:
 
     // ---- Accessors ----
 
-    VkInstance       GetInstance()    const { return m_instance; }
-    VkDevice         GetDevice()      const { return m_device; }
-    VkRenderPass     GetRenderPass()  const { return m_render_pass; }
-    VkExtent2D       GetExtent()      const { return m_extent; }
-    bool             IsInitialised()  const { return m_instance != VK_NULL_HANDLE; }
+    VkInstance       GetInstance()       const { return m_instance; }
+    VkDevice         GetDevice()         const { return m_device; }
+    VkPhysicalDevice GetPhysicalDevice() const { return m_physical_device; }
+    VkRenderPass     GetRenderPass()     const { return m_render_pass; }
+    VkExtent2D       GetExtent()         const { return m_extent; }
+    VkQueue          GetGraphicsQueue()  const { return m_graphics_queue; }
+    uint32_t         GetGraphicsQueueIndex() const { return m_graphics_queue_index; }
+    bool             IsInitialised()     const { return m_instance != VK_NULL_HANDLE; }
+#ifdef RENDERER_VULKAN_ENABLED
+    VmaAllocator     GetAllocator()      const { return m_allocator; }
+#endif
 
     /** Return the framebuffer for the swapchain image at index. */
     VkFramebuffer    GetFramebuffer(uint32_t index) const;
@@ -123,6 +133,11 @@ private:
     VkFence     m_in_flight_fences[kVKFramesInFlight] = {};
 
     int      m_current_frame = 0;
+
+#ifdef RENDERER_VULKAN_ENABLED
+    VmaAllocator m_allocator = VK_NULL_HANDLE;
+    bool CreateAllocator();
+#endif
 };
 
 #endif // VKDEVICE_H

@@ -12,6 +12,12 @@
 // vk-bootstrap — single-header bootstrap library
 #include <VkBootstrap.h>
 
+#ifdef RENDERER_VULKAN_ENABLED
+// VMA implementation — compiled exactly once here
+#  define VMA_IMPLEMENTATION
+#  include <vma/vk_mem_alloc.h>
+#endif
+
 #include "post_inc.h"
 
 /******************************************************************************/
@@ -91,6 +97,12 @@ bool VKDevice::InitDevice(VkSurfaceKHR surface, int w, int h)
     m_present_queue        = pq.value();
     m_present_queue_index  = vkb_dev.get_queue_index(vkb::QueueType::present).value();
 
+#ifdef RENDERER_VULKAN_ENABLED
+    // --- VMA allocator ---
+    if (!CreateAllocator())
+        return false;
+#endif
+
     // --- Render pass ---
     if (!CreateRenderPass())
         return false;
@@ -140,6 +152,14 @@ void VKDevice::Shutdown()
 
     if (m_device != VK_NULL_HANDLE)
         vkDeviceWaitIdle(m_device);
+
+#ifdef RENDERER_VULKAN_ENABLED
+    if (m_allocator != VK_NULL_HANDLE)
+    {
+        vmaDestroyAllocator(m_allocator);
+        m_allocator = VK_NULL_HANDLE;
+    }
+#endif
 
     DestroySwapchain();
     DestroySyncObjects();
@@ -470,3 +490,21 @@ VkFramebuffer VKDevice::GetFramebuffer(uint32_t index) const
         return m_framebuffers[index];
     return VK_NULL_HANDLE;
 }
+
+#ifdef RENDERER_VULKAN_ENABLED
+bool VKDevice::CreateAllocator()
+{
+    VmaAllocatorCreateInfo alloc_ci = {};
+    alloc_ci.instance         = m_instance;
+    alloc_ci.physicalDevice   = m_physical_device;
+    alloc_ci.device           = m_device;
+    alloc_ci.vulkanApiVersion = VK_API_VERSION_1_1;
+
+    if (vmaCreateAllocator(&alloc_ci, &m_allocator) != VK_SUCCESS)
+    {
+        ERRORLOG("VKDevice: failed to create VMA allocator");
+        return false;
+    }
+    return true;
+}
+#endif
