@@ -7,12 +7,12 @@
  *     Implements platform_create_gl_context / platform_destroy_gl_context /
  *     platform_swap_gl_buffers for any platform using SDL2 as the windowing
  *     layer (Windows, Linux, macOS).
- * @par Windows / HDR note:
+ * @par Windows note:
  *     SDL2 calls SetPixelFormat on the window's DC during SDL_CreateWindow
  *     (WIN_GL_SetupWindow) and loads wglCreateContextAttribsARB at the same
  *     time.  SDL_GL_CreateContext then uses that extension to create the 3.3
- *     Core context.  The GL pixel-format attributes (10-bit RGB) are set in
- *     VideoInit before any window is created so SDL2 picks them up.
+ *     Core context.  The GL pixel-format attributes (8-bit RGB, standard sRGB)
+ *     are set in VideoInit before any window is created so SDL2 picks them up.
  *     The window is created with SDL_WINDOW_HIDDEN so that SetPixelFormat
  *     does not trigger a DWM composition-pipeline reconfiguration on HDR
  *     displays (which would cause a visible black flash).  The window is
@@ -194,14 +194,14 @@ extern "C" int platform_create_gl_context(void *sdl_window)
         LbWarnLog("platform_create_gl_context: SDL_GL_SetAttribute(DEPTH_SIZE,24) failed: %s\n", SDL_GetError());
     if (SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE,  8) != 0)
         LbWarnLog("platform_create_gl_context: SDL_GL_SetAttribute(STENCIL_SIZE,8) failed: %s\n", SDL_GetError());
-    if (SDL_GL_SetAttribute(SDL_GL_RED_SIZE,   10) != 0)
-        LbWarnLog("platform_create_gl_context: SDL_GL_SetAttribute(RED_SIZE,10) failed: %s\n", SDL_GetError());
-    if (SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 10) != 0)
-        LbWarnLog("platform_create_gl_context: SDL_GL_SetAttribute(GREEN_SIZE,10) failed: %s\n", SDL_GetError());
-    if (SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE,  10) != 0)
-        LbWarnLog("platform_create_gl_context: SDL_GL_SetAttribute(BLUE_SIZE,10) failed: %s\n", SDL_GetError());
-    if (SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE,  2) != 0)
-        LbWarnLog("platform_create_gl_context: SDL_GL_SetAttribute(ALPHA_SIZE,2) failed: %s\n", SDL_GetError());
+    if (SDL_GL_SetAttribute(SDL_GL_RED_SIZE,    8) != 0)
+        LbWarnLog("platform_create_gl_context: SDL_GL_SetAttribute(RED_SIZE,8) failed: %s\n", SDL_GetError());
+    if (SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE,  8) != 0)
+        LbWarnLog("platform_create_gl_context: SDL_GL_SetAttribute(GREEN_SIZE,8) failed: %s\n", SDL_GetError());
+    if (SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE,   8) != 0)
+        LbWarnLog("platform_create_gl_context: SDL_GL_SetAttribute(BLUE_SIZE,8) failed: %s\n", SDL_GetError());
+    if (SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE,  8) != 0)
+        LbWarnLog("platform_create_gl_context: SDL_GL_SetAttribute(ALPHA_SIZE,8) failed: %s\n", SDL_GetError());
 
     log_sdl_display_info(window, "before GL context creation");
 #ifdef _WIN32
