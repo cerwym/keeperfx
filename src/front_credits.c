@@ -54,11 +54,7 @@ int credits_end;
 void frontstory_load(void)
 {
     frontend_load_data_from_cd();
-#ifdef SPRITE_FORMAT_V2
-    frontstory_font = load_font("ldata/frontft1-64.dat", "ldata/frontft1-64.tab");
-#else
     frontstory_font = load_font("ldata/frontft1.dat", "ldata/frontft1.tab");
-#endif
     if (!frontstory_font)
     {
         ERRORLOG("Unable to load front story font");

@@ -145,17 +145,10 @@ void FreeVRes256Data(void)
 short LoadVResMinimal(void)
 {
     button_sprites = load_spritesheet("data/gui1-32.dat", "data/gui1-32.tab");
-#ifdef SPRITE_FORMAT_V2
-    frontend_font[0] = load_font("ldata/frontft1-64.dat", "ldata/frontft1-64.tab");
-    frontend_font[1] = load_font("ldata/frontft2-64.dat", "ldata/frontft2-64.tab");
-    frontend_font[2] = load_font("ldata/frontft3-64.dat", "ldata/frontft3-64.tab");
-    frontend_font[3] = load_font("ldata/frontft4-64.dat", "ldata/frontft4-64.tab");
-#else
     frontend_font[0] = load_font("ldata/frontft1.dat", "ldata/frontft1.tab");
     frontend_font[1] = load_font("ldata/frontft2.dat", "ldata/frontft2.tab");
     frontend_font[2] = load_font("ldata/frontft3.dat", "ldata/frontft3.tab");
     frontend_font[3] = load_font("ldata/frontft4.dat", "ldata/frontft4.tab");
-#endif
     return button_sprites && frontend_font[0] && frontend_font[1] && frontend_font[2] &&
         frontend_font[3] && LbDataLoadAll(front_load_files_minimal_640) == 0;
 }
@@ -271,11 +264,7 @@ void set_frontend_vidmode(TbScreenMode nmode)
 
 void load_pointer_file(short hi_res)
 {
-#ifdef SPRITE_FORMAT_V2
-    pointer_sprites = load_spritesheet("data/pointer-64.dat", "data/pointer-64.tab");
-#else
     pointer_sprites = load_spritesheet("data/pointer64.dat", "data/pointer64.tab");
-#endif
     if (!pointer_sprites) ERRORLOG("Unable to load pointer sprites");
     RendererNotifyPointerSpritesLoaded();
 }

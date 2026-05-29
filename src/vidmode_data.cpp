@@ -73,19 +73,10 @@ struct TbLoadFiles gui_load_files_640[] = {
   {"",                   NULL,                                  NULL,                                           0, 0, 0},
 };
 
-#ifdef SPRITE_FORMAT_V2
-struct TbLoadFiles front_load_files_minimal_640[] = {
-  {"*FE_BACKUP_PAL",       (unsigned char **)&frontend_backup_palette,NULL,                            PALETTE_SIZE, 0, 0},
-  {"",                     NULL,                                  NULL,                                           0, 0, 0},
-};
-
-#else
 struct TbLoadFiles front_load_files_minimal_640[] = {
   {"*FE_BACKUP_PAL",     (unsigned char **)&frontend_backup_palette,NULL,                            PALETTE_SIZE, 0, 0},
   {"",                   NULL,                                  NULL,                                           0, 0, 0},
 };
-
-#endif
 
 struct TbLoadFiles legal_load_files[] = {
     {"*PALETTE",         &engine_palette,                        NULL,                               PALETTE_SIZE, 0, 0},
@@ -96,11 +87,7 @@ struct TbLoadFiles legal_load_files[] = {
 struct TbLoadFilesV2 game_load_files[] = {
     {"*SCRATCH",         &scratch,                                                                   0x10000, nullptr, nullptr},
     {"*TEXTURE_PAGE",    (unsigned char **)&block_mem,  max(size_t(BLOCK_MEM_SIZE), size_t(960*720)), nullptr, nullptr},// Store whole texture image or land view image
-#ifdef SPRITE_FORMAT_V2
-    {"data/thingspr-32.tab",(unsigned char**)&creature_table,                                              0, nullptr, nullptr},
-#else
     {"data/creature.tab",(unsigned char**)&creature_table,                                               0, &creature_table_load_get_size, &creature_table_load_unpack},
-#endif
     {"data/palette.dat", &engine_palette,                                                                  0, nullptr, nullptr},
     {"data/bluepal.dat", &blue_palette,                                                                    0, nullptr, nullptr},
     {"data/redpall.dat", &red_palette,                                                                     0, nullptr, nullptr},
