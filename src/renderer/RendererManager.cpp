@@ -26,6 +26,8 @@
 #ifdef RENDERER_VULKAN_ENABLED
 #  include "renderer/RendererVulkan.h"
 #  include "renderer/vulkan/VKCursorLayer.h"
+#  include "renderer/vulkan/VKMapFadePass.h"
+#  include "renderer/vulkan/VKTextRenderer.h"
 #endif
 #ifdef PLATFORM_VITA
 #  include "renderer/RendererVita.h"
@@ -443,6 +445,10 @@ static IMapFadePass* create_map_fade_pass(RendererType type)
         if (ogl) return ogl->CreateGLMapFadePass();
     }
 #endif
+#ifdef RENDERER_VULKAN_ENABLED
+    if (type == RENDERER_VULKAN)
+        return new VKMapFadePass();
+#endif
     (void)type;
     return new SoftwareMapFadePass();
 }
@@ -456,6 +462,10 @@ static ITextRenderer* create_text_renderer(RendererType type)
         RendererOpenGL* ogl = static_cast<RendererOpenGL*>(s_activeRenderer);
         if (ogl) return ogl->CreateGLTextRenderer();
     }
+#endif
+#ifdef RENDERER_VULKAN_ENABLED
+    if (type == RENDERER_VULKAN)
+        return new VKTextRenderer();
 #endif
     (void)type;
     return new SoftwareTextRenderer();
