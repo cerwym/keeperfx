@@ -200,8 +200,13 @@ void RendererVulkan::Shutdown()
 
     vkDeviceWaitIdle(m_device.GetDevice());
 
-    if (m_world_renderer) { m_world_renderer->Shutdown(); delete m_world_renderer; m_world_renderer = nullptr; }
-    if (m_ui_renderer)    { m_ui_renderer->Shutdown();    delete m_ui_renderer;    m_ui_renderer    = nullptr; }
+    // Sub-renderers are owned by RendererManager (returned by CreateVKXxx()).
+    // We call Shutdown() to release GPU resources while the device is valid and
+    // the GPU is idle, but do NOT delete — RendererManager will delete them.
+    // If the object was never transferred (Init() partial fail), the gpu_init_fail
+    // path deletes them directly.
+    if (m_world_renderer) { m_world_renderer->Shutdown(); m_world_renderer = nullptr; }
+    if (m_ui_renderer)    { m_ui_renderer->Shutdown();    m_ui_renderer    = nullptr; }
     if (m_tile_atlas)     { m_tile_atlas->Free();         delete m_tile_atlas;     m_tile_atlas     = nullptr; }
     shutdown_shared_textures();
     m_staging.Shutdown();

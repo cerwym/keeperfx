@@ -86,6 +86,11 @@ bool VKUIRenderer::Init(VkDevice device, VmaAllocator allocator,
 
 void VKUIRenderer::Shutdown()
 {
+    // Ensure all GPU commands using our resources have completed before freeing them.
+    // This covers the case where RendererManager deletes us before RendererVulkan::Shutdown().
+    if (m_device != VK_NULL_HANDLE && m_vtx_buf != VK_NULL_HANDLE)
+        vkDeviceWaitIdle(m_device);
+
     if (m_vtx_buf != VK_NULL_HANDLE) {
         vmaDestroyBuffer(m_allocator, m_vtx_buf, m_vtx_alloc);
         m_vtx_buf    = VK_NULL_HANDLE;

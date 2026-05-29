@@ -258,6 +258,11 @@ void VKWorldViewRenderer::Shutdown()
     m_shadow_img_ready = false;
     m_clut_img_ready   = false;
 
+    // Ensure all GPU commands using our resources have completed before freeing them.
+    // This covers the case where RendererManager deletes us before RendererVulkan::Shutdown().
+    if (m_device != VK_NULL_HANDLE)
+        vkDeviceWaitIdle(m_device);
+
     free_kspr_atlas();
 
     if (m_clut_sampler != VK_NULL_HANDLE) { vkDestroySampler(m_device, m_clut_sampler, nullptr); m_clut_sampler = VK_NULL_HANDLE; }
