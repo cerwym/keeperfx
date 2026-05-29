@@ -15,6 +15,7 @@
 #include "renderer/opengl/IGLShaderCompilable.h"
 #include "renderer/RendererThread.h"
 #include "renderer/UIVertex.h"
+#include "renderer/UIBatch.h"
 #include <vector>
 #include <cstdint>
 #include <atomic>
@@ -34,24 +35,7 @@ class GLFontAtlas;
  *  Alias for UIVertex — layout shared with the Vulkan backend. */
 using GLUIVertex = UIVertex;
 
-/** Batched UI element data before vertex expansion. */
-struct UIQuad {
-    float x0, y0, x1, y1;  // Screen rectangle
-    float u0, v0, u1, v1;  // Texture coordinates  
-    float r, g, b, a;      // Color/tint
-    float z;               // Z-depth
-    float mode;            // Render mode (0=sprite, 1=font, 3=solid, 10=slab, 20=colored, 30=remap)
-    uint32_t texture_id;   // Sprite sheet texture ID
-    int remap_row;         // Fade-table row for remap quads (mode 30); -1 = unused
-};
-
-/** Line segment for slab selectors. */
-struct UILine {
-    float x1, y1, x2, y2;  // Line endpoints
-    float r, g, b, a;      // Line color
-    float z;               // Z-depth
-    float thickness;       // Line thickness
-};
+// UIQuad and UILine are defined in renderer/UIBatch.h (included above).
 
 /** Picture-in-picture FBO composite quad.  Uses the FBO colour texture directly
  *  (no palette lookup).  Rendered before layer-1 atlas sprites so the zoom-box
