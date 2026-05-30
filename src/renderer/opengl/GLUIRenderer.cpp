@@ -124,7 +124,6 @@ void GLUIRenderer::Shutdown()
 
 void GLUIRenderer::SetScreenDimensions(int width, int height)
 {
-    ASSERT_RENDER_THREAD();
     m_screen_width = width;
     m_screen_height = height;
 }
