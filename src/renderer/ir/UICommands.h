@@ -179,19 +179,10 @@ struct IRUICursorPointerCmd
     int32_t           units_per_px  = 16;
 };
 
-/** Draw the keeper hand sprite at the cursor position. */
-struct IRUICursorKeeperHandCmd
-{
-    IRUILayer  layer        = IRUILayer::Cursor;
-    int16_t    x            = 0;
-    int16_t    y            = 0;
-    uint16_t   kspr_base    = 0;
-    int16_t    angle        = 0;
-    uint8_t    sprgroup     = 0;
-    int32_t    scale        = 0;
-    uint32_t   draw_flags   = 0;
-    uint8_t    draw_alpha   = 255;
-};
+/* IRUICursorKeeperHandCmd removed: keeper-hand sprites are now pre-computed on
+ * the game thread via GLWorldViewRenderer::BeginCursorCapture() /
+ * EndCursorCapture() and stored as IRWorldKeeperSpriteCmd in the WVR's own
+ * shadow buffer.  No game-side globals are touched from the render thread. */
 
 /******************************************************************************/
 
@@ -217,7 +208,6 @@ struct UICommandBuffers
     IRCommandBuffer<IRUIFBOQuadCmd>          fbo_quads;
     IRCommandBuffer<IRUIMinimapCmd>          minimaps;
     IRCommandBuffer<IRUICursorPointerCmd>    cursor_pointers;
-    IRCommandBuffer<IRUICursorKeeperHandCmd> cursor_hands;
 
     /** Game viewport captured at SetGameViewport() — restored by ExecuteUIFromIR(). */
     UIGameViewport game_vp;
@@ -235,7 +225,6 @@ struct UICommandBuffers
         fbo_quads.Reset();
         minimaps.Reset();
         cursor_pointers.Reset();
-        cursor_hands.Reset();
         game_vp   = {};
         ir_active = false;
     }
@@ -251,7 +240,6 @@ struct UICommandBuffers
         fbo_quads.Reserve(8);
         minimaps.Reserve(2);
         cursor_pointers.Reserve(4);
-        cursor_hands.Reserve(4);
     }
 
     /** Returns true if any drawable commands were submitted this frame.
@@ -263,7 +251,7 @@ struct UICommandBuffers
                !sprites.Empty()         || !sprites_remap.Empty()    ||
                !sprites_colored.Empty() || !slab_selectors.Empty()   ||
                !fbo_quads.Empty()       || !minimaps.Empty()         ||
-               !cursor_pointers.Empty() || !cursor_hands.Empty();
+               !cursor_pointers.Empty();
     }
 
     void Swap(UICommandBuffers& other)
@@ -277,7 +265,6 @@ struct UICommandBuffers
         fbo_quads.Swap(other.fbo_quads);
         minimaps.Swap(other.minimaps);
         cursor_pointers.Swap(other.cursor_pointers);
-        cursor_hands.Swap(other.cursor_hands);
         std::swap(game_vp,   other.game_vp);
         std::swap(ir_active, other.ir_active);
     }

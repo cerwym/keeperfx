@@ -29,6 +29,7 @@
 #include "creature_graphics.h" // KeeperSprite structure
 #include "bflib_sprite.h"      // TbSprite structure
 #include "player_data.h"       // get_player_color_idx(), player_room_colours[]
+#include "game_legacy.h"       // game.lish.subtile_lightness (lightmap snapshot in FlipBuffers)
 
 #include <glad/glad.h>
 #include <cassert>
@@ -935,33 +936,52 @@ bool GLWorldViewRenderer::init_flatpoly_shader()
 
 /******************************************************************************/
 
-void GLWorldViewRenderer::BeginHandSpriteRendering()
+void GLWorldViewRenderer::BeginCursorCapture()
+{
+    ASSERT_GAME_THREAD();
+    m_cursor_kspr_ir.clear();
+    m_cursor_capture = true;
+}
+
+void GLWorldViewRenderer::EndCursorCapture()
+{
+    ASSERT_GAME_THREAD();
+    m_cursor_capture = false;
+}
+
+void GLWorldViewRenderer::DrawCursorKeeperSprites()
 {
     ASSERT_RENDER_THREAD();
-    m_saved_screen_w   = m_draw_screen_w;
-    m_saved_screen_h   = m_draw_screen_h;
-    m_saved_sprite_z   = m_current_sprite_z;
+    if (m_rt_cursor_kspr_ir.empty()) return;
+
+    const int saved_draw_w   = m_draw_screen_w;
+    const int saved_draw_h   = m_draw_screen_h;
+    const float saved_z      = m_current_sprite_z;
 
     m_draw_screen_w    = m_full_screen_w;
     m_draw_screen_h    = m_full_screen_h;
     m_current_sprite_z = -1.0f;
-    m_direct_draw      = true;
 
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glViewport(0, 0, m_full_screen_w, m_full_screen_h);
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
-}
 
-void GLWorldViewRenderer::EndHandSpriteRendering()
-{
-    ASSERT_RENDER_THREAD();
-    m_draw_screen_w    = m_saved_screen_w;
-    m_draw_screen_h    = m_saved_screen_h;
-    m_current_sprite_z = m_saved_sprite_z;
-    m_direct_draw      = false;
+    for (const auto& cmd : m_rt_cursor_kspr_ir)
+    {
+        render_keepersprite_gpu(cmd.dst_x, cmd.dst_y, cmd.dst_w, cmd.dst_h,
+                                cmd.data, cmd.src_w, cmd.src_h,
+                                cmd.draw_flags, cmd.remap,
+                                cmd.z_ndc, cmd.owner, cmd.wants_outline);
+    }
 
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
+
+    m_draw_screen_w    = saved_draw_w;
+    m_draw_screen_h    = saved_draw_h;
+    m_current_sprite_z = saved_z;
 }
 
 /******************************************************************************/
@@ -981,16 +1001,24 @@ int GLWorldViewRenderer::SubmitKeeperSprite(
     }
     if (dst_w <= 0 || dst_h <= 0) return 1;
 
-    // Direct-draw mode: render thread cursor replay (BeginHandSpriteRendering active).
-    // Draw immediately instead of buffering — avoids writing to the game-thread IR vector
-    // from the render thread (data race) and ensures cursor sprites aren't delayed a frame.
-    if (m_direct_draw)
+    // Cursor capture mode: game thread is pre-computing cursor sprites.
+    // Store in cursor shadow buffer; render thread draws them via DrawCursorKeeperSprites().
+    if (m_cursor_capture)
     {
-        render_keepersprite_gpu(dst_x, dst_y, dst_w, dst_h,
-                                data, src_w, src_h, draw_flags, remap,
-                                m_current_sprite_z,
-                                WorldViewRenderer_GetCurrentSpriteOwner(),
-                                WorldViewRenderer_GetCurrentSpriteWantsOutline());
+        IRWorldKeeperSpriteCmd cmd;
+        cmd.dst_x         = dst_x;
+        cmd.dst_y         = dst_y;
+        cmd.dst_w         = dst_w;
+        cmd.dst_h         = dst_h;
+        cmd.src_w         = src_w;
+        cmd.src_h         = src_h;
+        cmd.draw_flags    = draw_flags;
+        cmd.data          = data;
+        cmd.remap         = remap;
+        cmd.z_ndc         = -1.0f;
+        cmd.owner         = (int8_t)WorldViewRenderer_GetCurrentSpriteOwner();
+        cmd.wants_outline = (int8_t)WorldViewRenderer_GetCurrentSpriteWantsOutline();
+        m_cursor_kspr_ir.push_back(cmd);
         return 1;
     }
 
@@ -1571,6 +1599,7 @@ void GLWorldViewRenderer::FlipBuffers()
     m_rt_shadow_cmds    = std::move(m_shadow_cmds);
     m_rt_flatpoly_verts = std::move(m_flatpoly_verts);
     m_rt_kspr_ir        = std::move(m_kspr_ir);
+    m_rt_cursor_kspr_ir = std::move(m_cursor_kspr_ir);
     m_rt_screen_w       = m_screen_w;
     m_rt_screen_h       = m_screen_h;
     m_rt_vp_x           = m_vp_x;
@@ -1579,6 +1608,9 @@ void GLWorldViewRenderer::FlipBuffers()
         memcpy(m_rt_palette, m_palette_data, sizeof(m_rt_palette));
     else
         memset(m_rt_palette, 0, sizeof(m_rt_palette));
+
+    // Snapshot the lightmap so the render thread never reads the live game array.
+    memcpy(m_rt_lightmap, game.lish.subtile_lightness, sizeof(m_rt_lightmap));
 
     // Swap raw vertex staging buffers: render thread gets the filled buffer,
     // game thread gets a clean buffer for the next frame.
@@ -1723,17 +1755,14 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl, int screen_w
     // Keep m_shader bound — pass 1 (tiles) draws with it immediately below.
     // glUseProgram(0) will fuck up flat-poly draws in pass 1, and the flat-poly shader is only used in pass 2 after all tiles are drawn, so we can defer binding it until then.    
 
-    // Upload lightmap (game.lish.subtile_lightness[]) to GL_TEXTURE2.
-    // Uploaded every frame so dynamic lighting changes (torches, spells) are
-    // reflected immediately.  511x511 x 2 bytes = ~0.5 MB, negligible cost.
-    // GL_UNPACK_ALIGNMENT must be 2: each row is 511*2=1022 bytes, which is
-    // divisible by 2 but NOT 4, so the default alignment of 4 would shift rows.
+    // Upload lightmap shadow copy (snapshotted from game.lish.subtile_lightness[]
+    // during FlipBuffers() on the game thread — no live game struct access here).
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, m_tex_lightmap);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 2);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, MAX_SUBTILES_X, MAX_SUBTILES_Y,
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, k_lightmap_w, k_lightmap_h,
                     GL_RED_INTEGER, GL_UNSIGNED_SHORT,
-                    game.lish.subtile_lightness);
+                    m_rt_lightmap);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 4);  // restore default
 
     // Bind fade table to unit 3 unconditionally — the sampler must always

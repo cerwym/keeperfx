@@ -34,7 +34,7 @@
 #include <glad/glad.h>
 #include "post_inc.h"
 
-// Read at SubmitKeeperHandSprite time to capture alpha state alongside DrawFlags.
+// Read at SubmitKeeperHandSprite time (game thread — all access is safe here).
 extern "C" unsigned char EngineSpriteDrawUsingAlpha;
 
 /******************************************************************************/
@@ -58,17 +58,17 @@ void GLCursorLayer::SubmitKeeperHandSprite(short x, short y,
                                             unsigned char sprgroup,
                                             int32_t scale)
 {
-    if (!m_write_cmds) return;
-    IRUICursorKeeperHandCmd cmd;
-    cmd.x          = x;
-    cmd.y          = y;
-    cmd.kspr_base  = kspr_base;
-    cmd.angle      = angle;
-    cmd.sprgroup   = sprgroup;
-    cmd.scale      = scale;
-    cmd.draw_flags = lbDisplay.DrawFlags;
-    cmd.draw_alpha = EngineSpriteDrawUsingAlpha;
-    m_write_cmds->cursor_hands.Append(cmd);
+    if (!m_wvr) return;
+    // Pre-compute the sprite on the game thread: process_keeper_sprite_ex resolves
+    // all game-global state (water offsets, thing flags, remap table, etc.) and
+    // routes through SubmitKeeperSprite() which, while m_cursor_capture is active,
+    // stores the result as IRWorldKeeperSpriteCmd in m_cursor_kspr_ir.
+    // FlipBuffers() then moves that to m_rt_cursor_kspr_ir for the render thread,
+    // which calls DrawCursorKeeperSprites() — no game globals are ever touched there.
+    m_wvr->BeginCursorCapture();
+    process_keeper_sprite_ex(x, y, kspr_base, angle, sprgroup, scale,
+                             lbDisplay.DrawFlags, EngineSpriteDrawUsingAlpha);
+    m_wvr->EndCursorCapture();
 }
 
 void GLCursorLayer::ExecuteCursorFromIR(const UICommandBuffers& cmds)
@@ -86,22 +86,9 @@ void GLCursorLayer::ExecuteCursorFromIR(const UICommandBuffers& cmds)
         m_glui->DrawCursorSprites();
     }
 
-    // ── Keeper-hand sprites (world-view renderer path) ────────────────────────
-    if (!cmds.cursor_hands.Empty() && m_wvr)
-    {
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        m_wvr->BeginHandSpriteRendering();
-
-        for (const auto& k : cmds.cursor_hands)
-        {
-            process_keeper_sprite_ex(k.x, k.y, k.kspr_base,
-                                     k.angle, k.sprgroup, k.scale,
-                                     k.draw_flags, k.draw_alpha);
-        }
-
-        m_wvr->EndHandSpriteRendering();  // restores depthMask and disables blend
-    }
+    // ── Keeper-hand sprites (pre-computed on game thread) ─────────────────────
+    if (m_wvr)
+        m_wvr->DrawCursorKeeperSprites();
 }
 
 #endif // RENDERER_OPENGL_ENABLED

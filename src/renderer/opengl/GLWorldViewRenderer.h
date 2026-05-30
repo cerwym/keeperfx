@@ -145,12 +145,19 @@ public:
 
    
 
-    // Called by GLUIRenderer::Draw() (via UIRenderer_Draw) to render power-hand
-    // keeper sprites after glClear() with full-screen NDC coordinates.
-    // Saves the render-thread active viewport size and m_current_sprite_z, sets them
-    // to full-screen and z=-1 (near plane, always on top), restores in EndHandSpriteRendering().
-    void BeginHandSpriteRendering();
-    void EndHandSpriteRendering();
+    /** Game thread: redirect keeper-sprite submits to the cursor shadow buffer.
+     *  Called by GLCursorLayer::SubmitKeeperHandSprite() before calling
+     *  process_keeper_sprite_ex() so the resulting SubmitKeeperSprite() calls
+     *  are captured to m_cursor_kspr_ir instead of m_kspr_ir.
+     *  Must be followed by EndCursorCapture() on the same thread. */
+    void BeginCursorCapture();
+    void EndCursorCapture();
+
+    /** Render thread: draw all pre-computed cursor keeper sprites from
+     *  m_rt_cursor_kspr_ir.  Sets up full-screen viewport + blend state,
+     *  calls render_keepersprite_gpu() for each sprite, then restores state.
+     *  Called by GLCursorLayer::ExecuteCursorFromIR(). */
+    void DrawCursorKeeperSprites();
 
     /** Attempt to initialise GL resources outside of a world pass, e.g. from
      *  RendererOpenGL::BeginFrame().  No-op when already initialised.
@@ -436,7 +443,21 @@ private:
     std::vector<FlatPolyVertex>      m_pip_flatpoly_verts;  // RT(PiP):
     std::vector<IRWorldKeeperSpriteCmd> m_pip_kspr_ir;      // RT(PiP): keeper sprites during PiP
     bool         m_pip_capture         = false;             // RT:
-    bool         m_direct_draw         = false;             // RT: set during hand-sprite rendering to bypass IR buffering
+    bool         m_cursor_capture      = false;             // GT: redirect SubmitKeeperSprite → m_cursor_kspr_ir
+
+    // ── Cursor keeper-sprite double buffer ────────────────────────────────────
+    // Game thread pre-computes cursor sprites (via process_keeper_sprite_ex) into
+    // m_cursor_kspr_ir during SubmitKeeperHandSprite().  FlipBuffers() moves them
+    // to m_rt_cursor_kspr_ir for the render thread to draw via DrawCursorKeeperSprites().
+    std::vector<IRWorldKeeperSpriteCmd> m_cursor_kspr_ir;     // GT: write
+    std::vector<IRWorldKeeperSpriteCmd> m_rt_cursor_kspr_ir;  // RT: read
+
+    // ── Lightmap shadow copy ──────────────────────────────────────────────────
+    // FlipBuffers() snapshots game.lish.subtile_lightness[] here so the render
+    // thread never touches the live game array.  511×511×2 bytes ≈ 0.5 MB.
+    static constexpr int k_lightmap_w = 511;
+    static constexpr int k_lightmap_h = 511;
+    uint16_t m_rt_lightmap[k_lightmap_w * k_lightmap_h] = {};
 
     bool m_initialized = false;
     // Set to true in BeginWorldPass(); reset to false at the end of GPURenderNow().
