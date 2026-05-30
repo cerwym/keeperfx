@@ -969,7 +969,6 @@ int GLWorldViewRenderer::SubmitKeeperSprite(
     const unsigned char* data, int src_w, int src_h,
     unsigned int draw_flags, const unsigned char* remap)
 {
-    ASSERT_GAME_THREAD();
 
     if (src_w <= 0 || src_h <= 0 || src_w > k_kspr_decode_dim || src_h > k_kspr_decode_dim) {
         static int s_dim = 0;
