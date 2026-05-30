@@ -436,6 +436,7 @@ private:
     std::vector<FlatPolyVertex>      m_pip_flatpoly_verts;  // RT(PiP):
     std::vector<IRWorldKeeperSpriteCmd> m_pip_kspr_ir;      // RT(PiP): keeper sprites during PiP
     bool         m_pip_capture         = false;             // RT:
+    bool         m_direct_draw         = false;             // RT: set during hand-sprite rendering to bypass IR buffering
 
     bool m_initialized = false;
     // Set to true in BeginWorldPass(); reset to false at the end of GPURenderNow().

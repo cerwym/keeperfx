@@ -945,6 +945,7 @@ void GLWorldViewRenderer::BeginHandSpriteRendering()
     m_draw_screen_w    = m_full_screen_w;
     m_draw_screen_h    = m_full_screen_h;
     m_current_sprite_z = -1.0f;
+    m_direct_draw      = true;
 
     glViewport(0, 0, m_full_screen_w, m_full_screen_h);
     glDisable(GL_DEPTH_TEST);
@@ -957,6 +958,7 @@ void GLWorldViewRenderer::EndHandSpriteRendering()
     m_draw_screen_w    = m_saved_screen_w;
     m_draw_screen_h    = m_saved_screen_h;
     m_current_sprite_z = m_saved_sprite_z;
+    m_direct_draw      = false;
 
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
@@ -978,6 +980,19 @@ int GLWorldViewRenderer::SubmitKeeperSprite(
         return 1;
     }
     if (dst_w <= 0 || dst_h <= 0) return 1;
+
+    // Direct-draw mode: render thread cursor replay (BeginHandSpriteRendering active).
+    // Draw immediately instead of buffering — avoids writing to the game-thread IR vector
+    // from the render thread (data race) and ensures cursor sprites aren't delayed a frame.
+    if (m_direct_draw)
+    {
+        render_keepersprite_gpu(dst_x, dst_y, dst_w, dst_h,
+                                data, src_w, src_h, draw_flags, remap,
+                                m_current_sprite_z,
+                                WorldViewRenderer_GetCurrentSpriteOwner(),
+                                WorldViewRenderer_GetCurrentSpriteWantsOutline());
+        return 1;
+    }
 
     // Choose the write target: PiP capture goes to m_pip_kspr_ir, normal to m_kspr_ir.
     auto& kspr_buf = m_pip_capture ? m_pip_kspr_ir : m_kspr_ir;
