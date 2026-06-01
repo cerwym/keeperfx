@@ -939,7 +939,9 @@ bool GLWorldViewRenderer::init_flatpoly_shader()
 void GLWorldViewRenderer::BeginCursorCapture()
 {
     ASSERT_GAME_THREAD();
-    m_cursor_kspr_ir.clear();
+    // No clear here: FlipBuffers() empties m_cursor_kspr_ir via std::move, so
+    // the buffer is already clean at frame start.  Multiple Begin/End pairs
+    // within one frame safely accumulate into the same buffer.
     m_cursor_capture = true;
 }
 

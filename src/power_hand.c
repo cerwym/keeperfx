@@ -713,6 +713,7 @@ void draw_power_hand(void)
             break;
         }
     }
+    
     if (player->hand_animationId == HndA_Hold)
     {
         inputpos_x = GetMouseX() + scale_ui_value(58*global_hand_scale);
@@ -720,7 +721,7 @@ void draw_power_hand(void)
         CursorLayer_SubmitKeeperHandSprite(inputpos_x / pixel_size, inputpos_y / pixel_size,
             thing->anim_sprite, 0, thing->current_frame, scale_ui_value(64*global_hand_scale));
         draw_mini_things_in_hand(GetMouseX()+scale_ui_value(60*global_hand_scale), GetMouseY());
-    } else
+    } else // All other animations (HoldGold, Hover, Pickup, SideHover, SideSlap, Slap) use the default offset
     {
         inputpos_x = GetMouseX() + scale_ui_value(60*global_hand_scale);
         inputpos_y = GetMouseY() + scale_ui_value(40*global_hand_scale);
