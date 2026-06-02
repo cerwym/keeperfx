@@ -92,7 +92,6 @@ public:
 
 private:
     bool pack_sprite(const struct TbSprite* spr, SpriteUV& out);
-    void decode_rle(uint8_t* dst, int dst_stride, const struct TbSprite* spr);
 
     SpriteHandle GetHandle_Unlocked(const struct TbSprite* spr) const;
     bool         GetUV_Unlocked(SpriteHandle h, SpriteUV& out) const;

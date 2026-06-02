@@ -261,8 +261,9 @@ bool GLFontAtlas::PackAndUploadAtlas(const struct TbSpriteSheet* font_sheet)
         // Copy sprite data to atlas buffer
         // Decode RLE compressed sprite data
         unsigned char* char_buffer = (unsigned char*)malloc(char_width * char_height);
-        if (char_buffer && DecodeRLESprite(char_buffer, char_width, spr->Data, char_width, char_height))
+        if (char_buffer)
         {
+            LbSpriteDecode(char_buffer, char_width, spr->Data, char_width, char_height);
             for (int y = 0; y < char_height; ++y)
             {
                 for (int x = 0; x < char_width; ++x)
@@ -276,8 +277,8 @@ bool GLFontAtlas::PackAndUploadAtlas(const struct TbSpriteSheet* font_sheet)
                     atlas_buffer[atlas_offset + 3] = (palette_idx == 0) ? 0 : 255; // Alpha
                 }
             }
+            free(char_buffer);
         }
-        if (char_buffer) free(char_buffer);
 
         // Update position for next character
         current_x += char_width;
@@ -320,40 +321,6 @@ const FontGlyph* GLFontAtlas::GetGlyph(unsigned long chr) const
         return &m_glyphs[idx];
 
     return nullptr;
-}
-
-bool GLFontAtlas::DecodeRLESprite(unsigned char* dst, int dst_stride,
-                                 const unsigned char* sprite_data, int w, int h)
-{
-    if (!dst || !sprite_data || w <= 0 || h <= 0)
-        return false;
-
-    // Clear destination buffer
-    for (int y = 0; y < h; ++y)
-        memset(dst + y * dst_stride, 0, w);
-
-    const signed char* sp = reinterpret_cast<const signed char*>(sprite_data);
-    for (int y = 0; y < h; ++y) {
-        unsigned char* row = dst + y * dst_stride;
-        int x = 0;
-        while (true) {
-            signed char cmd = *sp++;
-            if (cmd == 0) break; // End of row
-            if (cmd < 0) {
-                // Transparent skip
-                x += (int)(-cmd);
-            } else {
-                // Run of palette bytes
-                int count = (int)cmd;
-                for (int i = 0; i < count; ++i) {
-                    if (x < w) row[x] = (unsigned char)(*sp);
-                    ++sp;
-                    ++x;
-                }
-            }
-        }
-    }
-    return true;
 }
 
 /******************************************************************************/

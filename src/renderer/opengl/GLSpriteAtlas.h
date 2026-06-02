@@ -84,7 +84,6 @@ public:
 
 private:
     bool pack_sprite(const struct TbSprite* spr, SpriteUV& out);
-    void decode_rle(uint8_t* dst, int dst_stride, const struct TbSprite* spr);
     void flush_dirty();
 
     // Unlocked variants — called only while m_mutex is already held.

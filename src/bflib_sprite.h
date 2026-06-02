@@ -77,4 +77,60 @@ void trim_spritesheet(struct TbSpriteSheet *sheet, long count);
 #ifdef __cplusplus
 }
 #endif
+
+/**
+ * Decode a TbSprite RLE stream into a flat palette-index buffer.
+ *
+ * Each output byte is a raw palette index; index 0 is transparent.
+ * Transparent spans write nothing (the caller should zero the buffer first,
+ * or pass in a pre-zeroed destination).
+ *
+ * The format: a stream of signed bytes where
+ *   0       = end of row (advance to next row),
+ *   n < 0   = skip -n transparent pixels,
+ *   n > 0   = copy the next n palette-index bytes verbatim.
+ *
+ * @param dst        Destination pixel buffer.
+ * @param dst_stride Row pitch of @p dst in bytes (>= @p w).
+ * @param data       Pointer to the RLE-encoded sprite data.
+ * @param w          Sprite width in pixels.
+ * @param h          Sprite height in pixels.
+ */
+static inline void LbSpriteDecode(unsigned char *dst, int dst_stride,
+                                   const unsigned char *data, int w, int h)
+{
+    int y;
+    for (y = 0; y < h; ++y)
+        memset(dst + y * dst_stride, 0, (size_t)w);
+
+    for (y = 0; y < h; ++y) {
+        unsigned char *row = dst + y * dst_stride;
+        int x = 0;
+        for (;;) {
+            signed char cmd = (signed char)(*data++);
+            if (cmd == 0) break;
+            if (cmd < 0) {
+                x += (int)(-cmd);
+            } else {
+                int count = (int)cmd;
+                int i;
+                for (i = 0; i < count; ++i) {
+                    if (x < w) row[x] = *data;
+                    ++data;
+                    ++x;
+                }
+            }
+        }
+    }
+}
+
+#ifdef __cplusplus
+/** C++ overload: unwrap a TbSprite directly. */
+inline void LbSpriteDecode(unsigned char *dst, int dst_stride,
+                            const struct TbSprite *spr)
+{
+    LbSpriteDecode(dst, dst_stride, spr->Data, spr->SWidth, spr->SHeight);
+}
+#endif
+
 #endif

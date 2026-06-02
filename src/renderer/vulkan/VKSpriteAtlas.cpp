@@ -3,7 +3,6 @@
 /******************************************************************************/
 /** @file VKSpriteAtlas.cpp
  *     Vulkan sprite texture atlas — implementation.
- *     Packing + RLE-decode logic mirrors GLSpriteAtlas.cpp.
  */
 /******************************************************************************/
 #include "pre_inc.h"
@@ -78,32 +77,6 @@ void VKSpriteAtlas::Free_Internal()
 
 /******************************************************************************/
 
-void VKSpriteAtlas::decode_rle(uint8_t* dst, int dst_stride, const struct TbSprite* spr)
-{
-    for (int y = 0; y < spr->SHeight; ++y)
-        memset(dst + y * dst_stride, 0, spr->SWidth);
-
-    const signed char* sp = reinterpret_cast<const signed char*>(spr->Data);
-    for (int y = 0; y < spr->SHeight; ++y) {
-        uint8_t* row = dst + y * dst_stride;
-        int x = 0;
-        while (true) {
-            signed char cmd = *sp++;
-            if (cmd == 0) break;
-            if (cmd < 0) {
-                x += (int)(-cmd);
-            } else {
-                int count = (int)cmd;
-                for (int i = 0; i < count; ++i) {
-                    if (x < spr->SWidth)
-                        row[x] = (uint8_t)(*sp);
-                    ++sp; ++x;
-                }
-            }
-        }
-    }
-}
-
 bool VKSpriteAtlas::pack_sprite(const struct TbSprite* spr, SpriteUV& out)
 {
     const int w = spr->SWidth;
@@ -125,7 +98,7 @@ bool VKSpriteAtlas::pack_sprite(const struct TbSprite* spr, SpriteUV& out)
     if (alloc_h > m_shelf_h) m_shelf_h = alloc_h;
 
     uint8_t* dst = m_pixels.data() + m_shelf_y * k_atlas_w + m_cursor_x;
-    decode_rle(dst, k_atlas_w, spr);
+    LbSpriteDecode(dst, k_atlas_w, spr);
 
     out.u0      = (float) m_cursor_x       / (float)k_atlas_w;
     out.v0      = (float) m_shelf_y        / (float)k_atlas_h;

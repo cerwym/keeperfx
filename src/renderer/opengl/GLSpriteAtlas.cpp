@@ -66,59 +66,6 @@ void GLSpriteAtlas::Free_Internal()
 
 /******************************************************************************/
 
-void GLSpriteAtlas::decode_rle(uint8_t* dst, int dst_stride, const struct TbSprite* spr)
-{
-    KFX_ZONE("SpriteAtlas::DecodeRLE");
-    // Zero out the sprite area (index 0 == transparent)
-    for (int y = 0; y < spr->SHeight; ++y)
-        memset(dst + y * dst_stride, 0, spr->SWidth);
-
-    const signed char* sp = reinterpret_cast<const signed char*>(spr->Data);
-    int total_pixels_written = 0;
-
-    for (int y = 0; y < spr->SHeight; ++y) {
-        uint8_t* row = dst + y * dst_stride;
-        int x = 0;
-        while (true) {
-            signed char cmd = *sp++;
-            if (cmd == 0) break;            // end of row
-            if (cmd < 0) {
-                x += (int)(-cmd);           // transparent run — skip pixels
-            } else {
-                int count = (int)cmd;
-                for (int i = 0; i < count; ++i) {
-                    if (x < spr->SWidth) {
-                        row[x] = (uint8_t)(*sp);
-                        if (*sp != 0) total_pixels_written++;
-                    }
-                    ++sp;
-                    ++x;
-                }
-            }
-        }
-    }
-
-    // Log sprites that decode to all zeros (potential black squares)
-    if (total_pixels_written == 0) {
-        static int empty_sprite_count = 0;
-        if (empty_sprite_count < 10) {
-            WARNLOG("GLSpriteAtlas: Sprite %dx%d decoded to all zeros (palette index 0) - will appear as transparent", 
-                   spr->SWidth, spr->SHeight);
-            // Show first few bytes of sprite data for debugging
-            const unsigned char* raw = spr->Data;
-            SYNCLOG("GLSpriteAtlas: Empty sprite raw data: %02X %02X %02X %02X %02X %02X...", 
-                   raw[0], raw[1], raw[2], raw[3], raw[4], raw[5]);
-            empty_sprite_count++;
-        }
-    } else {
-        static int decoded_sprite_count = 0;
-        if (decoded_sprite_count < 5) {
-            SYNCLOG("GLSpriteAtlas: Sprite %dx%d decoded successfully: %d non-zero pixels", 
-                   spr->SWidth, spr->SHeight, total_pixels_written);
-            decoded_sprite_count++;
-        }
-    }
-}
 
 bool GLSpriteAtlas::pack_sprite(const struct TbSprite* spr, SpriteUV& out)
 {
@@ -145,7 +92,10 @@ bool GLSpriteAtlas::pack_sprite(const struct TbSprite* spr, SpriteUV& out)
 
     // Decode RLE into the CPU pixel buffer
     uint8_t* dst = m_pixels.data() + m_shelf_y * k_atlas_w + m_cursor_x;
-    decode_rle(dst, k_atlas_w, spr);
+    {
+        KFX_ZONE("SpriteAtlas::DecodeRLE");
+        LbSpriteDecode(dst, k_atlas_w, spr);
+    }
 
     // UV in normalised [0,1] atlas space
     out.u0 = (float) m_cursor_x       / (float)k_atlas_w;
