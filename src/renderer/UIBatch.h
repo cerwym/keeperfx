@@ -29,6 +29,7 @@ struct UIQuad {
     float mode;            ///< Pass selector (0=sprite, 1=font, 3=solid, 10=slab, 20=colored, 30=remap).
     uint32_t texture_id;   ///< Sprite-sheet texture ID (0 = primary atlas).
     int remap_row;         ///< Fade-table row for mode 30; -1 = unused.
+    uint32_t seq;          ///< Submission sequence number — used to restore game-thread order after IR type-separation sort.
 };
 
 /**

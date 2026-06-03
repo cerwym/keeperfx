@@ -195,6 +195,10 @@ private:
     /** Convert screen pixel coordinates to NDC. */
     void ScreenToNDC(float screen_x, float screen_y, float* ndc_x, float* ndc_y) const;
 
+    /** Re-issue the u_text_color uniform based on m_text_draw_flags.
+     *  Call whenever m_text_draw_flags changes (per-draw and at TRANSPAR control codes). */
+    void ApplyTextColorUniform();
+
     /**************************************************************************/
     /* Font / window state (owned, not delegated to globals)                  */
     /**************************************************************************/

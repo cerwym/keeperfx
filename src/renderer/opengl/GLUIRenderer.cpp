@@ -16,6 +16,7 @@
 #include "renderer/RendererManager.h"
 #include "renderer/RenderThreadManager.h"
 #include "renderer/RendererThread.h"
+#include "renderer/RendererSettings.h" // g_renderer_settings (transpar4_alpha, transpar8_alpha)
 #include "bflib_basics.h"
 #include "bflib_video.h"       // lbDisplay.DrawFlags (UIAlphaFromDrawFlags), units_per_pixel_best
 #include "engine_render.h"     // colored_stripey_lines, hud_scale, line_box_size
@@ -26,6 +27,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <vector>
 #include "renderer/VecMath.h"
 #include "kfx/profiling/KfxProfiling.h"
 #include "post_inc.h"
@@ -247,11 +249,12 @@ extern "C" unsigned char EngineSpriteDrawUsingAlpha;
 
 // Returns the alpha that should be applied to a submitted UI element based
 // on the current lbDisplay.DrawFlags transparency flags.
-// The ghost table (pixmap.ghost) computes (src*1/3 + dst*2/3) for both
-// TRANSPAR4 and TRANSPAR8 modes, so src alpha = 1/3 ≈ 0.333f.
+// Values are read from g_renderer_settings so they match the configured blend weights.
+// Priority matches the software renderer (bflib_vidraw.c): TRANSPAR4 is checked first.
 static inline float UIAlphaFromDrawFlags()
 {
-    if (lbDisplay.DrawFlags & (Lb_SPRITE_TRANSPAR4 | Lb_SPRITE_TRANSPAR8)) return 0.333f;
+    if (lbDisplay.DrawFlags & Lb_SPRITE_TRANSPAR4) return g_renderer_settings.transpar4_alpha;
+    if (lbDisplay.DrawFlags & Lb_SPRITE_TRANSPAR8) return g_renderer_settings.transpar8_alpha;
     return 1.0f;
 }
 
@@ -288,6 +291,7 @@ void GLUIRenderer::SubmitPanelSprite(int32_t x, int32_t y, int units_per_px, Spr
         cmd.flags        = flip_horiz ? kIRSpriteFlipHoriz : 0u;
         cmd.alpha        = UIAlphaFromDrawFlags();
         cmd.ndc_z        = m_world_depth_active ? m_world_z : 0.5f;
+        cmd.seq          = m_ui_write_cmds->next_seq++;
         m_ui_write_cmds->sprites.Append(cmd);
         return;
     }
@@ -330,6 +334,7 @@ void GLUIRenderer::SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px
         cmd.remap_row    = remap_row;
         cmd.alpha        = UIAlphaFromDrawFlags();
         cmd.ndc_z        = m_world_depth_active ? m_world_z : 0.5f;
+        cmd.seq          = m_ui_write_cmds->next_seq++;
         m_ui_write_cmds->sprites_remap.Append(cmd);
         return;
     }
@@ -379,6 +384,7 @@ void GLUIRenderer::SubmitPanelSpriteColored(int32_t x, int32_t y, int units_per_
         cmd.colour_idx   = color_idx;
         cmd.alpha        = UIAlphaFromDrawFlags();
         cmd.ndc_z        = m_world_depth_active ? m_world_z : 0.5f;
+        cmd.seq          = m_ui_write_cmds->next_seq++;
         m_ui_write_cmds->sprites_colored.Append(cmd);
         return;
     }
@@ -421,6 +427,7 @@ void GLUIRenderer::SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h
         cmd.flags        = kIRSpriteScaled;
         cmd.alpha        = UIAlphaFromDrawFlags();
         cmd.ndc_z        = m_world_depth_active ? m_world_z : 0.5f;
+        cmd.seq          = m_ui_write_cmds->next_seq++;
         m_ui_write_cmds->sprites.Append(cmd);
         return;
     }
@@ -451,6 +458,7 @@ void GLUIRenderer::SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, ui
         cmd.colour_idx = color_idx;
         cmd.alpha      = 1.0f;
         cmd.ndc_z      = m_world_depth_active ? m_world_z : 0.5f;
+        cmd.seq        = m_ui_write_cmds->next_seq++;
         m_ui_write_cmds->solid_boxes.Append(cmd);
         return;
     }
@@ -479,6 +487,7 @@ void GLUIRenderer::SubmitSolidBoxAlpha(int32_t x, int32_t y, int32_t w, int32_t 
         cmd.colour_idx = color_idx;
         cmd.alpha      = alpha;
         cmd.ndc_z      = m_world_depth_active ? m_world_z : 0.5f;
+        cmd.seq        = m_ui_write_cmds->next_seq++;
         m_ui_write_cmds->solid_boxes.Append(cmd);
         return;
     }
@@ -523,12 +532,21 @@ void GLUIRenderer::FlushPendingInit()
     SYNCLOG("FlushPendingInit/slab: tex=%u dim=%d first8=[%d,%d,%d,%d,%d,%d,%d,%d]",
             m_slab_texture, dim,
             data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7]);
+
+    // Apply the same zero-index substitution as the software renderer (gui_draw.c:143):
+    // palette index 0 means "transparent" in sprites but the slab tile shader discards
+    // it.  Replace every 0 with 1 so all texels render as opaque, matching the CPU path.
+    const int total = dim * dim;
+    std::vector<uint8_t> slab_buf(total);
+    for (int k = 0; k < total; ++k)
+        slab_buf[k] = data[k] ? data[k] : 1;
+
     glBindTexture(GL_TEXTURE_2D, m_slab_texture);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, dim, dim, 0, GL_RED, GL_UNSIGNED_BYTE, data);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, dim, dim, 0, GL_RED, GL_UNSIGNED_BYTE, slab_buf.data());
     glBindTexture(GL_TEXTURE_2D, 0);
     m_slab_dim = dim;
 }
@@ -556,6 +574,7 @@ bool GLUIRenderer::SubmitSlabBackground(int x, int y, int w, int h)
         cmd.y     = y;
         cmd.w     = w;
         cmd.h     = h;
+        cmd.seq   = m_ui_write_cmds->next_seq++;
         m_ui_write_cmds->slab_backgrounds.Append(cmd);
         return true;
     }
@@ -1303,6 +1322,7 @@ void GLUIRenderer::ExecuteUIFromIR(const UICommandBuffers& cmds, const FrameStat
         q.u0 = 0.0f; q.v0 = 0.0f; q.u1 = 1.0f; q.v1 = 1.0f;
         q.r = r; q.g = g; q.b = b; q.a = cmd.alpha;
         q.z = cmd.ndc_z; q.mode = 3.0f; q.texture_id = 0; q.remap_row = -1;
+        q.seq = cmd.seq;
         m_rt_quads[idx].push_back(q);
     }
 
@@ -1321,6 +1341,7 @@ void GLUIRenderer::ExecuteUIFromIR(const UICommandBuffers& cmds, const FrameStat
             qbg.u0=0.0f; qbg.v0=0.0f; qbg.u1=1.0f; qbg.v1=1.0f;
             qbg.r=0.0f; qbg.g=0.0f; qbg.b=0.0f; qbg.a=1.0f;
             qbg.z=0.48f; qbg.mode=3.0f; qbg.texture_id=0; qbg.remap_row=-1;
+            qbg.seq = cmd.seq;
             m_rt_quads[idx].push_back(qbg);
             // Tiled slab texture
             UIQuad qt;
@@ -1329,6 +1350,7 @@ void GLUIRenderer::ExecuteUIFromIR(const UICommandBuffers& cmds, const FrameStat
             qt.u0=0.0f; qt.v0=0.0f; qt.u1=u1; qt.v1=v1;
             qt.r=1.0f; qt.g=1.0f; qt.b=1.0f; qt.a=1.0f;
             qt.z=0.49f; qt.mode=10.0f; qt.texture_id=0; qt.remap_row=-1;
+            qt.seq = cmd.seq;
             m_rt_quads[idx].push_back(qt);
         }
     }
@@ -1356,6 +1378,7 @@ void GLUIRenderer::ExecuteUIFromIR(const UICommandBuffers& cmds, const FrameStat
             q.u0=u0; q.v0=uv.v0; q.u1=u1; q.v1=uv.v1;
             q.r=1.0f; q.g=1.0f; q.b=1.0f; q.a=cmd.alpha;
             q.z=cmd.ndc_z; q.mode=0.0f; q.texture_id=0; q.remap_row=-1;
+            q.seq = cmd.seq;
             m_rt_quads[idx].push_back(q);
         }
 
@@ -1373,6 +1396,7 @@ void GLUIRenderer::ExecuteUIFromIR(const UICommandBuffers& cmds, const FrameStat
                 q.u0=uv.u0; q.v0=uv.v0; q.u1=uv.u1; q.v1=uv.v1;
                 q.r=1.0f; q.g=1.0f; q.b=1.0f; q.a=cmd.alpha;
                 q.z=cmd.ndc_z; q.mode=30.0f; q.texture_id=0; q.remap_row=cmd.remap_row;
+                q.seq = cmd.seq;
                 m_rt_quads[idx].push_back(q);
             }
         }
@@ -1393,6 +1417,7 @@ void GLUIRenderer::ExecuteUIFromIR(const UICommandBuffers& cmds, const FrameStat
             q.u0=uv.u0; q.v0=uv.v0; q.u1=uv.u1; q.v1=uv.v1;
             q.r=r; q.g=g; q.b=b; q.a=cmd.alpha;
             q.z=cmd.ndc_z; q.mode=20.0f; q.texture_id=0; q.remap_row=-1;
+            q.seq = cmd.seq;
             m_rt_quads[idx].push_back(q);
         }
     }
@@ -1438,6 +1463,13 @@ void GLUIRenderer::ExecuteUIFromIR(const UICommandBuffers& cmds, const FrameStat
             m_rt_lines[layer_idx].push_back(ln);
             t = t_end; ++segs;
         }
+    }
+
+    // Restore submission order across all command types so rendering matches
+    // the game-thread draw sequence (e.g. progress bar fill before empty overlay).
+    for (int i = 0; i < 4; ++i) {
+        std::stable_sort(m_rt_quads[i].begin(), m_rt_quads[i].end(),
+            [](const UIQuad& a, const UIQuad& b){ return a.seq < b.seq; });
     }
 
 }

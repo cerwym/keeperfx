@@ -112,6 +112,15 @@ void RendererNotifySpritesReloaded()
 #endif
 }
 
+bool RendererHasDeferredAtlasRebuild()
+{
+#ifdef RENDERER_OPENGL_ENABLED
+    return s_rebuild_deferred;
+#else
+    return false;
+#endif
+}
+
 void RendererDrainDeferredAtlasRebuild()
 {
 #ifdef RENDERER_OPENGL_ENABLED

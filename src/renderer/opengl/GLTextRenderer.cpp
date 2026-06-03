@@ -14,6 +14,7 @@
 #include "renderer/opengl/GLDbcFontAtlas.h"
 #include "renderer/opengl/GLShaders.h"
 #include "renderer/RendererManager.h"
+#include "renderer/RendererSettings.h"
 #include "bflib_sprfnt.h"
 #include "bflib_video.h"
 #include "frontend.h"       // frontend_font[], winfont, font_sprites, frontstory_font
@@ -530,6 +531,7 @@ void GLTextRenderer::Draw()
 
     if (m_loc_viewport >= 0)
         glUniform2f(m_loc_viewport, (float)m_screen_width, (float)m_screen_height);
+    // Per-draw alpha is applied via ApplyTextColorUniform() below; reset to opaque for now.
     if (m_loc_text_color >= 0)
         glUniform4f(m_loc_text_color, 1.0f, 1.0f, 1.0f, 1.0f);
 
@@ -691,6 +693,7 @@ void GLTextRenderer::Draw()
         // m_text_draw_flags/colour consistently for control codes.
         m_text_draw_flags  = d.draw_flags;
         m_text_draw_colour = d.draw_colour;
+        ApplyTextColorUniform();
 
         // Update batch scissor — flush if it changed so pending vertices use the old rect
         {
@@ -796,8 +799,8 @@ void GLTextRenderer::FlushSegment(const char* sbuf, const char* ebuf,
         {
             switch (ch)
             {
-                case 1:  m_text_draw_flags ^= Lb_SPRITE_TRANSPAR4;   break;
-                case 2:  m_text_draw_flags ^= Lb_SPRITE_TRANSPAR8;   break;
+                case 1:  m_text_draw_flags ^= Lb_SPRITE_TRANSPAR4;   ApplyTextColorUniform(); break;
+                case 2:  m_text_draw_flags ^= Lb_SPRITE_TRANSPAR8;   ApplyTextColorUniform(); break;
                 case 3:  m_text_draw_flags ^= Lb_SPRITE_OUTLINE;     break;
                 case 4:  m_text_draw_flags ^= Lb_SPRITE_FLIP_HORIZ;  break;
                 case 5:  m_text_draw_flags ^= Lb_SPRITE_FLIP_VERTIC; break;
@@ -895,6 +898,22 @@ void GLTextRenderer::ScreenToNDC(float screen_x, float screen_y, float* ndc_x, f
     Vec2f ndc = ::ScreenToNDC(screen_x, screen_y, (float)m_screen_width, (float)m_screen_height);
     *ndc_x = ndc.x;
     *ndc_y = ndc.y;
+}
+
+void GLTextRenderer::ApplyTextColorUniform()
+{
+    if (m_loc_text_color < 0) return;
+    // Flush any pending vertices accumulated with the previous alpha before updating
+    // the uniform — GL uniforms are program-global, so pending batch vertices would
+    // otherwise be drawn with the new alpha when they are eventually flushed.
+    FlushBatch();
+    float alpha = 1.0f;
+    // Priority matches software renderer (bflib_vidraw.c): TRANSPAR4 is checked first.
+    if (m_text_draw_flags & Lb_SPRITE_TRANSPAR4)
+        alpha = g_renderer_settings.transpar4_alpha;
+    else if (m_text_draw_flags & Lb_SPRITE_TRANSPAR8)
+        alpha = g_renderer_settings.transpar8_alpha;
+    glUniform4f(m_loc_text_color, 1.0f, 1.0f, 1.0f, alpha);
 }
 
 /******************************************************************************/

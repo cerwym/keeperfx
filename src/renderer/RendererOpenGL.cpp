@@ -605,6 +605,19 @@ bool RendererOpenGL::BeginFrame()
 {
     // Idempotent: multiple RendererLockScreen calls per frame must not clear the UI queue again.
     if (m_frame_begun) return true;
+
+    // If a deferred sprite-atlas rebuild is pending, drain it now — before any
+    // sprite handles are issued for this frame — so the generation bump is invisible
+    // to the game code that follows.  WaitForCompletion() ensures the render thread
+    // has finished consuming the previous frame's IR (old-generation handles) before
+    // Rebuild() increments the generation.  This is the only safe window: after the
+    // render thread retires the old atlas, and before new handles are stamped.
+    if (RendererHasDeferredAtlasRebuild())
+    {
+        m_render_thread.WaitForCompletion();
+        RendererDrainDeferredAtlasRebuild();
+    }
+
     m_frame_begun = true;
 
     // Reset IR write-side buffers for this frame so sub-renderers start clean.
@@ -695,10 +708,13 @@ void RendererOpenGL::EndFrame()
     // so the very first call passes through immediately (no prior frame).
     m_render_thread.WaitForCompletion();
 
-    // Execute any deferred atlas rebuild now: WaitForCompletion() guarantees the
-    // render thread has finished consuming the previous frame's IR (old-generation
-    // handles), and no sprites for this frame have been submitted yet — every
-    // handle emitted after this point will carry the new generation.
+    // Drain any deferred sprite-atlas rebuild not already handled by BeginFrame().
+    // BeginFrame() now drains when s_rebuild_deferred is set (the common load-time
+    // case), so this call is a no-op for the normal path.  It remains here as a
+    // fallback for the rare case where RendererNotifySpritesReloaded() is called
+    // mid-frame (after BeginFrame() but before EndFrame()); in that scenario the
+    // rebuild fires here and causes a one-frame sprite drop — acceptable for an
+    // in-flight reload that does not happen during normal gameplay.
     RendererDrainDeferredAtlasRebuild();
 
     // Lazily start the render thread on the first EndFrame() call.

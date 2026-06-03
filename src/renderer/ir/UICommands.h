@@ -51,6 +51,7 @@ struct IRUISolidBoxCmd
     uint8_t   colour_idx = 0;   /**< Palette index. */
     float     alpha      = 1.0f; /**< 1.0 = opaque. */
     float     ndc_z      = 0.5f; /**< NDC depth for WorldDepth layer; ignored for other layers. */
+    uint32_t  seq        = 0;   /**< Global submission order across all IR command types. */
 };
 
 /** Slab background tile fill. */
@@ -61,6 +62,7 @@ struct IRUISlabBackgroundCmd
     int32_t   y     = 0;
     int32_t   w     = 0;
     int32_t   h     = 0;
+    uint32_t  seq   = 0; /**< Global submission order across all IR command types. */
 };
 
 /******************************************************************************/
@@ -84,6 +86,7 @@ struct IRUISpriteCmd
     uint32_t     flags         = 0;   /**< kIRSpriteFlipHoriz | kIRSpriteScaled */
     float        alpha         = 1.0f; /**< 1.0 = opaque; 0.333 = ghost transparent. */
     float        ndc_z         = 0.5f; /**< NDC depth for WorldDepth layer; ignored for other layers. */
+    uint32_t     seq           = 0;   /**< Global submission order across all IR command types. */
 };
 
 /** Draw a palette-remap sprite (player colour recolour). */
@@ -97,6 +100,7 @@ struct IRUISpriteRemapCmd
     int32_t      remap_row    = 0;   /**< Row into fade_tables[]. */
     float        alpha        = 1.0f;
     float        ndc_z        = 0.5f; /**< NDC depth for WorldDepth layer; ignored for other layers. */
+    uint32_t     seq          = 0;   /**< Global submission order across all IR command types. */
 };
 
 /** Draw a single-colour tinted sprite. */
@@ -110,6 +114,7 @@ struct IRUISpriteColoredCmd
     uint8_t      colour_idx   = 0;   /**< Palette index for flat output. */
     float        alpha        = 1.0f;
     float        ndc_z        = 0.5f; /**< NDC depth for WorldDepth layer; ignored for other layers. */
+    uint32_t     seq          = 0;   /**< Global submission order across all IR command types. */
 };
 
 /******************************************************************************/
@@ -213,6 +218,10 @@ struct UICommandBuffers
     UIGameViewport game_vp;
     /** True when this buffer was populated via the IR path (not stale-replay). */
     bool           ir_active = false;
+    /** Monotonically increasing counter assigned to each command Append() call.
+     *  Stored in each command's seq field so ExecuteUIFromIR() can restore the
+     *  original game-thread submission order after processing commands by type. */
+    uint32_t       next_seq  = 0;
 
     void Reset()
     {
@@ -227,6 +236,7 @@ struct UICommandBuffers
         cursor_pointers.Reset();
         game_vp   = {};
         ir_active = false;
+        next_seq  = 0;
     }
 
     void Reserve(size_t sprites_n)
@@ -267,6 +277,7 @@ struct UICommandBuffers
         cursor_pointers.Swap(other.cursor_pointers);
         std::swap(game_vp,   other.game_vp);
         std::swap(ir_active, other.ir_active);
+        std::swap(next_seq,  other.next_seq);
     }
 };
 

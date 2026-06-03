@@ -488,8 +488,12 @@ void main()
         col = texture(u_palette, vec2(pal_idx, 0.5));
     }
 
-    // Palette index 0 is the void/transparent convention for DK1 paletted world data.
-    // Mirror the sprite shader behaviour: discard rather than rendering solid black.
+    // Palette index 0 = void/transparent in DK1 paletted data.
+    // The same convention applies here as in the sprite/UI shader (which also discards index 0).
+    // Without this, world-geometry tiles whose data is all-zero bytes (e.g. the entrance-portal
+    // centre column, or unclaimed portal-floor tiles whose atlas variation is empty) render as
+    // a solid opaque black quad, which is visually wrong.  Making them transparent is correct:
+    // the portal centre is a gateway void, and unset tiles should not occlude anything beneath.
     if (pal_idx < 0.5 / 255.0)
         discard;
 
