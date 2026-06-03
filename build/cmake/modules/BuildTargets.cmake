@@ -175,8 +175,9 @@ if(PLATFORM_VITA OR PLATFORM_3DS OR PLATFORM_SWITCH)
         deps/centijson/value.c)
     target_include_directories(centijson_static PUBLIC deps/centijson/include)
     
-    # TODO: centitoml source needs to be provided for Vita/3DS/Switch builds
-    # (migrated to vcpkg port cerwym/centitoml for PC builds)
+    add_library(centitoml OBJECT deps/centitoml/toml_api.c)
+    target_include_directories(centitoml INTERFACE deps/centitoml)
+    target_link_libraries(centitoml PUBLIC centijson_static)
 endif()
 
 # ━━━ Main Target: keeperfx ━━━
