@@ -488,6 +488,11 @@ void main()
         col = texture(u_palette, vec2(pal_idx, 0.5));
     }
 
+    // Palette index 0 is the void/transparent convention for DK1 paletted world data.
+    // Mirror the sprite shader behaviour: discard rather than rendering solid black.
+    if (pal_idx < 0.5 / 255.0)
+        discard;
+
     // --- Palette fade-table lookup (PALETTE and FOG modes, nearest path only) ---
     // In the bilinear path (u_tile_filter == 1) each neighbour is already shaded
     // above, so col already contains the fully shaded and blended colour.

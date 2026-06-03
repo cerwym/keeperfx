@@ -123,14 +123,16 @@ void RendererDrainDeferredAtlasRebuild()
     // pointer_sprites and frontend_sprite are added incrementally via AddSheet()
     // after a normal rebuild; they must be included here so a deferred rebuild
     // that fires after they've already been loaded doesn't lose them.
-    const TbSpriteSheet* sheets[5] = {};
-    const char*          names[5]  = {};
+    const TbSpriteSheet* sheets[7] = {};
+    const char*          names[7]  = {};
     int count = 0;
     if (gui_panel_sprites)                          { sheets[count] = gui_panel_sprites; names[count++] = "gui_panel_sprites"; }
     if (button_sprites)                             { sheets[count] = button_sprites;    names[count++] = "button_sprites";    }
     if (custom_sprites  && num_sprites(custom_sprites)  > 0) { sheets[count] = custom_sprites;  names[count++] = "custom_sprites";  }
     if (pointer_sprites && num_sprites(pointer_sprites) > 0) { sheets[count] = pointer_sprites; names[count++] = "pointer_sprites"; }
     if (frontend_sprite && num_sprites(frontend_sprite) > 0) { sheets[count] = frontend_sprite; names[count++] = "frontend_sprite"; }
+    if (map_flag        && num_sprites(map_flag)        > 0) { sheets[count] = map_flag;        names[count++] = "map_flag";        }
+    if (swipe_sprites   && num_sprites(swipe_sprites)   > 0) { sheets[count] = swipe_sprites;   names[count++] = "swipe_sprites";   }
     s_spriteAtlas->Rebuild(sheets, names, count);
     for (int i = 0; i < count; ++i)
         SYNCLOG("RendererDrainDeferredAtlasRebuild: added '%s' (%d sprites)", names[i], (int)num_sprites(sheets[i]));
@@ -143,6 +145,7 @@ void RendererNotifyPointerSpritesLoaded()
     ++s_text_font_generation;
 #ifdef RENDERER_OPENGL_ENABLED
     if (s_spriteAtlas && pointer_sprites && num_sprites(pointer_sprites) > 0) {
+        if (s_rebuild_deferred) return; // Rebuild will include pointer_sprites; stale handle avoidance.
         int32_t before = (int32_t)s_spriteAtlas->GetRegisteredCount();
         s_spriteAtlas->AddSheet(pointer_sprites, "pointer_sprites");
         int32_t after  = (int32_t)s_spriteAtlas->GetRegisteredCount();
@@ -158,6 +161,7 @@ void RendererNotifyFrontendSpritesLoaded()
     ++s_text_font_generation;
 #ifdef RENDERER_OPENGL_ENABLED
     if (s_spriteAtlas && frontend_sprite && num_sprites(frontend_sprite) > 0) {
+        if (s_rebuild_deferred) return; // Rebuild will include frontend_sprite; stale handle avoidance.
         int32_t before = (int32_t)s_spriteAtlas->GetRegisteredCount();
         s_spriteAtlas->AddSheet(frontend_sprite, "frontend_sprite");
         int32_t after  = (int32_t)s_spriteAtlas->GetRegisteredCount();
@@ -176,11 +180,13 @@ void RendererNotifyLandviewFlagLoaded()
     ++s_text_font_generation;
 #ifdef RENDERER_OPENGL_ENABLED
     if (s_spriteAtlas && map_flag && num_sprites(map_flag) > 0) {
-        int32_t before = (int32_t)s_spriteAtlas->GetRegisteredCount();
-        s_spriteAtlas->AddSheet(map_flag, "map_flag");
-        int32_t after  = (int32_t)s_spriteAtlas->GetRegisteredCount();
-        SYNCLOG("RendererNotifyLandviewFlagLoaded: map_flag=%p added %d new sprites (total %d)",
-                (void*)map_flag, after - before, after);
+        if (!s_rebuild_deferred) { // Skip if pending Rebuild will re-add; stale handle avoidance.
+            int32_t before = (int32_t)s_spriteAtlas->GetRegisteredCount();
+            s_spriteAtlas->AddSheet(map_flag, "map_flag");
+            int32_t after  = (int32_t)s_spriteAtlas->GetRegisteredCount();
+            SYNCLOG("RendererNotifyLandviewFlagLoaded: map_flag=%p added %d new sprites (total %d)",
+                    (void*)map_flag, after - before, after);
+        }
     }
 #endif
     // SW mode: register into the IUIRenderer handle table so SubmitPanelSprite
@@ -193,6 +199,7 @@ void RendererNotifySwipeSpritesLoaded()
     ++s_text_font_generation;
 #ifdef RENDERER_OPENGL_ENABLED
     if (s_spriteAtlas && swipe_sprites && num_sprites(swipe_sprites) > 0) {
+        if (s_rebuild_deferred) return; // Rebuild will include swipe_sprites; stale handle avoidance.
         int32_t before = (int32_t)s_spriteAtlas->GetRegisteredCount();
         s_spriteAtlas->AddSheet(swipe_sprites, "swipe_sprites");
         int32_t after  = (int32_t)s_spriteAtlas->GetRegisteredCount();
