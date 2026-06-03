@@ -8,6 +8,7 @@
         "enet6",
         "libspng",
         "centijson",
+        "centitoml",
         "astronomy",
         "minizip",
         "miniupnpc",
