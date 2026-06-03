@@ -1,0 +1,17 @@
+{
+  "gfx": {
+    "repo": "dkfans/FXGraphics",
+    "tag": "v17",
+    "dest": "gfx"
+  },
+  "sfx": {
+    "repo": "dkfans/FXSounds",
+    "tag": "V10",
+    "dest": "sfx"
+  },
+  "custom": {
+    "repo": "dkfans/customsprites",
+    "tag": "1.3",
+    "dest": "custom"
+  }
+}

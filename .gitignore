@@ -62,3 +62,8 @@ __pycache__/
 VITAGL_SECURITY_AUDIT.md
 .vscode/.sonar-token
 /docs/rendering/
+# Asset packs fetched by packaging/fetch-assets.ps1
+/gfx/
+/sfx/
+/custom/
+/packaging/assets.local.json
