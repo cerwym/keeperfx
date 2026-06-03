@@ -43,6 +43,10 @@ public:
     void     DrawSwipeOverlay(struct TbSpriteSheet* sprites, int frame,
                               bool draw_lr, int engine_window_x) override;
 
+    /** Save the current lbDrawSurface to @p path.
+     *  Called while the screen is locked, so lbDrawSurface pixels are valid. */
+    bool     ScheduleScreenshot(const char* path, int fmt) override;
+
     const char* GetName() const override;
     bool     SupportsRuntimeSwitch() const override;
 
@@ -50,6 +54,7 @@ public:
         BackendCapabilities c = {};
         c.supportsRuntimeSwitch = 1;
         c.supportsMovieCapture  = 1;
+        c.supportsScreenshot    = 1;
         return c;
     }
 

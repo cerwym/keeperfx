@@ -298,6 +298,13 @@ void RendererNotifyGameTablesReady(void);
  *  will open the right panels without a full slot wipe. */
 int RendererNeedsUIReinitAfterLoad(void);
 
+/** Schedule a screenshot to be saved to @p path.
+ *  Dispatches to the active backend's ScheduleScreenshot().
+ *  Returns non-zero if the backend accepted the request; zero if screenshots
+ *  are not supported (e.g. Vita, 3DS) or no backend is active.
+ *  The actual save happens asynchronously in GPU mode (next EndFrame_GL). */
+TbBool RendererScheduleScreenshot(const char* path, int fmt);
+
 /******************************************************************************/
 /* C-callable world-view renderer wrappers (safe to call from C files)        */
 /******************************************************************************/

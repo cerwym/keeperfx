@@ -76,6 +76,10 @@ struct BackendCapabilities {
     /** True when the backend can capture movie frames into a CPU buffer.
      *  Only the software renderer supports this today.  scrcapt.c uses it. */
     int supportsMovieCapture;
+
+    /** True when the backend implements ScheduleScreenshot().
+     *  When false, take_screenshot() returns false and the UI shows "Cannot save". */
+    int supportsScreenshot;
 };
 
 #ifdef __cplusplus

@@ -28,6 +28,7 @@
 #include "platform.h"        // platform_get_sdl_window
 
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_image.h>
 #include <cstring>
 #include "post_inc.h"
 
@@ -291,4 +292,23 @@ ITextRenderer* RendererSoftware::GetTextRenderer()
 IUIRenderer* RendererSoftware::GetUIRenderer()
 {
     return m_uiRenderer;
+}
+
+bool RendererSoftware::ScheduleScreenshot(const char* path, int fmt)
+{
+    if (!lbDrawSurface)
+    {
+        ERRORLOG("Screenshot: lbDrawSurface is null");
+        return false;
+    }
+    bool ok;
+    switch (fmt)
+    {
+        case 1:  ok = (IMG_SavePNG(lbDrawSurface, path) == 0); break;
+        case 2:  ok = (SDL_SaveBMP(lbDrawSurface, path) == 0); break;
+        default: ok = false; break;
+    }
+    if (!ok)
+        ERRORLOG("Screenshot failed (%s): %s", path, SDL_GetError());
+    return ok;
 }

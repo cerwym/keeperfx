@@ -822,6 +822,13 @@ struct BackendCapabilities RendererGetCapabilities()
     return empty;
 }
 
+TbBool RendererScheduleScreenshot(const char* path, int fmt)
+{
+    if (!s_activeRenderer)
+        return 0;
+    return s_activeRenderer->ScheduleScreenshot(path, fmt) ? 1 : 0;
+}
+
 /******************************************************************************/
 /* C-callable wrappers */
 /******************************************************************************/

@@ -268,6 +268,12 @@ public:
      *  The result is a trivially-copyable POD — callers may store it by value. */
     virtual BackendCapabilities GetCapabilities() const = 0;
 
+    /** Schedule a screenshot to be saved to @p path.
+     *  The backend captures the current (or next) rendered frame and saves it.
+     *  Returns true if the request was accepted (success is logged by the backend);
+     *  returns false if screenshots are not supported by this backend. */
+    virtual bool ScheduleScreenshot(const char* /*path*/, int /*fmt*/) { return false; }
+
     // -------------------------------------------------------------------------
     // Sub-renderer access (managed internally by each backend)
 

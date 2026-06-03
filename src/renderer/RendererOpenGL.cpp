@@ -41,6 +41,8 @@
 #include "vidfade.h"         // g_palette_possession_tint
 
 #include <glad/glad.h>
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_image.h>
 #include <cstring>
 #include "post_inc.h"
 
@@ -778,6 +780,13 @@ void RendererOpenGL::EndFrame()
 
     // Double-buffer swipe overlay verts: same pattern as PiP/rawblit queues.
     m_rt_swipe_verts = std::move(m_swipe_verts);
+
+    // Screenshot: move pending path/fmt into render-thread copies; clear pending
+    // so that subsequent EndFrame() calls without a screenshot don't re-trigger.
+    m_rt_screenshot_path = std::move(m_pending_screenshot_path);
+    m_rt_screenshot_fmt  = m_pending_screenshot_fmt;
+    m_pending_screenshot_path.clear();
+    m_pending_screenshot_fmt = 0;
 
     // Snapshot all game-thread globals that EndFrame_GL() needs.
     // Must happen here (before signalling) so the render thread never reads live
@@ -1610,6 +1619,43 @@ void RendererOpenGL::EndFrame_GL()
     SYNCDBG(0, "EndFrame_GL step 5: before cursor draw");
     if (auto* cursor = RendererGetCursorLayer())
         cursor->ExecuteCursorFromIR(m_render_graph.GetUIBuffersRT());
+
+    // Screenshot capture: after all draw calls, before buffer swap so that the
+    // default framebuffer holds the fully-composited frame.
+    if (!m_rt_screenshot_path.empty())
+    {
+        const int w = m_rt_frame_state.screen_w;
+        const int h = m_rt_frame_state.screen_h;
+        std::vector<uint8_t> pixels(static_cast<size_t>(w) * h * 4);
+        glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+        // GL origin is bottom-left; flip rows for top-down image formats.
+        std::vector<uint8_t> flipped(pixels.size());
+        const size_t row_bytes = static_cast<size_t>(w) * 4;
+        for (int row = 0; row < h; ++row)
+            std::memcpy(flipped.data() + row * row_bytes,
+                        pixels.data() + (h - 1 - row) * row_bytes,
+                        row_bytes);
+        SDL_Surface* surf = SDL_CreateRGBSurfaceWithFormatFrom(
+            flipped.data(), w, h, 32, static_cast<int>(row_bytes),
+            SDL_PIXELFORMAT_RGBA32);
+        if (surf)
+        {
+            bool ok = (m_rt_screenshot_fmt == 2)
+                ? (SDL_SaveBMP(surf, m_rt_screenshot_path.c_str()) == 0)
+                : (IMG_SavePNG(surf, m_rt_screenshot_path.c_str()) == 0);
+            if (!ok)
+                ERRORLOG("Screenshot failed (%s): %s",
+                         m_rt_screenshot_path.c_str(), SDL_GetError());
+            SDL_FreeSurface(surf);
+        }
+        else
+        {
+            ERRORLOG("Screenshot: SDL_CreateRGBSurfaceWithFormatFrom failed: %s",
+                     SDL_GetError());
+        }
+        m_rt_screenshot_path.clear();
+    }
+
     platform_swap_gl_buffers(platform_get_sdl_window());
 
     KFX_GPU_COLLECT();
@@ -2596,4 +2642,11 @@ void RendererOpenGL::NotifyGameTablesReady()
         ui->SetPaletteSource(lbPalette);
     if (auto* wr = RendererGetWorldViewRenderer())
         wr->SetPaletteSource(lbPalette);
+}
+
+bool RendererOpenGL::ScheduleScreenshot(const char* path, int fmt)
+{
+    m_pending_screenshot_path = path ? path : "";
+    m_pending_screenshot_fmt  = fmt;
+    return true;  // optimistic — render thread will log errors on failure
 }

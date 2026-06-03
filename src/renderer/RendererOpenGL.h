@@ -75,6 +75,7 @@ public:
         c.hasSwipeOverlay         = 1;
         c.supportsRuntimeSwitch   = 1;
         c.supportsGPUPasses       = 1;
+        c.supportsScreenshot      = 1;
         return c;
     }
 
@@ -122,6 +123,11 @@ public:
     /** Called after game tables (render_fade_tables etc.) are ready — schedules
      *  fade-table texture creation and palette wiring on the render thread. */
     void NotifyGameTablesReady() override;
+
+    /** Schedule a screenshot: game thread queues the path; capture happens in
+     *  EndFrame_GL() (render thread) after all draw calls, before the buffer swap.
+     *  Returns true immediately (optimistic); render thread logs save errors. */
+    bool ScheduleScreenshot(const char* path, int fmt) override;
 
     // Sub-renderer access
     IWorldViewRenderer* GetWorldViewRenderer() override;
@@ -391,6 +397,13 @@ private:
     std::vector<ZoomBoxBgCmd>   m_rt_zoom_box_bg_cmds;
     float                       m_rt_zoom_clip_rect[4] = {0,0,0,0};
     float                       m_rt_zoom_clip_radius  = -1.0f;
+
+    // Screenshot: game thread stores pending path/fmt; EndFrame() snapshots into
+    // m_rt_screenshot_* alongside other per-frame state; EndFrame_GL() captures.
+    std::string                 m_pending_screenshot_path;
+    int                         m_pending_screenshot_fmt  = 0;
+    std::string                 m_rt_screenshot_path;
+    int                         m_rt_screenshot_fmt       = 0;
 
     /** Snapshot of all game-thread globals consumed by EndFrame_GL().
      *  Captured inside FlipBuffers() before the render thread is signalled,
