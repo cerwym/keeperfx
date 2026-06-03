@@ -150,7 +150,16 @@ void GLTileAtlas::BuildAnimatedStrip(int variation)
 
     const int src_stride = (int)(block_count_per_row * k_tile_dim);
 
-    for (int tile_id = first_tile; tile_id < last_tile; tile_id++)
+    // The animated tile range (first_tile..last_tile-1) shares atlas rows with
+    // static tiles at both edges: static-A tiles first_row*k_atlas_cols..(first_tile-1)
+    // occupy the beginning of first_row, and static-B tiles last_tile..(last_row+1)*k_atlas_cols-1
+    // occupy the tail of last_row.  The memset above zeroed those positions, so we
+    // must re-fill them here alongside the animated tiles to avoid overwriting them
+    // with zeros on every animation tick.
+    const int strip_start = first_row * k_atlas_cols;
+    const int strip_end   = (last_row + 1) * k_atlas_cols;
+
+    for (int tile_id = strip_start; tile_id < strip_end && tile_id < total_tiles; tile_id++)
     {
         const uint8_t* src = block_ptrs[variation * total_tiles + tile_id];
         if (!src) continue;
