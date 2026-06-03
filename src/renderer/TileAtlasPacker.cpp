@@ -119,10 +119,19 @@ void TileAtlasPacker::BuildAnimatedStrip(int variation)
     const int y_offset  = first_row * k_tile_dim;
     const int h_pixels  = row_count * k_tile_dim;
 
-    // Decode the animated rows into the start of scratch (strip-local coords)
+    // Decode the strip rows into scratch (strip-local coords).
+    // IMPORTANT: include static tiles that share rows with the animated range.
+    // Animated tiles start at k_anim_first=544 (row 8, col 32) and end at
+    // k_anim_last=999 (row 15, col 39).  Static-A tiles 512..543 share row 8
+    // (cols 0..31) and static-B tiles 1000..1023 share row 15 (cols 40..63).
+    // Without re-filling those static tiles here, the memset above would
+    // permanently zero their atlas positions on every animation tick.
     memset(m_rgba_scratch, 0, (size_t)k_atlas_w * h_pixels * 4);
 
-    for (int tile_id = k_anim_first; tile_id < k_anim_last; tile_id++)
+    const int strip_start = first_row * k_atlas_cols;            // 512
+    const int strip_end   = (last_row + 1) * k_atlas_cols;       // 1024
+
+    for (int tile_id = strip_start; tile_id < strip_end && tile_id < k_total_tiles; tile_id++)
     {
         const uint8_t* src = block_ptrs[variation * k_total_tiles + tile_id];
         if (!src) continue;
