@@ -6,10 +6,6 @@
 	path = sfx
 	url = https://github.com/Cerwym/FXsounds.git
 	branch = develop
-[submodule "deps/kfx"]
-	path = deps/kfx
-	url = https://github.com/Cerwym/kfx-deps.git
-	branch = develop
 [submodule "custom"]
 	path = custom
 	url = https://github.com/Cerwym/customsprites.git

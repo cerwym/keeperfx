@@ -175,9 +175,8 @@ if(PLATFORM_VITA OR PLATFORM_3DS OR PLATFORM_SWITCH)
         deps/centijson/value.c)
     target_include_directories(centijson_static PUBLIC deps/centijson/include)
     
-    add_library(centitoml OBJECT deps/centitoml/toml_api.c)
-    target_include_directories(centitoml INTERFACE deps/centitoml)
-    target_link_libraries(centitoml PUBLIC centijson_static)
+    # TODO: centitoml source needs to be provided for Vita/3DS/Switch builds
+    # (migrated to vcpkg port cerwym/centitoml for PC builds)
 endif()
 
 # ━━━ Main Target: keeperfx ━━━
@@ -188,7 +187,7 @@ if(MSVC)
         RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/.deploy"
     )
 endif()
-target_include_directories(keeperfx PRIVATE src deps/centitoml deps/centijson/include)
+target_include_directories(keeperfx PRIVATE src deps/centijson/include)
 if(KEEPERFX_HVLOG)
     target_compile_definitions(keeperfx PUBLIC BFDEBUG_LEVEL=10)
 else()
