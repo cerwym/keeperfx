@@ -18,6 +18,12 @@
  *  @return true on success. */
 bool RendererHelper_SaveIndexedImage(const uint8_t* pixels, int w, int h, int pitch,
                                      const char* path);
+
+/** Save a 32-bit RGBA framebuffer to a PNG or BMP file.
+ *  @param fmt  Screenshot format code: 2 = BMP, anything else = PNG.
+ *  @return true on success. */
+bool RendererHelper_SaveRGBAImage(const uint8_t* pixels, int w, int h, int pitch,
+                                  int fmt, const char* path);
 #endif
 
 /******************************************************************************/

@@ -28,6 +28,7 @@
 #include "kfx/lense/LensManager.h"
 #include "kfx/lense/LensEffect.h"
 #include "renderer/IPostProcessPass.h"
+#include "renderer/RendererHelper.h"
 
 #include "bflib_video.h"    // lbDisplay, RendererGetScreenWidth()/Height
 #include "bflib_render.h"   // render_fade_tables
@@ -41,8 +42,6 @@
 #include "vidfade.h"         // g_palette_possession_tint
 
 #include <glad/glad.h>
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_image.h>
 #include <cstring>
 #include "post_inc.h"
 
@@ -1649,24 +1648,8 @@ void RendererOpenGL::EndFrame_GL()
             std::memcpy(flipped.data() + row * row_bytes,
                         pixels.data() + (h - 1 - row) * row_bytes,
                         row_bytes);
-        SDL_Surface* surf = SDL_CreateRGBSurfaceWithFormatFrom(
-            flipped.data(), w, h, 32, static_cast<int>(row_bytes),
-            SDL_PIXELFORMAT_RGBA32);
-        if (surf)
-        {
-            bool ok = (m_rt_screenshot_fmt == 2)
-                ? (SDL_SaveBMP(surf, m_rt_screenshot_path.c_str()) == 0)
-                : (IMG_SavePNG(surf, m_rt_screenshot_path.c_str()) == 0);
-            if (!ok)
-                ERRORLOG("Screenshot failed (%s): %s",
-                         m_rt_screenshot_path.c_str(), SDL_GetError());
-            SDL_FreeSurface(surf);
-        }
-        else
-        {
-            ERRORLOG("Screenshot: SDL_CreateRGBSurfaceWithFormatFrom failed: %s",
-                     SDL_GetError());
-        }
+        RendererHelper_SaveRGBAImage(flipped.data(), w, h, static_cast<int>(row_bytes),
+                                     m_rt_screenshot_fmt, m_rt_screenshot_path.c_str());
         m_rt_screenshot_path.clear();
     }
 
