@@ -24,7 +24,7 @@ struct EnginePolyVertex {
 /** Copy a PolyPoint into an EnginePolyVertex with explicit field-by-field
  *  assignment.  Safe on all platforms regardless of sizeof(long). */
 #ifdef __cplusplus
-#include "bflib_render.h"   // PolyPoint — only needed for this conversion helper
+#include "bflib_render_types.h"  /* PolyPoint for EnginePolyVertexFrom() */
 inline EnginePolyVertex EnginePolyVertexFrom(const struct PolyPoint& p)
 {
     EnginePolyVertex v;

@@ -21,7 +21,6 @@
 #include "engine_buckets.h"    // QKinds enum, BasicQ, BucketKind* structs, buckets[]
 #include "engine_textures.h"   // TEXTURE_BLOCKS_COUNT, block_count_per_row
 #include "engine_render.h"     // display_drawlist(), display_fast_drawlist(), BUCKETS_COUNT
-#include "bflib_render.h"      // PolyPoint, draw_keepsprite_unscaled_in_buffer
 #include "bflib_basics.h"      // ERRORLOG / SYNCLOG / WARNLOG
 #include "bflib_sprite.h"
 #include "renderer/RendererManager.h"  // WorldViewRenderer_GetCurrentSpriteOwner etc.

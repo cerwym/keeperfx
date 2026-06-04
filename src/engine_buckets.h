@@ -17,8 +17,8 @@
 #ifndef DK_ENGINE_BUCKETS_H
 #define DK_ENGINE_BUCKETS_H
 
-#include "bflib_render.h"  /* PolyPoint, XYZ */
-#include "engine_render.h" /* BUCKETS_COUNT  */
+#include "bflib_render_types.h"  /* PolyPoint */
+#include "engine_render.h"       /* BUCKETS_COUNT, XYZ */
 
 #ifdef __cplusplus
 extern "C" {

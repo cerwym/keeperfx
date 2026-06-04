@@ -23,7 +23,6 @@
 #include "engine_textures.h"  // TEXTURE_BLOCKS_COUNT
 #include "renderer/TileAtlasPacker.h" // GetTileUV
 #include "engine_render.h"    // draw_3d_sprites_for_bucket(), draw_nonspatial_sprites_no_shadows()
-#include "bflib_render.h"      // PolyPoint
 #include "bflib_basics.h"      // ERRORLOG / SYNCLOG / WARNLOG
 #include "renderer/opengl/GLUIRenderer.h"
 #include "creature_graphics.h" // KeeperSprite structure
