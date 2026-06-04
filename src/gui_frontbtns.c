@@ -428,7 +428,7 @@ void gui_round_glass_background(struct GuiMenu *gmnu)
         {
             gmnu->visual_state = 2;
         } else {
-            fade_h = ((int)MyScreenHeight - (int)gmnu->pos_y) / i;
+            fade_h = ((int)RendererGetScreenHeight() - (int)gmnu->pos_y) / i;
             if (fade_h < 0)
                 fade_h = 0;
         }
@@ -444,7 +444,7 @@ void gui_round_glass_background(struct GuiMenu *gmnu)
         break;
     case 1:
         px = gmnu->pos_x;
-        py = MyScreenHeight - fade_h * (gmnu->menu_init->fade_time - gmnu->fade_time);
+        py = RendererGetScreenHeight() - fade_h * (gmnu->menu_init->fade_time - gmnu->fade_time);
         draw_round_slab64k(px, py, units_per_pixel, gmnu->width, gmnu->height, ROUNDSLAB64K_LIGHT);
         break;
     default:

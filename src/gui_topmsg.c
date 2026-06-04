@@ -126,7 +126,7 @@ TbBool draw_onscreen_direct_messages(void)
     int tx_units_per_px;
     if (dbc_language > 0)
     {
-        tx_units_per_px = scale_value_by_horizontal_resolution((MyScreenWidth >= 640) ? 16 : 32);
+        tx_units_per_px = scale_value_by_horizontal_resolution((RendererGetScreenWidth() >= 640) ? 16 : 32);
     }
     else
     {

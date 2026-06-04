@@ -26,6 +26,7 @@ class GLWorldViewRenderer;
 class GLMapFadePass;
 class GLUIRenderer;
 class GLTextRenderer;
+class ICursorLayer;
 
 /******************************************************************************/
 
@@ -165,6 +166,7 @@ public:
     ITextRenderer*      CreateGLTextRenderer();
     /** Returns null on failure (caller should fall back to SoftwareUIRenderer). */
     IUIRenderer*        CreateGLUIRenderer();
+    ICursorLayer*       CreateGLCursorLayer();
 
     /** Compile GLSL programs for all GL sub-renderers.
      *  Called once by RendererManager::RendererInit() after all sub-renderers

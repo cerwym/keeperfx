@@ -25,6 +25,7 @@
 #include <unordered_map>
 #include "renderer/IWorldViewRenderer.h"
 #include "renderer/WorldVertex.h"
+#include "renderer/FlatPolyVertex.h"
 #include "renderer/opengl/IGLShaderCompilable.h"
 #include "renderer/ir/WorldCommands.h"
 #include "renderer/RendererThread.h"
@@ -71,10 +72,10 @@ public:
 
     // Called by RendererOpenGL::EndFrame() to issue the accumulated draw list
     // after glClear() and before the CPU framebuffer blit overlay.
-    void GPURenderNow();
+    void GPURenderNow(const WorldCommandBuffers& cmds);
 
     /** Redirect all geometry writes to dedicated PiP-only buffers so that
-     *  the concurrent game thread's m_verts / m_draw_cmds are never touched.
+     *  the concurrent game thread's world IR / m_draw_cmds are never touched.
      *  Must be called on the render thread before BeginWorldPass() / draw_view()
      *  for each PiP view.  GPURenderToFBO() ends the capture internally. */
     void BeginPiPCapture();
@@ -96,7 +97,8 @@ public:
 
     bool HasPendingCommands() const
     {
-        return !m_draw_cmds.empty() || !m_shadow_cmds.empty() || !m_flatpoly_verts.empty()
+        return !m_draw_cmds.empty() || !m_shadow_cmds.empty()
+            || (m_world_write_cmds != nullptr && !m_world_write_cmds->flat_poly_verts.empty())
             || (m_vert_count > m_cmd_vert_start);
     }
 
@@ -104,19 +106,15 @@ public:
 
     /** Set the IR write target for this frame.
      *  When @p cmds is non-null, SetWorldCommandBuffers activates the IR path;
-     *  actual bucket-walk recording still writes to internal m_draw_cmds etc.
-     *  (the internal double-buffer IS the world IR).  The pointer is used as a
-     *  sentinel so ExecuteWorldFromIR() can be dispatched by the render thread.
+     *  actual bucket-walk recording still writes ordering to internal m_draw_cmds
+     *  while tile/flat-poly vertex data is written into @p cmds.
      *  Call with nullptr to close the write window (e.g. during PiP). */
     void SetWorldCommandBuffers(WorldCommandBuffers* cmds) { m_world_write_cmds = cmds; }
 
     /** Replay the captured world geometry on the render thread.
-     *  The world renderer already double-buffers its command list internally
-     *  (FlipBuffers → m_rt_draw_cmds); this method simply calls GPURenderNow()
-     *  so the render graph can dispatch through the IR interface.
-     *  @param cmds  Read-side WorldCommandBuffers — not used directly yet (the
-     *               data lives in m_rt_draw_cmds); accepted for interface symmetry
-     *               with ExecuteUIFromIR / ExecuteTextFromIR. */
+     *  The world renderer still uses its internal ordered draw-command stream
+     *  (FlipBuffers → m_rt_draw_cmds), but tile/flat-poly vertex data comes from
+     *  the render-graph-owned WorldCommandBuffers passed here. */
     void ExecuteWorldFromIR(const WorldCommandBuffers& cmds);
 
     /** IWorldViewRenderer override: calls ExecuteWorldFromIR().
@@ -210,6 +208,8 @@ private:
      *  viewport to the full screen and clears the draw-command lists.
      *  @p kspr_ir  The keeper-sprite IR buffer to use for CMD_IR_KEEPER_SPRITES. */
     void gpu_execute_passes(int vp_x, int vp_y_gl, int screen_w, int screen_h,
+                            const std::vector<WorldVertex>& tile_verts,
+                            const std::vector<FlatPolyVertex>& fp_verts,
                             const std::vector<IRWorldKeeperSpriteCmd>& kspr_ir);
     void ensure_clut_valid();
     void execute_preload_atlas();  // render-thread: bulk decode+upload of all known sprites
@@ -256,11 +256,6 @@ private:
     int   m_saved_screen_w   = 0;
     int   m_saved_screen_h   = 0;
     float m_saved_sprite_z   = 0.0f;
-
-    // Flat-colour polygon vertex: screen-pixel XY, NDC Z depth, linear RGB.
-    // Built during DrawIsometricView for QK_PolyMode0/4/BasicPolygon,
-    // uploaded once in GPURenderNow and drawn with the flat-poly shader.
-    struct FlatPolyVertex { float x, y, z, r, g, b; };
 
     // Injected resources (not owned)
     ITileAtlas* m_atlas       = nullptr;
@@ -405,26 +400,20 @@ private:
 
     // CPU-side vertex staging buffer (dynamic VBO)
     static const int k_max_verts = 65536;   // ~21000 triangles per frame
-    WorldVertex* m_verts      = nullptr;    // GT: game-thread write buffer
-    int          m_vert_count = 0;          // GT: game-thread vertex count
+    int          m_vert_count = 0;          // GT: vertex count in WorldCommandBuffers::tile_verts
     int          m_cmd_vert_start = 0;      // GT: start index of current accumulating tile batch
 
     // GT: Deferred draw list — built during DrawIsometricView(), executed in GPURenderNow()
     std::vector<DrawCmd>             m_draw_cmds;
     std::vector<ShadowCmd>           m_shadow_cmds;
-    std::vector<FlatPolyVertex>      m_flatpoly_verts;
     std::vector<IRWorldKeeperSpriteCmd> m_kspr_ir;  // keeper sprite capture (game thread)
 
     // ── Double-buffer render copies ───────────────────────────────────────────
     // FlipBuffers() (called from RendererOpenGL::EndFrame before signalling the
-    // render thread) std::moves the game-thread vectors here and swaps the
-    // raw vertex pointers, so the game thread can start the next frame while
-    // the render thread reads from these stable render-side copies.
-    WorldVertex* m_rt_verts       = nullptr;  // RT: render-thread read buffer
-    int          m_rt_vert_count  = 0;        // RT:
+    // render thread) std::moves the game-thread vectors here so the game thread
+    // can start the next frame while the render thread reads stable copies.
     std::vector<DrawCmd>             m_rt_draw_cmds;       // RT:
     std::vector<ShadowCmd>           m_rt_shadow_cmds;     // RT:
-    std::vector<FlatPolyVertex>      m_rt_flatpoly_verts;  // RT:
     std::vector<IRWorldKeeperSpriteCmd> m_rt_kspr_ir;      // RT: keeper sprites after FlipBuffers
     int          m_rt_screen_w = 0;   // RT:
     int          m_rt_screen_h = 0;   // RT:
@@ -434,8 +423,8 @@ private:
 
     // ── PiP-only buffers (render-thread write, never touched by game thread) ─
     // BeginPiPCapture() switches all geometry writes here so draw_view() called
-    // from the render thread (PiP) never races with the game thread's m_verts.
-    WorldVertex* m_pip_verts           = nullptr;  // RT(PiP):
+    // from the render thread (PiP) never races with the game thread's world IR.
+    std::vector<WorldVertex> m_pip_verts;         // RT(PiP):
     int          m_pip_vert_count      = 0;         // RT(PiP):
     int          m_pip_cmd_vert_start  = 0;         // RT(PiP):
     std::vector<DrawCmd>             m_pip_draw_cmds;       // RT(PiP):

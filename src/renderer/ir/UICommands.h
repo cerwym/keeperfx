@@ -139,37 +139,6 @@ struct IRUISlabSelectorCmd
     uint32_t  game_turn   = 0;    /**< Animated phase (gameturn & mask).     */
 };
 
-/** FBO quad composite (Picture-in-Picture zoom box). */
-struct IRUIFBOQuadCmd
-{
-    IRUILayer        layer          = IRUILayer::Front;
-    int32_t          x              = 0;
-    int32_t          y              = 0;
-    int32_t          w              = 0;
-    int32_t          h              = 0;
-    GpuTextureHandle fbo_texture_id = kInvalidGpuTexture; /**< Opaque backend texture handle. */
-    float            clip_radius    = -1.0f; /**< < 0 = no rounded clip. */
-};
-
-/** Minimap pixel buffer submission. */
-struct IRUIMinimapCmd
-{
-    IRUILayer layer          = IRUILayer::Front;
-    int32_t   screen_x       = 0;
-    int32_t   screen_y       = 0;
-    int32_t   size           = 0;    /**< NxN pixel square. */
-    /* Pointer to the palette-indexed pixel buffer valid for this frame.
-     * The render thread must not access this after the next BeginFrame(). */
-    const uint8_t* pixels    = nullptr;
-};
-
-/** Fullscreen map-fade transition wipe composite. */
-struct IRMapFadeCmd
-{
-    float step            = 0.f;   ///< Interpolated wipe step [0.0..32.0].
-    bool  capture_pending = false; ///< Render thread must re-capture both views before compositing.
-};
-
 /******************************************************************************/
 // Cursor layer
 /******************************************************************************/
@@ -182,10 +151,11 @@ struct IRUICursorPointerCmd
     int32_t           x             = 0;
     int32_t           y             = 0;
     int32_t           units_per_px  = 16;
+    unsigned int      draw_flags    = 0;        /**< lbDisplay.DrawFlags captured at submit time. */
 };
 
 /* IRUICursorKeeperHandCmd removed: keeper-hand sprites are now pre-computed on
- * the game thread via GLWorldViewRenderer::BeginCursorCapture() /
+ * the game thread via IWorldViewRenderer::BeginCursorCapture() /
  * EndCursorCapture() and stored as IRWorldKeeperSpriteCmd in the WVR's own
  * shadow buffer.  No game-side globals are touched from the render thread. */
 
@@ -210,8 +180,6 @@ struct UICommandBuffers
     IRCommandBuffer<IRUISpriteRemapCmd>      sprites_remap;
     IRCommandBuffer<IRUISpriteColoredCmd>    sprites_colored;
     IRCommandBuffer<IRUISlabSelectorCmd>     slab_selectors;
-    IRCommandBuffer<IRUIFBOQuadCmd>          fbo_quads;
-    IRCommandBuffer<IRUIMinimapCmd>          minimaps;
     IRCommandBuffer<IRUICursorPointerCmd>    cursor_pointers;
 
     /** Game viewport captured at SetGameViewport() — restored by ExecuteUIFromIR(). */
@@ -231,8 +199,6 @@ struct UICommandBuffers
         sprites_remap.Reset();
         sprites_colored.Reset();
         slab_selectors.Reset();
-        fbo_quads.Reset();
-        minimaps.Reset();
         cursor_pointers.Reset();
         game_vp   = {};
         ir_active = false;
@@ -247,8 +213,6 @@ struct UICommandBuffers
         sprites_remap.Reserve(sprites_n / 4);
         sprites_colored.Reserve(sprites_n / 4);
         slab_selectors.Reserve(8);
-        fbo_quads.Reserve(8);
-        minimaps.Reserve(2);
         cursor_pointers.Reserve(4);
     }
 
@@ -260,7 +224,6 @@ struct UICommandBuffers
         return !solid_boxes.Empty()     || !slab_backgrounds.Empty() ||
                !sprites.Empty()         || !sprites_remap.Empty()    ||
                !sprites_colored.Empty() || !slab_selectors.Empty()   ||
-               !fbo_quads.Empty()       || !minimaps.Empty()         ||
                !cursor_pointers.Empty();
     }
 
@@ -272,8 +235,6 @@ struct UICommandBuffers
         sprites_remap.Swap(other.sprites_remap);
         sprites_colored.Swap(other.sprites_colored);
         slab_selectors.Swap(other.slab_selectors);
-        fbo_quads.Swap(other.fbo_quads);
-        minimaps.Swap(other.minimaps);
         cursor_pointers.Swap(other.cursor_pointers);
         std::swap(game_vp,   other.game_vp);
         std::swap(ir_active, other.ir_active);

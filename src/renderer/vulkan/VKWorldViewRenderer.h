@@ -29,6 +29,7 @@
 #include <cstdint>
 #include "renderer/IWorldViewRenderer.h"
 #include "renderer/WorldVertex.h"
+#include "renderer/FlatPolyVertex.h"
 #include "renderer/ir/WorldCommands.h"
 #include "renderer/vulkan/VKTileAtlas.h"
 #include "renderer/vulkan/VKPipelineCache.h"
@@ -77,9 +78,6 @@ public:
         float            darkness     = 1.0f;
         float            ndc_z        = 0.0f;
     };
-
-    /** Flat-colour polygon vertex (screen px XY, NDC Z, linear RGB). */
-    struct FlatPolyVertex { float x, y, z, r, g, b; };
 
     // ── Lifecycle ────────────────────────────────────────────────────────────
 

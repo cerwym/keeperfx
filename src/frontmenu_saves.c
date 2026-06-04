@@ -38,6 +38,7 @@
 #include "kjm_input.h"
 #include "sprites.h"
 #include "keeperfx.hpp"
+#include "renderer/RendererManager.h"
 #include "post_inc.h"
 
 /******************************************************************************/
@@ -93,7 +94,7 @@ void draw_load_button(struct GuiButton *gbtn)
     if (gbtn == NULL) return;
     int bs_units_per_px = simple_button_sprite_height_units_per_px(gbtn, GBS_frontend_button_std_c, 94);
     int width = gbtn->width;
-    TbBool low_res = (MyScreenHeight < 400);
+    TbBool low_res = (RendererGetScreenHeight() < 400);
     if (low_res)
     {
         width += 32;

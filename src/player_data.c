@@ -460,12 +460,12 @@ void set_player_mode(struct PlayerInfo *player, unsigned short nview)
       if ((game.operation_flags & GOF_ShowGui) != 0)
       {
         if (RendererWantsFullscreenViewport())
-          setup_engine_window(0, 0, MyScreenWidth, MyScreenHeight);
+          setup_engine_window(0, 0, RendererGetScreenWidth(), RendererGetScreenHeight());
         else
-          setup_engine_window(status_panel_width, 0, MyScreenWidth, MyScreenHeight);
+          setup_engine_window(status_panel_width, 0, RendererGetScreenWidth(), RendererGetScreenHeight());
       }
       else
-        setup_engine_window(0, 0, MyScreenWidth, MyScreenHeight);
+        setup_engine_window(0, 0, RendererGetScreenWidth(), RendererGetScreenHeight());
       break;
   }
   case PVT_CreatureContrl:
@@ -483,7 +483,7 @@ void set_player_mode(struct PlayerInfo *player, unsigned short nview)
       if (is_my_player(player))
         set_gui_visible((game.operation_flags & GOF_ShowGui) != 0);
       else
-        setup_engine_window(0, 0, MyScreenWidth, MyScreenHeight);
+        setup_engine_window(0, 0, RendererGetScreenWidth(), RendererGetScreenHeight());
       break;
   case PVT_MapScreen:
       player->continue_work_state = player->work_state;

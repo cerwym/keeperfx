@@ -178,6 +178,14 @@ TbScreenCoord RendererScreenWidth(void);
  *  Replaces lbDisplay.GraphicsScreenHeight reads. */
 TbScreenCoord RendererScreenHeight(void);
 
+/** Active screen width in physical pixels.
+ *  Replaces direct screen-width global reads. */
+unsigned short RendererGetScreenWidth(void);
+
+/** Active screen height in physical pixels.
+ *  Replaces direct screen-height global reads. */
+unsigned short RendererGetScreenHeight(void);
+
 /** Pointer to the locked CPU framebuffer, or NULL if not locked.
  *  Replaces lbDisplay.WScreen reads. */
 unsigned char* RendererGetWScreen(void);
@@ -377,6 +385,9 @@ int WorldViewRenderer_GetCurrentSpriteWantsOutline(void);
 /* C-callable map fade pass wrappers                                          */
 /******************************************************************************/
 
+/** Prepare source and destination frame buffers for the map-fade transition. */
+void MapFadePass_PrepareBuffers(unsigned char* fade_src, unsigned char* fade_dest, int scanline, int height);
+
 /** Render one fade-in step (parchment → 3D view) and return next step value. */
 int32_t MapFadePass_StepFadeIn(int32_t step);
 
@@ -511,6 +522,12 @@ TbBool RendererSubmitTransparentBlit(const unsigned char* buf, int w, int h);
 void RendererDrawSwipeOverlay(struct TbSpriteSheet* sprites, int frame,
                               int draw_lr, int engine_window_x);
 
+/** Begin first-person lens capture around engine() for the active renderer. */
+void RendererBeginLensCapture(void);
+
+/** Finish first-person lens capture and restore the active framebuffer. */
+void RendererEndLensCapture(void);
+
 /** Submit the overhead (parchment) map tile colours for GPU rendering.
  *  The caller provides one palette index per map tile (tiles_x × tiles_y,
  *  row-major, background=0 for unrevealed tiles that need ghost effects).
@@ -606,6 +623,12 @@ void UIRenderer_BeginTopOverlay(void);
 /** End the top-overlay batch. */
 void UIRenderer_EndTopOverlay(void);
 
+/** Begin drawing zoom-box thing sprites. */
+void UIRenderer_BeginZoomBoxOverlay(int x, int y, int w, int h);
+
+/** End zoom-box thing sprites drawing scope. */
+void UIRenderer_EndZoomBoxOverlay(int x, int y, int w, int h);
+
 /** Draw deferred cursor sprites (OS pointer + power-hand).
  *  Must be called AFTER TextRenderer_Draw() so the cursor composites above
  *  all text.  Replaces UIRenderer_DrawHandSprites(). */
@@ -692,6 +715,10 @@ void UIRenderer_SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, unsig
  *  GPU: solid shader with vertex alpha; CPU: GlassMap blend via Lb_SPRITE_TRANSPAR4. */
 void UIRenderer_SubmitSolidBoxAlpha(int32_t x, int32_t y, int32_t w, int32_t h, unsigned char color_idx, float alpha);
 
+/** Submit a filled circle.
+ *  GPU backends may approximate the circle; software matches LbDrawCircle exactly. */
+void UIRenderer_SubmitCircle(int32_t x, int32_t y, int32_t radius, unsigned char color_idx);
+
 /** Upload the 64×64 R8 gui_slab tile to the GPU for use by UIRenderer_SubmitSlabBackground.
  *  Call after gui_slab data is loaded (typically inside RendererNotifySpritesReloaded). */
 void UIRenderer_SetSlabTexture(void);
@@ -713,6 +740,13 @@ unsigned char* UIRenderer_AcquireMinimapBuffer(int size);
  *  In GL mode: uploads the buffer to a GL_R8 texture and queues a palette-lookup quad.
  *  In software mode: no-op (pixels were already in WScreen). */
 void UIRenderer_SubmitMinimap(int screen_x, int screen_y, int size);
+
+/** Initialise minimap background colours from the active UI renderer. */
+void UIRenderer_SetupMinimapBackground(int diaglen, int panel_x, int panel_y);
+
+/** Query the minimap renderer's opaque-black palette index.
+ *  Returns non-zero when a GPU renderer wants a non-zero black replacement. */
+TbBool UIRenderer_GetMinimapOpaqueBlackIndex(unsigned char* idx);
 
 /** Submit a TiledSprite (like the status panel) through the UI renderer.
  *  Iterates tiles in the same order as LbTiledSpriteDraw, resolving each sprite
@@ -738,9 +772,9 @@ void UIRenderer_Clear(void);
 unsigned char* UIRenderer_QueryPanelSpriteMask(int32_t spridx, int* out_w, int* out_h, int* out_stride);
 
 // ── Raw sprite submission (intercept path from LbSpriteDraw) ─────────────────
-// Called from bflib_vidraw.c when g_render_pass_active is set.
-// Returns Lb_OK on success; Lb_FAIL on atlas miss so the caller can fall
-// through to the CPU blitter.
+// Called from bflib_vidraw.c whenever a sprite draw is not already executing
+// inside a submit wrapper. Returns Lb_OK on success; Lb_FAIL on atlas miss so
+// the caller can fall through to the CPU blitter.
 
 /** Submit a raw TbSprite at (x,y) — equivalent to LbSpriteDraw.
  *  Returns Lb_FAIL on atlas miss; the caller should then run the SW path. */

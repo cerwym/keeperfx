@@ -19,7 +19,9 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <utility>
 #include "renderer/WorldVertex.h"
+#include "renderer/FlatPolyVertex.h"
 #include "bflib_render.h"  // PolyPoint (for shadow geometry)
 
 /******************************************************************************/
@@ -138,6 +140,12 @@ struct WorldCommandBuffers
     IRCommandBuffer<IRWorldKeeperSpriteCmd>  keeper_sprites;
     IRCommandBuffer<IRWorldShadowCmd>        shadows;
 
+    // Vertex data backing vert_start/vert_count in tiles and flat_polys commands.
+    // Owned here so any backend's ExecuteWorldFromIR can access them without
+    // coupling to backend-private arrays.
+    std::vector<WorldVertex>    tile_verts;
+    std::vector<FlatPolyVertex> flat_poly_verts;
+
     void Reset()
     {
         tiles.Reset();
@@ -145,6 +153,8 @@ struct WorldCommandBuffers
         flat_polys.Reset();
         keeper_sprites.Reset();
         shadows.Reset();
+        tile_verts.clear();
+        flat_poly_verts.clear();
     }
 
     void Reserve(size_t tiles_n, size_t sprites_n, size_t shadows_n)
@@ -153,6 +163,8 @@ struct WorldCommandBuffers
         flat_polys.Reserve(tiles_n / 4);
         keeper_sprites.Reserve(sprites_n);
         shadows.Reserve(shadows_n);
+        tile_verts.reserve(65536);
+        flat_poly_verts.reserve(8192);
     }
 
     void Swap(WorldCommandBuffers& other)
@@ -162,6 +174,8 @@ struct WorldCommandBuffers
         flat_polys.Swap(other.flat_polys);
         keeper_sprites.Swap(other.keeper_sprites);
         shadows.Swap(other.shadows);
+        std::swap(tile_verts, other.tile_verts);
+        std::swap(flat_poly_verts, other.flat_poly_verts);
     }
 };
 

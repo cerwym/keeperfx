@@ -61,8 +61,8 @@ unsigned char *vec_map;
 unsigned long vec_screen_width;
 long vec_window_width;
 
-/** Set to 1 while a backend submit is in-flight to prevent re-entry from SoftwareBackend. */
-static int lb_in_sprite_submit = 0;
+/** Set to 1 while a renderer submit is in-flight to prevent recursive submit re-entry. */
+int lb_in_sprite_submit = 0;
 long vec_window_height;
 unsigned char *dither_map;
 unsigned char *dither_end;
@@ -330,36 +330,17 @@ void LbDrawBoxClip(long x, long y, unsigned long width, unsigned long height, Tb
  */
 TbResult LbDrawBox(long x, long y, unsigned long width, unsigned long height, TbPixel colour)
 {
-    if (g_render_pass_active)
-    {
-        if (lbDisplay.DrawFlags & Lb_SPRITE_OUTLINE)
-        {
-            UIRenderer_SubmitOutlineBox((int32_t)x, (int32_t)y, (int32_t)width, (int32_t)height, colour);
-        }
-        else if (lbDisplay.DrawFlags & (Lb_SPRITE_TRANSPAR4 | Lb_SPRITE_TRANSPAR8))
-        {
-            UIRenderer_SubmitSolidBoxAlpha((int32_t)x, (int32_t)y, (int32_t)width, (int32_t)height, colour, 0.333f);
-        }
-        else
-        {
-            UIRenderer_SubmitSolidBox((int32_t)x, (int32_t)y, (int32_t)width, (int32_t)height, colour);
-        }
-        return Lb_SUCCESS;
-    }
     if (lbDisplay.DrawFlags & Lb_SPRITE_OUTLINE)
     {
-        if ((width < 1) || (height < 1))
-          return Lb_FAIL;
-        LbDrawHVLine(x, y, width + x - 1, y, colour);
-        LbDrawHVLine(x, height + y - 1, width + x - 1, height + y - 1, colour);
-        if (height > 2)
-        {
-          LbDrawHVLine(x, y + 1, x, height + y - 2, colour);
-          LbDrawHVLine(width + x - 1, y + 1, width + x - 1, height + y - 2, colour);
-        }
-    } else
+        UIRenderer_SubmitOutlineBox((int32_t)x, (int32_t)y, (int32_t)width, (int32_t)height, colour);
+    }
+    else if (lbDisplay.DrawFlags & (Lb_SPRITE_TRANSPAR4 | Lb_SPRITE_TRANSPAR8))
     {
-        LbDrawBoxClip(x, y, width, height, colour);
+        UIRenderer_SubmitSolidBoxAlpha((int32_t)x, (int32_t)y, (int32_t)width, (int32_t)height, colour, 0.333f);
+    }
+    else
+    {
+        UIRenderer_SubmitSolidBox((int32_t)x, (int32_t)y, (int32_t)width, (int32_t)height, colour);
     }
     return Lb_SUCCESS;
 }
@@ -1034,7 +1015,7 @@ TbResult LbSpriteDraw(long x, long y, const struct TbSprite *spr)
     struct TbSpriteDrawData spd;
     TbResult ret;
     SYNCDBG(19,"At (%ld,%ld)",x,y);
-    if (g_render_pass_active && !lb_in_sprite_submit) {
+    if (!lb_in_sprite_submit) {
         lb_in_sprite_submit = 1;
 #ifdef RENDERER_OPENGL_ENABLED
         ret = UIRenderer_SubmitRawSprite(x, y, spr, lbDisplay.DrawFlags);
@@ -1333,7 +1314,7 @@ TbResult LbSpriteDrawOneColour(long x, long y, const struct TbSprite *spr, const
     struct TbSpriteDrawData spd;
     TbResult ret;
     SYNCDBG(19,"At (%ld,%ld)",x,y);
-    if (g_render_pass_active && !lb_in_sprite_submit) {
+    if (!lb_in_sprite_submit) {
         lb_in_sprite_submit = 1;
 #ifdef RENDERER_OPENGL_ENABLED
         ret = UIRenderer_SubmitRawSpriteOneColour(x, y, spr, colour, lbDisplay.DrawFlags);
@@ -1617,7 +1598,7 @@ TbResult LbSpriteDrawScaled(long xpos, long ypos, const struct TbSprite *sprite,
     SYNCDBG(19,"At (%ld,%ld) size (%ld,%ld)",xpos,ypos,dest_width,dest_height);
     if ((dest_width <= 0) || (dest_height <= 0))
       return 1;
-    if (g_render_pass_active && !lb_in_sprite_submit) {
+    if (!lb_in_sprite_submit) {
         UIRenderer_SubmitScaledSprite((int32_t)xpos, (int32_t)ypos, (int32_t)dest_width, (int32_t)dest_height, sprite);
         return Lb_SUCCESS;
     }
@@ -1649,7 +1630,7 @@ int LbSpriteDrawScaledRemap(long xpos, long ypos, const struct TbSprite *sprite,
     SYNCDBG(19,"At (%ld,%ld) size (%ld,%ld)",xpos,ypos,dest_width,dest_height);
     if ((dest_width <= 0) || (dest_height <= 0))
       return 1;
-    if (g_render_pass_active && !lb_in_sprite_submit) {
+    if (!lb_in_sprite_submit) {
         lb_in_sprite_submit = 1;
 #ifdef RENDERER_OPENGL_ENABLED
         TbResult ret = UIRenderer_SubmitRawSpriteRemap(xpos, ypos, sprite, cmap, lbDisplay.DrawFlags);

@@ -17,7 +17,7 @@
 #include "renderer/RendererVulkan.h"
 #include "renderer/RendererManager.h"
 #include "platform.h"
-#include "bflib_video.h"    // MyScreenWidth / MyScreenHeight, lbDisplay
+#include "bflib_video.h"    // RendererGetScreenWidth() / RendererGetScreenHeight(), lbDisplay
 #include "bflib_render.h"   // render_fade_tables
 #include "engine_lenses.h"  // lens_mode
 #include "vidfade.h"        // g_palette_possession_tint, g_screen_tint
@@ -48,8 +48,8 @@ bool RendererVulkan::Init()
         return false;
     }
 
-    m_width  = (MyScreenWidth  > 0) ? (int)MyScreenWidth  : 640;
-    m_height = (MyScreenHeight > 0) ? (int)MyScreenHeight : 480;
+    m_width  = (RendererGetScreenWidth()  > 0) ? (int)RendererGetScreenWidth()  : 640;
+    m_height = (RendererGetScreenHeight() > 0) ? (int)RendererGetScreenHeight() : 480;
 
     // Phase 1: create VkInstance (exposes GetInstance() for surface creation).
     if (!m_device.InitInstance())
@@ -263,10 +263,10 @@ bool RendererVulkan::BeginFrame()
 #ifdef RENDERER_VK_SHADERC_AVAILABLE
     m_render_graph.BeginFrame();
 
-    if (MyScreenWidth > 0 && MyScreenHeight > 0)
+    if (RendererGetScreenWidth() > 0 && RendererGetScreenHeight() > 0)
     {
-        m_width  = (int)MyScreenWidth;
-        m_height = (int)MyScreenHeight;
+        m_width  = (int)RendererGetScreenWidth();
+        m_height = (int)RendererGetScreenHeight();
     }
 
     if (!RendererIsFadeCachePreserved())

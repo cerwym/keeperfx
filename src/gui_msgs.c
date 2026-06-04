@@ -51,7 +51,7 @@ void message_draw(void)
         spr = get_panel_sprite(GPS_plyrsym_symbol_player_red_std_b);
         ps_units_per_px = (22 * units_per_pixel) / spr->SHeight;
     }
-    TbBool low_res = (MyScreenHeight < 400);
+    TbBool low_res = (RendererGetScreenHeight() < 400);
     int tx_units_per_px = ( (low_res) && (dbc_language > 0) ) ? ps_units_per_px : (22 * units_per_pixel) / LbTextLineHeight();
     int h = LbTextLineHeight();
     long y = 28 * units_per_pixel / 16;
@@ -67,7 +67,7 @@ void message_draw(void)
         if ( (game.messages[i].target_idx == my_player_number) || (game.messages[i].target_idx == -1) )
         {
             long x = 148 * units_per_pixel / 16;
-            LbTextSetWindow(0, 0, MyScreenWidth, MyScreenHeight);
+            LbTextSetWindow(0, 0, RendererGetScreenWidth(), RendererGetScreenHeight());
             clear_flag(lbDisplay.DrawFlags, Lb_TEXT_ONE_COLOR);
             LbTextDrawResized(x+32*units_per_pixel/16, y, tx_units_per_px, game.messages[i].text);
             unsigned long spr_idx = 0;

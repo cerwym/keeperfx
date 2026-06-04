@@ -21,7 +21,7 @@
 #include "renderer/opengl/GLUIRenderer.h"
 #include "renderer/opengl/GLTextRenderer.h"
 #include "renderer/opengl/GLMapFadePass.h"
-#include "renderer/backends/SoftwareTextRenderer.h"
+#include "renderer/opengl/GLCursorLayer.h"
 #include "renderer/opengl/GLShaders.h"
 #include "renderer/opengl/GLLensPass.h"
 #include "kfx/profiling/KfxProfiling.h"
@@ -29,7 +29,7 @@
 #include "kfx/lense/LensEffect.h"
 #include "renderer/IPostProcessPass.h"
 
-#include "bflib_video.h"    // lbDisplay, MyScreenWidth/Height
+#include "bflib_video.h"    // lbDisplay, RendererGetScreenWidth()/Height
 #include "bflib_render.h"   // render_fade_tables
 #include "bflib_vidraw.h"   // vec_window_width/height (PiP projection override), LbSpriteDrawResized
 #include "bflib_sprite.h"   // TbSpriteSheet, get_sprite
@@ -162,8 +162,8 @@ bool RendererOpenGL::Init()
     glBindVertexArray(0);
 
     // Screen dimensions (used throughout EndFrame for viewport sizing).
-    m_screenW = MyScreenWidth;
-    m_screenH = MyScreenHeight;
+    m_screenW = RendererGetScreenWidth();
+    m_screenH = RendererGetScreenHeight();
 
     // Transparent overlay texture — GL_R8, screen-sized.
     // SubmitTransparentBlit() uploads directly into this texture; EndFrame composites
@@ -625,10 +625,10 @@ bool RendererOpenGL::BeginFrame()
 
     // Refresh cached screen dimensions — screen mode may have changed since Init().
     // These are game-thread-only values; the render thread reads from m_rt_frame_state.
-    if (MyScreenWidth > 0 && MyScreenHeight > 0)
+    if (RendererGetScreenWidth() > 0 && RendererGetScreenHeight() > 0)
     {
-        m_screenW = (int)MyScreenWidth;
-        m_screenH = (int)MyScreenHeight;
+        m_screenW = (int)RendererGetScreenWidth();
+        m_screenH = (int)RendererGetScreenHeight();
     }
 
     // NOTE: sub-renderer SetScreenSize() is NOT called here (game thread).
@@ -814,23 +814,21 @@ void RendererOpenGL::EndFrame()
     m_rt_frame_state.screen_w  = m_screenW;
     m_rt_frame_state.screen_h  = m_screenH;
 
-    // Flush the map-fade IR command to the render graph write slot.
-    // FlushToRenderGraph() checks view_mode (game thread safe), emits an
-    // IRMapFadeCmd if a transition is active, and clears m_capture_pending.
-    // Must happen before Flip()/UpdateFrameState() so the write slot is
-    // populated before it transfers to the render-side.
+    // Flush the map-fade IR command to the render graph's write-side
+    // post-process buffers. FlushToRenderGraph() checks view_mode (game thread
+    // safe), emits an IRMapFadeCmd if a transition is active, and clears
+    // m_capture_pending. Must happen before Flip()/UpdateFrameState().
     if (auto* mfp = RendererGetMapFadePass()) mfp->FlushToRenderGraph(m_render_graph);
 
     {
         const UICommandBuffers& wui [[maybe_unused]] = m_render_graph.GetWriteUIBuffers();
         SYNCDBG(1, "EndFrame: fade=%d ir_active=%d solid=%zu slabbg=%zu sprites=%zu sprR=%zu sprC=%zu "
-                   "slabsel=%zu fbo=%zu mm=%zu cptr=%zu chand=%zu",
+                   "slabsel=%zu cptr=%zu chand=%zu",
                 (int)RendererIsFadeCachePreserved(),
                 (int)wui.ir_active,
                 wui.solid_boxes.Size(),   wui.slab_backgrounds.Size(),
                 wui.sprites.Size(),       wui.sprites_remap.Size(),
                 wui.sprites_colored.Size(), wui.slab_selectors.Size(),
-                wui.fbo_quads.Size(),     wui.minimaps.Size(),
                 wui.cursor_pointers.Size(), wui.cursor_hands.Size());
     }
 
@@ -1030,13 +1028,13 @@ void RendererOpenGL::EndFrame_GL()
     // rawblit/overhead map draws (so those queues are still available for the
     // parchment FBO capture inside CaptureAndUploadFrames).
     // IRMapFadeCmd is written by GLMapFadePass::FlushToRenderGraph() on the
-    // game thread and transferred to the render-side by Flip()/UpdateFrameState().
+    // game thread and consumed from the render-side post-process buffers here.
     {
-        const auto& map_fade_cmd = m_render_graph.GetMapFadeCmdRT();
-        if (map_fade_cmd)
+        const auto& post_process = m_render_graph.GetPostProcessBuffersRT();
+        if (post_process.map_fade)
         {
             IMapFadePass* mfp = RendererGetMapFadePass();
-            if (mfp) mfp->ExecuteFromIR(*map_fade_cmd);
+            if (mfp) mfp->ExecuteFromIR(*post_process.map_fade);
         }
     }
 
@@ -2521,7 +2519,7 @@ IWorldViewRenderer* RendererOpenGL::CreateGLWorldViewRenderer()
 
 IMapFadePass* RendererOpenGL::CreateGLMapFadePass()
 {
-    auto* glmf = new GLMapFadePass();
+    auto* glmf = new GLMapFadePass{this};
     glmf->SetScreenSize(lbDisplay.PhysicalScreenWidth, lbDisplay.PhysicalScreenHeight);
     SetGLMapFadePass(glmf);
     return glmf;
@@ -2532,9 +2530,9 @@ ITextRenderer* RendererOpenGL::CreateGLTextRenderer()
     auto* glt = new GLTextRenderer();
     if (!glt->Init())
     {
-        WARNLOG("GLTextRenderer::Init() failed, falling back to software");
+        WARNLOG("GLTextRenderer::Init() failed");
         delete glt;
-        return new SoftwareTextRenderer();
+        return nullptr;
     }
     glt->SetPaletteTexture(m_texPalette);
     glt->SetScreenSize(lbDisplay.PhysicalScreenWidth, lbDisplay.PhysicalScreenHeight);
@@ -2558,6 +2556,15 @@ IUIRenderer* RendererOpenGL::CreateGLUIRenderer()
     glui->SetScreenDimensions(lbDisplay.PhysicalScreenWidth, lbDisplay.PhysicalScreenHeight);
     SetGLUIRenderer(glui);
     return glui;
+}
+
+ICursorLayer* RendererOpenGL::CreateGLCursorLayer()
+{
+    auto* glcur = new GLCursorLayer();
+    glcur->SetWorldViewRenderer(m_world_renderer);
+    glcur->SetSpriteAtlas(m_sprite_atlas);
+    glcur->SetGLUIRenderer(m_gl_ui_renderer);
+    return glcur;
 }
 
 bool RendererOpenGL::CompileSubRendererShaders()

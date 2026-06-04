@@ -23,10 +23,16 @@ public:
     SoftwareMapFadePass()  = default;
     ~SoftwareMapFadePass() = default;
 
+    void PrepareBuffers(uint8_t* fade_src, uint8_t* fade_dest, int scanline, int height) override;
     int32_t StepFadeIn(int32_t step) override;
     int32_t StepFadeOut(int32_t step) override;
-
+ 
     const char* GetName() const override { return "SOFTWARE"; }
+
+protected:
+    unsigned char* m_map_fade_ghost_table = nullptr;
+    unsigned char* m_map_fade_dest = nullptr;
+    unsigned char* m_map_fade_src = nullptr;
 };
 
 /******************************************************************************/

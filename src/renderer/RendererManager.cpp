@@ -19,9 +19,6 @@
 #ifdef RENDERER_OPENGL_ENABLED
 #  include "renderer/RendererOpenGL.h"
 #  include "renderer/opengl/GLSpriteAtlas.h"
-#  include "renderer/opengl/GLWorldViewRenderer.h"
-#  include "renderer/opengl/GLUIRenderer.h"
-#  include "renderer/opengl/GLCursorLayer.h"
 #endif
 #ifdef RENDERER_VULKAN_ENABLED
 #  include "renderer/RendererVulkan.h"
@@ -254,6 +251,18 @@ void RendererDrawSwipeOverlay(struct TbSpriteSheet* sprites, int frame,
     rend->DrawSwipeOverlay(sprites, frame, draw_lr != 0, engine_window_x);
 }
 
+void RendererBeginLensCapture(void)
+{
+    IRenderer* rend = RendererGetActive();
+    if (rend) rend->BeginLensCapture();
+}
+
+void RendererEndLensCapture(void)
+{
+    IRenderer* rend = RendererGetActive();
+    if (rend) rend->EndLensCapture();
+}
+ 
 TbBool RendererSubmitOverheadMap(const unsigned char* tile_colors, int tiles_x, int tiles_y,
                                   int dst_x, int dst_y, int dst_w, int dst_h)
 {
@@ -484,19 +493,25 @@ static IMapFadePass* create_map_fade_pass(RendererType type)
 /** Allocates the appropriate ITextRenderer for the given renderer type. */
 static ITextRenderer* create_text_renderer(RendererType type)
 {
+    ITextRenderer* renderer = nullptr;
 #ifdef RENDERER_OPENGL_ENABLED
     if (type == RENDERER_OPENGL)
     {
         RendererOpenGL* ogl = static_cast<RendererOpenGL*>(s_activeRenderer);
-        if (ogl) return ogl->CreateGLTextRenderer();
+        if (ogl) renderer = ogl->CreateGLTextRenderer();
     }
 #endif
 #ifdef RENDERER_VULKAN_ENABLED
     if (type == RENDERER_VULKAN)
-        return new VKTextRenderer();
+        renderer = new VKTextRenderer();
 #endif
     (void)type;
-    return new SoftwareTextRenderer();
+    if (!renderer)
+    {
+        WARNLOG("Text renderer creation failed, falling back to software");
+        renderer = new SoftwareTextRenderer();
+    }
+    return renderer;
 }
 
 /** Allocates the appropriate ICursorLayer for the given renderer type. */
@@ -507,15 +522,7 @@ static ICursorLayer* create_cursor_layer(RendererType type)
     {
         RendererOpenGL* ogl = static_cast<RendererOpenGL*>(s_activeRenderer);
         if (ogl)
-        {
-            auto* glcur = new GLCursorLayer();
-            // s_worldViewRenderer and s_uiRenderer were just created by their own
-            // factory functions inside the same RENDERER_OPENGL branch — static_cast safe.
-            glcur->SetWorldViewRenderer(static_cast<GLWorldViewRenderer*>(s_worldViewRenderer));
-            glcur->SetSpriteAtlas(s_spriteAtlas);
-            glcur->SetGLUIRenderer(static_cast<GLUIRenderer*>(s_uiRenderer));
-            return glcur;
-        }
+            return ogl->CreateGLCursorLayer();
     }
 #endif
 #ifdef RENDERER_VULKAN_ENABLED
@@ -1038,6 +1045,8 @@ TbScreenCoord RendererPhysicalWidth(void)  { return lbDisplay.PhysicalScreenWidt
 TbScreenCoord RendererPhysicalHeight(void) { return lbDisplay.PhysicalScreenHeight; }
 TbScreenCoord RendererScreenWidth(void)    { return lbDisplay.GraphicsScreenWidth;  }
 TbScreenCoord RendererScreenHeight(void)   { return lbDisplay.GraphicsScreenHeight; }
+unsigned short RendererGetScreenWidth(void)  { return MyScreenWidth; }
+unsigned short RendererGetScreenHeight(void) { return MyScreenHeight; }
 unsigned char* RendererGetWScreen(void)    { return lbDisplay.WScreen; }
 
 void RendererSetWScreen(unsigned char* buf)
@@ -1199,6 +1208,12 @@ void CursorLayer_SubmitKeeperHandSprite(short x, short y, unsigned short kspr_ba
         s_cursorLayer->SubmitKeeperHandSprite(x, y, kspr_base, kspr_angle, sprgroup, scale);
 }
 /******************************************************************************/
+
+void MapFadePass_PrepareBuffers(unsigned char* fade_src, unsigned char* fade_dest, int scanline, int height)
+{
+    if (s_mapFadePass)
+        s_mapFadePass->PrepareBuffers(fade_src, fade_dest, scanline, height);
+}
 
 int32_t MapFadePass_StepFadeIn(int32_t step)
 {

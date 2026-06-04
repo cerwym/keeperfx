@@ -35,6 +35,7 @@
 #include "renderer/ir/TextCommands.h"
 #include "renderer/ir/ShadowCommands.h"
 #include "renderer/ir/DebugCommands.h"
+#include "renderer/ir/PostProcessCommands.h"
 
 /******************************************************************************/
 
@@ -70,27 +71,16 @@ public:
     // =========================================================================
     // Game-thread write accessors
 
-    WorldCommandBuffers&  GetWorldBuffers()  { return m_write.world;  }
-    UICommandBuffers&     GetUIBuffers()     { return m_write.ui;     }
-    TextCommandBuffers&   GetTextBuffers()   { return m_write.text;   }
-    ShadowCommandBuffers& GetShadowBuffers() { return m_write.shadow; }
-    DebugCommandBuffers&  GetDebugBuffers()  { return m_write.debug;  }
+    WorldCommandBuffers&       GetWorldBuffers()       { return m_write.world;        }
+    UICommandBuffers&          GetUIBuffers()          { return m_write.ui;           }
+    TextCommandBuffers&        GetTextBuffers()        { return m_write.text;         }
+    ShadowCommandBuffers&      GetShadowBuffers()      { return m_write.shadow;       }
+    DebugCommandBuffers&       GetDebugBuffers()       { return m_write.debug;        }
+    PostProcessCommandBuffers& GetPostProcessBuffers() { return m_write.post_process; }
 
     /** Read-only access to the write-side UI buffer (game thread, before Flip).
      *  Used by EndFrame() to detect empty frames and skip Flip(). */
     const UICommandBuffers& GetWriteUIBuffers() const { return m_write.ui; }
-
-    /** Record a map-fade composite command for this frame (game thread).
-     *  Transferred to the render-side by Flip() / UpdateFrameState(). */
-    void SetMapFadeCmd(const IRMapFadeCmd& cmd) { m_write_map_fade = cmd; }
-
-    /** Clear any pending map-fade command for this frame (game thread). */
-    void ClearMapFadeCmd() { m_write_map_fade = std::nullopt; }
-
-    /** Returns true if a map-fade command has been written this frame (game thread).
-     *  Used by EndFrame() to force Flip() during ParchFadeIn/Out so stale UI quads
-     *  from the preceding parchment view are not replayed over the fade blend. */
-    bool HasWriteMapFadeCmd() const { return m_write_map_fade.has_value(); }
 
     // =========================================================================
     // Frame lifecycle (game thread)
@@ -129,16 +119,13 @@ public:
     // =========================================================================
     // Render-thread read accessors (valid after Flip(), before next Flip())
 
-    const WorldCommandBuffers&  GetWorldBuffersRT()  const { return m_read.world;  }
-    const UICommandBuffers&     GetUIBuffersRT()     const { return m_read.ui;     }
-    const TextCommandBuffers&   GetTextBuffersRT()   const { return m_read.text;   }
-    const ShadowCommandBuffers& GetShadowBuffersRT() const { return m_read.shadow; }
-    const DebugCommandBuffers&  GetDebugBuffersRT()  const { return m_read.debug;  }
-    const FrameState&           GetFrameStateRT()    const { return m_read_fs;     }
-
-    /** Read the map-fade command for this frame (render thread).
-     *  Returns nullopt when no map-fade transition is active. */
-    const std::optional<IRMapFadeCmd>& GetMapFadeCmdRT() const { return m_read_map_fade; }
+    const WorldCommandBuffers&       GetWorldBuffersRT()       const { return m_read.world;        }
+    const UICommandBuffers&          GetUIBuffersRT()          const { return m_read.ui;           }
+    const TextCommandBuffers&        GetTextBuffersRT()        const { return m_read.text;         }
+    const ShadowCommandBuffers&      GetShadowBuffersRT()      const { return m_read.shadow;       }
+    const DebugCommandBuffers&       GetDebugBuffersRT()       const { return m_read.debug;        }
+    const PostProcessCommandBuffers& GetPostProcessBuffersRT() const { return m_read.post_process; }
+    const FrameState&                GetFrameStateRT()         const { return m_read_fs;           }
 
     // =========================================================================
     // Render-thread execution
@@ -173,11 +160,12 @@ private:
 
     struct FrameBuffers
     {
-        WorldCommandBuffers  world;
-        UICommandBuffers     ui;
-        TextCommandBuffers   text;
-        ShadowCommandBuffers shadow;
-        DebugCommandBuffers  debug;
+        WorldCommandBuffers       world;
+        UICommandBuffers          ui;
+        TextCommandBuffers        text;
+        ShadowCommandBuffers      shadow;
+        DebugCommandBuffers       debug;
+        PostProcessCommandBuffers post_process;
 
         void Reset();
         void Reserve(size_t world_tiles, size_t world_sprites, size_t world_shadows,
@@ -189,10 +177,6 @@ private:
     FrameBuffers m_write;     /**< Written by game thread.  */
     FrameBuffers m_read;      /**< Read by render thread.   */
     FrameState   m_read_fs;   /**< Snapshot captured at Flip(). */
-
-    /** Map-fade composite command, transferred each frame by Flip()/UpdateFrameState(). */
-    std::optional<IRMapFadeCmd> m_write_map_fade;
-    std::optional<IRMapFadeCmd> m_read_map_fade;
 };
 
 /******************************************************************************/

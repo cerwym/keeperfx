@@ -59,6 +59,7 @@
 #include "gui_frontbtns.h"
 #include "keeperfx.hpp"
 #include "kjm_input.h"
+#include "renderer/RendererManager.h"
 #include "post_inc.h"
 
 /******************************************************************************/
@@ -780,7 +781,7 @@ void init_player(struct PlayerInfo *player, short no_explore)
     player->minimap_pos_x = 11;
     player->minimap_pos_y = 11;
     player->minimap_zoom = settings.minimap_zoom;
-    setup_engine_window(0, 0, MyScreenWidth, MyScreenHeight);
+    setup_engine_window(0, 0, RendererGetScreenWidth(), RendererGetScreenHeight());
     player->continue_work_state = PSt_CtrlDungeon;
     player->work_state = PSt_CtrlDungeon;
     player->main_palette = engine_palette;

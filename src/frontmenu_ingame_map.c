@@ -100,9 +100,9 @@ enum TbPixelsColours
 /**
  * Background behind the map area.
  */
-static unsigned char *MapBackground = NULL;
-static int32_t *MapShapeStart = NULL;
-static int32_t *MapShapeEnd = NULL;
+unsigned char *MapBackground = NULL;
+int32_t *MapShapeStart = NULL;
+int32_t *MapShapeEnd = NULL;
 /**
  * Frame-scoped pointer to the renderer-owned minimap pixel buffer.
  * Set by panel_map_draw_slabs() via UIRenderer_AcquireMinimapBuffer() and
@@ -115,9 +115,9 @@ static unsigned char *s_minimap_pixels = NULL;
 
 static long PanelMapY;
 static long PanelMapX;
-static long NumBackColours;
+long NumBackColours;
 static long PrevPixelSize;
-static unsigned char MapBackColours[256];
+unsigned char MapBackColours[256];
 static unsigned char PanelColours[16*PnC_End];
 static long PrevRoomHighlight;
 static long PrevDoorHighlight;
@@ -893,8 +893,8 @@ short do_left_map_drag(long begin_x, long begin_y, int32_t curr_x, int32_t curr_
     grabbed_small_map = 0;
     return 0;
   }
-  x = (curr_x - (MyScreenWidth >> 1)) / 2;
-  y = (curr_y - (MyScreenHeight >> 1)) / 2;
+  x = (curr_x - (RendererGetScreenWidth() >> 1)) / 2;
+  y = (curr_y - (RendererGetScreenHeight() >> 1)) / 2;
   if ((labs(curr_x - old_mx) < 2) && (labs(curr_y - old_my) < 2))
     return 0;
   if (!grabbed_small_map)
@@ -1005,52 +1005,7 @@ void setup_background(long units_per_px)
         MapShapeEnd[i] = radius + LbSqrL(n);
     }
 
-    if (RendererHasGPURenderPath()) {
-        // GPU mode: WScreen is the CPU staging buffer — not a composited background.
-        // MapBackground[] is already zeroed by KfxCalloc; bkcol=0 is the only entry
-        // needed because s_minimap_pixels is pre-zeroed by AcquireMinimapBuffer.
-        // Skip the WScreen read/write that would corrupt the staging buffer.
-        NumBackColours = 1;
-        MapBackColours[0] = 0;
-    } else {
-        int num_colours;
-        num_colours = 0;
-        long out_scanline;
-        out_scanline = lbDisplay.GraphicsScreenWidth;
-        long bkgnd_pos;
-        bkgnd_pos = 0;
-        TbPixel *out;
-        out = &lbDisplay.WScreen[PanelMapX + out_scanline * PanelMapY];
-        int w;
-        int h;
-        for (h=0; h < MapDiagonalLength; h++)
-        {
-            for (w = MapShapeStart[h]; w < MapShapeEnd[h]; w++)
-            {
-                if (w < 0) continue;
-
-                TbPixel orig;
-                orig = out[w];
-                out[w] = 255;
-                int colour;
-                for (colour=0; colour < num_colours; colour++)
-                {
-                    if (MapBackColours[colour] == orig) {
-                        break;
-                    }
-                }
-                if (num_colours == colour)
-                {
-                    MapBackColours[num_colours] = orig;
-                    num_colours++;
-                }
-                MapBackground[bkgnd_pos+w] = colour;
-            }
-            bkgnd_pos += MapDiagonalLength;
-            out += out_scanline;
-        }
-        NumBackColours = num_colours;
-    }
+    UIRenderer_SetupMinimapBackground(MapDiagonalLength, PanelMapX, PanelMapY);
 }
 
 void setup_panel_colors(void)
@@ -1088,25 +1043,9 @@ void setup_panel_colors(void)
         PanelColours[n + PnC_purplePath]    = 255;
         PanelColours[n + PnC_Gems]      = 102 + (pixmap.ghost[bkcol] >> 6);
         PanelColours[n + PnC_RockFloor] = 145;
-        if (RendererHasGPURenderPath()) {
-            // GPU sprite shader discards palette index 0 (transparent); ensure all
-            // visible terrain types map to a non-zero entry.
-            // For rock: it should appear as black on the minimap. Palette index 0
-            // IS black, but 0 is the discard sentinel. Find the darkest non-zero
-            // palette entry (lbPalette is 6-bit, values 0-63) to use instead.
-            {
-                uint8_t black_idx = 1;
-                uint32_t best_lum = UINT32_MAX;
-                for (int i = 1; i < 256; i++)
-                {
-                    uint32_t r = lbPalette[i * 3 + 0];
-                    uint32_t g = lbPalette[i * 3 + 1];
-                    uint32_t b = lbPalette[i * 3 + 2];
-                    uint32_t lum = r * r + g * g + b * b;
-                    if (lum < best_lum) { best_lum = lum; black_idx = (uint8_t)i; }
-                }
-                PanelColours[n + PnC_Rock] = black_idx;
-            }
+        unsigned char black_idx;
+        if (UIRenderer_GetMinimapOpaqueBlackIndex(&black_idx)) {
+            PanelColours[n + PnC_Rock] = black_idx;
             if (PanelColours[n + PnC_Wall]        == 0) PanelColours[n + PnC_Wall]        = 1;
             if (PanelColours[n + PnC_Unexplored]  == 0) PanelColours[n + PnC_Unexplored]  = 1;
             if (PanelColours[n + PnC_Tagged_Gold] == 0) PanelColours[n + PnC_Tagged_Gold] = 1;

@@ -23,13 +23,22 @@
 #include "bflib_render.h"
 #include "bflib_sprite.h"    // TbSpriteSheet, get_sprite
 #include "bflib_vidraw.h"    // LbSpriteDrawResized
+#include "engine_render.h"   // draw_texture
+#include "vidmode.h"         // pixmap ghost tables
 #include "renderer/RendererManager.h"
 #include "platform/PlatformManager.h"
 #include "platform.h"        // platform_get_sdl_window
+#include "engine_redraw.h"
+#include "lens_api.h"
+#include "player_data.h"
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <cstring>
+
+extern "C" void draw_texture(int32_t texture_x, int32_t texture_y, int32_t texture_width, int32_t texture_height,
+                             int32_t texture_block_index, int32_t flags, int32_t fade_level);
+
 #include "post_inc.h"
 
 /******************************************************************************/
@@ -206,6 +215,103 @@ void RendererSoftware::UnlockFramebuffer()
         SDL_UnlockSurface(lbDrawSurface);
 }
 
+bool RendererSoftware::SubmitTransparentBlit(const uint8_t* buf, int w, int h)
+{
+    if (!buf || !RendererGetWScreen()) return false;
+    if (w != RendererScreenWidth() || h != RendererPhysicalHeight()) return false;
+
+    uint8_t* dst = RendererGetWScreen();
+    const size_t count = (size_t)w * (size_t)h;
+    for (size_t i = 0; i < count; ++i)
+    {
+        if (buf[i] != 0)
+            dst[i] = buf[i];
+    }
+    return true;
+}
+
+bool RendererSoftware::SubmitOverheadMap(const uint8_t* tile_colors, int tiles_x, int tiles_y,
+                                         int dst_x, int dst_y, int dst_w, int dst_h)
+{
+    if (!tile_colors || tiles_x <= 0 || tiles_y <= 0) return false;
+
+    uint8_t* dst_screen = RendererGetWScreen();
+    if (!dst_screen) return false;
+
+    const int block_w = dst_w / tiles_x;
+    const int block_h = dst_h / tiles_y;
+    const int screen_w = RendererScreenWidth();
+
+    for (int ty = 0; ty < tiles_y; ++ty)
+    {
+        for (int tx = 0; tx < tiles_x; ++tx)
+        {
+            const int idx = (ty * tiles_x + tx) * 2;
+            const uint8_t r_val = tile_colors[idx + 0];
+            const uint8_t op = tile_colors[idx + 1];
+            if (op == 0x00)
+                continue;
+
+            for (int py = 0; py < block_h; ++py)
+            {
+                uint8_t* dst = &dst_screen[(dst_y + ty * block_h + py) * screen_w + dst_x + tx * block_w];
+                for (int px = 0; px < block_w; ++px, ++dst)
+                {
+                    switch (op)
+                    {
+                    case 0xFF:
+                        *dst = r_val;
+                        break;
+                    case 0x01:
+                        *dst = pixmap.ghost[((unsigned int)r_val << 8) | *dst];
+                        break;
+                    case 0x02:
+                        *dst = (uint8_t)(102 + (pixmap.ghost[(64u << 8) | *dst] >> 6));
+                        break;
+                    case 0x03:
+                        *dst = (uint8_t)(pixmap.ghost[((unsigned int)r_val << 8) | *dst] + 2);
+                        break;
+                    default:
+                        *dst = r_val;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    return true;
+}
+
+void RendererSoftware::SubmitZoomBoxTiles(const uint16_t* tile_block_ids, int tiles_x, int tiles_y,
+                                          int dst_x, int dst_y, int tile_w, int tile_h)
+{
+    if (!tile_block_ids || tiles_x <= 0 || tiles_y <= 0) return;
+
+    lbDisplay.DrawFlags = 0;
+    setup_vecs(RendererGetWScreen(), NULL, (unsigned int)RendererScreenWidth(),
+               (unsigned int)RendererScreenWidth(), (unsigned int)RendererScreenHeight());
+
+    int scr_y = dst_y;
+    for (int ty = 0; ty < tiles_y; ++ty)
+    {
+        int scr_x = dst_x;
+        for (int tx = 0; tx < tiles_x; ++tx)
+        {
+            const uint16_t block = tile_block_ids[ty * tiles_x + tx];
+            if (block != 0xFFFF)
+                draw_texture(scr_x, scr_y, tile_w, tile_h, block, 0, -1);
+            else
+                LbDrawBox(scr_x, scr_y, tile_w, tile_h, 1);
+            scr_x += tile_w;
+        }
+        scr_y += tile_h;
+    }
+
+    lbDisplay.DrawFlags |= Lb_SPRITE_OUTLINE;
+    LbDrawBox(dst_x, dst_y, tiles_x * tile_w, tiles_y * tile_h, 0);
+    lbDisplay.DrawFlags &= ~Lb_SPRITE_OUTLINE;
+}
+
 void RendererSoftware::DrawSwipeOverlay(struct TbSpriteSheet* sprites, int frame,
                                         bool draw_lr, int engine_window_x)
 {
@@ -264,6 +370,59 @@ void RendererSoftware::DrawSwipeOverlay(struct TbSpriteSheet* sprites, int frame
     lbDisplay.DrawFlags = 0;
 }
 
+void RendererSoftware::BeginLensCapture()
+{
+    m_lens_capture_active = false;
+    if (!lens_is_ready())
+        return;
+
+    m_lens_buffer = lens_get_render_target();
+    m_lens_buffer_w = lens_get_render_target_width();
+    m_lens_buffer_h = lens_get_render_target_height();
+    if (!m_lens_buffer || m_lens_buffer_w == 0 || m_lens_buffer_h == 0)
+        return;
+
+    m_saved_wscreen = RendererGetWScreen();
+    m_saved_graphics_w = lbDisplay.GraphicsScreenWidth;
+    m_saved_graphics_h = lbDisplay.GraphicsScreenHeight;
+    RendererStoreViewport(&m_saved_viewport);
+
+    memset(m_lens_buffer, 0, (size_t)m_lens_buffer_w * (size_t)m_lens_buffer_h * sizeof(TbPixel));
+    lbDisplay.WScreen = m_lens_buffer;
+    lbDisplay.GraphicsScreenWidth = (int)m_lens_buffer_w;
+    lbDisplay.GraphicsScreenHeight = (int)m_lens_buffer_h;
+    RendererSetViewport(0, 0, RendererScreenWidth(), RendererScreenHeight());
+    setup_engine_window(0, 0, RendererGetScreenWidth(), RendererGetScreenHeight());
+    m_lens_capture_active = true;
+}
+
+void RendererSoftware::EndLensCapture()
+{
+    if (!m_lens_capture_active)
+        return;
+
+    struct PlayerInfo* player = get_my_player();
+    const long view_width = player->engine_window_width / pixel_size;
+    const long view_height = player->engine_window_height / pixel_size;
+    const long view_x = player->engine_window_x / pixel_size;
+    const long view_y = player->engine_window_y / pixel_size;
+
+    lbDisplay.WScreen = m_saved_wscreen;
+    lbDisplay.GraphicsScreenWidth = m_saved_graphics_w;
+    lbDisplay.GraphicsScreenHeight = m_saved_graphics_h;
+    RendererLoadViewport(&m_saved_viewport);
+    setup_engine_window(0, 0, RendererGetScreenWidth(), RendererGetScreenHeight());
+
+    const long dst_offset = view_y * RendererScreenWidth() + view_x;
+    draw_lens_effect(RendererGetWScreen() + dst_offset, RendererScreenWidth(),
+        m_lens_buffer, m_lens_buffer_w, view_width, view_height, view_x, game.applied_lens_type);
+
+    m_lens_capture_active = false;
+    m_lens_buffer = nullptr;
+    m_lens_buffer_w = 0;
+    m_lens_buffer_h = 0;
+}
+ 
 const char* RendererSoftware::GetName() const
 {
     return "Software";

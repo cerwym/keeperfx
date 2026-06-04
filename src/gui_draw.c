@@ -131,7 +131,7 @@ void draw_slab64k_background(long pos_x, long pos_y, long width, long height)
     i = RendererPhysicalWidth() * pixel_size;
     if (scr_x + scr_w > i)
         scr_w = i - scr_x;
-    i = MyScreenHeight;
+    i = RendererGetScreenHeight();
     if (scr_y + scr_h > i)
         scr_h = i - scr_y;
     TbPixel* out = &RendererGetWScreen()[scr_x + RendererScreenWidth() * scr_y];
@@ -408,7 +408,7 @@ void draw_button_string(struct GuiButton *gbtn, int base_width, const char *text
         lbDisplay.DrawColour = LbTextGetFontFaceColor(TextRenderer_GetFont());
         lbDisplayEx.ShadowColour = LbTextGetFontBackColor(TextRenderer_GetFont());
     }
-    TbBool low_res = ( (MyScreenHeight < 400) && (dbc_language > 0) );
+    TbBool low_res = ( (RendererGetScreenHeight() < 400) && (dbc_language > 0) );
     int width = gbtn->width;
     int x = gbtn->scr_pos_x;
     if (low_res)
@@ -464,27 +464,27 @@ void draw_button_string(struct GuiButton *gbtn, int base_width, const char *text
     {
         if (gbtn->id_num == BID_QUERY_INFO)
         {
-            if (MyScreenWidth > 640)
+            if (RendererGetScreenWidth() > 640)
             {
-                h += (13 + (MyScreenWidth / 640));
+                h += (13 + (RendererGetScreenWidth() / 640));
                 w += 8;
                 tx_units_per_px = scale_value_by_horizontal_resolution(10);
             }
         }
         else if (gbtn->id_num == BID_DUNGEON_INFO)
         {
-            if (MyScreenWidth > 640)
+            if (RendererGetScreenWidth() > 640)
             {
-                h += (12 + (MyScreenWidth / 640));
+                h += (12 + (RendererGetScreenWidth() / 640));
                 w += 8;
                 tx_units_per_px = scale_value_by_horizontal_resolution(12);
             }
         }
         else if (gbtn->tooltip_stridx == GUIStr_ExperienceDesc)
         {
-            if (MyScreenWidth > 640)
+            if (RendererGetScreenWidth() > 640)
             {
-                h += (8 + (MyScreenWidth / 640));
+                h += (8 + (RendererGetScreenWidth() / 640));
             }
         }
     }

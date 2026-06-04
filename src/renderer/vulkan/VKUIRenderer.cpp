@@ -15,13 +15,20 @@
 #include "renderer/VecMath.h"
 #include "renderer/ir/UICommands.h"
 #include "renderer/FrameState.h"
+#include "renderer/RendererSettings.h"
 #include "bflib_basics.h"
-#include "bflib_video.h"       // lbDisplay, units_per_pixel_best, UPP_BASE
+#include "bflib_video.h"       // Lb_SPRITE_TRANSPAR*, lbDisplay, units_per_pixel_best, UPP_BASE
 #include "engine_render.h"     // colored_stripey_lines, hud_scale, line_box_size
 #include "globals.h"           // get_gameturn()
 #include <cstring>
 #include <cmath>
 #include <algorithm>
+
+extern "C" {
+extern long NumBackColours;
+extern unsigned char MapBackColours[256];
+}
+
 #include "post_inc.h"
 
 /******************************************************************************/
@@ -144,6 +151,49 @@ void VKUIRenderer::SetGameViewport(int x, int y, int w, int h)
     m_rt_game_vp_w   = w;
     m_rt_game_vp_h   = h;
     m_rt_game_vp_set = true;
+}
+
+void VKUIRenderer::BeginZoomBoxOverlay(int x, int y, int w, int h)
+{
+    (void)x; (void)y; (void)w; (void)h;
+    SetTopOverlay();
+}
+
+void VKUIRenderer::EndZoomBoxOverlay(int x, int y, int w, int h)
+{
+    (void)x; (void)y; (void)w; (void)h;
+    ClearTopOverlay();
+}
+
+void VKUIRenderer::SetupMinimapBackground(int diaglen, int panel_x, int panel_y)
+{
+    (void)diaglen;
+    (void)panel_x;
+    (void)panel_y;
+    NumBackColours = 1;
+    MapBackColours[0] = 0;
+}
+
+bool VKUIRenderer::GetMinimapOpaqueBlackIndex(uint8_t* idx) const
+{
+    if (!idx) return false;
+    const uint8_t* pal = m_palette_data ? m_palette_data : lbPalette;
+    uint8_t black_idx = 1;
+    uint32_t best_lum = UINT32_MAX;
+    for (int i = 1; i < 256; i++)
+    {
+        const uint32_t r = pal[i * 3 + 0];
+        const uint32_t g = pal[i * 3 + 1];
+        const uint32_t b = pal[i * 3 + 2];
+        const uint32_t lum = r * r + g * g + b * b;
+        if (lum < best_lum)
+        {
+            best_lum = lum;
+            black_idx = (uint8_t)i;
+        }
+    }
+    *idx = black_idx;
+    return true;
 }
 
 /******************************************************************************/
@@ -325,51 +375,61 @@ static IRUILayer ComputeVKIRLayer(int layer, bool world_depth, bool top_overlay)
     return (layer == 0) ? IRUILayer::Back : IRUILayer::Front;
 }
 
+static inline float UIAlphaFromFlags(unsigned int flags)
+{
+    if (flags & Lb_SPRITE_TRANSPAR4) return g_renderer_settings.transpar4_alpha;
+    if (flags & Lb_SPRITE_TRANSPAR8) return g_renderer_settings.transpar8_alpha;
+    return 1.0f;
+}
+
 void VKUIRenderer::SubmitPanelSprite(int32_t x, int32_t y, int units_per_px,
-                                     SpriteHandle spr, bool flip_horiz)
+                                     SpriteHandle spr, bool flip_horiz,
+                                     unsigned int draw_flags)
 {
     if (spr == kInvalidSpriteHandle || !m_sprite_atlas || !m_write_cmds) return;
     IRUISpriteCmd cmd;
     cmd.layer       = ComputeVKIRLayer(m_current_layer, m_world_depth_active, m_top_overlay_active);
     cmd.x = x; cmd.y = y; cmd.units_per_px = units_per_px; cmd.sprite = spr;
     cmd.flags       = flip_horiz ? kIRSpriteFlipHoriz : 0u;
-    cmd.alpha       = 1.0f;
+    cmd.alpha       = UIAlphaFromFlags(draw_flags);
     cmd.ndc_z       = m_world_depth_active ? m_world_z : 0.5f;
     m_write_cmds->sprites.Append(cmd);
 }
 
 void VKUIRenderer::SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px,
-                                          SpriteHandle spr, int remap_row)
+                                          SpriteHandle spr, int remap_row,
+                                          unsigned int draw_flags)
 {
     if (spr == kInvalidSpriteHandle || !m_sprite_atlas || !m_write_cmds) return;
     IRUISpriteRemapCmd cmd;
     cmd.layer        = ComputeVKIRLayer(m_current_layer, m_world_depth_active, m_top_overlay_active);
     cmd.x = x; cmd.y = y; cmd.units_per_px = units_per_px;
-    cmd.sprite       = spr; cmd.remap_row = remap_row; cmd.alpha = 1.0f;
+    cmd.sprite       = spr; cmd.remap_row = remap_row; cmd.alpha = UIAlphaFromFlags(draw_flags);
     cmd.ndc_z        = m_world_depth_active ? m_world_z : 0.5f;
     m_write_cmds->sprites_remap.Append(cmd);
 }
 
 void VKUIRenderer::SubmitPanelSpriteColored(int32_t x, int32_t y, int units_per_px,
-                                            SpriteHandle spr, uint8_t color_idx)
+                                            SpriteHandle spr, uint8_t color_idx,
+                                            unsigned int draw_flags)
 {
     if (spr == kInvalidSpriteHandle || !m_sprite_atlas || !m_write_cmds) return;
     IRUISpriteColoredCmd cmd;
     cmd.layer        = ComputeVKIRLayer(m_current_layer, m_world_depth_active, m_top_overlay_active);
     cmd.x = x; cmd.y = y; cmd.units_per_px = units_per_px;
-    cmd.sprite       = spr; cmd.colour_idx = color_idx; cmd.alpha = 1.0f;
+    cmd.sprite       = spr; cmd.colour_idx = color_idx; cmd.alpha = UIAlphaFromFlags(draw_flags);
     cmd.ndc_z        = m_world_depth_active ? m_world_z : 0.5f;
     m_write_cmds->sprites_colored.Append(cmd);
 }
 
 void VKUIRenderer::SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h,
-                                      SpriteHandle spr)
+                                      SpriteHandle spr, unsigned int draw_flags)
 {
     if (spr == kInvalidSpriteHandle || !m_sprite_atlas || !m_write_cmds) return;
     IRUISpriteCmd cmd;
     cmd.layer        = ComputeVKIRLayer(m_current_layer, m_world_depth_active, m_top_overlay_active);
     cmd.x = x; cmd.y = y; cmd.w = w; cmd.h = h; cmd.units_per_px = 16;
-    cmd.sprite       = spr; cmd.flags = kIRSpriteScaled; cmd.alpha = 1.0f; cmd.ndc_z = 0.5f;
+    cmd.sprite       = spr; cmd.flags = kIRSpriteScaled; cmd.alpha = UIAlphaFromFlags(draw_flags); cmd.ndc_z = 0.5f;
     m_write_cmds->sprites.Append(cmd);
 }
 

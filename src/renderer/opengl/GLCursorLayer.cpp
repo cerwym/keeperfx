@@ -49,6 +49,7 @@ void GLCursorLayer::SubmitPointerSprite(const TbSprite* spr,
     cmd.x            = x;
     cmd.y            = y;
     cmd.units_per_px = units_per_px;
+    cmd.draw_flags   = (unsigned int)lbDisplay.DrawFlags;
     m_write_cmds->cursor_pointers.Append(cmd);
 }
 
@@ -81,7 +82,7 @@ void GLCursorLayer::ExecuteCursorFromIR(const UICommandBuffers& cmds)
             SpriteHandle h = m_atlas->GetHandle(p.sprite);
             if (h == kInvalidSpriteHandle) continue;
             m_glui->SubmitCursorPanelSprite((int32_t)p.x, (int32_t)p.y,
-                                            p.units_per_px, h);
+                                            p.units_per_px, h, p.draw_flags);
         }
         m_glui->DrawCursorSprites();
     }

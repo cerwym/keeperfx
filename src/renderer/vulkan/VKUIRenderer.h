@@ -43,7 +43,6 @@
 #include "renderer/vulkan/VKDescriptorLayout.h"
 #include "renderer/vulkan/VKSpriteAtlas.h"
 #include "renderer/vulkan/VKFontAtlas.h"
-#include "renderer/opengl/GLSpriteAtlas.h"  // SpriteUV
 
 /******************************************************************************/
 
@@ -130,7 +129,11 @@ public:
     void ClearWorldDepth()        override { m_world_depth_active = false; }
     void SetTopOverlay()          override { m_top_overlay_active = true;  }
     void ClearTopOverlay()        override { m_top_overlay_active = false; }
-
+    void BeginZoomBoxOverlay(int x, int y, int w, int h) override;
+    void EndZoomBoxOverlay(int x, int y, int w, int h) override;
+    void SetupMinimapBackground(int diaglen, int panel_x, int panel_y) override;
+    bool GetMinimapOpaqueBlackIndex(uint8_t* idx) const override;
+ 
     void PopulateFromIR(const UICommandBuffers& cmds, const FrameState& fs) override;
     void DrawBack()          override;
     void DrawFront()         override;
@@ -165,13 +168,16 @@ public:
 
     // Submit calls — all go to m_write_cmds (IR path) or m_quads[] (legacy)
     void SubmitPanelSprite(int32_t x, int32_t y, int units_per_px,
-                           SpriteHandle spr, bool flip_horiz = false) override;
+                           SpriteHandle spr, bool flip_horiz,
+                           unsigned int draw_flags) override;
     void SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px,
-                                SpriteHandle spr, int remap_row) override;
+                                SpriteHandle spr, int remap_row,
+                                unsigned int draw_flags) override;
     void SubmitPanelSpriteColored(int32_t x, int32_t y, int units_per_px,
-                                  SpriteHandle spr, uint8_t color_idx) override;
+                                  SpriteHandle spr, uint8_t color_idx,
+                                  unsigned int draw_flags) override;
     void SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h,
-                            SpriteHandle spr) override;
+                            SpriteHandle spr, unsigned int draw_flags) override;
     void SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h,
                         uint8_t color_idx) override;
     void SubmitSolidBoxAlpha(int32_t x, int32_t y, int32_t w, int32_t h,

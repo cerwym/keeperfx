@@ -959,7 +959,7 @@ void draw_slider64k(long scr_x, long scr_y, int units_per_px, long width)
     // Inner size
     ScreenCoord x = scr_x;
     ScreenCoord y = scr_y;
-    TbBool low_res = (MyScreenHeight < 400);
+    TbBool low_res = (RendererGetScreenHeight() < 400);
     if (low_res)
     {
         x -= 16;
@@ -1000,7 +1000,7 @@ void gui_area_slider(struct GuiButton *gbtn)
     int units_per_px = (gbtn->height*16 + 30/2) / 30;
     int bs_units_per_px = simple_button_sprite_height_units_per_px(gbtn, GBS_frontend_button_std_c, 100);
     int bar_width = gbtn->width;
-    if (MyScreenHeight < 400)
+    if (RendererGetScreenHeight() < 400)
     {
         bar_width += 32;
     }
@@ -1160,7 +1160,7 @@ void gui_area_text(struct GuiButton *gbtn)
     }
     int bs_units_per_px = simple_button_sprite_height_units_per_px(gbtn, GBS_frontend_button_std_c, 94);
     int width = gbtn->width;
-    TbBool low_res = (MyScreenHeight < 400);
+    TbBool low_res = (RendererGetScreenHeight() < 400);
     if (low_res)
     {
         width += 32;
@@ -1225,7 +1225,7 @@ void frontend_set_player_number(long plr_num)
     my_player_number = plr_num;
     player = get_my_player();
     player->id_number = plr_num;
-    setup_engine_window(0, 0, MyScreenWidth, MyScreenHeight);
+    setup_engine_window(0, 0, RendererGetScreenWidth(), RendererGetScreenHeight());
 }
 
 const char *frontend_button_caption_text(const struct GuiButton *gbtn)
@@ -1400,7 +1400,7 @@ void draw_scrolling_button_string(struct GuiButton *gbtn, const char *text)
   int tx_units_per_px;
   if (dbc_language > 0)
   {
-      tx_units_per_px = scale_value_by_horizontal_resolution((MyScreenWidth >= 640) ? 16 : 32);
+      tx_units_per_px = scale_value_by_horizontal_resolution((RendererGetScreenWidth() >= 640) ? 16 : 32);
   }
   else
   {
@@ -2092,10 +2092,10 @@ long compute_menu_position_x(long desired_pos,int menu_width, int units_per_px)
       pos = old_menu_mouse_x - (scaled_width >> 1);
       break;
   case POS_SCRCTR:
-      pos = (MyScreenWidth >> 1) - (scaled_width >> 1);
+      pos = (RendererGetScreenWidth() >> 1) - (scaled_width >> 1);
       break;
   case POS_SCRBTM:
-      pos = MyScreenWidth - scaled_width;
+      pos = RendererGetScreenWidth() - scaled_width;
       break;
   default: // Desired position have direct coordinates
       pos = ((desired_pos*(long)units_per_pixel)>>4)*((long)pixel_size);
@@ -2110,14 +2110,14 @@ long compute_menu_position_x(long desired_pos,int menu_width, int units_per_px)
   // Clipping position X
   if (desired_pos == POS_GAMECTR)
   {
-    if (pos+scaled_width > MyScreenWidth)
-      pos = MyScreenWidth-scaled_width;
+    if (pos+scaled_width > RendererGetScreenWidth())
+      pos = RendererGetScreenWidth()-scaled_width;
     if (pos < player->engine_window_x)
       pos = player->engine_window_x;
   } else
   {
-    if (pos+scaled_width > MyScreenWidth)
-      pos = MyScreenWidth-scaled_width;
+    if (pos+scaled_width > RendererGetScreenWidth())
+      pos = RendererGetScreenWidth()-scaled_width;
     if (pos < 0)
       pos = 0;
   }
@@ -2142,10 +2142,10 @@ long compute_menu_position_y(long desired_pos,int menu_height, int units_per_px)
         pos = old_menu_mouse_y - (scaled_height >> 1);
         break;
     case POS_SCRCTR:
-        pos = (MyScreenHeight >> 1) - (scaled_height >> 1);
+        pos = (RendererGetScreenHeight() >> 1) - (scaled_height >> 1);
         break;
     case POS_SCRBTM:
-        pos = MyScreenHeight - scaled_height;
+        pos = RendererGetScreenHeight() - scaled_height;
         break;
     default: // Desired position have direct coordinates
         pos = ((desired_pos*((long)units_per_pixel))>>4)*((long)pixel_size);
@@ -2154,8 +2154,8 @@ long compute_menu_position_y(long desired_pos,int menu_height, int units_per_px)
         break;
     }
     // Clipping position Y
-    if (pos+scaled_height > MyScreenHeight)
-      pos = MyScreenHeight-scaled_height;
+    if (pos+scaled_height > RendererGetScreenHeight())
+      pos = RendererGetScreenHeight()-scaled_height;
     if (pos < 0)
       pos = 0;
     return pos;
@@ -2489,16 +2489,16 @@ void set_gui_visible(TbBool visible)
           && player->view_type != PVT_CreatureContrl
           && player->view_type != PVT_CreaturePasngr)
       {
-          setup_engine_window(0, 0, MyScreenWidth, MyScreenHeight);
+          setup_engine_window(0, 0, RendererGetScreenWidth(), RendererGetScreenHeight());
       }
       else
       {
-          setup_engine_window(status_panel_width, 0, MyScreenWidth, MyScreenHeight);
+          setup_engine_window(status_panel_width, 0, RendererGetScreenWidth(), RendererGetScreenHeight());
       }
   }
   else
   {
-      setup_engine_window(0, 0, MyScreenWidth, MyScreenHeight);
+      setup_engine_window(0, 0, RendererGetScreenWidth(), RendererGetScreenHeight());
   }
 }
 

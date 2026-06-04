@@ -14,8 +14,8 @@
 #include "renderer/opengl/GLShaders.h"
 #include "renderer/RendererOpenGL.h"      // FlushSceneToFBO
 #include "renderer/RendererManager.h"     // RendererGetActive, WorldViewRenderer_BeginWorldPass
-#include "renderer/RenderGraph.h"         // SetMapFadeCmd / ClearMapFadeCmd
-#include "renderer/ir/UICommands.h"       // IRMapFadeCmd
+#include "renderer/RenderGraph.h"
+#include "renderer/ir/PostProcessCommands.h"
 #include "engine_redraw.h"    // setup_engine_window
 #include "engine_render.h"    // EngineRenderState, engine_save/restore_render_state, draw_view
 #include "gui_parchment.h"    // load_parchment_file, redraw_minimal_overhead_view
@@ -62,7 +62,8 @@ static GLuint compile_shader(GLenum type, const char* src)
 
 /******************************************************************************/
 
-GLMapFadePass::GLMapFadePass()
+GLMapFadePass::GLMapFadePass(RendererOpenGL* renderer)
+    : m_renderer(renderer)
 {
     // GL resources are initialised by CompileShaders(),
     // called by the bootstrapper in RendererManager::RendererInit().
@@ -155,10 +156,9 @@ void GLMapFadePass::Shutdown()
 
 bool GLMapFadePass::CaptureAndUploadFrames()
 {
-    RendererOpenGL* gl_rend = static_cast<RendererOpenGL*>(RendererGetActive());
-    if (!gl_rend)
+    if (!m_renderer)
     {
-        WARNLOG("GLMapFadePass::CaptureAndUploadFrames — no active renderer");
+        WARNLOG("GLMapFadePass::CaptureAndUploadFrames — no renderer bound");
         return false;
     }
 
@@ -246,7 +246,7 @@ bool GLMapFadePass::CaptureAndUploadFrames()
         glDepthMask(GL_TRUE);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        gl_rend->FlushSceneToFBO(w, h);
+        m_renderer->FlushSceneToFBO(w, h);
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glDeleteRenderbuffers(1, &depth_rb);
@@ -370,7 +370,7 @@ void GLMapFadePass::FlushToRenderGraph(RenderGraph& graph)
 {
     if (!m_active)
     {
-        graph.ClearMapFadeCmd();
+        graph.GetPostProcessBuffers().map_fade = std::nullopt;
         return;
     }
 
@@ -387,7 +387,7 @@ void GLMapFadePass::FlushToRenderGraph(RenderGraph& graph)
 
     // Transfer the pending-capture flag to the IR command and clear it here
     // so the render thread receives it exactly once.
-    graph.SetMapFadeCmd(IRMapFadeCmd{m_step, m_capture_pending});
+    graph.GetPostProcessBuffers().map_fade = IRMapFadeCmd{m_step, m_capture_pending};
     m_capture_pending = false;
 }
 

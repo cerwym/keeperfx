@@ -18,7 +18,7 @@
 #include "renderer/RendererThread.h"
 #include "renderer/RendererSettings.h" // g_renderer_settings (transpar4_alpha, transpar8_alpha)
 #include "bflib_basics.h"
-#include "bflib_video.h"       // lbDisplay.DrawFlags (UIAlphaFromDrawFlags), units_per_pixel_best
+#include "bflib_video.h"       // Lb_SPRITE_TRANSPAR*, units_per_pixel_best
 #include "engine_render.h"     // colored_stripey_lines, hud_scale, line_box_size
 #include "globals.h"            // get_gameturn()
 
@@ -30,6 +30,12 @@
 #include <vector>
 #include "renderer/VecMath.h"
 #include "kfx/profiling/KfxProfiling.h"
+
+extern "C" {
+extern long NumBackColours;
+extern unsigned char MapBackColours[256];
+}
+
 #include "post_inc.h"
 
 struct SamplerBinding {
@@ -248,13 +254,13 @@ void GLUIRenderer::SubmitSlabSelector(int x1, int y1, int x2, int y2, unsigned c
 extern "C" unsigned char EngineSpriteDrawUsingAlpha;
 
 // Returns the alpha that should be applied to a submitted UI element based
-// on the current lbDisplay.DrawFlags transparency flags.
+// on captured Bullfrog draw flags.
 // Values are read from g_renderer_settings so they match the configured blend weights.
 // Priority matches the software renderer (bflib_vidraw.c): TRANSPAR4 is checked first.
-static inline float UIAlphaFromDrawFlags()
+static inline float UIAlphaFromFlags(unsigned int draw_flags)
 {
-    if (lbDisplay.DrawFlags & Lb_SPRITE_TRANSPAR4) return g_renderer_settings.transpar4_alpha;
-    if (lbDisplay.DrawFlags & Lb_SPRITE_TRANSPAR8) return g_renderer_settings.transpar8_alpha;
+    if (draw_flags & Lb_SPRITE_TRANSPAR4) return g_renderer_settings.transpar4_alpha;
+    if (draw_flags & Lb_SPRITE_TRANSPAR8) return g_renderer_settings.transpar8_alpha;
     return 1.0f;
 }
 
@@ -270,7 +276,9 @@ static int IRUILayerToIndex(IRUILayer layer)
     }
 }
 
-void GLUIRenderer::SubmitPanelSprite(int32_t x, int32_t y, int units_per_px, SpriteHandle spr, bool flip_horiz)
+void GLUIRenderer::SubmitPanelSprite(int32_t x, int32_t y, int units_per_px,
+                                     SpriteHandle spr, bool flip_horiz,
+                                     unsigned int draw_flags)
 {
     ASSERT_GAME_THREAD();
     if (spr == kInvalidSpriteHandle) {
@@ -289,7 +297,7 @@ void GLUIRenderer::SubmitPanelSprite(int32_t x, int32_t y, int units_per_px, Spr
         cmd.units_per_px = units_per_px;
         cmd.sprite       = spr;
         cmd.flags        = flip_horiz ? kIRSpriteFlipHoriz : 0u;
-        cmd.alpha        = UIAlphaFromDrawFlags();
+        cmd.alpha        = UIAlphaFromFlags(draw_flags);
         cmd.ndc_z        = m_world_depth_active ? m_world_z : 0.5f;
         cmd.seq          = m_ui_write_cmds->next_seq++;
         m_ui_write_cmds->sprites.Append(cmd);
@@ -304,14 +312,15 @@ void GLUIRenderer::SubmitPanelSprite(int32_t x, int32_t y, int units_per_px, Spr
     float h = (float)((uv.pixel_h * units_per_px + 8) / 16);
     float u0 = flip_horiz ? uv.u1 : uv.u0;
     float u1 = flip_horiz ? uv.u0 : uv.u1;
-    float a = UIAlphaFromDrawFlags();
+    float a = UIAlphaFromFlags(draw_flags);
     SubmitQuad((float)x, (float)y, w, h,
                u0, uv.v0, u1, uv.v1,
                1.0f, 1.0f, 1.0f, a, 0.5f, 0.0f);
 }
 
 void GLUIRenderer::SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px,
-                                          SpriteHandle spr, int remap_row)
+                                          SpriteHandle spr, int remap_row,
+                                          unsigned int draw_flags)
 {
     ASSERT_GAME_THREAD();
     if (spr == kInvalidSpriteHandle) {
@@ -332,7 +341,7 @@ void GLUIRenderer::SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px
         cmd.units_per_px = units_per_px;
         cmd.sprite       = spr;
         cmd.remap_row    = remap_row;
-        cmd.alpha        = UIAlphaFromDrawFlags();
+        cmd.alpha        = UIAlphaFromFlags(draw_flags);
         cmd.ndc_z        = m_world_depth_active ? m_world_z : 0.5f;
         cmd.seq          = m_ui_write_cmds->next_seq++;
         m_ui_write_cmds->sprites_remap.Append(cmd);
@@ -350,7 +359,7 @@ void GLUIRenderer::SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px
     q.x1 = (float)x + w;  q.y1 = (float)y + h;
     q.u0 = uv.u0;  q.v0 = uv.v0;
     q.u1 = uv.u1;  q.v1 = uv.v1;
-    q.r = 1.0f;  q.g = 1.0f;  q.b = 1.0f;  q.a = UIAlphaFromDrawFlags();
+    q.r = 1.0f;  q.g = 1.0f;  q.b = 1.0f;  q.a = UIAlphaFromFlags(draw_flags);
     q.z = 0.5f;
     q.mode = 30.0f;
     q.texture_id = 0;
@@ -362,7 +371,8 @@ void GLUIRenderer::SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px
 }
 
 void GLUIRenderer::SubmitPanelSpriteColored(int32_t x, int32_t y, int units_per_px,
-                                            SpriteHandle spr, uint8_t color_idx)
+                                            SpriteHandle spr, uint8_t color_idx,
+                                            unsigned int draw_flags)
 {
     ASSERT_GAME_THREAD();
     if (spr == kInvalidSpriteHandle) {
@@ -382,7 +392,7 @@ void GLUIRenderer::SubmitPanelSpriteColored(int32_t x, int32_t y, int units_per_
         cmd.units_per_px = units_per_px;
         cmd.sprite       = spr;
         cmd.colour_idx   = color_idx;
-        cmd.alpha        = UIAlphaFromDrawFlags();
+        cmd.alpha        = UIAlphaFromFlags(draw_flags);
         cmd.ndc_z        = m_world_depth_active ? m_world_z : 0.5f;
         cmd.seq          = m_ui_write_cmds->next_seq++;
         m_ui_write_cmds->sprites_colored.Append(cmd);
@@ -401,10 +411,11 @@ void GLUIRenderer::SubmitPanelSpriteColored(int32_t x, int32_t y, int units_per_
     // mode=20.0: atlas-as-mask, flat vertex colour (Pass 5 in FlushQuads)
     SubmitQuad((float)x, (float)y, w, h,
                uv.u0, uv.v0, uv.u1, uv.v1,
-               r, g, b, UIAlphaFromDrawFlags(), 0.5f, 20.0f);
+               r, g, b, UIAlphaFromFlags(draw_flags), 0.5f, 20.0f);
 }
 
-void GLUIRenderer::SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h, SpriteHandle spr)
+void GLUIRenderer::SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h,
+                                     SpriteHandle spr, unsigned int draw_flags)
 {
     ASSERT_GAME_THREAD();
     if (spr == kInvalidSpriteHandle) {
@@ -425,7 +436,7 @@ void GLUIRenderer::SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h
         cmd.units_per_px = 16;
         cmd.sprite       = spr;
         cmd.flags        = kIRSpriteScaled;
-        cmd.alpha        = UIAlphaFromDrawFlags();
+        cmd.alpha        = UIAlphaFromFlags(draw_flags);
         cmd.ndc_z        = m_world_depth_active ? m_world_z : 0.5f;
         cmd.seq          = m_ui_write_cmds->next_seq++;
         m_ui_write_cmds->sprites.Append(cmd);
@@ -438,7 +449,7 @@ void GLUIRenderer::SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h
     }
     SubmitQuad((float)x, (float)y, (float)w, (float)h,
                uv.u0, uv.v0, uv.u1, uv.v1,
-               1.0f, 1.0f, 1.0f, UIAlphaFromDrawFlags(), 0.5f, 0.0f);
+               1.0f, 1.0f, 1.0f, UIAlphaFromFlags(draw_flags), 0.5f, 0.0f);
 }
 
 void GLUIRenderer::SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx)
@@ -568,8 +579,7 @@ bool GLUIRenderer::SubmitSlabBackground(int x, int y, int w, int h)
     }
     if (m_ui_write_cmds) {
         IRUISlabBackgroundCmd cmd;
-        // Always on Back layer regardless of current layer state.
-        cmd.layer = IRUILayer::Back;
+        cmd.layer = ComputeIRLayer(m_current_layer, m_world_depth_active, m_top_overlay_active);
         cmd.x     = x;
         cmd.y     = y;
         cmd.w     = w;
@@ -580,14 +590,12 @@ bool GLUIRenderer::SubmitSlabBackground(int x, int y, int w, int h)
     }
     float u1 = (float)w / (float)dim;
     float v1 = (float)h / (float)dim;
-    // Always submit on layer 0 (back, rendered before the staging-buffer blit).
-    // Force world-depth off so SubmitQuad doesn't redirect to layer 2.
+    // Force layer 0 (back) unless top-overlay is active (tooltip), and force
+    // world-depth off so SubmitQuad doesn't redirect to layer 2.
     int saved_layer = m_current_layer;
     bool saved_world_depth = m_world_depth_active;
-    bool saved_top_overlay = m_top_overlay_active;
     m_current_layer = 0;
     m_world_depth_active = false;
-    m_top_overlay_active = false;
     // Opaque black backing quad — blocks world geometry from bleeding through
     // any transparent pixels in the slab tile texture.  Submitted first so
     // the tiled slab renders on top via painter's order.
@@ -600,7 +608,6 @@ bool GLUIRenderer::SubmitSlabBackground(int x, int y, int w, int h)
                1.0f, 1.0f, 1.0f, 1.0f, 0.49f, 10.0f);
     m_current_layer = saved_layer;
     m_world_depth_active = saved_world_depth;
-    m_top_overlay_active = saved_top_overlay;
     return true;
 }
 
@@ -1181,7 +1188,8 @@ void GLUIRenderer::DrawWorldSprites()
     glDisable(GL_BLEND);
 }
 
-void GLUIRenderer::SubmitCursorPanelSprite(int32_t x, int32_t y, int units_per_px, SpriteHandle spr)
+void GLUIRenderer::SubmitCursorPanelSprite(int32_t x, int32_t y, int units_per_px, SpriteHandle spr,
+                                           unsigned int draw_flags)
 {
     ASSERT_RENDER_THREAD();
     // Called exclusively from GLCursorLayer::Draw() on the render thread so the
@@ -1207,7 +1215,7 @@ void GLUIRenderer::SubmitCursorPanelSprite(int32_t x, int32_t y, int units_per_p
     q.u0 = uv.u0;          q.v0 = uv.v0;
     q.u1 = uv.u1;          q.v1 = uv.v1;
     q.r = 1.0f;  q.g = 1.0f;  q.b = 1.0f;
-    q.a = UIAlphaFromDrawFlags();
+    q.a = UIAlphaFromFlags(draw_flags);
     q.z = 0.5f;
     q.mode = 0.0f;   // PASS_SPRITE
     q.texture_id = 0;
@@ -1951,6 +1959,49 @@ void GLUIRenderer::ClearTopOverlay()
     m_top_overlay_active = false;
 }
 
+void GLUIRenderer::BeginZoomBoxOverlay(int x, int y, int w, int h)
+{
+    (void)x; (void)y; (void)w; (void)h;
+    SetTopOverlay();
+}
+
+void GLUIRenderer::EndZoomBoxOverlay(int x, int y, int w, int h)
+{
+    (void)x; (void)y; (void)w; (void)h;
+    ClearTopOverlay();
+}
+
+void GLUIRenderer::SetupMinimapBackground(int diaglen, int panel_x, int panel_y)
+{
+    (void)diaglen;
+    (void)panel_x;
+    (void)panel_y;
+    NumBackColours = 1;
+    MapBackColours[0] = 0;
+}
+
+bool GLUIRenderer::GetMinimapOpaqueBlackIndex(uint8_t* idx) const
+{
+    if (!idx) return false;
+    const uint8_t* pal = m_palette_data ? m_palette_data : lbPalette;
+    uint8_t black_idx = 1;
+    uint32_t best_lum = UINT32_MAX;
+    for (int i = 1; i < 256; i++)
+    {
+        const uint32_t r = pal[i * 3 + 0];
+        const uint32_t g = pal[i * 3 + 1];
+        const uint32_t b = pal[i * 3 + 2];
+        const uint32_t lum = r * r + g * g + b * b;
+        if (lum < best_lum)
+        {
+            best_lum = lum;
+            black_idx = (uint8_t)i;
+        }
+    }
+    *idx = black_idx;
+    return true;
+}
+ 
 void GLUIRenderer::SubmitLine(float x1, float y1, float x2, float y2, float r, float g, float b, float a, 
                              float z, float thickness)
 {

@@ -46,7 +46,7 @@ public:
     void DrawNow();
 
     // Override the screen dimensions used for NDC conversion during the next draw.
-    // Pass (0, 0) to restore the default (MyScreenWidth / MyScreenHeight).
+    // Pass (0, 0) to restore the default (RendererGetScreenWidth() / RendererGetScreenHeight()).
     void SetScreenSize(int w, int h);
     
     // ========== Sheet Lifecycle ==========

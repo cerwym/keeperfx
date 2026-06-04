@@ -195,6 +195,16 @@ public:
                                   bool draw_lr, int engine_window_x)
     { (void)sprites; (void)frame; (void)draw_lr; (void)engine_window_x; }
 
+    /** Called immediately before engine() during first-person creature view.
+     *  SW: if a lens effect is active, redirects WScreen to the lens capture buffer.
+     *  GPU: no-op (lens applied as post-process in EndFrame). */
+    virtual void BeginLensCapture() {}
+
+    /** Called immediately after draw_swipe_graphic() during first-person creature view.
+     *  SW: applies the lens distortion from the capture buffer to WScreen and restores it.
+     *  GPU: no-op. */
+    virtual void EndLensCapture() {}
+ 
     /** GPU path for the overhead (parchment) map tile colours.
      *
      *  The caller builds a tiles_x × tiles_y byte buffer containing one

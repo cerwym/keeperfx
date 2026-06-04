@@ -37,12 +37,19 @@
 
 /******************************************************************************/
 
+class RendererOpenGL;
+
 class GLMapFadePass : public IMapFadePass, public IGLShaderCompilable {
 public:
-    GLMapFadePass();
+    explicit GLMapFadePass(RendererOpenGL* renderer);
     ~GLMapFadePass() override;
 
     // ── IMapFadePass ─────────────────────────────────────────────────────────
+
+    void PrepareBuffers(uint8_t* fade_src, uint8_t* fade_dest, int scanline, int height) override
+    {
+        (void)fade_src; (void)fade_dest; (void)scanline; (void)height;
+    }
 
     /** Render one fade-in frame (parchment → 3D world).
      *  Captures both views on step == 0.  Records the current step and sets
@@ -66,9 +73,10 @@ public:
 
     // ── IR interface ─────────────────────────────────────────────────────────
 
-    /** Push an IRMapFadeCmd to the graph's write slot if a transition is active.
-     *  Handles the terminal-frame snap when view_mode has left ParchFade mode.
-     *  Called by RendererOpenGL::EndFrame() on the game thread before Flip(). */
+    /** Push an IRMapFadeCmd into the graph's write-side post-process buffers if
+     *  a transition is active.  Handles the terminal-frame snap when view_mode
+     *  has left ParchFade mode.  Called by RendererOpenGL::EndFrame() on the
+     *  game thread before Flip(). */
     void FlushToRenderGraph(RenderGraph& graph) override;
 
     /** Execute the map-fade wipe composite on the render thread.
@@ -79,7 +87,7 @@ public:
     bool SupportsNativeResolution() const override { return m_initialized; }
 
     /** Notify of current OS-window dimensions so CaptureAndUploadFrames()
-     *  does not need to read MyScreenWidth/Height directly.
+     *  does not need to read RendererGetScreenWidth()/Height directly.
      *  Called by RendererOpenGL::BeginFrame(). */
     void SetScreenSize(int w, int h) override { m_screen_w = w; m_screen_h = h; }
 
@@ -107,9 +115,11 @@ private:
     int   m_tex_w           = 0;
     int   m_tex_h           = 0;
 
-    // Full OS-window dimensions — set by SetScreenSize(), eliminates MyScreenWidth/Height reads.
+    // Full OS-window dimensions — set by SetScreenSize(), eliminates RendererGetScreenWidth()/Height reads.
     int  m_screen_w    = 0;
     int  m_screen_h    = 0;
+
+    RendererOpenGL* m_renderer = nullptr;
 };
 
 /******************************************************************************/

@@ -192,16 +192,8 @@ bool GLWorldViewRenderer::init_gl_resources()
 
     glBindVertexArray(0);
 
-    // CPU staging buffer
-    m_verts    = (WorldVertex*)malloc(k_max_verts * sizeof(WorldVertex));
-    m_rt_verts = (WorldVertex*)malloc(k_max_verts * sizeof(WorldVertex));
-    m_pip_verts = (WorldVertex*)malloc(k_max_verts * sizeof(WorldVertex));
-    if (!m_verts || !m_pip_verts)
-    {
-        ERRORLOG("GLWorldViewRenderer: failed to allocate vertex staging buffer");
-        free_gl_resources();
-        return false;
-    }
+    // CPU staging buffer for PiP capture
+    m_pip_verts.reserve(k_max_verts);
 
     // Cache uniform locations and bind samplers to fixed texture units
     glUseProgram(m_shader);
@@ -401,9 +393,8 @@ void GLWorldViewRenderer::ensure_clut_valid()
 
 void GLWorldViewRenderer::free_gl_resources()
 {
-    free(m_verts);    m_verts    = nullptr;
-    free(m_rt_verts); m_rt_verts = nullptr;
-    free(m_pip_verts); m_pip_verts = nullptr;
+    m_pip_verts.clear();
+    m_pip_verts.shrink_to_fit();
 
     if (m_vao)    { glDeleteVertexArrays(1, &m_vao);  m_vao = 0; }
     if (m_vbo)    { glDeleteBuffers(1, &m_vbo);        m_vbo = 0; }
@@ -1469,12 +1460,26 @@ bool GLWorldViewRenderer::append_triangle(int tile_id,
     const int variation  = tile_id / TEXTURE_BLOCKS_COUNT;
     const int tile_local = tile_id % TEXTURE_BLOCKS_COUNT;
 
-    if (m_vert_count + 3 > k_max_verts)
+    int& vcnt = m_pip_capture ? m_pip_vert_count : m_vert_count;
+    if (vcnt + 3 > k_max_verts)
     {
         gpu_flush();
-        if (m_vert_count + 3 > k_max_verts)
+        if (vcnt + 3 > k_max_verts)
             return false; // buffer full; drop gracefully rather than write OOB
     }
+
+    std::vector<WorldVertex>* verts_vec = nullptr;
+    if (m_pip_capture)
+    {
+        verts_vec = &m_pip_verts;
+    }
+    else
+    {
+        if (!m_world_write_cmds)
+            return false;
+        verts_vec = &m_world_write_cmds->tile_verts;
+    }
+    verts_vec->resize((size_t)(vcnt + 3));
 
     // Look up the normalised UV rectangle for this tile in the atlas.
     float u0f, v0f, u1f, v1f;
@@ -1485,9 +1490,7 @@ bool GLWorldViewRenderer::append_triangle(int tile_id,
     const float z_ndc = 2.0f * (float)m_current_bucket / (float)(BUCKETS_COUNT - 1) - 1.0f;
     const float layer = (float)variation;
 
-    WorldVertex* const verts = m_pip_capture ? m_pip_verts : m_verts;
-    int&               vcnt  = m_pip_capture ? m_pip_vert_count : m_vert_count;
-
+    WorldVertex* const verts = verts_vec->data();
     const struct PolyPoint* pts[3] = { p0, p1, p2 };
     const int32_t cam_z[3] = { cam_z0, cam_z1, cam_z2 };
     for (int i = 0; i < 3; i++)
@@ -1529,12 +1532,26 @@ bool GLWorldViewRenderer::append_triangle_compact(
     // Compact triangles always reference tiles with variation 0 (tile_id < TEXTURE_BLOCKS_COUNT);
     // atlas_layer is set to 0.0f in the COMPACT_UV_TO_WORLDVERTEX macro.
 
-    if (m_vert_count + 3 > k_max_verts)
+    int& vcnt = m_pip_capture ? m_pip_vert_count : m_vert_count;
+    if (vcnt + 3 > k_max_verts)
     {
         gpu_flush();
-        if (m_vert_count + 3 > k_max_verts)
+        if (vcnt + 3 > k_max_verts)
             return false; // buffer full; drop gracefully rather than write OOB
     }
+
+    std::vector<WorldVertex>* verts_vec = nullptr;
+    if (m_pip_capture)
+    {
+        verts_vec = &m_pip_verts;
+    }
+    else
+    {
+        if (!m_world_write_cmds)
+            return false;
+        verts_vec = &m_world_write_cmds->tile_verts;
+    }
+    verts_vec->resize((size_t)(vcnt + 3));
 
     // Helper: derive atlas UV from a compact (u8, v8) coordinate pair.
     // The compact coords index the 8-column source layout; map to atlas via GetTileUV.
@@ -1555,8 +1572,7 @@ bool GLWorldViewRenderer::append_triangle_compact(
 
     const float z_ndc = 2.0f * (float)m_current_bucket / (float)(BUCKETS_COUNT - 1) - 1.0f;
 
-    WorldVertex* const verts = m_pip_capture ? m_pip_verts : m_verts;
-    int&               vcnt  = m_pip_capture ? m_pip_vert_count : m_vert_count;
+    WorldVertex* const verts = verts_vec->data();
     WorldVertex* v = &verts[vcnt];
 
     // Build screen-space XY and shade via the existing macro, then overwrite
@@ -1599,7 +1615,6 @@ void GLWorldViewRenderer::FlipBuffers()
     // After the move, game-side containers are empty and ready for the next frame.
     m_rt_draw_cmds      = std::move(m_draw_cmds);
     m_rt_shadow_cmds    = std::move(m_shadow_cmds);
-    m_rt_flatpoly_verts = std::move(m_flatpoly_verts);
     m_rt_kspr_ir        = std::move(m_kspr_ir);
     m_rt_cursor_kspr_ir = std::move(m_cursor_kspr_ir);
     m_rt_screen_w       = m_screen_w;
@@ -1614,30 +1629,21 @@ void GLWorldViewRenderer::FlipBuffers()
     // Snapshot the lightmap so the render thread never reads the live game array.
     memcpy(m_rt_lightmap, game.lish.subtile_lightness, sizeof(m_rt_lightmap));
 
-    // Swap raw vertex staging buffers: render thread gets the filled buffer,
-    // game thread gets a clean buffer for the next frame.
-    std::swap(m_verts, m_rt_verts);
-    m_rt_vert_count  = m_vert_count;
     m_vert_count     = 0;
     m_cmd_vert_start = 0;
     // m_kspr_ir is already empty after std::move above.
 }
 
-void GLWorldViewRenderer::ExecuteWorldFromIR(const WorldCommandBuffers& /*cmds*/)
+void GLWorldViewRenderer::ExecuteWorldFromIR(const WorldCommandBuffers& cmds)
 {
     ASSERT_RENDER_THREAD();
-    // The world renderer already double-buffers its command stream via FlipBuffers()
-    // into m_rt_draw_cmds / m_rt_shadow_cmds / m_rt_flatpoly_verts / m_rt_verts.
-    // GPURenderNow() reads those buffers and issues all GL calls on the render thread.
-    // This wrapper provides the IR-interface entry-point for RenderGraph::Execute()
-    // and EndFrame_GL() without changing the underlying rendering logic.
-    GPURenderNow();
+    GPURenderNow(cmds);
 }
 
 void GLWorldViewRenderer::BeginPiPCapture()
 {
     // Redirect all geometry writes from draw_view() (called on the render thread
-    // for each PiP view) to dedicated pip buffers, so the game thread's m_verts /
+    // for each PiP view) to dedicated pip buffers, so the game thread's world IR /
     // m_draw_cmds / etc. are never written by the render thread concurrently.
     m_pip_capture        = true;
     m_pip_vert_count     = 0;
@@ -1648,7 +1654,7 @@ void GLWorldViewRenderer::BeginPiPCapture()
     m_pip_kspr_ir.clear();
 }
 
-void GLWorldViewRenderer::GPURenderNow()
+void GLWorldViewRenderer::GPURenderNow(const WorldCommandBuffers& cmds)
 {
     KFX_ZONE("WVR::GPURenderNow");
     KFX_GPU_ZONE("Frame::WorldPass");
@@ -1664,7 +1670,6 @@ void GLWorldViewRenderer::GPURenderNow()
     {
         m_rt_draw_cmds.clear();
         m_rt_kspr_ir.clear();
-        m_rt_vert_count  = 0;
         m_cmd_vert_start = 0;
         return;
     }
@@ -1673,7 +1678,8 @@ void GLWorldViewRenderer::GPURenderNow()
         return;
 
     const int vp_y_gl = m_full_screen_h - m_rt_vp_y - m_rt_screen_h;
-    gpu_execute_passes(m_rt_vp_x, vp_y_gl, m_rt_screen_w, m_rt_screen_h, m_rt_kspr_ir);
+    gpu_execute_passes(m_rt_vp_x, vp_y_gl, m_rt_screen_w, m_rt_screen_h,
+                       cmds.tile_verts, cmds.flat_poly_verts, m_rt_kspr_ir);
     m_rt_kspr_ir.clear();
 }
 
@@ -1686,6 +1692,8 @@ void GLWorldViewRenderer::GPURenderToFBO(int pip_w, int pip_h)
     {
         m_pip_draw_cmds.clear();
         m_pip_kspr_ir.clear();
+        m_pip_verts.clear();
+        m_pip_flatpoly_verts.clear();
         m_pip_vert_count     = 0;
         m_pip_cmd_vert_start = 0;
         m_pip_capture        = false;
@@ -1696,24 +1704,30 @@ void GLWorldViewRenderer::GPURenderToFBO(int pip_w, int pip_h)
 
     m_rt_draw_cmds      = std::move(m_pip_draw_cmds);
     m_rt_shadow_cmds    = std::move(m_pip_shadow_cmds);
-    m_rt_flatpoly_verts = std::move(m_pip_flatpoly_verts);
-    std::swap(m_pip_verts, m_rt_verts);
-    m_rt_vert_count      = m_pip_vert_count;
-    m_pip_vert_count     = 0;
-    m_pip_cmd_vert_start = 0;
     m_pip_capture        = false;
 
     if (m_rt_draw_cmds.empty())
     {
         m_pip_kspr_ir.clear();
+        m_pip_verts.clear();
+        m_pip_flatpoly_verts.clear();
+        m_pip_vert_count     = 0;
+        m_pip_cmd_vert_start = 0;
         return;
     }
 
-    gpu_execute_passes(0, 0, pip_w, pip_h, m_pip_kspr_ir);
+    gpu_execute_passes(0, 0, pip_w, pip_h,
+                       m_pip_verts, m_pip_flatpoly_verts, m_pip_kspr_ir);
     m_pip_kspr_ir.clear();
+    m_pip_verts.clear();
+    m_pip_flatpoly_verts.clear();
+    m_pip_vert_count     = 0;
+    m_pip_cmd_vert_start = 0;
 }
 
 void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl, int screen_w, int screen_h,
+                                             const std::vector<WorldVertex>& tile_verts,
+                                             const std::vector<FlatPolyVertex>& fp_verts,
                                              const std::vector<IRWorldKeeperSpriteCmd>& kspr_ir)
 {
     ensure_clut_valid();
@@ -1722,8 +1736,8 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl, int screen_w
 
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
     glBufferSubData(GL_ARRAY_BUFFER, 0,
-                    (GLsizeiptr)(m_rt_vert_count * sizeof(WorldVertex)),
-                    m_rt_verts);
+                    (GLsizeiptr)(tile_verts.size() * sizeof(WorldVertex)),
+                    tile_verts.data());
 
     glViewport(vp_x, vp_y_gl, screen_w, screen_h);
     glUseProgram(m_shader);
@@ -1841,14 +1855,14 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl, int screen_w
         {
             KFX_GL_PUSH("WorldPass/FlatPoly");
             // Upload the entire flat-poly buffer once on first encounter, draw sub-range.
-            if (!m_rt_flatpoly_verts.empty())
+            if (!fp_verts.empty())
             {
                 if (!flatpoly_uploaded)
                 {
                     glBindBuffer(GL_ARRAY_BUFFER, m_flatpoly_vbo);
                     glBufferData(GL_ARRAY_BUFFER,
-                                 (GLsizeiptr)(m_rt_flatpoly_verts.size() * sizeof(FlatPolyVertex)),
-                                 m_rt_flatpoly_verts.data(), GL_STREAM_DRAW);
+                                 (GLsizeiptr)(fp_verts.size() * sizeof(FlatPolyVertex)),
+                                 fp_verts.data(), GL_STREAM_DRAW);
                     flatpoly_uploaded = true;
                 }
                 glUseProgram(m_flatpoly_shader);
@@ -1988,7 +2002,7 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl, int screen_w
     glViewport(0, 0, m_full_screen_w, m_full_screen_h);
 
     // Emit per-frame statistics as Tracy plots.
-    KFX_PLOT("WVR/VertCount",          m_rt_vert_count);
+    KFX_PLOT("WVR/VertCount",          (int)tile_verts.size());
     KFX_PLOT("WVR/DrawCmds",           (int)m_rt_draw_cmds.size());
     KFX_PLOT("WVR/ShadowCmds",         (int)m_rt_shadow_cmds.size());
     KFX_PLOT("WVR/KSprAtlasCacheSize", m_kspr_atlas_used);
@@ -1999,8 +2013,6 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl, int screen_w
     // Reset render-side buffers for the next frame.
     m_rt_draw_cmds.clear();
     m_rt_shadow_cmds.clear();
-    m_rt_flatpoly_verts.clear();
-    m_rt_vert_count  = 0;
     m_cmd_vert_start = 0;
 }
 
@@ -2017,9 +2029,12 @@ void GLWorldViewRenderer::DrawIsometricView()
 
     // Use pip-specific command/shadow/flatpoly lists when capturing for PiP,
     // otherwise use the normal game-thread write buffers.
+    if (!m_pip_capture && !m_world_write_cmds)
+        return;
+
     std::vector<DrawCmd>&        draw_cmds   = m_pip_capture ? m_pip_draw_cmds      : m_draw_cmds;
     std::vector<ShadowCmd>&      shadow_cmds = m_pip_capture ? m_pip_shadow_cmds    : m_shadow_cmds;
-    std::vector<FlatPolyVertex>& fpverts     = m_pip_capture ? m_pip_flatpoly_verts : m_flatpoly_verts;
+    std::vector<FlatPolyVertex>& fpverts     = m_pip_capture ? m_pip_flatpoly_verts : m_world_write_cmds->flat_poly_verts;
 
     // Walk the depth-sorted bucket list back-to-front (painter's algorithm).
     // For each bucket:

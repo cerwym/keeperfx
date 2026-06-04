@@ -58,13 +58,16 @@ public:
     // IUIRenderer interface
     virtual void SubmitSlabSelector(int x1, int y1, int x2, int y2, unsigned char color, float z_depth) override;
     virtual void SubmitPanelSprite(int32_t x, int32_t y, int units_per_px,
-                                   SpriteHandle spr, bool flip_horiz = false) override;
+                                   SpriteHandle spr, bool flip_horiz,
+                                   unsigned int draw_flags) override;
     virtual void SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px,
-                                       SpriteHandle spr, int remap_row) override;
+                                       SpriteHandle spr, int remap_row,
+                                       unsigned int draw_flags) override;
     virtual void SubmitPanelSpriteColored(int32_t x, int32_t y, int units_per_px,
-                                          SpriteHandle spr, uint8_t color_idx) override;
+                                          SpriteHandle spr, uint8_t color_idx,
+                                          unsigned int draw_flags) override;
     virtual void SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h,
-                                    SpriteHandle spr) override;
+                                    SpriteHandle spr, unsigned int draw_flags) override;
     virtual void SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx) override;
     virtual void SubmitSolidBoxAlpha(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx, float alpha) override;
     virtual void UpdateSlabTexture(const uint8_t* data, int dim) override;
@@ -86,6 +89,10 @@ public:
     void SetGameViewport(int x, int y, int w, int h);
     virtual void SetTopOverlay() override;
     virtual void ClearTopOverlay() override;
+    void BeginZoomBoxOverlay(int x, int y, int w, int h) override;
+    void EndZoomBoxOverlay(int x, int y, int w, int h) override;
+    void SetupMinimapBackground(int diaglen, int panel_x, int panel_y) override;
+    bool GetMinimapOpaqueBlackIndex(uint8_t* idx) const override;
     virtual void DrawBack() override;
     virtual void DrawFront() override;
     /** IUIRenderer override: layer-1 portion of DrawFront: FBOQuads + layer-1 sprites
@@ -119,7 +126,8 @@ public:
      *  Pushes to m_cursor_quads instead of the shared m_quads[layer], preventing
      *  the Phase-3C data race between the render thread (cursor path) and the game
      *  thread (UI build for the next frame) on m_quads[1]. */
-    void SubmitCursorPanelSprite(int32_t x, int32_t y, int units_per_px, SpriteHandle spr);
+    void SubmitCursorPanelSprite(int32_t x, int32_t y, int units_per_px, SpriteHandle spr,
+                                 unsigned int draw_flags);
 
     /** Initialize OpenGL resources.
      *  @return true if successful */

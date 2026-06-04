@@ -30,8 +30,8 @@
 
 #include <stdint.h>
 
-// Forward declarations — avoid pulling in RenderGraph and UICommands headers
-// into software/vita backends that don't use them.
+// Forward declarations — avoid pulling in RenderGraph and post-process IR
+// headers into software/vita backends that don't use them.
 class RenderGraph;
 struct IRMapFadeCmd;
 
@@ -40,6 +40,10 @@ struct IRMapFadeCmd;
 class IMapFadePass {
 public:
     virtual ~IMapFadePass() = default;
+
+    /** Capture the source and destination frames for the fade transition.
+     *  Software fills the provided CPU buffers; GPU backends usually ignore this. */
+    virtual void PrepareBuffers(uint8_t* fade_src, uint8_t* fade_dest, int scanline, int height) = 0;
 
     /** Render one fade-in frame (parchment → 3D view).
      *  On step == 0, captures the source and destination frames.
@@ -63,9 +67,10 @@ public:
     /** Called by RendererOpenGL::EndFrame() (game thread) after the FrameState
      *  snapshot and before the RenderGraph flip.
      *
-     *  GPU implementations push an IRMapFadeCmd to the graph's write slot so
-     *  the render thread can composite the wipe quad via ExecuteFromIR().
-     *  When no transition is active the implementation calls ClearMapFadeCmd().
+     *  GPU implementations push an IRMapFadeCmd into the graph's write-side
+     *  post-process buffers so the render thread can composite the wipe quad via
+     *  ExecuteFromIR().  When no transition is active the implementation clears
+     *  the map_fade slot.
      *
      *  Software implementations leave this as a no-op — they write directly
      *  to WScreen inside StepFadeIn/StepFadeOut. */

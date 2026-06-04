@@ -4229,65 +4229,12 @@ void draw_creature_view(struct Thing *thing)
 {
   struct PlayerInfo* player = get_my_player();
   struct Camera* render_cam = get_local_camera(CamIV_FirstPerson);
+  (void)thing;
 
-  // GPU renderer path: world geometry is rendered by engine() → GPURenderNow()
-  // into either the default framebuffer or the lens scene FBO (depending on
-  // whether lens effects are active — managed by RendererOpenGL::EndFrame).
-  // Swipe overlay is submitted as a GPU texture via draw_swipe_graphic().
-  // CPU lens buffer redirect is skipped entirely — lens effects are applied
-  // as GPU post-process passes in EndFrame().
-  if (RendererHasGPURenderPath())
-  {
-      engine(player, render_cam);
-      draw_swipe_graphic();
-      return;
-  }
-
-  // If no eye lens required - just draw on the screen, directly
-  if (!lens_is_ready())
-  {
-      engine(player, render_cam);
-      // Still need to draw swipe even when no lens effect is active.
-      draw_swipe_graphic();
-      return;
-  }
-  // So there is an eye lens - we have to put a buffer in place of screen,
-  // draw on that buffer, an then copy it to screen applying lens effect.
-  unsigned char* scrmem = lens_get_render_target();
-  unsigned int render_width = lens_get_render_target_width();
-  unsigned int render_height = lens_get_render_target_height();
-  
-  // Store previous graphics settings
-  unsigned char* wscr_cp = RendererGetWScreen();
-  TbGraphicsWindow grwnd;
-  RendererStoreViewport(&grwnd);
-  // Prepare new settings
-  memset(scrmem, 0, render_width*render_height*sizeof(TbPixel));
-  lbDisplay.WScreen = scrmem;
-  lbDisplay.GraphicsScreenHeight = render_height;
-  lbDisplay.GraphicsScreenWidth = render_width;
-  RendererSetViewport(0, 0, RendererScreenWidth(), RendererScreenHeight());
-  // Draw on our buffer
-  setup_engine_window(0, 0, MyScreenWidth, MyScreenHeight);
+  RendererBeginLensCapture();
   engine(player, render_cam);
-  // Draw swipe into buffer BEFORE lens effects (so overlay renders on top of swipe)
   draw_swipe_graphic();
-  // Get the actual viewport dimensions (accounts for sidebar)
-  long view_width = player->engine_window_width / pixel_size;
-  long view_height = player->engine_window_height / pixel_size;
-  long view_x = player->engine_window_x / pixel_size;
-  long view_y = player->engine_window_y / pixel_size;
-  // Restore original graphics settings
-  lbDisplay.WScreen = wscr_cp;
-  RendererLoadViewport(&grwnd);
-  // Draw the buffer on real screen using actual viewport dimensions
-  setup_engine_window(0, 0, MyScreenWidth, MyScreenHeight);
-  // Apply lens effect to the viewport area only (not including sidebar)
-  // Pass full srcbuf so displacement map lookups work correctly
-  // Calculate 2D viewport offset for destination buffer
-  long dst_offset = view_y * RendererScreenWidth() + view_x;
-  draw_lens_effect(RendererGetWScreen() + dst_offset, RendererScreenWidth(), 
-      scrmem, render_width, view_width, view_height, view_x, game.applied_lens_type);
+  RendererEndLensCapture();
 }
 
 struct Thing *get_creature_near_for_controlling(PlayerNumber plyr_idx, MapCoord x, MapCoord y)
