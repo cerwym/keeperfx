@@ -9,6 +9,7 @@
 #include "renderer/RendererManager.h"
 #include "renderer/SpriteHandle.h"
 #include "renderer/ICursorLayer.h"
+#include "renderer/ir/WorldCommands.h"
 #include "renderer/backends/SWCursorLayer.h"
 
 #include "renderer/RendererSoftware.h"
@@ -1123,6 +1124,40 @@ int WorldViewRenderer_SubmitKeeperSprite(int32_t dst_x, int32_t dst_y, int32_t d
         return s_worldViewRenderer->SubmitKeeperSprite(dst_x, dst_y, dst_w, dst_h,
                                                        data, src_w, src_h, draw_flags, remap);
     return 0;
+}
+
+static int SubmitWorldShadowCmd(const IRWorldShadowCmd& cmd)
+{
+    if (s_worldViewRenderer)
+        return s_worldViewRenderer->SubmitWorldShadowCmd(cmd);
+    return 0;
+}
+
+int WorldViewRenderer_SubmitWorldShadow(const struct WorldShadowSubmitCmd* cmd)
+{
+    if (!cmd || !s_worldViewRenderer)
+        return 0;
+
+    IRWorldShadowCmd ir_cmd;
+    for (int i = 0; i < 4; ++i)
+    {
+        ir_cmd.verts[i].x = cmd->verts[i].x;
+        ir_cmd.verts[i].y = cmd->verts[i].y;
+        ir_cmd.verts[i].u = cmd->verts[i].u;
+        ir_cmd.verts[i].v = cmd->verts[i].v;
+    }
+    ir_cmd.anim_sprite   = cmd->anim_sprite;
+    ir_cmd.angle         = cmd->angle;
+    ir_cmd.current_frame = cmd->current_frame;
+    ir_cmd.tex_w         = cmd->tex_w;
+    ir_cmd.tex_h         = cmd->tex_h;
+    ir_cmd.darkness      = cmd->darkness;
+    ir_cmd.ndc_z         = cmd->ndc_z;
+    ir_cmd.wx            = cmd->wx;
+    ir_cmd.wy            = cmd->wy;
+    ir_cmd.wz            = cmd->wz;
+    ir_cmd.sort_key      = cmd->sort_key;
+    return SubmitWorldShadowCmd(ir_cmd);
 }
 
 void WorldViewRenderer_ClearKeeperSpriteAtlas(void)

@@ -30,6 +30,7 @@
 #include <optional>
 #include "renderer/FrameState.h"
 #include "renderer/BackendCapabilities.h"
+#include "renderer/IShadowRenderer.h"
 #include "renderer/ir/WorldCommands.h"
 #include "renderer/ir/UICommands.h"
 #include "renderer/ir/TextCommands.h"
@@ -42,7 +43,6 @@
 class IWorldViewRenderer;
 class IUIRenderer;
 class ITextRenderer;
-class IShadowRenderer;
 class IDebugRenderer;
 
 /******************************************************************************/

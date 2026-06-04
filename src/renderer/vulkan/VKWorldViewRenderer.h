@@ -31,6 +31,7 @@
 #include "renderer/WorldVertex.h"
 #include "renderer/FlatPolyVertex.h"
 #include "renderer/EngineVertex.h"
+#include "renderer/ir/IRCommandBuffer.h"
 #include "renderer/ir/WorldCommands.h"
 #include "renderer/vulkan/VKTileAtlas.h"
 #include "renderer/vulkan/VKPipelineCache.h"
@@ -68,18 +69,7 @@ public:
         int shadow_idx      = 0;
     };
 
-    /** Per-shadow data resolved on the game thread. */
-    struct ShadowCmd
-    {
-        EnginePolyVertex verts[4]   = {};
-        unsigned short   anim_sprite  = 0;
-        short            angle        = 0;
-        unsigned char    current_frame = 0;
-        int              tex_w        = 0;
-        int              tex_h        = 0;
-        float            darkness     = 1.0f;
-        float            ndc_z        = 0.0f;
-    };
+    using ShadowCmd = IRWorldShadowCmd;
 
     // ── Lifecycle ────────────────────────────────────────────────────────────
 
@@ -137,6 +127,7 @@ public:
     void DrawIsometricView() override;
     void DrawFrontView(struct Camera* cam) override;
     void ExecuteFromIR(const WorldCommandBuffers& cmds) override;
+    void SetWorldCommandBuffers(WorldCommandBuffers* cmds) override { m_world_write_cmds = cmds; }
 
     int  SubmitKeeperSprite(int32_t dst_x, int32_t dst_y,
                             int32_t dst_w, int32_t dst_h,
@@ -144,6 +135,7 @@ public:
                             int src_w, int src_h,
                             unsigned int draw_flags,
                             const unsigned char* remap) override;
+    int  SubmitWorldShadowCmd(const IRWorldShadowCmd& cmd) override;
     void ClearKeeperSpriteAtlas() override;
     void PreloadKeeperSpriteAtlas() override;
 
@@ -158,7 +150,8 @@ public:
 
     bool HasPendingCommands() const
     {
-        return !m_draw_cmds.empty() || !m_shadow_cmds.empty()
+        return !m_draw_cmds.empty()
+            || (m_world_write_cmds != nullptr && !m_world_write_cmds->shadows.Empty())
             || !m_flatpoly_verts.empty() || (m_vert_count > m_cmd_vert_start);
     }
 
@@ -183,7 +176,8 @@ private:
 
     void execute_passes(VkCommandBuffer cmd,
                         int vp_x, int vp_y, int screen_w, int screen_h,
-                        const std::vector<IRWorldKeeperSpriteCmd>& kspr_ir);
+                        const std::vector<IRWorldKeeperSpriteCmd>& kspr_ir,
+                        const IRCommandBuffer<IRWorldShadowCmd>& shadows);
 
     void DrawKeeperSpriteVK(VkCommandBuffer cmd, const IRWorldKeeperSpriteCmd& kspr);
 
@@ -284,7 +278,6 @@ private:
     int          m_cmd_vert_start = 0;       // GT:
 
     std::vector<DrawCmd>              m_draw_cmds;
-    std::vector<ShadowCmd>            m_shadow_cmds;
     std::vector<FlatPolyVertex>       m_flatpoly_verts;
     std::vector<IRWorldKeeperSpriteCmd> m_kspr_ir;
 
@@ -293,7 +286,6 @@ private:
     WorldVertex* m_rt_verts          = nullptr; // RT:
     int          m_rt_vert_count     = 0;       // RT:
     std::vector<DrawCmd>              m_rt_draw_cmds;
-    std::vector<ShadowCmd>            m_rt_shadow_cmds;
     std::vector<FlatPolyVertex>       m_rt_flatpoly_verts;
     std::vector<IRWorldKeeperSpriteCmd> m_rt_kspr_ir;
     int          m_rt_screen_w = 0;
@@ -306,6 +298,7 @@ private:
     bool         m_shadow_img_ready     = false; // RT: shadow image transitioned to SHADER_READ
     bool         m_clut_img_ready       = false; // RT: CLUT image transitioned to SHADER_READ
     bool         m_world_pass_active    = false; // GT:
+    WorldCommandBuffers* m_world_write_cmds = nullptr;
 };
 
 /******************************************************************************/

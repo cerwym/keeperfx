@@ -381,6 +381,32 @@ int WorldViewRenderer_GetCurrentSpriteOwner(void);
  *  requested a depth-fail outline for this sprite. */
 int WorldViewRenderer_GetCurrentSpriteWantsOutline(void);
 
+struct WorldShadowSubmitVertex {
+    int32_t x;
+    int32_t y;
+    int32_t u;
+    int32_t v;
+};
+
+struct WorldShadowSubmitCmd {
+    struct WorldShadowSubmitVertex verts[4];
+    unsigned short anim_sprite;
+    short          angle;
+    unsigned char  current_frame;
+    int32_t        tex_w;
+    int32_t        tex_h;
+    float          darkness;
+    float          ndc_z;
+    int32_t        wx;
+    int32_t        wy;
+    int32_t        wz;
+    uint32_t       sort_key;
+};
+
+/** Submit a creature shadow through the hardware world-renderer IR path.
+ *  Returns 1 if captured by the active world renderer, 0 to fall back. */
+int WorldViewRenderer_SubmitWorldShadow(const struct WorldShadowSubmitCmd* cmd);
+
 /******************************************************************************/
 /* C-callable map fade pass wrappers                                          */
 /******************************************************************************/

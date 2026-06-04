@@ -272,8 +272,7 @@ bool RendererVulkan::BeginFrame()
     if (!RendererIsFadeCachePreserved())
     {
         if (m_ui_renderer) m_ui_renderer->SetUICommandBuffers(&m_render_graph.GetUIBuffers());
-        // VKWorldViewRenderer manages its own internal double-buffer;
-        // game-thread calls to BeginWorldPass/DrawIsometricView write there directly.
+        if (m_world_renderer) m_world_renderer->SetWorldCommandBuffers(&m_render_graph.GetWorldBuffers());
     }
 
     // Text write window is always opened.
@@ -304,7 +303,7 @@ void RendererVulkan::EndFrame()
 
         // Close IR write windows.
         if (m_ui_renderer) m_ui_renderer->SetUICommandBuffers(nullptr);
-        // VKWorldViewRenderer: no SetWorldCommandBuffers - uses its own internal state.
+        if (m_world_renderer) m_world_renderer->SetWorldCommandBuffers(nullptr);
         {
             auto* tr = RendererGetTextRenderer();
             if (tr) tr->SetTextCommandBuffers(nullptr);

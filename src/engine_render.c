@@ -3733,6 +3733,27 @@ static void create_shadows(struct Thing *thing, struct EngineCoord *ecor, struct
                 dim_ow, dim_oh, thing->index, animation_sprite, current_frame);
         return;
     }
+    unsigned char shadow_frame = current_frame;
+    int shadow_tex_w = 0;
+    int shadow_tex_h = 0;
+    if (spr->FramesCount > 0)
+    {
+        int quarter = abs(4 - (((sprite_angle + DEGREES_22_5) & ANGLE_MASK) >> 8));
+        if (shadow_frame >= spr->FramesCount)
+            shadow_frame = spr->FramesCount - 1;
+        if (spr->Rotable == 0)
+        {
+            struct KeeperSprite* frame_spr = &spr[shadow_frame];
+            shadow_tex_w = frame_spr->FrameWidth;
+            shadow_tex_h = frame_spr->FrameHeight;
+        }
+        else if (spr->Rotable == 2)
+        {
+            struct KeeperSprite* frame_spr = &spr[shadow_frame + quarter * spr->FramesCount];
+            shadow_tex_w = frame_spr->SWidth;
+            shadow_tex_h = frame_spr->SHeight;
+        }
+    }
     {
         int sh_angle_sin = LbSinL(sh_angle);
         int sh_angle_cos = LbCosL(sh_angle);
@@ -3786,6 +3807,53 @@ static void create_shadows(struct Thing *thing, struct EngineCoord *ecor, struct
     int min_cor_z = min(min(ecor1.z,ecor2.z),min(ecor3.z,ecor4.z));
     if (min_cor_z < BUCKETS_STEP)
         return;
+
+    int bucket_idx = min_cor_z / BUCKETS_STEP;
+    if (bucket_idx < 0)
+        bucket_idx = 0;
+    else if (bucket_idx > BUCKETS_COUNT - 2)
+        bucket_idx = BUCKETS_COUNT - 2;
+
+    if (RendererHasGPURenderPath())
+    {
+        struct WorldShadowSubmitCmd scmd;
+        memset(&scmd, 0, sizeof(scmd));
+
+        scmd.verts[0].x = ecor1.view_width;
+        scmd.verts[0].y = ecor1.view_height;
+        scmd.verts[0].u = 0;
+        scmd.verts[0].v = TO_FIXED(dim_oh - 1);
+
+        scmd.verts[1].x = ecor2.view_width;
+        scmd.verts[1].y = ecor2.view_height;
+        scmd.verts[1].u = 0;
+        scmd.verts[1].v = 0;
+
+        scmd.verts[2].x = ecor3.view_width;
+        scmd.verts[2].y = ecor3.view_height;
+        scmd.verts[2].u = TO_FIXED(dim_ow - 1);
+        scmd.verts[2].v = 0;
+
+        scmd.verts[3].x = ecor4.view_width;
+        scmd.verts[3].y = ecor4.view_height;
+        scmd.verts[3].u = TO_FIXED(dim_ow - 1);
+        scmd.verts[3].v = TO_FIXED(dim_oh - 1);
+
+        scmd.anim_sprite   = animation_sprite;
+        scmd.angle         = sprite_angle;
+        scmd.current_frame = shadow_frame;
+        scmd.tex_w         = shadow_tex_w;
+        scmd.tex_h         = shadow_tex_h;
+        scmd.darkness      = 1.0f - (float)dist_sq / 32.0f;
+        scmd.ndc_z         = 2.0f * (float)bucket_idx / (float)(BUCKETS_COUNT - 1) - 1.0f;
+        scmd.wx            = (int32_t)ecor->x;
+        scmd.wy            = (int32_t)ecor->y;
+        scmd.wz            = (int32_t)ecor->z;
+        scmd.sort_key      = (uint32_t)bucket_idx;
+        WorldViewRenderer_SubmitWorldShadow(&scmd);
+        return;
+    }
+
     struct BucketKindCreatureShadow *kspr = (struct BucketKindCreatureShadow *)get_bucket_item(min_cor_z, QK_CreatureShadow, sizeof(struct BucketKindCreatureShadow));
     if (kspr == NULL)
         return;

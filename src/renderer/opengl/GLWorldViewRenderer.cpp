@@ -1034,6 +1034,23 @@ int GLWorldViewRenderer::SubmitKeeperSprite(
     return 1;
 }
 
+int GLWorldViewRenderer::SubmitWorldShadowCmd(const IRWorldShadowCmd& cmd)
+{
+    if (m_pip_capture)
+    {
+        DrawCmd draw_cmd;
+        draw_cmd.type       = DrawCmd::CMD_SHADOWS;
+        draw_cmd.shadow_idx = (int)m_pip_shadow_cmds.size();
+        m_pip_shadow_cmds.push_back(cmd);
+        m_pip_draw_cmds.push_back(draw_cmd);
+        return 1;
+    }
+    if (!m_world_write_cmds)
+        return 0;
+    m_world_write_cmds->shadows.Append(cmd);
+    return 1;
+}
+
 /******************************************************************************/
 
 int GLWorldViewRenderer::render_keepersprite_gpu(
@@ -1673,12 +1690,12 @@ void GLWorldViewRenderer::GPURenderNow(const WorldCommandBuffers& cmds)
         return;
     }
 
-    if (m_rt_draw_cmds.empty())
+    if (m_rt_draw_cmds.empty() && cmds.shadows.Empty())
         return;
 
     const int vp_y_gl = m_full_screen_h - m_rt_vp_y - m_rt_screen_h;
     gpu_execute_passes(m_rt_vp_x, vp_y_gl, m_rt_screen_w, m_rt_screen_h,
-                       cmds.tile_verts, cmds.flat_poly_verts, m_rt_kspr_ir);
+                       cmds.tile_verts, cmds.flat_poly_verts, m_rt_kspr_ir, &cmds.shadows);
     m_rt_kspr_ir.clear();
 }
 
@@ -1724,10 +1741,60 @@ void GLWorldViewRenderer::GPURenderToFBO(int pip_w, int pip_h)
     m_pip_cmd_vert_start = 0;
 }
 
+void GLWorldViewRenderer::DrawShadowGL(const IRWorldShadowCmd& sc, int screen_w, int screen_h)
+{
+    if (sc.tex_w <= 0 || sc.tex_h <= 0 || sc.tex_w > 256 || sc.tex_h > 256)
+        return;
+
+    memset(s_kspr_decode_buf, 0, (size_t)sc.tex_h * 256);
+    draw_keepsprite_unscaled_in_buffer(sc.anim_sprite, sc.angle,
+                                       sc.current_frame, s_kspr_decode_buf);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_shadow_silhouette_tex);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 256);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, sc.tex_w, sc.tex_h,
+                    GL_RED, GL_UNSIGNED_BYTE, s_kspr_decode_buf);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+
+    float sv[6][4];
+    const EnginePolyVertex* vp = sc.verts;
+    const int idx[6] = { 0, 1, 2, 0, 2, 3 };
+    for (int t = 0; t < 6; t++)
+    {
+        sv[t][0] = (float)vp[idx[t]].x;
+        sv[t][1] = (float)vp[idx[t]].y;
+        sv[t][2] = (float)(vp[idx[t]].u >> 16) / 256.0f;
+        sv[t][3] = (float)(vp[idx[t]].v >> 16) / 256.0f;
+    }
+    glBindBuffer(GL_ARRAY_BUFFER, m_shadow_vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(sv), nullptr, GL_DYNAMIC_DRAW);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(sv), sv);
+
+    glBindVertexArray(m_shadow_vao);
+    glUseProgram(m_shadow_shader);
+    glUniform2f(m_shadow_loc_viewport, (float)screen_w, (float)screen_h);
+    glUniform1f(m_shadow_loc_darkness, sc.darkness);
+    glUniform1f(m_shadow_loc_ndc_z,    sc.ndc_z);
+
+    glDepthMask(GL_FALSE);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LEQUAL);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ZERO, GL_ONE_MINUS_SRC_ALPHA);
+
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+
+    glDisable(GL_BLEND);
+    glDepthFunc(GL_LEQUAL);
+    glDepthMask(GL_TRUE);
+}
+
 void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl, int screen_w, int screen_h,
                                              const std::vector<WorldVertex>& tile_verts,
                                              const std::vector<FlatPolyVertex>& fp_verts,
-                                             const std::vector<IRWorldKeeperSpriteCmd>& kspr_ir)
+                                             const std::vector<IRWorldKeeperSpriteCmd>& kspr_ir,
+                                             const IRCommandBuffer<IRWorldShadowCmd>* ir_shadows)
 {
     ensure_clut_valid();
     m_draw_screen_w = screen_w;
@@ -1884,65 +1951,26 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl, int screen_w
     // Depth testing is ENABLED (GL_LEQUAL, no depth write) so that columns and
     // walls correctly occlude shadows — the floor z-values written in pass 1
     // pass the test, while column face z-values are closer and fail it.
-    for (const auto& cmd : m_rt_draw_cmds)
+    if (ir_shadows)
     {
-        if (cmd.type != DrawCmd::CMD_SHADOWS) continue;
-
-        KFX_GL_PUSH("WorldPass/Shadows");
-        assert(cmd.shadow_idx >= 0 && (size_t)cmd.shadow_idx < m_rt_shadow_cmds.size());
-        const ShadowCmd& sc = m_rt_shadow_cmds[cmd.shadow_idx];
-
-        // Rasterise the silhouette into the scratch buffer.
-        // draw_keepsprite_unscaled_in_buffer handles heap load, FrameOffsW/H
-        // placement, and x-flip — matching the software renderer exactly.
-        memset(s_kspr_decode_buf, 0, (size_t)sc.tex_h * 256);
-        draw_keepsprite_unscaled_in_buffer(sc.anim_sprite, sc.angle,
-                                           sc.current_frame, s_kspr_decode_buf);
-
-        // Upload silhouette to the reusable R8 texture.
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, m_shadow_silhouette_tex);
-        glPixelStorei(GL_UNPACK_ROW_LENGTH, 256);
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, sc.tex_w, sc.tex_h,
-                        GL_RED, GL_UNSIGNED_BYTE, s_kspr_decode_buf);
-        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-
-        // Build 6 float vertices: two triangles covering the quad (0,1,2)+(0,2,3).
-        // U/V are 16.16 fixed-point sprite-pixel coords; normalise to [0,1] by /256.
-        // No UV x-flip adjustment: draw_keepsprite_unscaled_in_buffer already
-        // mirrors the silhouette in the buffer for angles in the flip range.
-        float sv[6][4];
-        const EnginePolyVertex* vp = sc.verts;
-        for (int t = 0; t < 6; t++)
+        for (const auto& sc : *ir_shadows)
         {
-            const int idx[6] = { 0, 1, 2, 0, 2, 3 };
-            sv[t][0] = (float)vp[idx[t]].x;
-            sv[t][1] = (float)vp[idx[t]].y;
-            sv[t][2] = (float)(vp[idx[t]].u >> 16) / 256.0f;
-            sv[t][3] = (float)(vp[idx[t]].v >> 16) / 256.0f;
+            KFX_GL_PUSH("WorldPass/Shadows");
+            DrawShadowGL(sc, screen_w, screen_h);
+            KFX_GL_POP();
         }
-        glBindBuffer(GL_ARRAY_BUFFER, m_shadow_vbo);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(sv), nullptr, GL_DYNAMIC_DRAW);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(sv), sv);
+    }
+    else
+    {
+        for (const auto& cmd : m_rt_draw_cmds)
+        {
+            if (cmd.type != DrawCmd::CMD_SHADOWS) continue;
 
-        glBindVertexArray(m_shadow_vao);
-        glUseProgram(m_shadow_shader);
-        glUniform2f(m_shadow_loc_viewport, (float)screen_w, (float)screen_h);
-        glUniform1f(m_shadow_loc_darkness, sc.darkness);
-        glUniform1f(m_shadow_loc_ndc_z,    sc.ndc_z);
-
-        glDepthMask(GL_FALSE);
-        glEnable(GL_DEPTH_TEST);
-        glDepthFunc(GL_LEQUAL);
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_ZERO, GL_ONE_MINUS_SRC_ALPHA);
-
-        glDrawArrays(GL_TRIANGLES, 0, 6);
-
-        glDisable(GL_BLEND);
-        glDepthFunc(GL_LEQUAL);  // restore (matches tile-pass default)
-        glDepthMask(GL_TRUE);
-        KFX_GL_POP();
+            KFX_GL_PUSH("WorldPass/Shadows");
+            assert(cmd.shadow_idx >= 0 && (size_t)cmd.shadow_idx < m_rt_shadow_cmds.size());
+            DrawShadowGL(m_rt_shadow_cmds[cmd.shadow_idx], screen_w, screen_h);
+            KFX_GL_POP();
+        }
     }
 
     // Restore tile shader/VAO state for the sprite pass.
@@ -2001,9 +2029,10 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl, int screen_w
     glViewport(0, 0, m_full_screen_w, m_full_screen_h);
 
     // Emit per-frame statistics as Tracy plots.
+    const int shadow_plot_count = ir_shadows ? (int)ir_shadows->Size() : (int)m_rt_shadow_cmds.size();
     KFX_PLOT("WVR/VertCount",          (int)tile_verts.size());
     KFX_PLOT("WVR/DrawCmds",           (int)m_rt_draw_cmds.size());
-    KFX_PLOT("WVR/ShadowCmds",         (int)m_rt_shadow_cmds.size());
+    KFX_PLOT("WVR/ShadowCmds",         shadow_plot_count);
     KFX_PLOT("WVR/KSprAtlasCacheSize", m_kspr_atlas_used);
     KFX_PLOT("WVR/KSprAtlasHits",      m_kspr_atlas_hits);
     KFX_PLOT("WVR/KSprAtlasMisses",    m_kspr_atlas_misses);
@@ -2032,7 +2061,6 @@ void GLWorldViewRenderer::DrawIsometricView()
         return;
 
     std::vector<DrawCmd>&        draw_cmds   = m_pip_capture ? m_pip_draw_cmds      : m_draw_cmds;
-    std::vector<ShadowCmd>&      shadow_cmds = m_pip_capture ? m_pip_shadow_cmds    : m_shadow_cmds;
     std::vector<FlatPolyVertex>& fpverts     = m_pip_capture ? m_pip_flatpoly_verts : m_world_write_cmds->flat_poly_verts;
 
     // Walk the depth-sorted bucket list back-to-front (painter's algorithm).
@@ -2144,57 +2172,6 @@ void GLWorldViewRenderer::DrawIsometricView()
                 case QK_JontyISOSprite:
                     bucket_has_3d_sprites = true;
                     break;
-
-                // ── Creature shadows: GPU multiply-blend over rendered tiles ─
-                case QK_CreatureShadow:
-                {
-                    auto* s = (struct BucketKindCreatureShadow*)q;
-                    struct KeeperSprite* kspr_arr = keepersprite_array(s->anim_sprite);
-                    if (!kspr_arr || kspr_arr->FramesCount == 0) break;
-
-                    // Resolve frame dimensions at collection time.  Heap load,
-                    // offset placement, and x-flip are all handled by
-                    // draw_keepsprite_unscaled_in_buffer at flush time.
-                    short angle         = (short)s->angle;
-                    int   quarter       = abs(4 - (((angle + DEGREES_22_5) & ANGLE_MASK) >> 8));
-                    unsigned char frame = s->current_frame;
-                    if (frame >= kspr_arr->FramesCount)
-                        frame = kspr_arr->FramesCount - 1;
-
-                    int tex_w, tex_h;
-                    if (kspr_arr->Rotable == 0) {
-                        struct KeeperSprite* ks = &kspr_arr[frame];
-                        tex_w = ks->FrameWidth;
-                        tex_h = ks->FrameHeight;
-                    } else if (kspr_arr->Rotable == 2) {
-                        struct KeeperSprite* ks = &kspr_arr[frame + quarter * kspr_arr->FramesCount];
-                        tex_w = ks->SWidth;
-                        tex_h = ks->SHeight;
-                    } else {
-                        break;  // unsupported rotable type
-                    }
-                    if (tex_w <= 0 || tex_h <= 0 || tex_w > 256 || tex_h > 256) break;
-
-                    ShadowCmd sc;
-                    sc.verts[0]      = EnginePolyVertexFrom(s->vertex_first);
-                    sc.verts[1]      = EnginePolyVertexFrom(s->vertex_second);
-                    sc.verts[2]      = EnginePolyVertexFrom(s->vertex_third);
-                    sc.verts[3]      = EnginePolyVertexFrom(s->vertex_fourth);
-                    sc.anim_sprite   = s->anim_sprite;
-                    sc.angle         = angle;
-                    sc.current_frame = frame;
-                    sc.tex_w         = tex_w;
-                    sc.tex_h         = tex_h;
-                    // vertex_first.S holds dist_sq (range 16..31) set by create_shadows().
-                    sc.darkness      = 1.0f - (float)s->vertex_first.S / 32.0f;
-                    sc.ndc_z         = 2.0f * (float)bi / (float)(BUCKETS_COUNT - 1) - 1.0f;
-                    DrawCmd cmd;
-                    cmd.type       = DrawCmd::CMD_SHADOWS;
-                    cmd.shadow_idx = (int)shadow_cmds.size();
-                    shadow_cmds.push_back(sc);
-                    draw_cmds.push_back(cmd);
-                    break;
-                }
 
                 // ── All other types go to draw_nonspatial_sprites() ──────────
                 default:

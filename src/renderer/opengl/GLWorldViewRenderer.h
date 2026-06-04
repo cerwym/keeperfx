@@ -29,6 +29,7 @@
 #include "renderer/EngineVertex.h"
 #include "renderer/opengl/IGLShaderCompilable.h"
 #include "renderer/ir/WorldCommands.h"
+#include "renderer/ir/IRCommandBuffer.h"
 #include "renderer/RendererThread.h"
 
 struct PolyPoint;
@@ -99,7 +100,8 @@ public:
     bool HasPendingCommands() const
     {
         return !m_draw_cmds.empty() || !m_shadow_cmds.empty()
-            || (m_world_write_cmds != nullptr && !m_world_write_cmds->flat_poly_verts.empty())
+            || (m_world_write_cmds != nullptr
+                && (!m_world_write_cmds->flat_poly_verts.empty() || !m_world_write_cmds->shadows.Empty()))
             || (m_vert_count > m_cmd_vert_start);
     }
 
@@ -110,7 +112,7 @@ public:
      *  actual bucket-walk recording still writes ordering to internal m_draw_cmds
      *  while tile/flat-poly vertex data is written into @p cmds.
      *  Call with nullptr to close the write window (e.g. during PiP). */
-    void SetWorldCommandBuffers(WorldCommandBuffers* cmds) { m_world_write_cmds = cmds; }
+    void SetWorldCommandBuffers(WorldCommandBuffers* cmds) override { m_world_write_cmds = cmds; }
 
     /** Replay the captured world geometry on the render thread.
      *  The world renderer still uses its internal ordered draw-command stream
@@ -134,6 +136,7 @@ public:
     int SubmitKeeperSprite(int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
                            const unsigned char* data, int src_w, int src_h,
                            unsigned int draw_flags, const unsigned char* remap) override;
+    int SubmitWorldShadowCmd(const IRWorldShadowCmd& cmd) override;
 
     // IWorldViewRenderer: clear per-level atlas cache.
     void ClearKeeperSpriteAtlas() override;
@@ -211,7 +214,9 @@ private:
     void gpu_execute_passes(int vp_x, int vp_y_gl, int screen_w, int screen_h,
                             const std::vector<WorldVertex>& tile_verts,
                             const std::vector<FlatPolyVertex>& fp_verts,
-                            const std::vector<IRWorldKeeperSpriteCmd>& kspr_ir);
+                            const std::vector<IRWorldKeeperSpriteCmd>& kspr_ir,
+                            const IRCommandBuffer<IRWorldShadowCmd>* ir_shadows = nullptr);
+    void DrawShadowGL(const IRWorldShadowCmd& cmd, int screen_w, int screen_h);
     void ensure_clut_valid();
     void execute_preload_atlas();  // render-thread: bulk decode+upload of all known sprites
 
@@ -239,19 +244,7 @@ private:
         int shadow_idx      = 0;
     };
 
-    // Per-shadow data recorded during DrawIsometricView, consumed by GPURenderNow.
-    // Sprite data is resolved eagerly during bucket walk so GPURenderNow
-    // stays pure-GPU (no calls back into engine_render C functions).
-    struct ShadowCmd {
-        EnginePolyVertex verts[4];      // vertex_first..fourth (screen-px coords + fixed-point UV)
-        unsigned short   anim_sprite;   // passed to draw_keepsprite_unscaled_in_buffer
-        short            angle;         // sprite_angle (already computed in create_shadows)
-        unsigned char    current_frame; // animation frame
-        int              tex_w;         // frame width  (FrameWidth for Rotable==0, SWidth for Rotable==2)
-        int              tex_h;         // frame height (FrameHeight for Rotable==0, SHeight for Rotable==2)
-        float            darkness;      // 1.0 - dist_sq/32.0; src_alpha for multiply-blend
-        float            ndc_z;         // NDC depth of shadow's floor bucket, used for depth testing
-    };
+    using ShadowCmd = IRWorldShadowCmd;
 
     // Saved viewport state during hand sprite rendering (see BeginHandSpriteRendering)
     int   m_saved_screen_w   = 0;

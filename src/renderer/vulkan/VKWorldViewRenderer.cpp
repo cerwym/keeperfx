@@ -723,6 +723,15 @@ int VKWorldViewRenderer::SubmitKeeperSprite(
     return 1;
 }
 
+int VKWorldViewRenderer::SubmitWorldShadowCmd(const IRWorldShadowCmd& cmd)
+{
+    ASSERT_GAME_THREAD();
+    if (!m_world_write_cmds)
+        return 0;
+    m_world_write_cmds->shadows.Append(cmd);
+    return 1;
+}
+
 void VKWorldViewRenderer::ClearKeeperSpriteAtlas()
 {
     // Called between levels. Free the keeper-sprite atlas so it will be
@@ -750,7 +759,6 @@ void VKWorldViewRenderer::FlipBuffers()
     ASSERT_GAME_THREAD();
 
     m_rt_draw_cmds      = std::move(m_draw_cmds);
-    m_rt_shadow_cmds    = std::move(m_shadow_cmds);
     m_rt_flatpoly_verts = std::move(m_flatpoly_verts);
     m_rt_kspr_ir        = std::move(m_kspr_ir);
     m_rt_screen_w       = m_screen_w;
@@ -774,12 +782,12 @@ void VKWorldViewRenderer::FlipBuffers()
 // ExecuteFromIR (render thread)
 /******************************************************************************/
 
-void VKWorldViewRenderer::ExecuteFromIR(const WorldCommandBuffers& /*cmds*/)
+void VKWorldViewRenderer::ExecuteFromIR(const WorldCommandBuffers& cmds)
 {
     ASSERT_RENDER_THREAD();
-    if (!m_initialized || m_rt_draw_cmds.empty()) return;
+    if (!m_initialized || (m_rt_draw_cmds.empty() && cmds.shadows.Empty())) return;
 
-    execute_passes(m_cmd, m_rt_vp_x, m_rt_vp_y, m_rt_screen_w, m_rt_screen_h, m_rt_kspr_ir);
+    execute_passes(m_cmd, m_rt_vp_x, m_rt_vp_y, m_rt_screen_w, m_rt_screen_h, m_rt_kspr_ir, cmds.shadows);
     m_rt_kspr_ir.clear();
 }
 
@@ -789,7 +797,8 @@ void VKWorldViewRenderer::ExecuteFromIR(const WorldCommandBuffers& /*cmds*/)
 
 void VKWorldViewRenderer::execute_passes(VkCommandBuffer cmd,
                                           int vp_x, int vp_y, int screen_w, int screen_h,
-                                          const std::vector<IRWorldKeeperSpriteCmd>& kspr_ir)
+                                          const std::vector<IRWorldKeeperSpriteCmd>& kspr_ir,
+                                          const IRCommandBuffer<IRWorldShadowCmd>& shadows)
 {
     if (!cmd) return;
     ensure_clut_valid(cmd);
@@ -936,26 +945,21 @@ void VKWorldViewRenderer::execute_passes(VkCommandBuffer cmd,
     // ── Pass 2: Shadows ───────────────────────────────────────────────────────
     VkPipeline shadow_pipeline = m_pipelines->GetPipeline(VKPassType::WorldShadow);
     if (shadow_pipeline) {
-        for (const auto& dc : m_rt_draw_cmds) {
-            if (dc.type != DrawCmd::CMD_SHADOWS) continue;
-            assert(dc.shadow_idx >= 0 && (size_t)dc.shadow_idx < m_rt_shadow_cmds.size());
-            const ShadowCmd& sc = m_rt_shadow_cmds[dc.shadow_idx];
+        for (const auto& sc : shadows) {
+            if (sc.tex_w <= 0 || sc.tex_h <= 0 || sc.tex_w > 256 || sc.tex_h > 256)
+                continue;
 
-            // Decode shadow silhouette into scratch buffer.
             memset(s_vk_kspr_decode_buf, 0, (size_t)sc.tex_h * k_kspr_decode_dim);
             draw_keepsprite_unscaled_in_buffer(sc.anim_sprite, sc.angle,
                                                sc.current_frame, s_vk_kspr_decode_buf);
 
-            // Upload to shadow image via staging ring.
             const size_t shadow_bytes = (size_t)sc.tex_w * sc.tex_h;
             VKStagingAlloc sa;
             if (!m_staging->Alloc(nullptr, shadow_bytes, 1, sa)) continue;
-            // Copy with stride conversion (scratch is k_kspr_decode_dim wide).
             uint8_t* dst = static_cast<uint8_t*>(sa.cpu_ptr);
             for (int y = 0; y < sc.tex_h; ++y)
                 memcpy(dst + y * sc.tex_w, s_vk_kspr_decode_buf + y * k_kspr_decode_dim, sc.tex_w);
 
-            // Transition shadow image to TRANSFER_DST.
             VkImageMemoryBarrier b = {};
             b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
             b.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -986,8 +990,6 @@ void VKWorldViewRenderer::execute_passes(VkCommandBuffer cmd,
                 VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
                 0, 0, nullptr, 0, nullptr, 1, &b);
 
-            // Build shadow quad as a 6-vertex triangle pair.
-            // Written into the transient vertex buffer (VERTEX_BUFFER_BIT).
             static const int k_shadow_verts = 6;
             struct ShadVtx { float x, y, u, v; };
             ShadVtx sv[k_shadow_verts];
@@ -1005,17 +1007,9 @@ void VKWorldViewRenderer::execute_passes(VkCommandBuffer cmd,
             memcpy(m_transient_mapped + sv_byte_off, sv, sizeof(sv));
             m_transient_cursor += (int)sizeof(sv);
 
-            // Push constants: darkness and ndc_z via shadow-specific fields.
-            struct { float data[32]; } spc = {};
-            float* f = spc.data;
-            f[0] = (float)screen_w;  // screen_size.x
-            f[1] = (float)screen_h;  // screen_size.y
-            f[2] = sc.ndc_z;         // z_ndc (re-used for ndc_z_shadow in shader)
-            f[3] = sc.darkness;      // alpha (re-used for darkness in shadow shader)
-            // Full pc struct with ndc_z_shadow at offset 124.
             uint8_t full_pc[128] = {};
             memcpy(full_pc, &pc, sizeof(pc));
-            float* darkness_field = reinterpret_cast<float*>(full_pc + 12); // alpha = darkness
+            float* darkness_field = reinterpret_cast<float*>(full_pc + 12);
             *darkness_field = sc.darkness;
             float* ndc_z_shadow   = reinterpret_cast<float*>(full_pc + 124);
             *ndc_z_shadow = sc.ndc_z;
@@ -1032,7 +1026,6 @@ void VKWorldViewRenderer::execute_passes(VkCommandBuffer cmd,
                                         m_pipelines->GetLayout(), 0, 1, &shadow_ds, 0, nullptr);
             }
 
-            // Use the transient buffer for shadow quad vertices.
             VkDeviceSize sv_off = sv_byte_off;
             vkCmdBindVertexBuffers(cmd, 0, 1, &m_transient_buf, &sv_off);
             vkCmdDraw(cmd, k_shadow_verts, 1, 0, 0);

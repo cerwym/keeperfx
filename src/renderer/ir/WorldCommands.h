@@ -124,6 +124,7 @@ struct IRWorldShadowCmd
     int              tex_h         = 0;
     float            darkness      = 1.0f;  /**< Alpha for multiply-blend. */
     float            ndc_z         = 0.0f;  /**< NDC depth for depth test. */
+    int32_t          wx            = 0, wy = 0, wz = 0;  /**< World-space caster origin. */
     uint32_t         sort_key      = 0;
 };
 
