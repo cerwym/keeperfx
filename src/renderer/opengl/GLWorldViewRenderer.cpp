@@ -15,6 +15,7 @@
 #include "renderer/backends/SoftwareWorldViewRenderer.h"
 #include "renderer/ITileAtlas.h"
 #include "renderer/RendererManager.h"  // for RendererGetActive/RendererGetActiveType
+#include "renderer/RendererSettings.h" // g_renderer_settings (transpar4_alpha, transpar8_alpha)
 #include "renderer/RendererOpenGL.h"   // for RendererOpenGL class
 #include "renderer/VecMath.h"
 
@@ -1173,8 +1174,8 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
     glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(sv), sv);
 
     float alpha = 1.0f;
-    if      (draw_flags & Lb_SPRITE_TRANSPAR4) alpha = 0.5f;
-    else if (draw_flags & Lb_SPRITE_TRANSPAR8) alpha = 0.25f;
+    if      (draw_flags & Lb_SPRITE_TRANSPAR4) alpha = g_renderer_settings.transpar4_alpha;
+    else if (draw_flags & Lb_SPRITE_TRANSPAR8) alpha = g_renderer_settings.transpar8_alpha;
 
     glBindVertexArray(m_kspr_vao);
     glEnable(GL_DEPTH_TEST);
