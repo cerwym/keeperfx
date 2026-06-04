@@ -99,10 +99,13 @@ public:
      *  + minimap + layer-1 lines.  Does NOT flush layer-2/3 or restore GL state.
      *  Must be followed by DrawFrontOverlay(). */
     void DrawFrontBase() override;
-    /** IUIRenderer override: layer-2/3 portion of DrawFront: depth-tested layer-2,
-     *  top-overlay layer-3, and GL state cleanup.  Call after DrawFrontBase() (and
-     *  any intermediate direct-GL passes between layer-1 and layer-3). */
+    /** IUIRenderer override: layer-3 top-overlay (tooltip, corner frames).
+     *  Call after DrawFrontBase() and DrawWorldSpriteLayerRT().
+     *  Layer-2 (world sprites) is now handled by DrawWorldSpriteLayerRT(). */
     void DrawFrontOverlay() override;
+    /** IUIRenderer override: flush RT layer-2 (world-depth sprites) before the
+     *  sidebar.  Must be called after DrawBack() and before DrawFrontBase(). */
+    void DrawWorldSpriteLayerRT() override;
     /** IUIRenderer override: flip game-thread command lists to render-thread copies. */
     void FlipBuffers() override;
     virtual void Draw() override;

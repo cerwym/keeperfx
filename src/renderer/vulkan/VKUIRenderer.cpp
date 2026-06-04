@@ -929,9 +929,15 @@ void VKUIRenderer::DrawFrontOverlay()
 {
     ASSERT_RENDER_THREAD();
     if (m_cmd == VK_NULL_HANDLE) return;
-    flush_layer(2, true);   // WorldDepth — depth-tested, scissored
     flush_layer(3, false);  // Overlay
     flush_layer(4, false);  // Cursor
+}
+
+void VKUIRenderer::DrawWorldSpriteLayerRT()
+{
+    ASSERT_RENDER_THREAD();
+    if (m_cmd == VK_NULL_HANDLE) return;
+    flush_layer(2, true);   // WorldDepth — depth-tested, scissored; before sidebar
 }
 
 void VKUIRenderer::DrawFront()

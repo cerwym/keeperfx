@@ -784,6 +784,7 @@ void UIRenderer_SubmitTiledSprite(int32_t x, int32_t y, int units_per_px, const 
 void UIRenderer_SetLayer(int layer);
 void UIRenderer_SetGameViewport(int x, int y, int w, int h);
 void UIRenderer_DrawBack(void);
+void UIRenderer_DrawWorldSpriteLayerRT(void);
 void UIRenderer_DrawFront(void);
 void UIRenderer_Draw(void);
 void UIRenderer_Clear(void);

@@ -1023,6 +1023,38 @@ void GLUIRenderer::DrawFrontBase()
     glDisable(GL_BLEND);
 }
 
+void GLUIRenderer::DrawWorldSpriteLayerRT()
+{
+    KFX_ZONE("UIRenderer::DrawWorldSpriteLayerRT");
+    ASSERT_RENDER_THREAD();
+
+    if (m_rt_quads[2].empty() && m_rt_lines[2].empty()) return;
+
+    // Scissor-clip to the game viewport so world sprites can't bleed onto
+    // the sidebar, overhead map, or zoom box.
+    if (m_rt_game_vp_set && m_rt_game_vp_w > 0 && m_rt_game_vp_h > 0)
+    {
+        glEnable(GL_SCISSOR_TEST);
+        int scissor_y = m_screen_height - m_rt_game_vp_y - m_rt_game_vp_h;
+        glScissor(m_rt_game_vp_x, scissor_y, m_rt_game_vp_w, m_rt_game_vp_h);
+    }
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LEQUAL);
+    glDepthMask(GL_TRUE);
+
+    FlushQuads_RT(2);
+    FlushLines_RT(2);
+
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_BLEND);
+    if (m_rt_game_vp_set)
+        glDisable(GL_SCISSOR_TEST);
+    glUseProgram(0);
+}
+
 void GLUIRenderer::DrawFrontOverlay()
 {
     KFX_ZONE("UIRenderer::DrawFrontOverlay");
@@ -1036,26 +1068,6 @@ void GLUIRenderer::DrawFrontOverlay()
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-    {
-        if (!m_rt_quads[2].empty() || !m_rt_lines[2].empty())
-        {
-            if (m_rt_game_vp_set && m_rt_game_vp_w > 0 && m_rt_game_vp_h > 0)
-            {
-                glEnable(GL_SCISSOR_TEST);
-                int scissor_y = m_screen_height - m_rt_game_vp_y - m_rt_game_vp_h;
-                glScissor(m_rt_game_vp_x, scissor_y, m_rt_game_vp_w, m_rt_game_vp_h);
-            }
-            glEnable(GL_DEPTH_TEST);
-            glDepthFunc(GL_LEQUAL);
-            glDepthMask(GL_TRUE);
-            FlushQuads_RT(2);
-            FlushLines_RT(2);
-            glDisable(GL_DEPTH_TEST);
-            if (m_rt_game_vp_set)
-                glDisable(GL_SCISSOR_TEST);
-        }
-    }
 
     FlushQuads_RT(3);
     FlushLines_RT(3);

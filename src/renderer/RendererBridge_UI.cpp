@@ -298,6 +298,12 @@ void UIRenderer_DrawBack(void)
     if (ui) ui->DrawBack();
 }
 
+void UIRenderer_DrawWorldSpriteLayerRT(void)
+{
+    IUIRenderer* ui = RendererGetUIRenderer();
+    if (ui) ui->DrawWorldSpriteLayerRT();
+}
+
 void UIRenderer_DrawFront(void)
 {
     IUIRenderer* ui = RendererGetUIRenderer();

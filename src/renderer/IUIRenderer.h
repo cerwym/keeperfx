@@ -255,6 +255,13 @@ public:
      *  Must be called after DrawFrontBase().  GPU default: no-op. */
     virtual void DrawFrontOverlay() {}
 
+    /** Draw world-depth sprites (layer 2, RT copy) between the world geometry
+     *  pass and the sidebar.  Creature status icons, room flags, floating gold
+     *  text etc. must appear in front of world geometry but BEHIND the sidebar.
+     *  Must be called after DrawBack() and before DrawFrontBase().
+     *  GPU default: no-op. */
+    virtual void DrawWorldSpriteLayerRT() {}
+
     /** Flip game-thread command lists to render-thread read copies.
      *  Called from EndFrame() on the game thread before signalling the
      *  render thread.  CPU default: no-op. */

@@ -14,10 +14,10 @@
  *   2. FlushPendingInit(cmd, staging)      — upload dirty atlas pixels if needed
  *   3. PopulateFromIR(cmds, fs)            — translate IR → m_rt_quads[]/m_rt_lines[]
  *   4. DrawBack()                          — flush layer 0 (back panels, slab bg)
- *   5. [world pass]
+ *   5. DrawWorldSpriteLayerRT()            — flush layer 2 (world-depth sprites, before sidebar)
  *   6. DrawFrontBase()                     — flush FBO quads + layer 1 + minimap
  *   7. [optional intermediate passes]
- *   8. DrawFrontOverlay()                  — flush layer 2 (world-depth) + layer 3 (top)
+ *   8. DrawFrontOverlay()                  — flush layer 3 (top-overlay) + layer 4 (cursor)
  */
 /******************************************************************************/
 #pragma once
@@ -135,11 +135,12 @@ public:
     bool GetMinimapOpaqueBlackIndex(uint8_t* idx) const override;
  
     void PopulateFromIR(const UICommandBuffers& cmds, const FrameState& fs) override;
-    void DrawBack()          override;
-    void DrawFront()         override;
-    void DrawFrontBase()     override;
-    void DrawFrontOverlay()  override;
-    void DrawWorldSprites()  override;
+    void DrawBack()              override;
+    void DrawFront()             override;
+    void DrawFrontBase()         override;
+    void DrawFrontOverlay()      override;
+    void DrawWorldSprites()      override;
+    void DrawWorldSpriteLayerRT() override;
     void FlipBuffers()       override;
     void Clear()             override;
 

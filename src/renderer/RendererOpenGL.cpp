@@ -1041,6 +1041,11 @@ void RendererOpenGL::EndFrame_GL()
     // Draw layer-0 (back) GPU UI elements — sidebar background panels.
     UIRenderer_DrawBack();
 
+    // Draw layer-2 world-depth sprites (creature status icons, room flags,
+    // floating gold text) BEFORE the sidebar.  These must be depth-tested
+    // against world geometry but must not appear over the sidebar UI.
+    UIRenderer_DrawWorldSpriteLayerRT();
+
     // Raw-image GPU blit — frontend background images (legal, loading, menu bg,
     // map bg, torture, etc.).  Queued by BlitRaw8GPU() during the frame; drawn
     // here as an opaque quad so that the staging-blit overlay (which composites
