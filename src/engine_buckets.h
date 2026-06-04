@@ -69,6 +69,14 @@ struct BucketKindPolygonStandard {
     long camera_z_first;   // camera-space Z for perspective-correct GPU interpolation
     long camera_z_second;
     long camera_z_third;
+    /* World-space vertex coordinates (pre-projection EngineCoord.x/y/z).
+     * Used by GPU backends for dynamic lighting and shadow map generation.
+     * SW renderer ignores these fields.
+     * Note: adding 9 longs (36 bytes) reduces pool capacity from ~118k to ~94k
+     * standard polys in the 16 MiB poly pool — acceptable for the target scenes. */
+    long world_x_first,  world_y_first,  world_z_first;
+    long world_x_second, world_y_second, world_z_second;
+    long world_x_third,  world_y_third,  world_z_third;
 };
 
 struct BucketKindPolygonSimple {

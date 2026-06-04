@@ -368,7 +368,7 @@ void main()
 // World rendering shaders
 /******************************************************************************/
 
-// Tile geometry — WorldVertex layout (6 attributes, location 0-5).
+// Tile geometry — WorldVertex layout (7 attributes, location 0-6).
 static constexpr const char* VK_WORLD_VERT = R"glsl(
 #version 450
 layout(location = 0) in vec3  a_pos;
@@ -377,20 +377,23 @@ layout(location = 2) in float a_shade;
 layout(location = 3) in vec2  a_stl;
 layout(location = 4) in float a_camera_z;
 layout(location = 5) in float a_layer;
+layout(location = 6) in vec3  aWorldPos;
 
 layout(location = 0) out vec2  v_uv;
 layout(location = 1) out float v_shade;
 layout(location = 2) out vec2  v_stl;
 layout(location = 3) out float v_layer;
+layout(location = 4) out vec3  vWorldPos;
 
 void main()
 {
     float w = max(a_camera_z, 1.0);
     gl_Position = vec4(a_pos.xy * w, a_pos.z * w, w);
-    v_uv    = a_uv;
-    v_shade = a_shade;
-    v_stl   = a_stl;
-    v_layer = a_layer;
+    v_uv      = a_uv;
+    v_shade   = a_shade;
+    v_stl     = a_stl;
+    v_layer   = a_layer;
+    vWorldPos = aWorldPos;
 }
 )glsl";
 
@@ -405,6 +408,7 @@ layout(location = 0) in  vec2  v_uv;
 layout(location = 1) in  float v_shade;
 layout(location = 2) in  vec2  v_stl;
 layout(location = 3) in  float v_layer;
+layout(location = 4) in  vec3  vWorldPos;
 layout(location = 0) out vec4  fragColor;
 
 layout(set=0, binding=0) uniform sampler2DArray u_tile_atlas;

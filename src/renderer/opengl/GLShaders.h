@@ -328,10 +328,12 @@ layout(location = 2) in float a_shade;
 layout(location = 3) in vec2  a_stl;       // subtile coords for lightmap (mode 1)
 layout(location = 4) in float a_camera_z;  // camera-space Z for perspective correction
 layout(location = 5) in float a_layer;     // texture array layer (atlas variation)
+layout(location = 6) in vec3  aWorldPos;   // pre-projection world-space position
 out vec2  v_uv;
 out float v_shade;
 out vec2  v_stl;
 flat out float v_layer;
+out vec3  vWorldPos;
 void main()
 {
     // Perspective-correct interpolation trick: multiply clip-space position by
@@ -345,6 +347,7 @@ void main()
     v_shade     = a_shade;
     v_stl       = a_stl;
     v_layer     = a_layer;
+    vWorldPos   = aWorldPos;
 }
 )glsl";
 
@@ -354,6 +357,7 @@ in vec2  v_uv;
 in float v_shade;
 in vec2  v_stl;                         // subtile coords [0..511], mode 1 only
 flat in float v_layer;                  // texture array layer (atlas variation)
+in vec3  vWorldPos;                     // reserved for future dynamic lighting / shadow mapping
 uniform sampler2DArray u_tile_atlas;    // R8 palette-index atlas array (unit 0)
 uniform sampler2D  u_palette;           // RGBA8 256×1 palette (unit 1)
 uniform usampler2D u_lightmap;          // R16UI subtile_lightness map (unit 2), mode 1

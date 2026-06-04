@@ -190,7 +190,10 @@ private:
                          const struct PolyPoint* p0,
                          const struct PolyPoint* p1,
                          const struct PolyPoint* p2,
-                         int32_t cam_z0 = 0, int32_t cam_z1 = 0, int32_t cam_z2 = 0);
+                         int32_t cam_z0 = 0, int32_t cam_z1 = 0, int32_t cam_z2 = 0,
+                         int32_t wx0 = 0, int32_t wy0 = 0, int32_t wz0 = 0,
+                         int32_t wx1 = 0, int32_t wy1 = 0, int32_t wz1 = 0,
+                         int32_t wx2 = 0, int32_t wy2 = 0, int32_t wz2 = 0);
 
     // Append one triangle from compact-format fields (unsigned short xy, unsigned char uv/shade)
     bool append_triangle_compact(int sx0, int sy0, int u0, int v0, int shade0,

@@ -560,7 +560,10 @@ bool VKWorldViewRenderer::append_triangle(int tile_id,
                                            const struct PolyPoint* p0,
                                            const struct PolyPoint* p1,
                                            const struct PolyPoint* p2,
-                                           int32_t cam_z0, int32_t cam_z1, int32_t cam_z2)
+                                           int32_t cam_z0, int32_t cam_z1, int32_t cam_z2,
+                                           int32_t wx0, int32_t wy0, int32_t wz0,
+                                           int32_t wx1, int32_t wy1, int32_t wz1,
+                                           int32_t wx2, int32_t wy2, int32_t wz2)
 {
     const int variation  = tile_id / TEXTURE_BLOCKS_COUNT;
     const int tile_local = tile_id % TEXTURE_BLOCKS_COUNT;
@@ -578,6 +581,9 @@ bool VKWorldViewRenderer::append_triangle(int tile_id,
 
     const struct PolyPoint* pts[3] = { p0, p1, p2 };
     const int32_t cam_z[3] = { cam_z0, cam_z1, cam_z2 };
+    const int32_t world_x[3] = { wx0, wx1, wx2 };
+    const int32_t world_y[3] = { wy0, wy1, wy2 };
+    const int32_t world_z[3] = { wz0, wz1, wz2 };
     WorldVertex* v = &m_verts[m_vert_count];
     for (int i = 0; i < 3; i++) {
         v[i].x    = (float)(pts[i]->X) / (float)m_screen_w * 2.0f - 1.0f;
@@ -590,6 +596,9 @@ bool VKWorldViewRenderer::append_triangle(int tile_id,
         v[i].stl_y = 0.0f;
         v[i].camera_z   = (cam_z[i] > 0) ? (float)cam_z[i] : 1.0f;
         v[i].atlas_layer = layer;
+        v[i].wx = (float)world_x[i];
+        v[i].wy = (float)world_y[i];
+        v[i].wz = (float)world_z[i];
     }
     m_vert_count += 3;
     return true;
@@ -635,6 +644,7 @@ bool VKWorldViewRenderer::append_triangle_compact(
 bool VKWorldViewRenderer::append_frontview_quad(const struct BucketKindTexturedQuad* txquad)
 {
     // Mirror GLWorldViewRenderer::append_frontview_quad() exactly.
+    // Front view has no source world-space vertex data yet; append_triangle() defaults to 0.
     int orient = txquad->orient & 3;
 
     PolyPoint a, d, b, c;

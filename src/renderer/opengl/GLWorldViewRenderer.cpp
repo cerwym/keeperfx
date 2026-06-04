@@ -188,6 +188,10 @@ bool GLWorldViewRenderer::init_gl_resources()
     glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, sizeof(WorldVertex),
                           (void*)(9 * sizeof(float)));
     glEnableVertexAttribArray(5);
+    // layout(location=6) vec3 aWorldPos — pre-projection world-space position
+    glEnableVertexAttribArray(6);
+    glVertexAttribPointer(6, 3, GL_FLOAT, GL_FALSE, sizeof(WorldVertex),
+                          (void*)(10 * sizeof(float)));
 
     glBindVertexArray(0);
 
@@ -1471,7 +1475,10 @@ bool GLWorldViewRenderer::append_triangle(int tile_id,
                                            const struct PolyPoint* p0,
                                            const struct PolyPoint* p1,
                                            const struct PolyPoint* p2,
-                                           int32_t cam_z0, int32_t cam_z1, int32_t cam_z2)
+                                           int32_t cam_z0, int32_t cam_z1, int32_t cam_z2,
+                                           int32_t wx0, int32_t wy0, int32_t wz0,
+                                           int32_t wx1, int32_t wy1, int32_t wz1,
+                                           int32_t wx2, int32_t wy2, int32_t wz2)
 {
     const int variation  = tile_id / TEXTURE_BLOCKS_COUNT;
     const int tile_local = tile_id % TEXTURE_BLOCKS_COUNT;
@@ -1509,6 +1516,9 @@ bool GLWorldViewRenderer::append_triangle(int tile_id,
     WorldVertex* const verts = verts_vec->data();
     const struct PolyPoint* pts[3] = { p0, p1, p2 };
     const int32_t cam_z[3] = { cam_z0, cam_z1, cam_z2 };
+    const int32_t world_x[3] = { wx0, wx1, wx2 };
+    const int32_t world_y[3] = { wy0, wy1, wy2 };
+    const int32_t world_z[3] = { wz0, wz1, wz2 };
     for (int i = 0; i < 3; i++)
     {
         WorldVertex* wv = &verts[vcnt + i];
@@ -1529,6 +1539,9 @@ bool GLWorldViewRenderer::append_triangle(int tile_id,
         // 0 or negative means unknown — default to 1.0 (affine, no correction).
         wv->camera_z = (cam_z[i] > 0) ? (float)cam_z[i] : 1.0f;
         wv->atlas_layer = layer;
+        wv->wx = (float)world_x[i];
+        wv->wy = (float)world_y[i];
+        wv->wz = (float)world_z[i];
     }
     vcnt += 3;
     return true;
@@ -2098,7 +2111,16 @@ void GLWorldViewRenderer::DrawIsometricView()
                                     &p->vertex_third,
                                     p->camera_z_first,
                                     p->camera_z_second,
-                                    p->camera_z_third);
+                                    p->camera_z_third,
+                                    (int32_t)p->world_x_first,
+                                    (int32_t)p->world_y_first,
+                                    (int32_t)p->world_z_first,
+                                    (int32_t)p->world_x_second,
+                                    (int32_t)p->world_y_second,
+                                    (int32_t)p->world_z_second,
+                                    (int32_t)p->world_x_third,
+                                    (int32_t)p->world_y_third,
+                                    (int32_t)p->world_z_third);
                     break;
                 }
                 case QK_PolygonSimple:
@@ -2268,7 +2290,7 @@ bool GLWorldViewRenderer::append_frontview_quad(const struct BucketKindTexturedQ
         default: tile_id = (int)txquad->texture_idx; break;
     }
 
-    // Front view uses orthographic projection — camera_z defaults to 1.0f (affine).
+    // Front view uses orthographic projection and has no source world-space vertex data.
     bool ok = append_triangle(tile_id, &a, &d, &b);
     ok     &= append_triangle(tile_id, &a, &b, &c);
     return ok;

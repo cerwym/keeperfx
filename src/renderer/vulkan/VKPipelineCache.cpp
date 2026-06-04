@@ -62,14 +62,15 @@ static void FillWorldVertexInput(VkPipelineVertexInputStateCreateInfo& vi,
     binding.stride    = sizeof(WorldVertex);
     binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
-    attrs.resize(6);
-    // WorldVertex: x(0) y(4) z(8) u(12) v(16) shade(20) stl_x(24) stl_y(28) camera_z(32) atlas_layer(36)
+    attrs.resize(7);
+    // WorldVertex: x(0) y(4) z(8) u(12) v(16) shade(20) stl_x(24) stl_y(28) camera_z(32) atlas_layer(36) wx(40) wy(44) wz(48)
     attrs[0].location = 0; attrs[0].binding = 0; attrs[0].format = VK_FORMAT_R32G32B32_SFLOAT;   attrs[0].offset = 0u;
     attrs[1].location = 1; attrs[1].binding = 0; attrs[1].format = VK_FORMAT_R32G32_SFLOAT;      attrs[1].offset = 12u;
     attrs[2].location = 2; attrs[2].binding = 0; attrs[2].format = VK_FORMAT_R32_SFLOAT;          attrs[2].offset = 20u;
     attrs[3].location = 3; attrs[3].binding = 0; attrs[3].format = VK_FORMAT_R32G32_SFLOAT;      attrs[3].offset = 24u;
     attrs[4].location = 4; attrs[4].binding = 0; attrs[4].format = VK_FORMAT_R32_SFLOAT;          attrs[4].offset = 32u;
     attrs[5].location = 5; attrs[5].binding = 0; attrs[5].format = VK_FORMAT_R32_SFLOAT;          attrs[5].offset = 36u;
+    attrs[6].location = 6; attrs[6].binding = 0; attrs[6].format = VK_FORMAT_R32G32B32_SFLOAT;   attrs[6].offset = 40u;
 
     vi.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
     vi.vertexBindingDescriptionCount   = 1;
