@@ -113,11 +113,26 @@ extern int line_box_size;
 extern struct MapVolumeBox map_volume_box;
 extern long view_height_over_2;
 extern long view_width_over_2;
+
+/* Viewport dimensions set by the engine rendering pipeline.
+ * These are shared with hardware backends for projection. */
+extern long vec_window_width;
+extern long vec_window_height;
+
 extern long z_threshold_near;
 extern long split_2;
 extern long fade_max;
 /** Fog-of-war lighting lookup table. Set by engine init after table load. */
 extern unsigned char *render_fade_tables;
+
+/* Sprite scaling state captured by LbSpriteSetScalingData —
+ * read by hardware backends via the keeper-sprite hook. */
+extern long g_sprite_scale_dst_x;
+extern long g_sprite_scale_dst_y;
+extern long g_sprite_scale_dst_w;
+extern long g_sprite_scale_dst_h;
+extern long g_sprite_scale_src_w;
+extern long g_sprite_scale_src_h;
 
 extern short mx;
 extern short my;

@@ -9,7 +9,7 @@
 #include "pre_inc.h"
 #include "renderer/ITextRenderer.h"
 #include "bflib_sprfnt.h"    // is_wide_charcode
-#include "bflib_vidraw.h"    // Lb_TEXT_HALIGN_*
+#include "bflib_video.h"     // Lb_TEXT_HALIGN_*
 #include "post_inc.h"
 
 /******************************************************************************/
