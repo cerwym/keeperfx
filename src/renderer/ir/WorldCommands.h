@@ -22,7 +22,7 @@
 #include <utility>
 #include "renderer/WorldVertex.h"
 #include "renderer/FlatPolyVertex.h"
-#include "bflib_render.h"  // PolyPoint (for shadow geometry)
+#include "renderer/EngineVertex.h"
 
 /******************************************************************************/
 
@@ -116,7 +116,7 @@ struct IRWorldKeeperSpriteCmd
 struct IRWorldShadowCmd
 {
     WorldCmdLayer    layer         = WorldCmdLayer::Shadows;
-    struct PolyPoint verts[4]      = {};  /**< Screen-px coords + 16.16 UV. */
+    EnginePolyVertex verts[4]      = {};  /**< Screen-px coords + fixed-point UV. */
     unsigned short   anim_sprite   = 0;
     short            angle         = 0;
     unsigned char    current_frame = 0;

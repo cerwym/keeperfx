@@ -26,11 +26,12 @@
 #include "renderer/IWorldViewRenderer.h"
 #include "renderer/WorldVertex.h"
 #include "renderer/FlatPolyVertex.h"
+#include "renderer/EngineVertex.h"
 #include "renderer/opengl/IGLShaderCompilable.h"
 #include "renderer/ir/WorldCommands.h"
 #include "renderer/RendererThread.h"
-#include "bflib_render.h"   // PolyPoint (needed by ShadowCmd)
 
+struct PolyPoint;
 class ITileAtlas;
 
 /******************************************************************************/
@@ -242,7 +243,7 @@ private:
     // Sprite data is resolved eagerly during bucket walk so GPURenderNow
     // stays pure-GPU (no calls back into engine_render C functions).
     struct ShadowCmd {
-        struct PolyPoint verts[4];      // vertex_first..fourth (screen-px coords + 16.16 UV)
+        EnginePolyVertex verts[4];      // vertex_first..fourth (screen-px coords + fixed-point UV)
         unsigned short   anim_sprite;   // passed to draw_keepsprite_unscaled_in_buffer
         short            angle;         // sprite_angle (already computed in create_shadows)
         unsigned char    current_frame; // animation frame

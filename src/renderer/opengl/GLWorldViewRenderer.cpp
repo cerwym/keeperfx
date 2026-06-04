@@ -23,7 +23,7 @@
 #include "engine_textures.h"  // TEXTURE_BLOCKS_COUNT
 #include "renderer/TileAtlasPacker.h" // GetTileUV
 #include "engine_render.h"    // draw_3d_sprites_for_bucket(), draw_nonspatial_sprites_no_shadows()
-#include "bflib_render.h"      // PolyPoint, render_fade_tables
+#include "bflib_render.h"      // PolyPoint
 #include "bflib_vidraw.h"      // vec_window_width, vec_window_height
 #include "bflib_basics.h"      // ERRORLOG / SYNCLOG / WARNLOG
 #include "renderer/opengl/GLUIRenderer.h"
@@ -1914,14 +1914,14 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl, int screen_w
         // No UV x-flip adjustment: draw_keepsprite_unscaled_in_buffer already
         // mirrors the silhouette in the buffer for angles in the flip range.
         float sv[6][4];
-        const struct PolyPoint* vp = sc.verts;
+        const EnginePolyVertex* vp = sc.verts;
         for (int t = 0; t < 6; t++)
         {
             const int idx[6] = { 0, 1, 2, 0, 2, 3 };
-            sv[t][0] = (float)vp[idx[t]].X;
-            sv[t][1] = (float)vp[idx[t]].Y;
-            sv[t][2] = (float)(vp[idx[t]].U >> 16) / 256.0f;
-            sv[t][3] = (float)(vp[idx[t]].V >> 16) / 256.0f;
+            sv[t][0] = (float)vp[idx[t]].x;
+            sv[t][1] = (float)vp[idx[t]].y;
+            sv[t][2] = (float)(vp[idx[t]].u >> 16) / 256.0f;
+            sv[t][3] = (float)(vp[idx[t]].v >> 16) / 256.0f;
         }
         glBindBuffer(GL_ARRAY_BUFFER, m_shadow_vbo);
         glBufferData(GL_ARRAY_BUFFER, sizeof(sv), nullptr, GL_DYNAMIC_DRAW);
@@ -2178,10 +2178,10 @@ void GLWorldViewRenderer::DrawIsometricView()
                     if (tex_w <= 0 || tex_h <= 0 || tex_w > 256 || tex_h > 256) break;
 
                     ShadowCmd sc;
-                    sc.verts[0]      = s->vertex_first;
-                    sc.verts[1]      = s->vertex_second;
-                    sc.verts[2]      = s->vertex_third;
-                    sc.verts[3]      = s->vertex_fourth;
+                    sc.verts[0]      = EnginePolyVertexFrom(s->vertex_first);
+                    sc.verts[1]      = EnginePolyVertexFrom(s->vertex_second);
+                    sc.verts[2]      = EnginePolyVertexFrom(s->vertex_third);
+                    sc.verts[3]      = EnginePolyVertexFrom(s->vertex_fourth);
                     sc.anim_sprite   = s->anim_sprite;
                     sc.angle         = angle;
                     sc.current_frame = frame;

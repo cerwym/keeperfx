@@ -30,14 +30,16 @@
 #include "renderer/IWorldViewRenderer.h"
 #include "renderer/WorldVertex.h"
 #include "renderer/FlatPolyVertex.h"
+#include "renderer/EngineVertex.h"
 #include "renderer/ir/WorldCommands.h"
 #include "renderer/vulkan/VKTileAtlas.h"
 #include "renderer/vulkan/VKPipelineCache.h"
 #include "renderer/vulkan/VKDescriptorLayout.h"
 #include "renderer/vulkan/VKStagingRing.h"
-#include "bflib_render.h"   // PolyPoint
 
 /******************************************************************************/
+
+struct PolyPoint;
 
 class VKWorldViewRenderer : public IWorldViewRenderer
 {
@@ -69,7 +71,7 @@ public:
     /** Per-shadow data resolved on the game thread. */
     struct ShadowCmd
     {
-        struct PolyPoint verts[4]   = {};
+        EnginePolyVertex verts[4]   = {};
         unsigned short   anim_sprite  = 0;
         short            angle        = 0;
         unsigned char    current_frame = 0;

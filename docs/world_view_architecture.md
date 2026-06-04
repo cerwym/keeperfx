@@ -119,7 +119,7 @@ For each bucket, items in the linked list are processed in insertion order (LIFO
 | `QK_TrigMode2/3/6` | `trig()` variants | Compact triangle formats |
 | `QK_PolyMode0/4/5` | `draw_gpoly()` | Flat/gouraud polygons |
 
-`draw_gpoly()` (`src/bflib_render_gpoly.c`) dispatches to a mode-specific scanline function (`trig_gt()`, `trig_fl()`, etc.) based on `vec_mode`. These scanline functions interpolate U, V, and S (shade) per pixel, perform table-driven palette-indexed texture sampling, apply per-pixel shading from the fade/lighting LUT, and write directly to the CPU framebuffer (`WScreen`).
+`draw_gpoly()` (`src/renderer/software/bflib_render_gpoly.c`) dispatches to a mode-specific scanline function (`trig_gt()`, `trig_fl()`, etc.) based on `vec_mode`. These scanline functions interpolate U, V, and S (shade) per pixel, perform table-driven palette-indexed texture sampling, apply per-pixel shading from the fade/lighting LUT, and write directly to the CPU framebuffer (`WScreen`).
 
 ### 2A.3 Sprite rendering
 

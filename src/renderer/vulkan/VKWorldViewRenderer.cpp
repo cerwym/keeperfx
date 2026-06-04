@@ -993,13 +993,13 @@ void VKWorldViewRenderer::execute_passes(VkCommandBuffer cmd,
             static const int k_shadow_verts = 6;
             struct ShadVtx { float x, y, u, v; };
             ShadVtx sv[k_shadow_verts];
-            const struct PolyPoint* vp = sc.verts;
+            const EnginePolyVertex* vp = sc.verts;
             const int idx[k_shadow_verts] = { 0, 1, 2, 0, 2, 3 };
             for (int t = 0; t < k_shadow_verts; t++) {
-                sv[t].x = (float)vp[idx[t]].X;
-                sv[t].y = (float)vp[idx[t]].Y;
-                sv[t].u = (float)(vp[idx[t]].U >> 16) / 256.0f;
-                sv[t].v = (float)(vp[idx[t]].V >> 16) / 256.0f;
+                sv[t].x = (float)vp[idx[t]].x;
+                sv[t].y = (float)vp[idx[t]].y;
+                sv[t].u = (float)(vp[idx[t]].u >> 16) / 256.0f;
+                sv[t].v = (float)(vp[idx[t]].v >> 16) / 256.0f;
             }
             const VkDeviceSize sv_byte_off = transient_window + m_transient_cursor;
             if (m_transient_cursor + (int)sizeof(sv) > k_max_transient_verts * (int)transient_vtx_stride)

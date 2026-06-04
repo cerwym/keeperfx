@@ -13,7 +13,7 @@
 
 #include "bflib_basics.h"
 #include "bflib_sprite.h"       // TbSprite
-#include "bflib_render.h"       // render_fade_tables
+#include "engine_render.h"      // render_fade_tables
 #include "bflib_video.h"        // lbDisplay.DrawFlags
 #include "gui_draw.h"           // get_panel_sprite, gui_slab, GUI_SLAB_DIMENSION, TiledSprite
 #include "config_spritecolors.h" // get_player_colored_icon_idx

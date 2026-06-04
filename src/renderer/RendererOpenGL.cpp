@@ -31,7 +31,6 @@
 #include "renderer/RendererHelper.h"
 
 #include "bflib_video.h"    // lbDisplay, RendererGetScreenWidth()/Height
-#include "bflib_render.h"   // render_fade_tables
 #include "bflib_vidraw.h"   // vec_window_width/height (PiP projection override), LbSpriteDrawResized
 #include "bflib_sprite.h"   // TbSpriteSheet, get_sprite
 #include "platform.h"       // platform_create_gl_context / swap / destroy

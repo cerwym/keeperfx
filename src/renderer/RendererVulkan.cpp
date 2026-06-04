@@ -18,7 +18,7 @@
 #include "renderer/RendererManager.h"
 #include "platform.h"
 #include "bflib_video.h"    // RendererGetScreenWidth() / RendererGetScreenHeight(), lbDisplay
-#include "bflib_render.h"   // render_fade_tables
+#include "engine_render.h"   // render_fade_tables
 #include "engine_lenses.h"  // lens_mode
 #include "vidfade.h"        // g_palette_possession_tint, g_screen_tint
 #include "globals.h"

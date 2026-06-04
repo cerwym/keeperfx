@@ -3,6 +3,8 @@
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 # ━━━ Source File Collection ━━━
+# Recursive globs intentionally pick up software rasteriser sources under
+# src/renderer/software/ after their implementation-file relocation.
 file(GLOB_RECURSE KEEPERFX_SOURCES_C   CONFIGURE_DEPENDS "src/*.c")
 file(GLOB_RECURSE KEEPERFX_SOURCES_CXX CONFIGURE_DEPENDS "src/*.cpp")
 

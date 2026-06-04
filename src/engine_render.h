@@ -116,6 +116,8 @@ extern long view_width_over_2;
 extern long z_threshold_near;
 extern long split_2;
 extern long fade_max;
+/** Fog-of-war lighting lookup table. Set by engine init after table load. */
+extern unsigned char *render_fade_tables;
 
 extern short mx;
 extern short my;
