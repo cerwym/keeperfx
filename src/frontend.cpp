@@ -2029,9 +2029,9 @@ int create_button(struct GuiMenu *gmnu, struct GuiButtonInit *gbinit, int units_
     }
     if (gbtn->gbtype == LbBtnT_RadioBtn)
     {
-        struct TextScrollWindow *scrollwnd;
-        scrollwnd = (struct TextScrollWindow *)gbtn->content.ptr;
-        if ((scrollwnd != NULL) && (scrollwnd->text[0] == 1))
+        unsigned char *rbstate;
+        rbstate = (unsigned char *)gbtn->content.ptr;
+        if ((rbstate != NULL) && (*rbstate == 1))
         {
             gbtn->button_state_left_pressed = 1;
             gbtn->button_state_right_pressed = 0;
@@ -2225,6 +2225,56 @@ MenuNumber create_menu(struct GuiMenu *gmnu)
     callback = amnu->create_cb;
     if (callback != NULL)
         callback(amnu);
+
+    // Some static GuiButtonInit content pointers reference game fields.
+    // Ensure they are bound after runtime game state exists.
+    if (gmnu->ident == GMnu_AUTOPILOT)
+    {
+        for (i = 0; gmnu->buttons[i].gbtype != -1; i++)
+        {
+            struct GuiButtonInit *btn = &gmnu->buttons[i];
+            if ((btn->gbtype == LbBtnT_RadioBtn) && (btn->click_event == gui_set_autopilot))
+            {
+                switch (btn->btype_value)
+                {
+                case 0:
+                    btn->content.ptr = &game.comp_player_aggressive;
+                    break;
+                case 1:
+                    btn->content.ptr = &game.comp_player_defensive;
+                    break;
+                case 2:
+                    btn->content.ptr = &game.comp_player_construct;
+                    break;
+                case 3:
+                    btn->content.ptr = &game.comp_player_creatrsonly;
+                    break;
+                default:
+                    break;
+                }
+            }
+        }
+    }
+    else if (gmnu->ident == GMnu_VIDEO)
+    {
+        for (i = 0; gmnu->buttons[i].gbtype != -1; i++)
+        {
+            struct GuiButtonInit *btn = &gmnu->buttons[i];
+            if (btn->click_event == gui_video_shadows)
+                btn->content.ptr = &video_shadows;
+            else if (btn->click_event == gui_video_view_distance_level)
+                btn->content.ptr = &video_view_distance_level;
+            else if (btn->click_event == gui_video_rotate_mode)
+                btn->content.ptr = &settings.video_rotate_mode;
+            else if (btn->click_event == gui_video_cluedo_mode)
+                btn->content.ptr = &video_cluedo_mode;
+            else if (btn->click_event == gui_video_gamma_correction)
+                btn->content.ptr = &video_gamma_correction;
+            else if (btn->click_event == gui_video_renderer)
+                btn->content.ptr = &video_renderer;
+        }
+    }
+
     btninit = gmnu->buttons;
     for (i=0; btninit[i].gbtype != -1; i++)
     {
