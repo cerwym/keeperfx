@@ -67,6 +67,7 @@
 #include "custom_sprites.h"
 #include "keeperfx.hpp"
 #include "renderer/RendererManager.h"
+#include "renderer/RendMenuOverlay.h"
 #include "kfx/profiling/KfxProfilingC.h"
 #include "gui/gui_bridge.h"
 #include "post_inc.h"
@@ -532,13 +533,16 @@ void redraw_creature_view(void)
         draw_whole_status_panel();
         UIRenderer_SetLayer(1);  // restore front layer for all other GUI draws
     }
-    draw_gui();
-    if ((game.operation_flags & GOF_ShowGui) != 0) {
-        draw_overlay_compass(player->minimap_pos_x, player->minimap_pos_y);
+    TbBool menu_open = RendMenu_IsOpen();
+    if (!menu_open) {
+        draw_gui();
+        if ((game.operation_flags & GOF_ShowGui) != 0) {
+            draw_overlay_compass(player->minimap_pos_x, player->minimap_pos_y);
+        }
+        message_draw();
+        draw_tooltip();
     }
-    message_draw();
     gui_draw_all_boxes();
-    draw_tooltip();
     struct CreatureControl* cctrl = creature_control_get_from_thing(thing);
     if (!creature_control_invalid(cctrl)) {
         draw_creature_view_icons(thing);
@@ -586,21 +590,28 @@ void redraw_frontview(void)
 // Draws 2D elements on top of 3D view, like spell cursor. Called from redraw_isometric_view() and redraw_frontview()
 // after 3D rendering is done.  
 void draw_2d_elements(struct PlayerInfo* player) {
+    TbBool menu_open = RendMenu_IsOpen();
     if (flag_is_set(game.operation_flags, GOF_ShowGui)) {
         UIRenderer_SetLayer(0);  // sidebar background must land before the staging blit
         draw_whole_status_panel();
         UIRenderer_SetLayer(1);  // restore front layer for all other GUI draws
     }
-    draw_gui();
-    if (flag_is_set(game.operation_flags, GOF_ShowGui)) {
-        draw_overlay_compass(player->minimap_pos_x, player->minimap_pos_y);
+    /* Active-menu buttons, event briefings and compass labels are all text-IR
+       draws that float above our solid-box backgrounds.  Suppress everything
+       except the sidebar sprites when the full-screen overlay is up. */
+    if (!menu_open) {
+        draw_gui();
+        if (flag_is_set(game.operation_flags, GOF_ShowGui)) {
+            draw_overlay_compass(player->minimap_pos_x, player->minimap_pos_y);
+        }
+        message_draw();
+        draw_tooltip();
     }
-    message_draw();
     draw_power_hand();
-    draw_tooltip();
     if (should_render_ui()) {
         gui_draw_all_boxes();
     }
+    RendMenu_Draw();
 }
 
 /**
@@ -973,7 +984,7 @@ void redraw_display(void)
         draw_consolelog();
     }
 
-    if (((game.operation_flags & GOF_Paused) != 0) && ((game.operation_flags & GOF_WorldInfluence) == 0) && !unpausing_in_progress)
+    if (((game.operation_flags & GOF_Paused) != 0) && ((game.operation_flags & GOF_WorldInfluence) == 0) && !unpausing_in_progress && !RendMenu_IsOpen())
     {
           LbTextSetFont(winfont);
           const char * text = get_string(GUIStr_PausedMsg);

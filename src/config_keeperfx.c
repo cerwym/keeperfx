@@ -124,6 +124,7 @@ const struct NamedCommand renderer_zoom_box_mode_names[] = {
   };
 
 int cfg_renderer_type = RENDERER_AUTO;
+TbBool cfg_renderer_menu_pause = 1;
 
 const struct NamedCommand atmos_volume[] = {
   {"LOW",     64},
@@ -189,6 +190,7 @@ const struct NamedCommand conf_commands[] = {
   {"RENDERER_SHADE_GAMMA"          , 47},
   {"RENDERER_TILE_FILTER"          , 48},
   {"ZOOM_BOX_MODE"                 , 49},
+  {"RENDERER_MENU_PAUSE"           , 50},
   {NULL,                   0},
   };
 
@@ -1034,6 +1036,13 @@ static void load_file_configuration(const char *fname, const char *sname, const 
               g_renderer_settings.zoom_box_mode = i;
           }
           break;
+      case 50: // RENDERER_MENU_PAUSE
+      {
+          char val_buf[16];
+          if (get_conf_parameter_single(buf,&pos,len,val_buf,sizeof(val_buf)) > 0)
+              cfg_renderer_menu_pause = (atoi(val_buf) != 0);
+          break;
+      }
       case ccr_comment:
           break;
       case ccr_endOfFile:
