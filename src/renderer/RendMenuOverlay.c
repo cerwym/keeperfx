@@ -427,7 +427,49 @@ void RendMenu_Draw(void)
        so we must control this explicitly throughout. */
     LbTextSetWindow(0, 0, sw, sh);
 
-    /* Base scale: 16 units = 1px at 400-line reference height */
+    /* --- Advance preview animation (wall-clock delta, independent of game pause) --- */
+    {
+        TbClockMSec now_ms = LbTimerClock();
+        float dt_ms = 0.0f;
+        if (s_state.preview_tick_ms != 0 && now_ms > s_state.preview_tick_ms)
+            dt_ms = (float)(now_ms - s_state.preview_tick_ms);
+        if (dt_ms > 50.0f) dt_ms = 50.0f; /* cap: alt-tab / sleep spikes */
+        s_state.preview_tick_ms = now_ms;
+
+        if (s_state.preview_hold_ms > 0.0f || s_state.preview_frac > 0.0f)
+        {
+            if (s_state.preview_hold_ms > 0.0f)
+            {
+                float frac_before = s_state.preview_frac;
+                s_state.preview_frac += dt_ms / PREVIEW_FADEIN_MS;
+                if (s_state.preview_frac >= 1.0f)
+                {
+                    s_state.preview_frac = 1.0f;
+                    /* Only charge hold for the portion of dt after reaching 1.0 */
+                    float fade_used = (1.0f - frac_before) * PREVIEW_FADEIN_MS;
+                    float hold_dt   = dt_ms - fade_used;
+                    if (hold_dt > 0.0f)
+                    {
+                        s_state.preview_hold_ms -= hold_dt;
+                        if (s_state.preview_hold_ms < 0.0f)
+                            s_state.preview_hold_ms = 0.0f;
+                    }
+                }
+            }
+            else
+            {
+                s_state.preview_frac -= dt_ms / PREVIEW_FADEIN_MS;
+                if (s_state.preview_frac < 0.0f)
+                    s_state.preview_frac = 0.0f;
+            }
+        }
+    }
+
+    /* ease_f drives all alpha crossfades; text uses a hard threshold at 0.5 */
+    float ease_f      = ease_in_out(s_state.preview_frac);
+    float panel_alpha = 1.0f - ease_f;   /* full-panel multiplier: 1→0 */
+    int draw_full     = (ease_f < 0.5f); /* show full-panel text */
+    int draw_compact  = (ease_f > 0.0f); /* show compact bar */
     int ups = 16 * sh / 400;
     if (ups < 8)  ups = 8;
     if (ups > 48) ups = 48;
@@ -456,11 +498,11 @@ void RendMenu_Draw(void)
     int ec = 0;
     const RendMenuEntry* entries = RendMenu_GetEntries(&ec);
 
-    /* --- Full-screen dark background --- */
-    UIRenderer_SubmitSolidBoxAlpha(0, 0, sw, sh, 0, 0.88f);
+    /* --- Full-screen dark background (fades out during preview) --- */
+    UIRenderer_SubmitSolidBoxAlpha(0, 0, sw, sh, 0, 0.88f * panel_alpha);
 
     /* --- Tab bar --- */
-    UIRenderer_SubmitSolidBoxAlpha(0, 0, sw, tab_bar_h, 0, 0.55f);
+    UIRenderer_SubmitSolidBoxAlpha(0, 0, sw, tab_bar_h, 0, 0.55f * panel_alpha);
 
     /* Compute how many tabs fit: reserve room for < / > arrows */
     int arrow_w     = lh + 4 * ups / 16;   /* width of one arrow glyph + padding */
@@ -482,13 +524,13 @@ void RendMenu_Draw(void)
     int tab_slot_w = (tabs_vis > 0) ? bar_inner_w / tabs_vis : bar_inner_w;
 
     /* < nav arrow */
-    if (show_left)
+    if (draw_full && show_left)
     {
         int eff = style_begin(RMSTYLE_NAV_ARROW, ups);
         LbTextDrawResized(0, 4 * ups / 16, eff, "<");
     }
     /* > nav arrow */
-    if (show_right)
+    if (draw_full && show_right)
     {
         int eff = style_begin(RMSTYLE_NAV_ARROW, ups);
         LbTextDrawResized(sw - arrow_w, 4 * ups / 16, eff, ">");
@@ -500,7 +542,7 @@ void RendMenu_Draw(void)
         int is_active = (t == s_state.current_tab);
 
         if (is_active)
-            UIRenderer_SubmitSolidBoxAlpha(tx, 0, tab_slot_w, tab_bar_h, 15, 0.25f);
+            UIRenderer_SubmitSolidBoxAlpha(tx, 0, tab_slot_w, tab_bar_h, 15, 0.25f * panel_alpha);
 
         RendMenuStyleId tab_style = is_active ? RMSTYLE_TAB_ACTIVE : RMSTYLE_TAB_INACTIVE;
         int eff_ups = style_begin(tab_style, ups);
@@ -511,13 +553,16 @@ void RendMenu_Draw(void)
         /* Clamp relative x so long names start at left edge of inner area */
         int rel_x   = (inner_w - label_w) / 2;
         if (rel_x < 0) rel_x = 0;
-        LbTextSetWindow(tx + pad, 4 * ups / 16, inner_w, lh + 4 * ups / 16);
-        LbTextDrawResized(rel_x, 0, eff_ups, tabs[t].name);
+        if (draw_full)
+        {
+            LbTextSetWindow(tx + pad, 4 * ups / 16, inner_w, lh + 4 * ups / 16);
+            LbTextDrawResized(rel_x, 0, eff_ups, tabs[t].name);
+        }
     }
     LbTextSetWindow(0, 0, sw, sh);
 
     /* --- Entry rows for current tab --- */
-    if (s_state.current_tab < tc)
+    if (draw_full && s_state.current_tab < tc)
     {
         const RendMenuTab* tab = &tabs[s_state.current_tab];
         int end = s_state.scroll_top + vis;
@@ -531,7 +576,7 @@ void RendMenu_Draw(void)
             int is_available = (e->is_enabled == NULL || e->is_enabled());
 
             if (is_focused)
-                UIRenderer_SubmitSolidBoxAlpha(mx, ry, pw, row_h, 15, 0.22f);
+                UIRenderer_SubmitSolidBoxAlpha(mx, ry, pw, row_h, 15, 0.22f * panel_alpha);
 
             /* Cursor glyph */
             if (is_focused)
@@ -587,15 +632,69 @@ void RendMenu_Draw(void)
         }
     }
 
-    /* --- Description bar --- */
+    /* --- Description bar (fades with full panel) --- */
     int desc_y = my + ph - desc_h;
-    UIRenderer_SubmitSolidBoxAlpha(mx, desc_y, pw, desc_h, 0, 0.6f);
-    const RendMenuEntry* focused = get_focused_entry();
-    if (focused && focused->desc)
+    UIRenderer_SubmitSolidBoxAlpha(mx, desc_y, pw, desc_h, 0, 0.6f * panel_alpha);
+    if (draw_full)
     {
-        int eff = style_begin(RMSTYLE_DESC, ups);
-        LbTextDrawResized(mx + 4 * ups / 16, desc_y + 2 * ups / 16, eff,
-                          focused->desc);
+        const RendMenuEntry* focused_e = get_focused_entry();
+        if (focused_e && focused_e->desc)
+        {
+            int eff = style_begin(RMSTYLE_DESC, ups);
+            LbTextDrawResized(mx + 4 * ups / 16, desc_y + 2 * ups / 16, eff,
+                              focused_e->desc);
+        }
+    }
+
+    /* --- Compact preview bar (fades in when a value is adjusted) --- */
+    if (draw_compact && s_state.preview_entry_abs < ec)
+    {
+        const RendMenuEntry* pe = &entries[s_state.preview_entry_abs];
+        int pad   = 6 * ups / 16;
+        int bar_w = sw * 3 / 4;
+        if (bar_w < lh * 8) bar_w = lh * 8;
+        if (bar_w > sw - 2 * pad) bar_w = sw - 2 * pad;
+        int bar_h = row_h + 2 * pad;
+        int bar_x = (sw - bar_w) / 2;
+        int bar_y = (sh - bar_h) / 2;
+
+        UIRenderer_SubmitSolidBoxAlpha(bar_x, bar_y, bar_w, bar_h, 0, 0.88f * ease_f);
+
+        if (ease_f > 0.3f)
+        {
+            int ry = bar_y + pad;
+
+            /* Label */
+            int eff_lbl = style_begin(RMSTYLE_LABEL_FOCUSED, ups);
+            LbTextDrawResized(bar_x + pad, ry + ups / 16, eff_lbl, pe->label);
+
+            /* < value > right-aligned in bar */
+            char valbuf[48];
+            entry_value_str(pe, valbuf, sizeof(valbuf));
+            if (valbuf[0] != '\0')
+            {
+                int eff_arr = style_begin(RMSTYLE_ARROW, ups);
+                int space_w = LbTextStringWidthM(" ", eff_arr);
+                int arr_w   = LbTextStringWidthM("<", eff_arr) + space_w;
+
+                int eff_val = style_begin(RMSTYLE_VALUE_FOCUSED, ups);
+                int val_w   = LbTextStringWidthM(valbuf, eff_val);
+
+                int total  = arr_w + val_w + arr_w;
+                int base_x = bar_x + bar_w - total - pad;
+                int text_y = ry + ups / 16;
+
+                style_begin(RMSTYLE_ARROW, ups);
+                LbTextDrawResized(base_x, text_y, eff_arr, "<");
+
+                style_begin(RMSTYLE_VALUE_FOCUSED, ups);
+                LbTextDrawResized(base_x + arr_w, text_y, eff_val, valbuf);
+
+                style_begin(RMSTYLE_ARROW, ups);
+                LbTextDrawResized(base_x + arr_w + val_w + space_w,
+                                  text_y, eff_arr, ">");
+            }
+        }
     }
 
     /* --- Restore all text rendering state --- */
