@@ -194,6 +194,26 @@ void PlatformLinux::SetArgv(int argc, char** argv)
 const char* PlatformLinux::GetDataPath() const { return data_path_; }
 const char* PlatformLinux::GetSavePath() const { return save_path_; }
 
+const char* PlatformLinux::GetUserPrefDir()
+{
+    if (pref_path_[0] != '\0')
+        return pref_path_;
+    char* sdl_path = SDL_GetPrefPath("keeperfx", "keeperfx");
+    if (sdl_path)
+    {
+        snprintf(pref_path_, sizeof(pref_path_), "%s", sdl_path);
+        size_t len = strlen(pref_path_);
+        if (len > 0 && pref_path_[len - 1] == '/')
+            pref_path_[len - 1] = '\0';
+        SDL_free(sdl_path);
+    }
+    else
+    {
+        snprintf(pref_path_, sizeof(pref_path_), "%s", data_path_);
+    }
+    return pref_path_;
+}
+
 // ----- CDROM / Redbook audio -----
 
 void PlatformLinux::SetRedbookVolume(SoundVolume)

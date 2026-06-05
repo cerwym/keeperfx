@@ -47,6 +47,7 @@ public:
     void        SetArgv(int argc, char** argv) override;
     const char* GetDataPath() const override;
     const char* GetSavePath() const override;
+    const char* GetUserPrefDir() override { return "ux0:data/keeperfx"; }
 
     void   SetRedbookVolume(SoundVolume vol) override;
     TbBool PlayRedbookTrack(int track) override;
