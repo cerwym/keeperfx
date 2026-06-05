@@ -130,6 +130,7 @@
 #include "config_keeperfx.h"
 #include "platform/PlatformManager.h"
 #include "renderer/RendererManager.h"
+#include "renderer/RendererSettings.h"
 #include "gui/gui_bridge.h"
 #include "game_legacy.h"
 #include "room_list.h"
@@ -947,6 +948,9 @@ short setup_game(void)
       }
   }
   VITA_TICK("RendererInit");
+
+  // Load user renderer preferences — wins over keeperfx.cfg defaults.
+  RendererSettings_Load();
 
   if (flag_is_set(start_params.startup_flags, SFlg_Legal))
   {

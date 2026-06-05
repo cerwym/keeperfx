@@ -247,6 +247,25 @@ extern RendererSettings g_renderer_settings;
  *  Defaults preserve exact original software-renderer visual behaviour. */
 void RendererSettings_Reset(void);
 
+/** Clamp all fields in g_renderer_settings to their valid ranges.
+ *  Call after loading from file or receiving console input to prevent
+ *  out-of-range enum values from causing array-index or UB issues.
+ *  Also rounds float-backed boolean fields (shade_fullbright) to 0.0f/1.0f. */
+void RendererSettings_Sanitize(void);
+
+/** Load renderer preferences from the platform user-pref directory.
+ *  File: <GetUserPrefDir()>/renderer_prefs.ini
+ *  Missing file is silently ignored (first run).  Only fields present in the
+ *  file are updated; absent fields retain whatever value Reset() or keeperfx.cfg
+ *  left them at.  Calls RendererApplySettings() on success. */
+void RendererSettings_Load(void);
+
+/** Save the current g_renderer_settings to the platform user-pref directory.
+ *  File: <GetUserPrefDir()>/renderer_prefs.ini
+ *  Call this whenever the player confirms a change via the settings menu, and
+ *  on clean game exit. */
+void RendererSettings_Save(void);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
