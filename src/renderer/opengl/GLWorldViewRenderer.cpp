@@ -1414,7 +1414,10 @@ void GLWorldViewRenderer::BeginWorldPass(unsigned char* framebuf, int pitch,
                                           int w, int h, int vp_x, int vp_y)
 {
     KFX_ZONE("WVR::BeginWorldPass");
-    ASSERT_GAME_THREAD();
+    // Normal world passes are prepared on the game thread.
+    // PiP capture calls this from EndFrame_GL() on the render thread.
+    if (!m_pip_capture)
+        ASSERT_GAME_THREAD();
 
     // Since the render thread no longer accesses poly_pool (bucket bucket-walks moved
     // to the game thread in Phase 1), no fence wait is needed here.
