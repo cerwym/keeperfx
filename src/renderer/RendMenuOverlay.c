@@ -13,6 +13,7 @@
 #include "renderer/RendererManager.h"
 #include "bflib_sprfnt.h"
 #include "bflib_keybrd.h"
+#include "bflib_datetm.h"      /* LbTimerClock, TbClockMSec */
 #include "frontend.h"          /* winfont, frontend_font */
 #include "game_legacy.h"       /* game.operation_flags, GOF_Paused */
 #include "config_keeperfx.h"   /* cfg_renderer_menu_pause */
@@ -94,6 +95,20 @@ static int style_begin(RendMenuStyleId id, int base_ups)
 }
 
 /* ---------------------------------------------------------------------------
+ * Preview animation constants
+ * Mirrors Ironwail's settings-preview behaviour: when a value changes the
+ * full panel fades out and a compact bar fades in, holds, then reverses.
+ * All times are in milliseconds (wall-clock via LbTimerClock).
+ * ------------------------------------------------------------------------- */
+#define PREVIEW_FADEIN_MS  125.0f   /* fade-in / fade-out duration */
+#define PREVIEW_HOLD_MS   1250.0f   /* hold duration at peak       */
+
+static float ease_in_out(float t)
+{
+    return t * t * (3.0f - 2.0f * t);
+}
+
+/* ---------------------------------------------------------------------------
  * State
  * ------------------------------------------------------------------------- */
 
@@ -104,6 +119,12 @@ typedef struct {
     int scroll_top;      /* first visible entry within current tab          */
     int tab_scroll;      /* index of leftmost visible tab in the tab bar    */
     int paused_game;     /* 1 if we set GOF_Paused on open                  */
+
+    /* Preview animation (see PREVIEW_* constants above) */
+    float        preview_frac;       /* 0.0=full panel, 1.0=compact bar only  */
+    float        preview_hold_ms;    /* remaining hold time in ms             */
+    int          preview_entry_abs;  /* absolute entry index being previewed  */
+    TbClockMSec  preview_tick_ms;    /* wall-clock ms at last draw, 0=unset   */
 } RendMenuState;
 
 static RendMenuState s_state;
@@ -249,6 +270,24 @@ static void entry_value_str(const RendMenuEntry* e, char* buf, int buflen)
     }
 }
 
+/** Trigger the compact preview bar for the currently focused entry. */
+static void preview_set(void)
+{
+    const RendMenuEntry* e = get_focused_entry();
+    int has_value = (e->kind == RMENU_WIDGET_TOGGLE   ||
+                     e->kind == RMENU_WIDGET_TOGGLE_F ||
+                     e->kind == RMENU_WIDGET_CYCLE     ||
+                     e->kind == RMENU_WIDGET_SLIDER_F);
+    if (!has_value)
+        return;
+    int tc = 0;
+    const RendMenuTab* tabs = RendMenu_GetTabs(&tc);
+    if (s_state.current_tab < tc)
+        s_state.preview_entry_abs = tabs[s_state.current_tab].first_entry_idx
+                                  + s_state.focused_in_tab;
+    s_state.preview_hold_ms = PREVIEW_HOLD_MS;
+}
+
 /* ---------------------------------------------------------------------------
  * Public API — state machine
  * ------------------------------------------------------------------------- */
@@ -263,6 +302,10 @@ void RendMenu_Open(void)
     s_state.scroll_top     = 0;
     s_state.tab_scroll     = 0;
     s_state.paused_game    = 0;
+    s_state.preview_frac      = 0.0f;
+    s_state.preview_hold_ms   = 0.0f;
+    s_state.preview_entry_abs = 0;
+    s_state.preview_tick_ms   = 0;
 
     if (cfg_renderer_menu_pause &&
         (game.operation_flags & GOF_Paused) == 0)
@@ -277,6 +320,9 @@ void RendMenu_Close(void)
     if (!s_state.is_open)
         return;
     s_state.is_open = 0;
+    s_state.preview_frac    = 0.0f;
+    s_state.preview_hold_ms = 0.0f;
+    s_state.preview_tick_ms = 0;
 
     if (s_state.paused_game)
     {
