@@ -25,7 +25,6 @@
 #include "bflib_video.h"
 #include "bflib_keybrd.h"
 #include "bflib_datetm.h"
-#include "bflib_video.h"
 
 #include "vidmode.h"
 #include "kjm_input.h"

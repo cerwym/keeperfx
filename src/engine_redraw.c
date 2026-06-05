@@ -56,7 +56,6 @@
 #include "config.h"
 #include "config_strings.h"
 #include "config_terrain.h"
-#include "config_players.h"
 #include "config_magic.h"
 #include "config_spritecolors.h"
 #include "magic_powers.h"
