@@ -383,14 +383,18 @@ int RendMenu_HandleKey(int kc)
         return 1;
 
     case KC_LEFT:
-        if (focused->is_enabled == NULL || focused->is_enabled())
+        if (focused->is_enabled == NULL || focused->is_enabled()) {
             entry_adjust(focused, -1);
+            preview_set();
+        }
         return 1;
 
     case KC_RIGHT:
     case KC_RETURN:
-        if (focused->is_enabled == NULL || focused->is_enabled())
+        if (focused->is_enabled == NULL || focused->is_enabled()) {
             entry_adjust(focused, +1);
+            preview_set();
+        }
         return 1;
 
     default:
