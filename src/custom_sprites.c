@@ -610,6 +610,9 @@ void init_custom_sprites(LevelNumber lvnum)
             load_sprites_for_mod_list(lvnum, mods_conf.after_map_item, mods_conf.after_map_cnt);
     }
 #endif
+    // Ensure atlas is rebuilt after incremental population, even if a drain
+    // fired between SpriteSheetMgr_Free and here.
+    SpriteSheetMgr_ScheduleRebuild();
 }
 
 /**

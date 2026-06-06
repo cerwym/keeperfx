@@ -33,6 +33,7 @@
 #include <stdint.h>
 
 #ifdef __cplusplus
+#include <atomic>
 
 class FontManager {
 public:
@@ -55,15 +56,16 @@ public:
     void BumpGeneration();
 
     /** Current generation value — snapshot into queued text commands. */
-    uint32_t GetGeneration() const { return m_generation; }
+    uint32_t GetGeneration() const { return m_generation.load(std::memory_order_relaxed); }
+
+    static constexpr int kMaxFonts = 12;
 
 private:
     struct Entry { TbSpriteSheet** slot; const char* name; };
-    static constexpr int kMaxFonts = 8;
 
     Entry    m_entries[kMaxFonts] {};
     int      m_count      = 0;
-    uint32_t m_generation = 1;  // 0 is reserved as "always stale"
+    std::atomic<uint32_t> m_generation {1};  // 0 is reserved as "always stale"
 };
 
 #endif // __cplusplus

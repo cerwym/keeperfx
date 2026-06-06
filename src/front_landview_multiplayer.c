@@ -427,13 +427,13 @@ TbBool frontnetmap_load(void)
         SpriteSheetMgr_Load(&map_flag, "ldata/netflag_ens.dat", "ldata/netflag_ens.tab");
         break;
     }
-    map_font = load_spritesheet("ldata/netfont.dat", "ldata/netfont.tab");
+    FontMgr_Load(&map_font, "ldata/netfont.dat", "ldata/netfont.tab");
     prepare_file_path_buf(hand_data_path, sizeof(hand_data_path), FGrp_LandView, "maphand.dat");
     prepare_file_path_buf(hand_index_path, sizeof(hand_index_path), FGrp_LandView, "maphand.tab");
     SpriteSheetMgr_Load(&map_hand, hand_data_path, hand_index_path);
     if (!map_flag || !map_font || !map_hand) {
         ERRORLOG("Unable to load MAP SCREEN sprites");
-        free_font(&map_font);
+        FontMgr_Free(&map_font);
         SpriteSheetMgr_Free(&map_flag);
         SpriteSheetMgr_Free(&map_hand);
         unload_map_and_window();

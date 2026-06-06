@@ -64,8 +64,15 @@ extern "C" {
     extern struct TbSpriteSheet *frontend_font[4]; // FRONTEND_FONTS_COUNT
     // from front_credits.h
     extern struct TbSpriteSheet *frontstory_font;
+    // from front_landview.c
+    extern struct TbSpriteSheet *map_font;
+    extern struct TbSpriteSheet *map_hand;
+    // from front_torture_data.cpp / front_torture.c
+    extern struct TbSpriteSheet *fronttor_sprites;
+    extern struct DoorDesc doors[9]; // TORTURE_DOORS_COUNT
 }
 #include "thing_creature.h"    // swipe_sprites
+#include "front_torture.h"     // fronttorture_sprites, doors[]
 #include "renderer/RenderPass_C.h"
 #include <unordered_map>
 #include "post_inc.h"
@@ -523,12 +530,20 @@ int RendererInit(RendererType type)
         ssmgr.Register(&pointer_sprites,   "pointer_sprites");
         ssmgr.Register(&frontend_sprite,   "frontend_sprite");
         ssmgr.Register(&map_flag,          "map_flag");
+        ssmgr.Register(&map_hand,          "map_hand");
         ssmgr.Register(&swipe_sprites,     "swipe_sprites");
+        ssmgr.Register(&fronttor_sprites,  "fronttor_sprites");
+        for (int i = 0; i < TORTURE_DOORS_COUNT; ++i) {
+            static char door_names[TORTURE_DOORS_COUNT][16]; // stable storage for name strings
+            if (!door_names[i][0]) snprintf(door_names[i], sizeof(door_names[i]), "door[%d]", i);
+            ssmgr.Register(&doors[i].sprites, door_names[i]);
+        }
     }
     {
         auto& fmgr = FontManager::Get();
         fmgr.Register(&winfont,           "winfont");
         fmgr.Register(&font_sprites,      "font_sprites");
+        fmgr.Register(&map_font,          "map_font");
         fmgr.Register(&frontend_font[0],  "frontend_font[0]");
         fmgr.Register(&frontend_font[1],  "frontend_font[1]");
         fmgr.Register(&frontend_font[2],  "frontend_font[2]");
@@ -1253,6 +1268,9 @@ void RendererApplySettings(const RendererSettings* s)
     // If the atlas colour format changed, rebuild the sprite atlas immediately
     // so the new format takes effect without a restart.
     if (g_renderer_settings.palette_mode != prev_palette_mode) {
+        // Palette format changed — rebuild the atlas under the new format, and
+        // invalidate font caches / GUI state as if sprites were reloaded.
+        SpriteSheetManager::Get().ScheduleRebuild();
         RendererNotifySpritesReloaded();
     }
 

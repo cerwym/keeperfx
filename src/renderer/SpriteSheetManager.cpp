@@ -40,11 +40,18 @@ bool SpriteSheetManager::Load(TbSpriteSheet** slot,
 {
     KFX_ZONE_COLOR("SpriteSheetMgr::Load", KFX_COLOR_RENDER_CPU);
 
+#ifdef BFDEBUG_LEVEL
+    // Guard against callers that bypass Register() — would cause silent atlas misses.
+    bool found = false;
+    for (int i = 0; i < m_count; ++i) if (m_entries[i].slot == slot) { found = true; break; }
+    if (!found) WARNLOG("SpriteSheetManager::Load: slot %p not registered — atlas rebuild will miss it", (void*)slot);
+#endif
+
     if (*slot)
         free_spritesheet(slot);
 
     *slot = load_spritesheet(dat_path, tab_path);
-    m_rebuild_pending = true; // always — even on failure, the freed entry must drop
+    m_rebuild_pending = true;
 
     if (!*slot) {
         ERRORLOG("SpriteSheetManager: failed to load '%s'", dat_path);
@@ -57,6 +64,12 @@ bool SpriteSheetManager::Load(TbSpriteSheet** slot,
 void SpriteSheetManager::Free(TbSpriteSheet** slot)
 {
     KFX_ZONE_COLOR("SpriteSheetMgr::Free", KFX_COLOR_RENDER_CPU);
+
+#ifdef BFDEBUG_LEVEL
+    bool found = false;
+    for (int i = 0; i < m_count; ++i) if (m_entries[i].slot == slot) { found = true; break; }
+    if (!found) WARNLOG("SpriteSheetManager::Free: slot %p not registered", (void*)slot);
+#endif
 
     if (!*slot) return;
     free_spritesheet(slot);

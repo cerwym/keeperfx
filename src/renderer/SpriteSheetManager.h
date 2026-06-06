@@ -70,7 +70,7 @@ public:
     /** Returns true if GUI reinit is needed; resets the flag.  Consumes once. */
     bool ConsumeGUIDirty() { bool v = m_gui_dirty; m_gui_dirty = false; return v; }
 
-    static constexpr int kMaxSheets = 16;
+    static constexpr int kMaxSheets = 24;
 
 private:
     struct Entry { TbSpriteSheet** slot; const char* name; };

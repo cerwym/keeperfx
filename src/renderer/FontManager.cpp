@@ -79,8 +79,8 @@ void FontManager::FreeAll()
 
 void FontManager::BumpGeneration()
 {
-    ++m_generation;
-    KFX_PLOT("FontGeneration", (int64_t)m_generation);
+    uint32_t gen = m_generation.fetch_add(1, std::memory_order_relaxed) + 1;
+    KFX_PLOT("FontGeneration", (int64_t)gen);
 }
 
 /******************************************************************************/
