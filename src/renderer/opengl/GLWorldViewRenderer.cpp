@@ -2065,7 +2065,8 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl, int screen_w
 void GLWorldViewRenderer::DrawIsometricView()
 {
     KFX_ZONE("WVR::DrawIsometricView");
-    ASSERT_GAME_THREAD();
+    ASSERT_GAME_THREAD(); // PIP will be broken until I can fix the thread violation
+
     if (!m_initialized) {
         ERRORLOG("GLWorldViewRenderer asked to draw ISO but not initialised — frame dropped");
         return;
@@ -2075,6 +2076,7 @@ void GLWorldViewRenderer::DrawIsometricView()
     // otherwise use the normal game-thread write buffers.
     if (!m_pip_capture && !m_world_write_cmds)
         return;
+
 
     std::vector<DrawCmd>&        draw_cmds   = m_pip_capture ? m_pip_draw_cmds      : m_draw_cmds;
     std::vector<FlatPolyVertex>& fpverts     = m_pip_capture ? m_pip_flatpoly_verts : m_world_write_cmds->flat_poly_verts;
