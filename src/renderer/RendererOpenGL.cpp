@@ -857,8 +857,7 @@ void RendererOpenGL::EndFrame()
     }
 
     // Signal the render thread to execute EndFrame_GL() (GL submission + swap).
-    // Phase 3C: asynchronous — game thread returns immediately after signalling.
-    // The wait for completion has moved to the TOP of this function.
+    // Phase 3C: asynchronous by default.
     m_render_thread.Signal();
 
     // Reset the frame-begun flag HERE (game thread).
@@ -1226,7 +1225,7 @@ void RendererOpenGL::EndFrame_GL()
     // demand) then submitted to GLUIRenderer for compositing.  Queue cleared.
     if (m_world_renderer && !m_rt_pip_queue.empty())
     {
-        IUIRenderer* ui = RendererGetUIRenderer();
+        GLUIRenderer* pip_ui = m_gl_ui_renderer;
 
         for (std::size_t qi = 0; qi < m_rt_pip_queue.size(); ++qi)
         {
@@ -1241,58 +1240,19 @@ void RendererOpenGL::EndFrame_GL()
             if (!fbo.fbo)
                 continue;
 
-            SYNCDBG(7, "PiP[%zu]: fbo=%u pos=(%d,%d) size=(%dx%d) cam=(%d,%d,%d)",
-                    qi, fbo.fbo, pcmd.x, pcmd.y, pw, ph,
-                    (int)pcmd.cam_copy.mappos.x.val,
-                    (int)pcmd.cam_copy.mappos.y.val,
-                    (int)pcmd.cam_copy.zoom);
-
-            const int32_t saved_vw = vec_window_width;
-            const int32_t saved_vh = vec_window_height;
-            vec_window_width  = pw;
-            vec_window_height = ph;
-
-            TbGraphicsWindow saved_ewnd;
-            store_engine_window(&saved_ewnd, 1);
-            setup_engine_window(0, 0, pw, ph);
-
-            if (ui)
-                ui->BeginPiPSprites();
-
-            m_world_renderer->BeginPiPCapture();
-            m_world_renderer->BeginWorldPass(nullptr, 0, pw, ph, 0, 0);
-
-            // Save projection globals so main-view mouse→world unprojection is unaffected.
-            const Offset saved_vert[3] = { vert_offset[0], vert_offset[1], vert_offset[2] };
-            const Offset saved_hori[3] = { hori_offset[0], hori_offset[1], hori_offset[2] };
-            const int32_t saved_x_init  = x_init_off;
-            const int32_t saved_y_init  = y_init_off;
-
-            draw_view(const_cast<Camera*>(&pcmd.cam_copy), 0);
-
-            vert_offset[0] = saved_vert[0]; vert_offset[1] = saved_vert[1]; vert_offset[2] = saved_vert[2];
-            hori_offset[0] = saved_hori[0]; hori_offset[1] = saved_hori[1]; hori_offset[2] = saved_hori[2];
-            x_init_off = saved_x_init;
-            y_init_off = saved_y_init;
-
-            setup_engine_window(saved_ewnd.x, saved_ewnd.y,
-                                saved_ewnd.width, saved_ewnd.height);
-            vec_window_width  = saved_vw;
-            vec_window_height = saved_vh;
-
             glDisable(GL_SCISSOR_TEST);
             glBindFramebuffer(GL_FRAMEBUFFER, fbo.fbo);
             glViewport(0, 0, pw, ph);
             glClearColor(KFX_GL_CLEAR_COLOR);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-            m_world_renderer->GPURenderToFBO(pw, ph);
-            if (ui)
-                ui->DrawPiPSprites(pw, ph);
+            m_world_renderer->ExecutePiPCapture(pcmd.world_capture, pw, ph);
+            if (pip_ui)
+                pip_ui->DrawPiPSpriteCapture(pcmd.ui_capture, pw, ph);
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
             glViewport(0, 0, m_rt_frame_state.screen_w, m_rt_frame_state.screen_h);
 
-            if (ui)
-                ui->SubmitFBOQuad(pcmd.x, pcmd.y, pw, ph, static_cast<GpuTextureHandle>(fbo.color_tex), pcmd.clip_radius);
+            if (pip_ui)
+                pip_ui->SubmitFBOQuad(pcmd.x, pcmd.y, pw, ph, static_cast<GpuTextureHandle>(fbo.color_tex), pcmd.clip_radius);
         }
 
         m_rt_pip_queue.clear();
@@ -2135,12 +2095,56 @@ void RendererOpenGL::SubmitZoomBoxTiles(const uint16_t* tile_block_ids, int tile
 
 void RendererOpenGL::SubmitPiPRender(struct Camera* cam, int x, int y, int w, int h)
 {
-    if (!cam) return;
+    ASSERT_GAME_THREAD();
+    if (!cam || !m_world_renderer) return;
+    if (w <= 0 || h <= 0) return;
+
+    KFX_ZONE_COLOR("PiPRender::Capture", KFX_COLOR_RENDER_CPU);
+
     PiPCmd cmd;
-    cmd.cam_copy = *cam;
     cmd.x = x; cmd.y = y; cmd.w = w; cmd.h = h;
     cmd.clip_radius = RendererGetZoomBoxClipRadius();
-    m_pip_queue.push_back(cmd);
+
+    const int32_t saved_vw = vec_window_width;
+    const int32_t saved_vh = vec_window_height;
+
+    TbGraphicsWindow saved_ewnd;
+    store_engine_window(&saved_ewnd, 1);
+    setup_engine_window(0, 0, w, h);
+
+    const Offset saved_vert[3] = { vert_offset[0], vert_offset[1], vert_offset[2] };
+    const Offset saved_hori[3] = { hori_offset[0], hori_offset[1], hori_offset[2] };
+    const int32_t saved_x_init = x_init_off;
+    const int32_t saved_y_init = y_init_off;
+
+    GLUIRenderer* ui = m_gl_ui_renderer;
+    const bool reopen_ui_ir = !RendererIsFadeCachePreserved();
+    if (ui) {
+        ui->SetUICommandBuffers(nullptr);
+        ui->BeginPiPSprites();
+    }
+
+    m_world_renderer->BeginPiPCapture();
+    m_world_renderer->BeginWorldPass(nullptr, 0, w, h, 0, 0);
+    draw_view(cam, 0);
+    cmd.world_capture = m_world_renderer->FinalizePiPCapture();
+
+    if (ui)
+    {
+        cmd.ui_capture = ui->ExtractPiPSprites();
+        if (reopen_ui_ir)
+            ui->SetUICommandBuffers(&m_render_graph.GetUIBuffers());
+    }
+
+    vert_offset[0] = saved_vert[0]; vert_offset[1] = saved_vert[1]; vert_offset[2] = saved_vert[2];
+    hori_offset[0] = saved_hori[0]; hori_offset[1] = saved_hori[1]; hori_offset[2] = saved_hori[2];
+    x_init_off = saved_x_init;
+    y_init_off = saved_y_init;
+    setup_engine_window(saved_ewnd.x, saved_ewnd.y, saved_ewnd.width, saved_ewnd.height);
+    vec_window_width  = saved_vw;
+    vec_window_height = saved_vh;
+
+    m_pip_queue.push_back(std::move(cmd));
 }
 
 void RendererOpenGL::ensure_pip_fbo(std::size_t idx, int w, int h)
@@ -2211,10 +2215,6 @@ void RendererOpenGL::FlushSceneToFBO(int w, int h)
 
     // ── Palette ──────────────────────────────────────────────────────────
     upload_palette_texture();
-
-    // ── 3D world geometry ────────────────────────────────────────────────
-    if (m_world_renderer)
-        m_world_renderer->GPURenderToFBO(w, h);
 
     // ── Raw blit (parchment background image) ────────────────────────────
     if (m_rt_rawblit_pending)

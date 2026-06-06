@@ -1079,7 +1079,7 @@ void GLUIRenderer::DrawFrontOverlay()
 
 void GLUIRenderer::BeginPiPSprites()
 {
-    ASSERT_RENDER_THREAD();
+    ASSERT_GAME_THREAD();
     for (int i = 0; i < 4; ++i) {
         m_pip_quad_wm[i] = (int)m_quads[i].size();
         m_pip_line_wm[i] = (int)m_lines[i].size();
@@ -1087,24 +1087,39 @@ void GLUIRenderer::BeginPiPSprites()
     m_pip_capture_active = true;
 }
 
-void GLUIRenderer::DrawPiPSprites(int pip_w, int pip_h)
+GLUIRenderer::PiPSpriteCapture GLUIRenderer::ExtractPiPSprites()
+{
+    ASSERT_GAME_THREAD();
+    PiPSpriteCapture cap;
+    if (!m_pip_capture_active)
+        return cap;
+
+    for (int i = 0; i < 4; ++i) {
+        if ((int)m_quads[i].size() > m_pip_quad_wm[i]) {
+            cap.quads[i].assign(m_quads[i].begin() + m_pip_quad_wm[i], m_quads[i].end());
+            m_quads[i].erase(m_quads[i].begin() + m_pip_quad_wm[i], m_quads[i].end());
+        }
+        if ((int)m_lines[i].size() > m_pip_line_wm[i]) {
+            cap.lines[i].assign(m_lines[i].begin() + m_pip_line_wm[i], m_lines[i].end());
+            m_lines[i].erase(m_lines[i].begin() + m_pip_line_wm[i], m_lines[i].end());
+        }
+    }
+    m_pip_capture_active = false;
+    return cap;
+}
+
+void GLUIRenderer::DrawPiPSpriteCapture(const PiPSpriteCapture& cap, int pip_w, int pip_h)
 {
     ASSERT_RENDER_THREAD();
-    if (!m_pip_capture_active)
-        return;
-    m_pip_capture_active = false;
 
-    // Count total pip-sourced entries across layers 1 and 2 (layers 0/3 never
-    // submitted during draw_view, so their tails are expected to be zero).
     int nq = 0, nl = 0;
     for (int i = 0; i < 4; ++i) {
-        nq += (int)m_quads[i].size() - m_pip_quad_wm[i];
-        nl += (int)m_lines[i].size() - m_pip_line_wm[i];
+        nq += (int)cap.quads[i].size();
+        nl += (int)cap.lines[i].size();
     }
-
     if (nq > 0 || nl > 0)
     {
-        // FBO is already bound by caller.  Use pip dimensions for NDC conversion.
+        glDisable(GL_SCISSOR_TEST);
         glViewport(0, 0, pip_w, pip_h);
         const int saved_w = m_screen_width;
         const int saved_h = m_screen_height;
@@ -1116,35 +1131,29 @@ void GLUIRenderer::DrawPiPSprites(int pip_w, int pip_h)
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         glDepthMask(GL_FALSE);
 
-        // For each layer, extract pip-tail into a temporary vector, swap it in as
-        // the active queue, flush, then restore the pre-PiP entries.
         std::vector<UIQuad> pip_quads[4];
         std::vector<UILine> pip_lines[4];
         for (int i = 0; i < 4; ++i) {
-            pip_quads[i].assign(m_quads[i].begin() + m_pip_quad_wm[i], m_quads[i].end());
-            pip_lines[i].assign(m_lines[i].begin() + m_pip_line_wm[i], m_lines[i].end());
-            m_quads[i].erase(m_quads[i].begin() + m_pip_quad_wm[i], m_quads[i].end());
-            m_lines[i].erase(m_lines[i].begin() + m_pip_line_wm[i], m_lines[i].end());
-            m_quads[i].swap(pip_quads[i]);
-            m_lines[i].swap(pip_lines[i]);
+            pip_quads[i] = cap.quads[i];
+            pip_lines[i] = cap.lines[i];
         }
 
         // Layer-2: creature status / gold text — depth-tested against FBO geometry.
-        if (!m_quads[2].empty() || !m_lines[2].empty())
+        if (!pip_quads[2].empty() || !pip_lines[2].empty())
         {
             glEnable(GL_DEPTH_TEST);
             glDepthFunc(GL_LEQUAL);
             glDepthMask(GL_TRUE);
-            FlushQuads(2);
-            FlushLines(2);
+            flush_quads_from(pip_quads[2]);
+            flush_lines_from(pip_lines[2]);
             glDisable(GL_DEPTH_TEST);
         }
         // Layer-1: room flags — always on top inside the zoom box.
-        if (!m_quads[1].empty() || !m_lines[1].empty())
+        if (!pip_quads[1].empty() || !pip_lines[1].empty())
         {
             glDisable(GL_DEPTH_TEST);
-            FlushQuads(1);
-            FlushLines(1);
+            flush_quads_from(pip_quads[1]);
+            flush_lines_from(pip_lines[1]);
         }
 
         glDepthMask(GL_TRUE);
@@ -1153,16 +1162,13 @@ void GLUIRenderer::DrawPiPSprites(int pip_w, int pip_h)
         glViewport(0, 0, saved_w, saved_h);
         m_screen_width  = saved_w;
         m_screen_height = saved_h;
-
-        // Discard any remaining pip entries (layer-0/3 stray quads, should be empty).
-        for (int i = 0; i < 4; ++i) { m_quads[i].clear(); m_lines[i].clear(); }
-
-        // Restore the saved pre-PiP entries as the active queues.
-        for (int i = 0; i < 4; ++i) {
-            m_quads[i].swap(pip_quads[i]);
-            m_lines[i].swap(pip_lines[i]);
-        }
     }
+}
+
+void GLUIRenderer::DrawPiPSprites(int pip_w, int pip_h)
+{
+    ASSERT_RENDER_THREAD();
+    DrawPiPSpriteCapture(PiPSpriteCapture{}, pip_w, pip_h);
 }
 
 void GLUIRenderer::DrawCursorSprites()

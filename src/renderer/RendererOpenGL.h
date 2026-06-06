@@ -11,20 +11,17 @@
 #include "renderer/FrameState.h"
 #include "renderer/RenderGraph.h"
 #include "renderer/RenderThreadManager.h"
+#include "renderer/opengl/GLWorldViewRenderer.h"
+#include "renderer/opengl/GLUIRenderer.h"
 #include <atomic>
 #include <vector>
 
-// engine_camera.h defines struct Camera, which RendererOpenGL stores by value
-// in PiPCmd.  The include chain is short (globals.h only) and the renderer
-// already has a conceptual dependency on Camera via its C API.
-#include "engine_camera.h"
+struct Camera;
 
 class GLTileAtlas;
 class GLSpriteAtlas;
 class GLFontAtlas;
-class GLWorldViewRenderer;
 class GLMapFadePass;
-class GLUIRenderer;
 class GLTextRenderer;
 class ICursorLayer;
 
@@ -113,8 +110,8 @@ public:
                             int dst_x, int dst_y, int tile_w, int tile_h) override;
 
     /** Schedule a picture-in-picture isometric render for draw_zoom_box (ZBM_ISOMETRIC).
-     *  The camera is copied immediately; the render executes in EndFrame() after the
-     *  overhead-map draw but before UIFlushFront. */
+     *  The game thread captures the PiP world/UI draw data immediately; the render
+     *  thread later executes the snapshot in EndFrame(). */
     void SubmitPiPRender(struct Camera* cam, int x, int y, int w, int h) override;
 
     /** Called when tile/block textures are reloaded — invalidates the tile atlas
@@ -352,13 +349,15 @@ private:
     int               m_zoom_u_screen_h    = -1;
 
     // ── Picture-in-Picture isometric render (ZBM_ISOMETRIC zoom-box mode) ─
-    // SubmitPiPRender() appends to m_pip_queue; EndFrame() iterates the queue,
-    // renders each into its own FBO slot, submits the colour texture to
-    // GLUIRenderer::SubmitFBOQuad() for compositing, then clears the queue.
+    // SubmitPiPRender() appends pre-captured PiP snapshots to m_pip_queue;
+    // EndFrame() iterates the queue, renders each into its own FBO slot, submits
+    // the colour texture to GLUIRenderer::SubmitFBOQuad() for compositing, then
+    // clears the queue.
     struct PiPCmd {
-        Camera  cam_copy;
-        int     x = 0, y = 0, w = 0, h = 0;
-        float   clip_radius = -1.0f;
+        GLWorldViewRenderer::PiPCapture world_capture;
+        GLUIRenderer::PiPSpriteCapture  ui_capture;
+        int                             x = 0, y = 0, w = 0, h = 0;
+        float                           clip_radius = -1.0f;
     };
     struct PiPFBO {
         unsigned int fbo       = 0;

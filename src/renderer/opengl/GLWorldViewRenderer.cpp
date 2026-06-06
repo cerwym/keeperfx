@@ -1414,10 +1414,7 @@ void GLWorldViewRenderer::BeginWorldPass(unsigned char* framebuf, int pitch,
                                           int w, int h, int vp_x, int vp_y)
 {
     KFX_ZONE("WVR::BeginWorldPass");
-    // Normal world passes are prepared on the game thread.
-    // PiP capture calls this from EndFrame_GL() on the render thread.
-    if (!m_pip_capture)
-        ASSERT_GAME_THREAD();
+    ASSERT_GAME_THREAD();
 
     // Since the render thread no longer accesses poly_pool (bucket bucket-walks moved
     // to the game thread in Phase 1), no fence wait is needed here.
@@ -1674,9 +1671,7 @@ void GLWorldViewRenderer::ExecuteWorldFromIR(const WorldCommandBuffers& cmds)
 
 void GLWorldViewRenderer::BeginPiPCapture()
 {
-    // Redirect all geometry writes from draw_view() (called on the render thread
-    // for each PiP view) to dedicated pip buffers, so the game thread's world IR /
-    // m_draw_cmds / etc. are never written by the render thread concurrently.
+    ASSERT_GAME_THREAD();
     m_pip_capture        = true;
     m_pip_vert_count     = 0;
     m_pip_cmd_vert_start = 0;
@@ -1684,6 +1679,26 @@ void GLWorldViewRenderer::BeginPiPCapture()
     m_pip_shadow_cmds.clear();
     m_pip_flatpoly_verts.clear();
     m_pip_kspr_ir.clear();
+}
+
+GLWorldViewRenderer::PiPCapture GLWorldViewRenderer::FinalizePiPCapture()
+{
+    ASSERT_GAME_THREAD();
+    gpu_flush();
+
+    PiPCapture cap;
+    cap.draw_cmds       = std::move(m_pip_draw_cmds);
+    cap.tile_verts      = std::move(m_pip_verts);
+    cap.flat_poly_verts = std::move(m_pip_flatpoly_verts);
+    cap.kspr_ir         = std::move(m_pip_kspr_ir);
+    cap.shadow_cmds     = std::move(m_pip_shadow_cmds);
+    cap.screen_w        = m_screen_w;
+    cap.screen_h        = m_screen_h;
+
+    m_pip_vert_count     = 0;
+    m_pip_cmd_vert_start = 0;
+    m_pip_capture        = false;
+    return cap;
 }
 
 void GLWorldViewRenderer::GPURenderNow(const WorldCommandBuffers& cmds)
@@ -1715,46 +1730,35 @@ void GLWorldViewRenderer::GPURenderNow(const WorldCommandBuffers& cmds)
     m_rt_kspr_ir.clear();
 }
 
-void GLWorldViewRenderer::GPURenderToFBO(int pip_w, int pip_h)
+void GLWorldViewRenderer::ExecutePiPCapture(const PiPCapture& cap, int pip_w, int pip_h)
 {
-    KFX_ZONE("WVR::GPURenderToFBO");
+    KFX_ZONE("WVR::ExecutePiPCapture");
     ASSERT_RENDER_THREAD();
 
     if (!m_initialized)
     {
-        m_pip_draw_cmds.clear();
-        m_pip_kspr_ir.clear();
-        m_pip_verts.clear();
-        m_pip_flatpoly_verts.clear();
-        m_pip_vert_count     = 0;
-        m_pip_cmd_vert_start = 0;
-        m_pip_capture        = false;
+        m_rt_draw_cmds.clear();
+        m_rt_shadow_cmds.clear();
+        m_rt_kspr_ir.clear();
         return;
     }
 
-    gpu_flush();
-
-    m_rt_draw_cmds      = std::move(m_pip_draw_cmds);
-    m_rt_shadow_cmds    = std::move(m_pip_shadow_cmds);
-    m_pip_capture        = false;
+    m_rt_draw_cmds   = cap.draw_cmds;
+    m_rt_shadow_cmds = cap.shadow_cmds;
+    m_rt_kspr_ir     = cap.kspr_ir;
 
     if (m_rt_draw_cmds.empty())
     {
-        m_pip_kspr_ir.clear();
-        m_pip_verts.clear();
-        m_pip_flatpoly_verts.clear();
-        m_pip_vert_count     = 0;
-        m_pip_cmd_vert_start = 0;
+        m_rt_shadow_cmds.clear();
+        m_rt_kspr_ir.clear();
         return;
     }
 
+    glViewport(0, 0, pip_w, pip_h);
     gpu_execute_passes(0, 0, pip_w, pip_h,
-                       m_pip_verts, m_pip_flatpoly_verts, m_pip_kspr_ir);
-    m_pip_kspr_ir.clear();
-    m_pip_verts.clear();
-    m_pip_flatpoly_verts.clear();
-    m_pip_vert_count     = 0;
-    m_pip_cmd_vert_start = 0;
+                       cap.tile_verts, cap.flat_poly_verts, cap.kspr_ir);
+    m_rt_draw_cmds.clear();
+    m_rt_kspr_ir.clear();
 }
 
 void GLWorldViewRenderer::DrawShadowGL(const IRWorldShadowCmd& sc, int screen_w, int screen_h)
@@ -2065,7 +2069,12 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl, int screen_w
 void GLWorldViewRenderer::DrawIsometricView()
 {
     KFX_ZONE("WVR::DrawIsometricView");
-    ASSERT_GAME_THREAD(); // PIP will be broken until I can fix the thread violation
+    // Normal world build runs on the game thread.
+    // PiP capture build (draw_view from EndFrame_GL PiP loop) runs on the render thread.
+    if (m_pip_capture)
+        ASSERT_RENDER_THREAD();
+    else
+        ASSERT_GAME_THREAD();
 
     if (!m_initialized) {
         ERRORLOG("GLWorldViewRenderer asked to draw ISO but not initialised — frame dropped");

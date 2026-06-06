@@ -52,6 +52,11 @@ struct FBOQuad {
  */
 class GLUIRenderer : public IUIRenderer, public IGLShaderCompilable {
 public:
+    struct PiPSpriteCapture {
+        std::vector<UIQuad> quads[4];
+        std::vector<UILine> lines[4];
+    };
+
     GLUIRenderer();
     virtual ~GLUIRenderer();
 
@@ -81,8 +86,13 @@ public:
     void SubmitFBOQuad(int x, int y, int w, int h, GpuTextureHandle tex_id, float clip_radius = -1.0f) override;
     /** IUIRenderer override: mark start of PiP sprite capture. */
     void BeginPiPSprites() override;
-    /** IUIRenderer override: flush PiP sprites into the bound FBO. */
+    /** Game-thread: extract all UI sprites submitted since BeginPiPSprites(). */
+    PiPSpriteCapture ExtractPiPSprites();
+    /** IUIRenderer override retained for interface compatibility; GL PiP uses
+     *  DrawPiPSpriteCapture() with a pre-extracted snapshot. */
     void DrawPiPSprites(int pip_w, int pip_h) override;
+    /** Render-thread: draw a pre-extracted PiP UI snapshot into the bound FBO. */
+    void DrawPiPSpriteCapture(const PiPSpriteCapture& cap, int pip_w, int pip_h);
     virtual void SetLayer(int layer) override;
     virtual void SetWorldDepth(float ndc_z) override;
     virtual void ClearWorldDepth() override;
@@ -282,7 +292,7 @@ private:
     // Quads at indices [0..watermark[L]) in m_quads[L] were submitted before the PiP
     // draw_view (corner-frame sprites) and must survive into FlushFront() untouched.
     // Quads from [watermark[L]..end) were submitted during draw_view(pip_cam) and are
-    // rendered into the FBO by DrawPiPSprites(), then erased.
+    // extracted by ExtractPiPSprites() and rendered later on the render thread.
     int  m_pip_quad_wm[4]      = {};
     int  m_pip_line_wm[4]      = {};
     bool m_pip_capture_active  = false;

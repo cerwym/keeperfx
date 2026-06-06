@@ -39,6 +39,35 @@ class ITileAtlas;
 
 class GLWorldViewRenderer : public IWorldViewRenderer, public IGLShaderCompilable {
 public:
+    // Deferred draw command (built during DrawIsometricView/DrawFrontView, executed by GPURenderNow)
+    struct DrawCmd {
+        enum Type { CMD_TILES,
+                    CMD_IR_KEEPER_SPRITES,  // keeper sprites captured on game thread
+                    CMD_SHADOWS,
+                    CMD_FLAT_POLYS,
+                    CMD_PRELOAD_KSPR_ATLAS  // one-shot: bulk decode+upload on render thread
+                  } type;
+        // CMD_TILES fields
+        int vert_start      = 0;
+        int vert_count      = 0;
+        // CMD_IR_KEEPER_SPRITES fields (indices into m_rt_kspr_ir / m_pip_kspr_ir)
+        int sprite_ir_start = 0;
+        int sprite_ir_count = 0;
+        // CMD_SHADOWS field (index into m_shadow_cmds)
+        int shadow_idx      = 0;
+    };
+
+    // Public struct for captured PiP world geometry (populated on game thread).
+    struct PiPCapture {
+        std::vector<DrawCmd>                draw_cmds;
+        std::vector<WorldVertex>            tile_verts;
+        std::vector<FlatPolyVertex>         flat_poly_verts;
+        std::vector<IRWorldKeeperSpriteCmd> kspr_ir;
+        std::vector<IRWorldShadowCmd>       shadow_cmds;
+        int screen_w = 0;
+        int screen_h = 0;
+    };
+
     /**
      * @param atlas       Tile atlas providing GL texture handles.
      *                    Owned externally (RendererOpenGL); must outlive this.
@@ -77,18 +106,16 @@ public:
     void GPURenderNow(const WorldCommandBuffers& cmds);
 
     /** Redirect all geometry writes to dedicated PiP-only buffers so that
-     *  the concurrent game thread's world IR / m_draw_cmds are never touched.
-     *  Must be called on the render thread before BeginWorldPass() / draw_view()
-     *  for each PiP view.  GPURenderToFBO() ends the capture internally. */
+     *  PiP draw_view() capture can reuse the legacy bucket walk without touching
+     *  the main frame's world IR buffers. */
     void BeginPiPCapture();
 
-    /** Render the PiP geometry that was recorded after BeginPiPCapture() into
-     *  the currently-bound FBO.  Ends the PiP capture and moves the pip
-     *  command/vertex buffers into the rt_* slots for execution.
-     *  The caller is responsible for binding/unbinding the FBO and clearing it.
-     *  m_screen_w/h must already be set to pip_w/pip_h via a preceding
-     *  BeginWorldPass(nullptr, 0, pip_w, pip_h, 0, 0) call. */
-    void GPURenderToFBO(int pip_w, int pip_h);
+    /** Finalize the current PiP capture on the game thread and return the
+     *  snapshotted world geometry for render-thread execution. */
+    PiPCapture FinalizePiPCapture();
+
+    /** Execute a pre-captured PiP world snapshot into the currently-bound FBO. */
+    void ExecutePiPCapture(const PiPCapture& cap, int pip_w, int pip_h);
 
     /** Swap game-thread ↔ render-thread command buffers.
      *  Must be called from RendererOpenGL::EndFrame() while the render thread
@@ -209,7 +236,7 @@ private:
     // in GPURenderNow() after glClear().
     void gpu_flush();
 
-    /** Core GL draw pass shared by GPURenderNow() and GPURenderToFBO().
+    /** Core GL draw pass shared by GPURenderNow() and ExecutePiPCapture().
      *  Uploads the vertex buffer, sets the given viewport (already in GL
      *  bottom-origin coords), executes all three draw passes, then resets the
      *  viewport to the full screen and clears the draw-command lists.
@@ -228,24 +255,6 @@ private:
 
     // Setup world sprite processing for a bucket (sets m_current_sprite_z — GT only)
     void setup_world_sprite_processing(int32_t bucket_num);
-
-    // Deferred draw command (built during DrawIsometricView/DrawFrontView, executed by GPURenderNow)
-    struct DrawCmd {
-        enum Type { CMD_TILES,
-                    CMD_IR_KEEPER_SPRITES,  // keeper sprites captured on game thread
-                    CMD_SHADOWS,
-                    CMD_FLAT_POLYS,
-                    CMD_PRELOAD_KSPR_ATLAS  // one-shot: bulk decode+upload on render thread
-                  } type;
-        // CMD_TILES fields
-        int vert_start      = 0;
-        int vert_count      = 0;
-        // CMD_IR_KEEPER_SPRITES fields (indices into m_rt_kspr_ir / m_pip_kspr_ir)
-        int sprite_ir_start = 0;
-        int sprite_ir_count = 0;
-        // CMD_SHADOWS field (index into m_shadow_cmds)
-        int shadow_idx      = 0;
-    };
 
     using ShadowCmd = IRWorldShadowCmd;
 
@@ -418,17 +427,15 @@ private:
     int          m_rt_vp_y     = 0;   // RT:
     uint8_t      m_rt_palette[768] = {};  // RT:
 
-    // ── PiP-only buffers (render-thread write, never touched by game thread) ─
-    // BeginPiPCapture() switches all geometry writes here so draw_view() called
-    // from the render thread (PiP) never races with the game thread's world IR.
-    std::vector<WorldVertex> m_pip_verts;         // RT(PiP):
-    int          m_pip_vert_count      = 0;         // RT(PiP):
-    int          m_pip_cmd_vert_start  = 0;         // RT(PiP):
-    std::vector<DrawCmd>             m_pip_draw_cmds;       // RT(PiP):
-    std::vector<ShadowCmd>           m_pip_shadow_cmds;     // RT(PiP):
-    std::vector<FlatPolyVertex>      m_pip_flatpoly_verts;  // RT(PiP):
-    std::vector<IRWorldKeeperSpriteCmd> m_pip_kspr_ir;      // RT(PiP): keeper sprites during PiP
-    bool         m_pip_capture         = false;             // RT:
+    // ── PiP-only buffers (game-thread capture, render-thread execution after snapshot) ─
+    std::vector<WorldVertex>            m_pip_verts;          // GT(PiP capture):
+    int                                 m_pip_vert_count      = 0; // GT(PiP capture):
+    int                                 m_pip_cmd_vert_start  = 0; // GT(PiP capture):
+    std::vector<DrawCmd>                m_pip_draw_cmds;      // GT(PiP capture):
+    std::vector<ShadowCmd>              m_pip_shadow_cmds;    // GT(PiP capture):
+    std::vector<FlatPolyVertex>         m_pip_flatpoly_verts; // GT(PiP capture):
+    std::vector<IRWorldKeeperSpriteCmd> m_pip_kspr_ir;        // GT(PiP capture):
+    bool                                m_pip_capture         = false; // GT:
     bool         m_cursor_capture      = false;             // GT: redirect SubmitKeeperSprite → m_cursor_kspr_ir
 
     // ── Cursor keeper-sprite double buffer ────────────────────────────────────
