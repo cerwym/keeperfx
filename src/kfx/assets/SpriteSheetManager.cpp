@@ -6,7 +6,7 @@
  */
 /******************************************************************************/
 #include "pre_inc.h"
-#include "renderer/SpriteSheetManager.h"
+#include "kfx/assets/SpriteSheetManager.h"
 
 #include "bflib_sprite.h"   /* load_spritesheet, free_spritesheet, num_sprites */
 #include "bflib_basics.h"   /* ERRORLOG, SYNCLOG, ASSERT */
