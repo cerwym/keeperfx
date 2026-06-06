@@ -87,7 +87,6 @@
 #include "gui_soundmsgs.h"
 #include "vidfade.h"
 #include "config_settings.h"
-#include "config_strings.h"
 #include "game_legacy.h"
 #include "keeperfx.hpp"
 #include "custom_sprites.h"
