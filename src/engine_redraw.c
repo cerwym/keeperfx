@@ -83,9 +83,6 @@ extern "C" {
 int32_t xtab[640][2];
 int32_t ytab[480][2];
 
-static unsigned char * map_fade_ghost_table;
-static unsigned char * map_fade_dest;
-static unsigned char * map_fade_src;
 static long draw_spell_cost;
 /******************************************************************************/
 static void draw_creature_view_icons(struct Thing* creatng)
