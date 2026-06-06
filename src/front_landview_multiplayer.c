@@ -43,6 +43,7 @@
 #include "room_list.h"
 #include "vidfade.h"
 #include "vidmode.h"
+#include "renderer/RendererManager.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -150,6 +151,9 @@ void frontnetmap_unload(void)
 {
     unload_map_and_window();
     free_font(&map_font);
+    // Schedule a full atlas rebuild before freeing map_flag so stale
+    // pointer→handle entries are cleared before the sheet is reloaded.
+    RendererNotifySpritesReloaded();
     free_spritesheet(&map_flag);
     free_spritesheet(&map_hand);
     fe_network_active = 0;
@@ -437,6 +441,7 @@ TbBool frontnetmap_load(void)
         frontend_load_data_reset();
         return false;
     }
+    RendererNotifyLandviewFlagLoaded();
     frontend_load_data_reset();
     frontmap_zoom_skip_init(SINGLEPLAYER_NOTSTARTED);
     fe_net_level_selected = SINGLEPLAYER_NOTSTARTED;

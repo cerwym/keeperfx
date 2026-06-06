@@ -324,6 +324,9 @@ TbBool control_creature_as_passenger(struct PlayerInfo *player, struct Thing *th
 void free_swipe_graphic(void)
 {
     SYNCDBG(6,"Starting");
+    // Schedule a full atlas rebuild before freeing so stale pointer→handle
+    // entries are wiped before swipe_sprites is reloaded for a new creature type.
+    RendererNotifySpritesReloaded();
     free_spritesheet(&swipe_sprites);
     game.loaded_swipe_idx = -1;
 }

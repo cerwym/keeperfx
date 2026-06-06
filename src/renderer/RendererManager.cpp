@@ -349,6 +349,7 @@ void RendererNotifyCustomSpritesReloaded()
     ++s_text_font_generation;
 #ifdef RENDERER_OPENGL_ENABLED
     if (s_spriteAtlas && custom_sprites && num_sprites(custom_sprites) > 0) {
+        if (s_rebuild_deferred) return; // Rebuild will include custom_sprites; stale handle avoidance.
         int32_t before = (int32_t)s_spriteAtlas->GetRegisteredCount();
         s_spriteAtlas->AddSheet(custom_sprites, "custom_sprites");
         int32_t after  = (int32_t)s_spriteAtlas->GetRegisteredCount();

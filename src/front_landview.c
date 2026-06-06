@@ -1324,6 +1324,9 @@ void frontmap_unload(void)
     SYNCDBG(8,"Starting");
     set_pointer_graphic_none();
     unload_map_and_window();
+    // Schedule a full atlas rebuild before freeing map_flag so stale
+    // pointer→handle entries are cleared before the sheet is reloaded.
+    RendererNotifySpritesReloaded();
     free_spritesheet(&map_flag);
     StopAllSamples();
     stop_description_speech();

@@ -756,6 +756,11 @@ TbResult frontend_load_data(void)
     TbResult ret;
     long len;
     // TODO: There is no "frontend_unload_data", find a better spot for this
+    // Schedule a full atlas rebuild before freeing, so any stale pointer→handle
+    // entries for the old sheet are wiped by RendererDrainDeferredAtlasRebuild().
+    // Without this, memory reuse at the same address would cause AddSheet_Internal
+    // to silently skip re-packing the new sprites (stale art / invisible sprites).
+    RendererNotifySpritesReloaded();
     free_spritesheet(&frontend_sprite);
     ret = Lb_SUCCESS;
     frontend_background = (unsigned char *)game.map;
