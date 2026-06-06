@@ -149,8 +149,12 @@ short LoadVResMinimal(void)
     frontend_font[1] = load_font("ldata/frontft2.dat", "ldata/frontft2.tab");
     frontend_font[2] = load_font("ldata/frontft3.dat", "ldata/frontft3.tab");
     frontend_font[3] = load_font("ldata/frontft4.dat", "ldata/frontft4.tab");
-    return button_sprites && frontend_font[0] && frontend_font[1] && frontend_font[2] &&
-        frontend_font[3] && LbDataLoadAll(front_load_files_minimal_640) == 0;
+    if (!button_sprites || !frontend_font[0] || !frontend_font[1] || !frontend_font[2] ||
+        !frontend_font[3] || LbDataLoadAll(front_load_files_minimal_640) != 0) {
+        return 0;
+    }
+    RendererNotifySpritesReloaded();
+    return 1;
 }
 
 void FreeVResMinimal(void)
@@ -792,6 +796,24 @@ TbScreenMode setup_screen_mode_minimal(TbScreenMode nmode)
   {
     if ((nmode == old_mode) && (MinimalResolutionSetup))
     {
+      // Ensure minimal VRes resources are loaded even if the intro was skipped.
+      // initial_setup() sets MinimalResolutionSetup=true without calling
+      // LoadVResMinimal(), so button_sprites and frontend_font[] may be NULL.
+      if (!button_sprites)
+      {
+        TbBool hi_res = (new_mdinfo->Height >= 400);
+        if (hi_res)
+        {
+          frontend_load_data_from_cd();
+          if (!LoadVResMinimal())
+          {
+            ERRORLOG("Unable to load minimal VRes front files");
+            force_video_mode_reset = true;
+            return Lb_SCREEN_MODE_INVALID;
+          }
+          frontend_load_data_reset();
+        }
+      }
       SYNCDBG(6,"Mode %d already active, no changes.",(int)nmode);
       return nmode;
     }
