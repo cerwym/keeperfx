@@ -6,7 +6,7 @@
  */
 /******************************************************************************/
 #include "pre_inc.h"
-#include "renderer/FontManager.h"
+#include "kfx/assets/FontManager.h"
 
 #include "bflib_sprite.h"   /* load_spritesheet, free_spritesheet (= load_font, free_font) */
 #include "bflib_basics.h"   /* ERRORLOG, SYNCLOG */
