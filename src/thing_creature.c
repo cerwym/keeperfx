@@ -70,6 +70,7 @@
 #include "kjm_input.h"
 #include "lens_api.h"
 #include "renderer/RendererManager.h"
+#include "renderer/SpriteSheetManager.h"
 #include "light_data.h"
 #include "magic_powers.h"
 #include "map_blocks.h"
@@ -324,10 +325,7 @@ TbBool control_creature_as_passenger(struct PlayerInfo *player, struct Thing *th
 void free_swipe_graphic(void)
 {
     SYNCDBG(6,"Starting");
-    // Schedule a full atlas rebuild before freeing so stale pointer→handle
-    // entries are wiped before swipe_sprites is reloaded for a new creature type.
-    RendererNotifySpritesReloaded();
-    free_spritesheet(&swipe_sprites);
+    SpriteSheetMgr_Free(&swipe_sprites);
     game.loaded_swipe_idx = -1;
 }
 
@@ -352,14 +350,13 @@ TbBool load_swipe_graphic_for_creature(const struct Thing *thing)
         tmp_fname = get_game_file_path_fmt(FGrp_StdData, "swipe%02d.tab", swpe_idx);
         strcpy(tab_fname, tmp_fname != NULL ? tmp_fname : "");
     }
-    swipe_sprites = load_spritesheet(dat_fname, tab_fname);
+    SpriteSheetMgr_Load(&swipe_sprites, dat_fname, tab_fname);
     if (!swipe_sprites) {
         free_swipe_graphic();
         ERRORLOG("Unable to load swipe graphics for %s",thing_model_name(thing));
         return false;
     }
     game.loaded_swipe_idx = swpe_idx;
-    RendererNotifySwipeSpritesLoaded();
     return true;
 }
 

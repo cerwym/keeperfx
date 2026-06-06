@@ -7,6 +7,8 @@
 /******************************************************************************/
 #include "pre_inc.h"
 #include "renderer/RendererManager.h"
+#include "renderer/SpriteSheetManager.h"
+#include "renderer/FontManager.h"
 #include "renderer/SpriteHandle.h"
 #include "renderer/ICursorLayer.h"
 #include "renderer/ir/WorldCommands.h"
@@ -50,7 +52,19 @@
 #include "sprites.h"           // GBS_fontchars_number_dig0
 #include "player_data.h"       // my_player_number
 // Forward declaration to avoid pulling in frontend.h (conflicts with C++ stdlib)
-extern "C" { struct TbSpriteSheet; extern struct TbSpriteSheet *button_sprites; extern struct TbSpriteSheet *custom_sprites; extern struct TbSpriteSheet *pointer_sprites; extern struct TbSpriteSheet *map_flag; }
+extern "C" {
+    struct TbSpriteSheet;
+    extern struct TbSpriteSheet *button_sprites;
+    extern struct TbSpriteSheet *custom_sprites;
+    extern struct TbSpriteSheet *pointer_sprites;
+    extern struct TbSpriteSheet *map_flag;
+    // font globals from frontend.h
+    extern struct TbSpriteSheet *winfont;
+    extern struct TbSpriteSheet *font_sprites;
+    extern struct TbSpriteSheet *frontend_font[4]; // FRONTEND_FONTS_COUNT
+    // from front_credits.h
+    extern struct TbSpriteSheet *frontstory_font;
+}
 #include "thing_creature.h"    // swipe_sprites
 #include "renderer/RenderPass_C.h"
 #include <unordered_map>
@@ -60,10 +74,6 @@ extern "C" { struct TbSpriteSheet; extern struct TbSpriteSheet *button_sprites; 
 
 static IRenderer*           s_activeRenderer      = nullptr;
 static RendererType         s_activeType          = RENDERER_INVALID;
-// Set whenever the GL sprite atlas is rebuilt (RendererNotifySpritesReloaded).
-// Consumed by RendererNeedsUIReinitAfterLoad to decide whether init_gui() is
-// required after a save-game load.  Starts true so the first load always reinits.
-static bool                 s_gui_sprites_dirty   = true;
 static IWorldViewRenderer*  s_worldViewRenderer   = nullptr;
 static IMapFadePass*        s_mapFadePass         = nullptr;
 static ITextRenderer*       s_textRenderer        = nullptr;
@@ -72,15 +82,10 @@ static SoftwareUIRenderer*  s_softwareUIRenderer  = nullptr;  // non-null only i
 static ICursorLayer*        s_cursorLayer         = nullptr;
 #ifdef RENDERER_OPENGL_ENABLED
 static GLSpriteAtlas*       s_spriteAtlas         = nullptr;  // non-null only in GL mode
-// Set by RendererNotifySpritesReloaded(); drained at the top of EndFrame() (after
-// WaitForCompletion) so the rebuild never races with in-flight IR commands.
-static bool                 s_rebuild_deferred    = false;
 #endif
 // Software-mode sprite handle registry (GL mode uses s_spriteAtlas->GetHandle instead)
 static std::unordered_map<const TbSprite*, SpriteHandle> s_sprite_to_handle;
 static uint32_t             s_software_next_handle = 0;
-// Bumped whenever sprite/font sheet pointers can be invalidated by reload.
-static uint32_t             s_text_font_generation = 1;
 
 /******************************************************************************/
 
@@ -92,20 +97,16 @@ void RendererNotifyTexturesReloaded()
 
 void RendererNotifySpritesReloaded()
 {
-    s_gui_sprites_dirty = true;
-    ++s_text_font_generation;
+    // Full GUI data reload — mark for init_gui() after next level load, bump
+    // font generation so queued text commands from the old font are dropped,
+    // and re-latch the slab-texture pointer.
+    // Atlas rebuild is scheduled automatically by SpriteSheetManager::Load/Free
+    // at the individual callsites before this function is reached.
+    SpriteSheetManager::Get().MarkGUIDirty();
+    FontManager::Get().BumpGeneration();
 #ifdef RENDERER_OPENGL_ENABLED
-    // Schedule a deferred atlas rebuild.  The actual Rebuild() call is deferred to
-    // RendererDrainDeferredAtlasRebuild(), which is called at the top of EndFrame()
-    // after WaitForCompletion() — the only point where the render thread is
-    // guaranteed idle AND no sprites for the new frame have been submitted yet.
-    // Rebuilding here (mid-frame) would invalidate handles already written to the
-    // current frame's IR command buffer, causing a one-frame drop of all UI sprites.
-    s_rebuild_deferred = true;
-    SYNCLOG("RendererNotifySpritesReloaded: deferred rebuild scheduled (atlas=%p gui_panel=%p btn=%p)",
-            (void*)s_spriteAtlas, (void*)gui_panel_sprites, (void*)button_sprites);
-    // Latch the slab-texture pointer immediately — UpdateSlabTexture() only stores
-    // a pointer, no GL calls, so it is safe to call from any thread at any time.
+    SYNCLOG("RendererNotifySpritesReloaded: gui dirty set, font gen=%u (atlas=%p)",
+            FontManager::Get().GetGeneration(), (void*)s_spriteAtlas);
     UIRenderer_SetSlabTexture();
 #endif
 }
@@ -113,7 +114,7 @@ void RendererNotifySpritesReloaded()
 bool RendererHasDeferredAtlasRebuild()
 {
 #ifdef RENDERER_OPENGL_ENABLED
-    return s_rebuild_deferred;
+    return SpriteSheetManager::Get().RebuildPending();
 #else
     return false;
 #endif
@@ -122,119 +123,35 @@ bool RendererHasDeferredAtlasRebuild()
 void RendererDrainDeferredAtlasRebuild()
 {
 #ifdef RENDERER_OPENGL_ENABLED
-    if (!s_rebuild_deferred || !s_spriteAtlas)
+    auto& mgr = SpriteSheetManager::Get();
+    if (!mgr.RebuildPending() || !s_spriteAtlas)
         return;
-    s_rebuild_deferred = false;
+    mgr.ClearRebuildPending();
 
-    // Collect ALL currently-loaded sheets so nothing is lost after the wipe.
-    // pointer_sprites and frontend_sprite are added incrementally via AddSheet()
-    // after a normal rebuild; they must be included here so a deferred rebuild
-    // that fires after they've already been loaded doesn't lose them.
-    const TbSpriteSheet* sheets[7] = {};
-    const char*          names[7]  = {};
-    int count = 0;
-    if (gui_panel_sprites)                          { sheets[count] = gui_panel_sprites; names[count++] = "gui_panel_sprites"; }
-    if (button_sprites)                             { sheets[count] = button_sprites;    names[count++] = "button_sprites";    }
-    if (custom_sprites  && num_sprites(custom_sprites)  > 0) { sheets[count] = custom_sprites;  names[count++] = "custom_sprites";  }
-    if (pointer_sprites && num_sprites(pointer_sprites) > 0) { sheets[count] = pointer_sprites; names[count++] = "pointer_sprites"; }
-    if (frontend_sprite && num_sprites(frontend_sprite) > 0) { sheets[count] = frontend_sprite; names[count++] = "frontend_sprite"; }
-    if (map_flag        && num_sprites(map_flag)        > 0) { sheets[count] = map_flag;        names[count++] = "map_flag";        }
-    if (swipe_sprites   && num_sprites(swipe_sprites)   > 0) { sheets[count] = swipe_sprites;   names[count++] = "swipe_sprites";   }
+    const TbSpriteSheet* sheets[SpriteSheetManager::kMaxSheets];
+    const char*          names [SpriteSheetManager::kMaxSheets];
+    int count = mgr.CollectActive(sheets, names, SpriteSheetManager::kMaxSheets);
     s_spriteAtlas->Rebuild(sheets, names, count);
     for (int i = 0; i < count; ++i)
-        SYNCLOG("RendererDrainDeferredAtlasRebuild: added '%s' (%d sprites)", names[i], (int)num_sprites(sheets[i]));
-#endif
-}
-
-/** Append pointer_sprites into the live atlas after load_pointer_file(). */
-void RendererNotifyPointerSpritesLoaded()
-{
-    ++s_text_font_generation;
-#ifdef RENDERER_OPENGL_ENABLED
-    if (s_spriteAtlas && pointer_sprites && num_sprites(pointer_sprites) > 0) {
-        if (s_rebuild_deferred) return; // Rebuild will include pointer_sprites; stale handle avoidance.
-        int32_t before = (int32_t)s_spriteAtlas->GetRegisteredCount();
-        s_spriteAtlas->AddSheet(pointer_sprites, "pointer_sprites");
-        int32_t after  = (int32_t)s_spriteAtlas->GetRegisteredCount();
-        SYNCLOG("RendererNotifyPointerSpritesLoaded: pointer_sprites=%p added %d new sprites (total %d)",
-                (void*)pointer_sprites, after - before, after);
-    }
-#endif
-}
-
-/** Append frontend_sprite into the live atlas after frontend_load_data(). */
-void RendererNotifyFrontendSpritesLoaded()
-{
-    ++s_text_font_generation;
-#ifdef RENDERER_OPENGL_ENABLED
-    if (s_spriteAtlas && frontend_sprite && num_sprites(frontend_sprite) > 0) {
-        if (s_rebuild_deferred) return; // Rebuild will include frontend_sprite; stale handle avoidance.
-        int32_t before = (int32_t)s_spriteAtlas->GetRegisteredCount();
-        s_spriteAtlas->AddSheet(frontend_sprite, "frontend_sprite");
-        int32_t after  = (int32_t)s_spriteAtlas->GetRegisteredCount();
-        SYNCLOG("RendererNotifyFrontendSpritesLoaded: frontend_sprite=%p added %d new sprites (total %d)",
-                (void*)frontend_sprite, after - before, after);
-    }
+        SYNCLOG("RendererDrainDeferredAtlasRebuild: packed '%s' (%d sprites)",
+                names[i], (int)num_sprites(sheets[i]));
 #endif
 }
 
 static void register_sheet_software(const struct TbSpriteSheet* sheet); // fwd
 
-/** Append map_flag into the live atlas after load_spritesheet() in front_landview.c.
- *  Handles both GL (GLSpriteAtlas) and software (IUIRenderer handle table) modes. */
+/** Notify that map_flag was loaded.  GL: atlas rebuild is scheduled by the
+ *  SpriteSheetMgr_Load() at the callsite.  Software: register handle table entries
+ *  so SubmitPanelSprite falls back to LbSpriteDrawResized correctly. */
 void RendererNotifyLandviewFlagLoaded()
 {
-    ++s_text_font_generation;
-#ifdef RENDERER_OPENGL_ENABLED
-    if (s_spriteAtlas && map_flag && num_sprites(map_flag) > 0) {
-        if (!s_rebuild_deferred) { // Skip if pending Rebuild will re-add; stale handle avoidance.
-            int32_t before = (int32_t)s_spriteAtlas->GetRegisteredCount();
-            s_spriteAtlas->AddSheet(map_flag, "map_flag");
-            int32_t after  = (int32_t)s_spriteAtlas->GetRegisteredCount();
-            SYNCLOG("RendererNotifyLandviewFlagLoaded: map_flag=%p added %d new sprites (total %d)",
-                    (void*)map_flag, after - before, after);
-        }
-    }
-#endif
-    // SW mode: register into the IUIRenderer handle table so SubmitPanelSprite
-    // falls back to LbSpriteDrawResized correctly.
     register_sheet_software(map_flag);
-}
-
-void RendererNotifySwipeSpritesLoaded()
-{
-    ++s_text_font_generation;
-#ifdef RENDERER_OPENGL_ENABLED
-    if (s_spriteAtlas && swipe_sprites && num_sprites(swipe_sprites) > 0) {
-        if (s_rebuild_deferred) return; // Rebuild will include swipe_sprites; stale handle avoidance.
-        int32_t before = (int32_t)s_spriteAtlas->GetRegisteredCount();
-        s_spriteAtlas->AddSheet(swipe_sprites, "swipe_sprites");
-        int32_t after  = (int32_t)s_spriteAtlas->GetRegisteredCount();
-        SYNCLOG("RendererNotifySwipeSpritesLoaded: swipe_sprites=%p added %d new sprites (total %d)",
-                (void*)swipe_sprites, after - before, after);
-    }
-#endif
 }
 
 void RendererNotifyGameTablesReady()
 {
     if (s_activeRenderer)
         s_activeRenderer->NotifyGameTablesReady();
-}
-
-int RendererNeedsUIReinitAfterLoad(void)
-{
-    // Software renderer: always reinit — no atlas to preserve.
-    if (!RendererHasGPURenderPath())
-        return 1;
-    // OpenGL: the GPU sprite atlas persists across save loads.  Only reinit when
-    // the atlas was rebuilt (RendererNotifySpritesReloaded called — happens on
-    // resolution change, not on a plain save load at the same resolution).
-    // Consuming the flag here means one call per load cycle, which is correct.
-    if (!s_gui_sprites_dirty)
-        return 0;
-    s_gui_sprites_dirty = false;
-    return 1;
 }
 
 TbBool RendererSubmitTransparentBlit(const unsigned char* buf, int w, int h)
@@ -340,23 +257,6 @@ void RendererSchedulePiPRender(struct Camera* cam, int x, int y, int w, int h)
     IRenderer* rend = RendererGetActive();
     if (rend)
         rend->SubmitPiPRender(cam, x, y, w, h);
-}
-
-/** Append any newly-built custom_sprites into the live atlas.
- *  Call this after every init_custom_sprites() so per-level icons are available. */
-void RendererNotifyCustomSpritesReloaded()
-{
-    ++s_text_font_generation;
-#ifdef RENDERER_OPENGL_ENABLED
-    if (s_spriteAtlas && custom_sprites && num_sprites(custom_sprites) > 0) {
-        if (s_rebuild_deferred) return; // Rebuild will include custom_sprites; stale handle avoidance.
-        int32_t before = (int32_t)s_spriteAtlas->GetRegisteredCount();
-        s_spriteAtlas->AddSheet(custom_sprites, "custom_sprites");
-        int32_t after  = (int32_t)s_spriteAtlas->GetRegisteredCount();
-        SYNCLOG("RendererNotifyCustomSpritesReloaded: custom_sprites=%p added %d new sprites (total %d)",
-                (void*)custom_sprites, after - before, after);
-    }
-#endif
 }
 
 /******************************************************************************/
@@ -548,13 +448,10 @@ static IUIRenderer* create_ui_renderer(RendererType type)
             IUIRenderer* glui = ogl->CreateGLUIRenderer();
             if (glui)
             {
-                // Register initial sprite sheets into the atlas (GL-mode path).
                 s_spriteAtlas = ogl->GetSpriteAtlas();
-                if (s_spriteAtlas) {
-                    if (gui_panel_sprites) s_spriteAtlas->AddSheet(gui_panel_sprites, "gui_panel_sprites");
-                    if (button_sprites)    s_spriteAtlas->AddSheet(button_sprites,    "button_sprites");
-                }
                 s_softwareUIRenderer = nullptr;
+                // All sheets registered via SpriteSheetManager — drain on next BeginFrame
+                SpriteSheetManager::Get().ScheduleRebuild();
                 return glui;
             }
             // CreateGLUIRenderer returned nullptr — fall through to software
@@ -615,6 +512,28 @@ int RendererInit(RendererType type)
     if (!s_settings_initialised) {
         RendererSettings_Reset();
         s_settings_initialised = 1;
+    }
+
+    // Register all managed sprite/font slots (idempotent — safe on reinit).
+    {
+        auto& ssmgr = SpriteSheetManager::Get();
+        ssmgr.Register(&gui_panel_sprites, "gui_panel_sprites");
+        ssmgr.Register(&button_sprites,    "button_sprites");
+        ssmgr.Register(&custom_sprites,    "custom_sprites");
+        ssmgr.Register(&pointer_sprites,   "pointer_sprites");
+        ssmgr.Register(&frontend_sprite,   "frontend_sprite");
+        ssmgr.Register(&map_flag,          "map_flag");
+        ssmgr.Register(&swipe_sprites,     "swipe_sprites");
+    }
+    {
+        auto& fmgr = FontManager::Get();
+        fmgr.Register(&winfont,           "winfont");
+        fmgr.Register(&font_sprites,      "font_sprites");
+        fmgr.Register(&frontend_font[0],  "frontend_font[0]");
+        fmgr.Register(&frontend_font[1],  "frontend_font[1]");
+        fmgr.Register(&frontend_font[2],  "frontend_font[2]");
+        fmgr.Register(&frontend_font[3],  "frontend_font[3]");
+        fmgr.Register(&frontstory_font,   "frontstory_font");
     }
 
     if (type == RENDERER_AUTO)
@@ -762,7 +681,7 @@ void RendererShutdown()
 #endif
     s_sprite_to_handle.clear();
     s_software_next_handle = 0;
-    ++s_text_font_generation;
+    FontManager::Get().BumpGeneration();
     if (s_textRenderer)
     {
         delete s_textRenderer;
@@ -1183,7 +1102,7 @@ void RendererFlushPendingSpriteAtlas(void)
 
 uint32_t RendererGetTextFontGeneration(void)
 {
-    return s_text_font_generation;
+    return FontManager::Get().GetGeneration();
 }
 
 /******************************************************************************/

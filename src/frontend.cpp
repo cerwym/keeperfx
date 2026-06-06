@@ -28,6 +28,7 @@
 #include "bflib_sprite.h"
 #include "bflib_sprfnt.h"
 #include "renderer/RendererManager.h"
+#include "renderer/SpriteSheetManager.h"
 #include "bflib_dernc.h"
 #include "bflib_datetm.h"
 #include "bflib_keybrd.h"
@@ -756,12 +757,7 @@ TbResult frontend_load_data(void)
     TbResult ret;
     long len;
     // TODO: There is no "frontend_unload_data", find a better spot for this
-    // Schedule a full atlas rebuild before freeing, so any stale pointer→handle
-    // entries for the old sheet are wiped by RendererDrainDeferredAtlasRebuild().
-    // Without this, memory reuse at the same address would cause AddSheet_Internal
-    // to silently skip re-packing the new sprites (stale art / invisible sprites).
-    RendererNotifySpritesReloaded();
-    free_spritesheet(&frontend_sprite);
+    SpriteSheetMgr_Free(&frontend_sprite);
     ret = Lb_SUCCESS;
     frontend_background = (unsigned char *)game.map;
     fname = prepare_file_path(FGrp_LoData,"front.raw");
@@ -776,12 +772,11 @@ TbResult frontend_load_data(void)
     char tab_fname[2048];
     strcpy(dat_fname, prepare_file_path(FGrp_LoData,"frontbit.dat"));
     strcpy(tab_fname, prepare_file_path(FGrp_LoData,"frontbit.tab"));
-    frontend_sprite = load_spritesheet(dat_fname, tab_fname);
+    SpriteSheetMgr_Load(&frontend_sprite, dat_fname, tab_fname);
     if (!frontend_sprite) {
         ERRORLOG("Cannot load frontend sprites.");
         return Lb_FAIL;
     }
-    RendererNotifyFrontendSpritesLoaded();
     return ret;
 }
 

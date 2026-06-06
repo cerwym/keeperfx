@@ -188,7 +188,6 @@ static void init_level(void)
     luascript_loaded = open_lua_script(get_selected_level_number());
     // Load configs which may have per-campaign part, and can even be modified within a level
     init_custom_sprites(get_selected_level_number());
-    RendererNotifyCustomSpritesReloaded();
     WorldViewRenderer_PreloadKeeperSpriteAtlas();
     load_stats_files();
     check_and_auto_fix_stats();

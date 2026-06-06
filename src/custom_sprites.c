@@ -34,6 +34,7 @@
 #include <minizip/unzip.h>
 #include "platform/PlatformManager.h"
 #include "renderer/RendererManager.h"
+#include "renderer/SpriteSheetManager.h"
 #ifdef PLATFORM_VITA
 #include "custom_sprites_cache.h"
 #endif
@@ -443,10 +444,7 @@ static void load_sprites_for_mod_list(LevelNumber lvnum, const struct ModConfigI
 void init_custom_sprites(LevelNumber lvnum)
 {
     SYNCDBG(8, "Starting");
-    // Schedule a full atlas rebuild before freeing so stale pointer→handle
-    // entries are cleared by RendererDrainDeferredAtlasRebuild() at BeginFrame().
-    RendererNotifySpritesReloaded();
-    free_spritesheet(&custom_sprites);
+    SpriteSheetMgr_Free(&custom_sprites);
     custom_sprites = create_spritesheet();
     total_sprite_zip_count = 0;
     sprite_zip_combined_checksum = 0;

@@ -255,56 +255,25 @@ TbResult RendererWaitVbi(void);
  *  call at any time; no-op if no GL renderer is active. */
 void RendererNotifyTexturesReloaded(void);
 
-/** Call immediately after LoadVRes256Data() / LoadMcgaData() to rebuild the
- *  sprite atlas with the freshly-loaded gui_panel_sprites / button_sprites.
- *  Safe to call at any time; no-op if no GL renderer is active. */
+/** Call immediately after LoadVRes256Data() / LoadMcgaData() to mark GUI dirty,
+ *  bump font generation and re-latch the slab texture.
+ *  Atlas rebuild is now driven automatically by SpriteSheetManager Load/Free calls. */
 void RendererNotifySpritesReloaded(void);
 
 /** Monotonic generation for text font pointer validity across IR frames.
  *  Incremented when sprite/font sheets are reloaded so render-thread text
- *  commands can reject stale non-owning font pointers captured pre-reload. */
+ *  commands can reject stale non-owning font pointers captured pre-reload.
+ *  @deprecated Use FontManager::Get().GetGeneration() from C++ code. */
 uint32_t RendererGetTextFontGeneration(void);
 
-/** Append per-level custom_sprites into the live atlas after init_custom_sprites().
- *  Does NOT reinit the atlas — existing gui_panel_sprites / button_sprites entries
- *  are preserved.  Safe to call whenever custom_sprites is rebuilt. */
-void RendererNotifyCustomSpritesReloaded(void);
-
-/** Append pointer_sprites into the live atlas after load_pointer_file().
- *  pointer_sprites are loaded separately from the main GUI sprite sheets,
- *  so they must be registered after loading completes. */
-void RendererNotifyPointerSpritesLoaded(void);
-
-/** Append frontend_sprite into the live atlas after frontend_load_data().
- *  frontend_sprite is loaded independently from the main GUI sprite sheets
- *  and must be registered so UIRenderer_SubmitPanelSpriteRaw can resolve
- *  handles for frontend menu / button sprites. */
-void RendererNotifyFrontendSpritesLoaded(void);
-
-/** Append map_flag into the live atlas after load_spritesheet() in front_landview.c.
- *  map_flag is loaded fresh on each landview entry (singleplayer + network); call
- *  this after every successful load so UIRenderer_SubmitPanelSpriteRaw can draw
- *  campaign-map ensign / pin sprites without the staging-buffer fallback. */
+/** Notify that map_flag was loaded.  Software renderer: registers sprites into
+ *  the handle table.  GL: atlas rebuild is driven by SpriteSheetMgr_Load(). */
 void RendererNotifyLandviewFlagLoaded(void);
-
-/** Append swipe_sprites into the live atlas after load_swipe_graphic_for_creature().
- *  Swipe sprites are loaded dynamically per creature when entering possession mode.
- *  Must be called after every successful load so DrawSwipeOverlay can look up UVs. */
-void RendererNotifySwipeSpritesLoaded(void);
 
 /** Call after setup_stuff() to initialise GPU resources that depend on game
  *  lookup tables (render_fade_tables, etc.) which aren't available yet when
  *  RendererInit() runs.  Must be called exactly once during startup. */
 void RendererNotifyGameTablesReady(void);
-
-/** Returns non-zero if the UI (init_gui + init_gameplay_ui) must be reinitialised
- *  after a save-game load.  For the software renderer this is always true.
- *  For GPU renderers (OpenGL) this returns true only when the sprite atlas has
- *  been rebuilt since the last reinit — i.e. after a resolution change.  On a
- *  plain save-load at the same resolution the atlas is still valid, so the CPU
- *  menu slot state can be carried forward and reset_gui_based_on_player_mode()
- *  will open the right panels without a full slot wipe. */
-int RendererNeedsUIReinitAfterLoad(void);
 
 /** Schedule a screenshot to be saved to @p path.
  *  Dispatches to the active backend's ScheduleScreenshot().

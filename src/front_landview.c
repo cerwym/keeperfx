@@ -36,6 +36,7 @@
 #include "bflib_sound.h"
 #include "bflib_vidraw.h"
 #include "renderer/RendererManager.h"
+#include "renderer/SpriteSheetManager.h"
 
 #include "config_strings.h"
 #include "config_campaigns.h"
@@ -1050,13 +1051,13 @@ TbBool frontmap_load(void)
     }
     switch (campaign.land_markers) {
     case LndMk_PINPOINTS:
-        map_flag = load_spritesheet("ldata/lndflag_pin.dat", "ldata/lndflag_pin.tab");
+        SpriteSheetMgr_Load(&map_flag, "ldata/lndflag_pin.dat", "ldata/lndflag_pin.tab");
         break;
     default:
         ERRORLOG("Unsupported land markers type %d",(int)campaign.land_markers);
         // Fall through
     case LndMk_ENSIGNS:
-        map_flag = load_spritesheet("ldata/lndflag_ens.dat", "ldata/lndflag_ens.tab");
+        SpriteSheetMgr_Load(&map_flag, "ldata/lndflag_ens.dat", "ldata/lndflag_ens.tab");
         break;
     }
     if (!map_flag)
@@ -1324,10 +1325,7 @@ void frontmap_unload(void)
     SYNCDBG(8,"Starting");
     set_pointer_graphic_none();
     unload_map_and_window();
-    // Schedule a full atlas rebuild before freeing map_flag so stale
-    // pointer→handle entries are cleared before the sheet is reloaded.
-    RendererNotifySpritesReloaded();
-    free_spritesheet(&map_flag);
+    SpriteSheetMgr_Free(&map_flag);
     StopAllSamples();
     stop_description_speech();
     stop_music();

@@ -49,6 +49,8 @@
 #include "creature_graphics.h"
 #include "keeperfx.hpp"
 #include "renderer/RendererManager.h"
+#include "renderer/SpriteSheetManager.h"
+#include "renderer/FontManager.h"
 #include "custom_sprites.h"
 #include "sprites.h"
 #include "post_inc.h"
@@ -122,10 +124,10 @@ short LoadVRes256Data(long scrbuf_size)
         scrbuf_size = 640*480;
     gui_load_files_640[1].SLength = scrbuf_size;
     // Load the files
-    winfont = load_font("data/font2-64.dat", "data/font2-64.tab");
-    font_sprites = load_font("data/font1-64.dat", "data/font1-64.tab");
-    button_sprites = load_spritesheet("data/gui1-64.dat", "data/gui1-64.tab");
-    gui_panel_sprites = load_spritesheet("data/gui2-64.dat", "data/gui2-64.tab");
+    FontMgr_Load(&winfont, "data/font2-64.dat", "data/font2-64.tab");
+    FontMgr_Load(&font_sprites, "data/font1-64.dat", "data/font1-64.tab");
+    SpriteSheetMgr_Load(&button_sprites, "data/gui1-64.dat", "data/gui1-64.tab");
+    SpriteSheetMgr_Load(&gui_panel_sprites, "data/gui2-64.dat", "data/gui2-64.tab");
     if (!winfont || !font_sprites || !button_sprites || !gui_panel_sprites || LbDataLoadAll(gui_load_files_640)) {
         return 0;
     }
@@ -135,20 +137,20 @@ short LoadVRes256Data(long scrbuf_size)
 
 void FreeVRes256Data(void)
 {
-    free_font(&winfont);
-    free_font(&font_sprites);
-    free_spritesheet(&button_sprites);
-    free_spritesheet(&gui_panel_sprites);
+    FontMgr_Free(&winfont);
+    FontMgr_Free(&font_sprites);
+    SpriteSheetMgr_Free(&button_sprites);
+    SpriteSheetMgr_Free(&gui_panel_sprites);
     LbDataFreeAll(gui_load_files_640);
 }
 
 short LoadVResMinimal(void)
 {
-    button_sprites = load_spritesheet("data/gui1-32.dat", "data/gui1-32.tab");
-    frontend_font[0] = load_font("ldata/frontft1.dat", "ldata/frontft1.tab");
-    frontend_font[1] = load_font("ldata/frontft2.dat", "ldata/frontft2.tab");
-    frontend_font[2] = load_font("ldata/frontft3.dat", "ldata/frontft3.tab");
-    frontend_font[3] = load_font("ldata/frontft4.dat", "ldata/frontft4.tab");
+    SpriteSheetMgr_Load(&button_sprites, "data/gui1-32.dat", "data/gui1-32.tab");
+    FontMgr_Load(&frontend_font[0], "ldata/frontft1.dat", "ldata/frontft1.tab");
+    FontMgr_Load(&frontend_font[1], "ldata/frontft2.dat", "ldata/frontft2.tab");
+    FontMgr_Load(&frontend_font[2], "ldata/frontft3.dat", "ldata/frontft3.tab");
+    FontMgr_Load(&frontend_font[3], "ldata/frontft4.dat", "ldata/frontft4.tab");
     if (!button_sprites || !frontend_font[0] || !frontend_font[1] || !frontend_font[2] ||
         !frontend_font[3] || LbDataLoadAll(front_load_files_minimal_640) != 0) {
         return 0;
@@ -160,9 +162,9 @@ short LoadVResMinimal(void)
 void FreeVResMinimal(void)
 {
     for (int i = 0; i < FRONTEND_FONTS_COUNT; ++i) {
-        free_font(&frontend_font[i]);
+        FontMgr_Free(&frontend_font[i]);
     }
-    free_spritesheet(&button_sprites);
+    SpriteSheetMgr_Free(&button_sprites);
     LbDataFreeAll(front_load_files_minimal_640);
 }
 
@@ -195,10 +197,10 @@ short LoadMcgaData(void)
         i++;
         t_lfile = &gui_load_files_320[i];
   }
-  button_sprites = load_spritesheet("data/gui1-32.dat", "data/gui1-32.tab");
-  winfont = load_font("data/font2-32.dat", "data/font2-32.tab");
-  font_sprites = load_font("data/font1-32.dat", "data/font1-32.tab");
-  gui_panel_sprites = load_spritesheet("data/gui2-32.dat", "data/gui2-32.tab");
+  SpriteSheetMgr_Load(&button_sprites, "data/gui1-32.dat", "data/gui1-32.tab");
+  FontMgr_Load(&winfont, "data/font2-32.dat", "data/font2-32.tab");
+  FontMgr_Load(&font_sprites, "data/font1-32.dat", "data/font1-32.tab");
+  SpriteSheetMgr_Load(&gui_panel_sprites, "data/gui2-32.dat", "data/gui2-32.tab");
   if (button_sprites && winfont && font_sprites && gui_panel_sprites && (ferror == 0)) {
       RendererNotifySpritesReloaded();
       return 1;
@@ -209,10 +211,10 @@ short LoadMcgaData(void)
 void FreeMcgaData(void)
 {
     LbDataFreeAll(gui_load_files_320);
-    free_font(&winfont);
-    free_font(&font_sprites);
-    free_spritesheet(&button_sprites);
-    free_spritesheet(&gui_panel_sprites);
+    FontMgr_Free(&winfont);
+    FontMgr_Free(&font_sprites);
+    SpriteSheetMgr_Free(&button_sprites);
+    SpriteSheetMgr_Free(&gui_panel_sprites);
 }
 
 void set_game_vidmode(uint i, TbScreenMode nmode)
@@ -268,9 +270,8 @@ void set_frontend_vidmode(TbScreenMode nmode)
 
 void load_pointer_file(short hi_res)
 {
-    pointer_sprites = load_spritesheet("data/pointer64.dat", "data/pointer64.tab");
+    SpriteSheetMgr_Load(&pointer_sprites, "data/pointer64.dat", "data/pointer64.tab");
     if (!pointer_sprites) ERRORLOG("Unable to load pointer sprites");
-    RendererNotifyPointerSpritesLoaded();
 }
 
 TbBool set_pointer_graphic_none(void)
@@ -493,7 +494,7 @@ TbBool set_pointer_graphic(long ptr_idx)
 void unload_pointer_file(short hi_res)
 {
     set_pointer_graphic_none();
-    free_spritesheet(&pointer_sprites);
+    SpriteSheetMgr_Free(&pointer_sprites);
 }
 
 TbBool init_fades_table(void)

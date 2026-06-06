@@ -30,6 +30,7 @@
 #include "bflib_filelst.h"
 #include "bflib_datetm.h"
 #include "renderer/RendererManager.h"
+#include "renderer/FontManager.h"
 
 #include "gui_frontbtns.h"
 #include "front_simple.h"
@@ -54,7 +55,7 @@ int credits_end;
 void frontstory_load(void)
 {
     frontend_load_data_from_cd();
-    frontstory_font = load_font("ldata/frontft1.dat", "ldata/frontft1.tab");
+    FontMgr_Load(&frontstory_font, "ldata/frontft1.dat", "ldata/frontft1.tab");
     if (!frontstory_font)
     {
         ERRORLOG("Unable to load front story font");
@@ -72,7 +73,7 @@ void frontstory_load(void)
 
 void frontstory_unload(void)
 {
-    free_font(&frontstory_font);
+    FontMgr_Free(&frontstory_font);
 }
 
 void frontstory_draw(void)
