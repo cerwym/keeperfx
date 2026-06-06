@@ -75,6 +75,7 @@ extern "C" {
 #include "front_torture.h"     // fronttorture_sprites, doors[]
 #include "renderer/RenderPass_C.h"
 #include <unordered_map>
+#include <vector>
 #include "post_inc.h"
 
 /******************************************************************************/
@@ -135,10 +136,11 @@ void RendererDrainDeferredAtlasRebuild()
         return;
     mgr.ClearRebuildPending();
 
-    const TbSpriteSheet* sheets[SpriteSheetManager::kMaxSheets];
-    const char*          names [SpriteSheetManager::kMaxSheets];
-    int count = mgr.CollectActive(sheets, names, SpriteSheetManager::kMaxSheets);
-    s_spriteAtlas->Rebuild(sheets, names, count);
+    const size_t cap = mgr.RegisteredCount();
+    std::vector<const TbSpriteSheet*> sheets(cap);
+    std::vector<const char*>          names(cap);
+    int count = mgr.CollectActive(sheets.data(), names.data(), (int)cap);
+    s_spriteAtlas->Rebuild(sheets.data(), names.data(), count);
     for (int i = 0; i < count; ++i)
         SYNCLOG("RendererDrainDeferredAtlasRebuild: packed '%s' (%d sprites)",
                 names[i], (int)num_sprites(sheets[i]));

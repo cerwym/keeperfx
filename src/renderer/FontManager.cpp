@@ -24,14 +24,10 @@ FontManager& FontManager::Get()
 
 void FontManager::Register(TbSpriteSheet** slot, const char* name)
 {
-    for (int i = 0; i < m_count; ++i)
-        if (m_entries[i].slot == slot) return; // idempotent
+    for (const auto& e : m_entries)
+        if (e.slot == slot) return; // idempotent
 
-    if (m_count >= kMaxFonts) {
-        ERRORLOG("FontManager::Register: capacity exceeded (max %d)", kMaxFonts);
-        return;
-    }
-    m_entries[m_count++] = {slot, name};
+    m_entries.push_back({slot, name});
     SYNCLOG("FontManager: registered slot '%s' (%p)", name, (void*)slot);
 }
 
@@ -68,13 +64,13 @@ void FontManager::FreeAll()
 {
     KFX_ZONE_COLOR("FontMgr::FreeAll", KFX_COLOR_RENDER_CPU);
 
-    for (int i = 0; i < m_count; ++i) {
-        if (*m_entries[i].slot) {
-            free_spritesheet(m_entries[i].slot);
-            SYNCLOG("FontManager: freed '%s' in FreeAll", m_entries[i].name);
+    for (const auto& e : m_entries) {
+        if (*e.slot) {
+            free_spritesheet(e.slot);
+            SYNCLOG("FontManager: freed '%s' in FreeAll", e.name);
         }
     }
-    BumpGeneration(); // one bump covers all
+    BumpGeneration();
 }
 
 void FontManager::BumpGeneration()

@@ -26,6 +26,7 @@
 #include "bflib_basics.h"   /* TbBool */
 
 #ifdef __cplusplus
+#include <vector>
 
 class SpriteSheetManager {
 public:
@@ -53,9 +54,10 @@ public:
 
     bool RebuildPending()      const { return m_rebuild_pending; }
     void ClearRebuildPending()       { m_rebuild_pending = false; }
+    size_t RegisteredCount()   const { return m_entries.size(); }
 
     /** Collect currently-loaded (non-NULL, non-empty) sheets into out arrays.
-     *  Returns the count written.  capacity must be >= number of registered slots. */
+     *  Returns the count written. */
     int CollectActive(const TbSpriteSheet** out_sheets,
                       const char**          out_names,
                       int                   capacity) const;
@@ -70,13 +72,10 @@ public:
     /** Returns true if GUI reinit is needed; resets the flag.  Consumes once. */
     bool ConsumeGUIDirty() { bool v = m_gui_dirty; m_gui_dirty = false; return v; }
 
-    static constexpr int kMaxSheets = 24;
-
 private:
     struct Entry { TbSpriteSheet** slot; const char* name; };
 
-    Entry m_entries[kMaxSheets] {};
-    int   m_count           = 0;
+    std::vector<Entry> m_entries;
     bool  m_rebuild_pending = false;
     bool  m_gui_dirty       = true;  // true at startup — first load always reinits
 };

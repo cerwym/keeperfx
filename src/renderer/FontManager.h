@@ -34,6 +34,7 @@
 
 #ifdef __cplusplus
 #include <atomic>
+#include <vector>
 
 class FontManager {
 public:
@@ -58,13 +59,10 @@ public:
     /** Current generation value — snapshot into queued text commands. */
     uint32_t GetGeneration() const { return m_generation.load(std::memory_order_relaxed); }
 
-    static constexpr int kMaxFonts = 12;
-
 private:
     struct Entry { TbSpriteSheet** slot; const char* name; };
 
-    Entry    m_entries[kMaxFonts] {};
-    int      m_count      = 0;
+    std::vector<Entry>    m_entries;
     std::atomic<uint32_t> m_generation {1};  // 0 is reserved as "always stale"
 };
 
