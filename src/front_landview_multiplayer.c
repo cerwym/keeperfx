@@ -44,8 +44,8 @@
 #include "vidfade.h"
 #include "vidmode.h"
 #include "renderer/RendererManager.h"
-#include "renderer/SpriteSheetManager.h"
-#include "renderer/FontManager.h"
+#include "kfx/assets/SpriteSheetManager.h"
+#include "kfx/assets/FontManager.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus

@@ -70,7 +70,7 @@
 #include "kjm_input.h"
 #include "lens_api.h"
 #include "renderer/RendererManager.h"
-#include "renderer/SpriteSheetManager.h"
+#include "kfx/assets/SpriteSheetManager.h"
 #include "light_data.h"
 #include "magic_powers.h"
 #include "map_blocks.h"

@@ -30,7 +30,7 @@
 #include "bflib_filelst.h"
 #include "bflib_datetm.h"
 #include "renderer/RendererManager.h"
-#include "renderer/FontManager.h"
+#include "kfx/assets/FontManager.h"
 
 #include "gui_frontbtns.h"
 #include "front_simple.h"

@@ -21,7 +21,7 @@
 #include "ui_init.h"               /* init_gameplay_ui */
 #include "creature_states_combt.h" /* reset_postal_instance_cache */
 #include "renderer/RendererManager.h"
-#include "renderer/SpriteSheetManager.h"
+#include "kfx/assets/SpriteSheetManager.h"
 
 /******************************************************************************/
 

@@ -28,7 +28,7 @@
 #include "bflib_sprite.h"
 #include "bflib_sprfnt.h"
 #include "renderer/RendererManager.h"
-#include "renderer/SpriteSheetManager.h"
+#include "kfx/assets/SpriteSheetManager.h"
 #include "bflib_dernc.h"
 #include "bflib_datetm.h"
 #include "bflib_keybrd.h"

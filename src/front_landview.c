@@ -36,7 +36,7 @@
 #include "bflib_sound.h"
 #include "bflib_vidraw.h"
 #include "renderer/RendererManager.h"
-#include "renderer/SpriteSheetManager.h"
+#include "kfx/assets/SpriteSheetManager.h"
 
 #include "config_strings.h"
 #include "config_campaigns.h"

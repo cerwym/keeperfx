@@ -33,7 +33,7 @@
 #include "bflib_video.h"
 #include "bflib_vidraw.h"
 #include "renderer/RendererManager.h"
-#include "renderer/SpriteSheetManager.h"
+#include "kfx/assets/SpriteSheetManager.h"
 #include "bflib_mouse.h"
 #include "bflib_sound.h"
 #include "bflib_sndlib.h"

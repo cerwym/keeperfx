@@ -7,8 +7,8 @@
 /******************************************************************************/
 #include "pre_inc.h"
 #include "renderer/RendererManager.h"
-#include "renderer/SpriteSheetManager.h"
-#include "renderer/FontManager.h"
+#include "kfx/assets/SpriteSheetManager.h"
+#include "kfx/assets/FontManager.h"
 #include "renderer/SpriteHandle.h"
 #include "renderer/ICursorLayer.h"
 #include "renderer/ir/WorldCommands.h"

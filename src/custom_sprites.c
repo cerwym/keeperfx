@@ -34,7 +34,7 @@
 #include <minizip/unzip.h>
 #include "platform/PlatformManager.h"
 #include "renderer/RendererManager.h"
-#include "renderer/SpriteSheetManager.h"
+#include "kfx/assets/SpriteSheetManager.h"
 #ifdef PLATFORM_VITA
 #include "custom_sprites_cache.h"
 #endif
