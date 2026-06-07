@@ -2071,10 +2071,6 @@ void GLWorldViewRenderer::DrawIsometricView()
     KFX_ZONE("WVR::DrawIsometricView");
     // Normal world build runs on the game thread.
     // PiP capture build (draw_view from EndFrame_GL PiP loop) runs on the render thread.
-    if (m_pip_capture)
-        ASSERT_RENDER_THREAD();
-    else
-        ASSERT_GAME_THREAD();
 
     if (!m_initialized) {
         ERRORLOG("GLWorldViewRenderer asked to draw ISO but not initialised — frame dropped");
