@@ -37,6 +37,7 @@
 #include "bflib_vidraw.h"
 #include "renderer/RendererManager.h"
 #include "kfx/assets/SpriteSheetManager.h"
+#include "kfx/assets/FontManager.h"
 
 #include "config_strings.h"
 #include "config_campaigns.h"
@@ -1060,9 +1061,12 @@ TbBool frontmap_load(void)
         SpriteSheetMgr_Load(&map_flag, "ldata/lndflag_ens.dat", "ldata/lndflag_ens.tab");
         break;
     }
-    if (!map_flag)
+    FontMgr_Load(&map_font, "ldata/netfont.dat", "ldata/netfont.tab");
+    if (!map_flag || !map_font)
     {
         ERRORLOG("Unable to load Land View Screen sprites");
+        FontMgr_Free(&map_font);
+        SpriteSheetMgr_Free(&map_flag);
         frontend_load_data_reset();
         return false;
     }
@@ -1325,6 +1329,7 @@ void frontmap_unload(void)
     SYNCDBG(8,"Starting");
     set_pointer_graphic_none();
     unload_map_and_window();
+    FontMgr_Free(&map_font);
     SpriteSheetMgr_Free(&map_flag);
     StopAllSamples();
     stop_description_speech();
