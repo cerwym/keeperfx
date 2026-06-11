@@ -1111,6 +1111,8 @@ TbBool frontmap_load(void)
     return true;
 }
 
+static void draw_ensign_name_tooltip(void);
+
 void frontmap_draw(void)
 {
     SYNCDBG(8,"Starting");
@@ -1126,6 +1128,7 @@ void frontmap_draw(void)
         draw_map_level_ensigns();
         set_pointer_graphic_spland(0);
         compressed_window_draw();
+        draw_ensign_name_tooltip();
     }
 }
 
@@ -1251,6 +1254,55 @@ void draw_map_level_descriptions(void)
     LbDrawBox(scale_value_landview(x-4), scale_value_landview(y), scale_value_landview(w+8), scale_value_landview(h), 0);
     LbTextDrawResized(scale_value_landview(x), scale_value_landview(y), units_per_pixel_landview, level_name);
   }
+}
+
+/**
+ * Draws a tooltip anchored to the cursor showing the name of the ensign
+ * currently under the mouse.Name will be read from LevelInformation
+ */
+static void draw_ensign_name_tooltip(void)
+{
+    if (mouse_over_lvnum <= 0)
+        return;
+    if ((map_info.fadeflags & MLInfoFlg_Zooming) != 0)
+        return;
+
+    struct LevelInformation* lvinfo = get_level_info(mouse_over_lvnum);
+    if (lvinfo == NULL)
+        return;
+
+    const char* lv_name = (lvinfo->name_stridx > 0) ? get_string(lvinfo->name_stridx) : lvinfo->name;
+    set_level_name_text(mouse_over_lvnum, lv_name);
+
+    // Measure text in logical units, then convert to screen pixels.
+    const long PAD_PX     = 4;
+    const long OFFSET_X   = 8;
+    const long OFFSET_Y   = 20;
+    long text_w = LbTextStringWidth(level_name);
+    long text_h = LbTextHeight(level_name);
+    long box_w  = scale_value_landview(text_w + PAD_PX * 2);
+    long box_h  = scale_value_landview(text_h);
+
+    // Anchor to the mouse cursor; clamp so the box stays on screen.
+    long x = GetMouseX() + OFFSET_X;
+    long y = GetMouseY() + OFFSET_Y;
+    if (x + box_w > RendererPhysicalWidth())
+        x = RendererPhysicalWidth() - box_w;
+    if (x < 0)
+        x = 0;
+    if (y + box_h > RendererPhysicalHeight())
+        y = RendererPhysicalHeight() - box_h;
+    if (y < 0)
+        y = 0;
+
+    UIRenderer_BeginTopOverlay();
+    UIRenderer_SubmitSolidBoxAlpha(x, y, box_w, box_h, 0, 0.75f);
+    UIRenderer_EndTopOverlay();
+
+    LbTextSetWindow(x, y, box_w, box_h);
+    lbDisplay.DrawFlags = 0;
+    LbTextDrawResized(scale_value_landview(PAD_PX), 0, units_per_pixel_landview, level_name);
+    LbTextSetWindow(0, 0, RendererPhysicalWidth(), RendererPhysicalHeight());
 }
 
 void frontmap_input(void)
