@@ -9149,17 +9149,33 @@ static void do_map_who_for_thing(struct Thing *thing)
         // Shadows
         if (thing_is_creature(thing) && ((thing->movement_flags & TMvF_BeingSacrificed) == 0))
         {
-            int count;
-            int i;
+            int shadow_type = g_renderer_settings.shadow_type;
 
-            unsigned short animation_sprite = get_render_animation_sprite(thing->anim_sprite);
-            struct KeeperSprite *spr = keepersprite_array(animation_sprite);
-            if ((spr != NULL) && ((spr->frame_flags & FFL_NoShadows) == 0))
+            /* GPU circle blob — one submission per creature, no light loop */
+            if (RendererHasGPURenderPath() && shadow_type == RENDERER_SHADOW_CIRCLE)
             {
-                count = find_closest_lights(&thing->mappos, &nearlgt);
-                for (i = 0; i < count; i++)
+                unsigned short animation_sprite = get_render_animation_sprite(thing->anim_sprite);
+                struct KeeperSprite *spr = keepersprite_array(animation_sprite);
+                if (spr != NULL && (spr->frame_flags & FFL_NoShadows) == 0)
+                    create_circle_shadow(thing, &ecor);
+            }
+            else if (shadow_type != RENDERER_SHADOW_OFF)
+            {
+                int count;
+                int i;
+
+                unsigned short animation_sprite = get_render_animation_sprite(thing->anim_sprite);
+                struct KeeperSprite *spr = keepersprite_array(animation_sprite);
+                if ((spr != NULL) && ((spr->frame_flags & FFL_NoShadows) == 0))
                 {
-                    create_shadows(thing, &ecor, &nearlgt.coord[i]);
+                    count = find_closest_lights(&thing->mappos, &nearlgt);
+                    /* Clamp to the configured type (1-4 = shadow count, default 4) */
+                    if (RendererHasGPURenderPath() && shadow_type >= 1 && shadow_type <= 4 && count > shadow_type)
+                        count = shadow_type;
+                    for (i = 0; i < count; i++)
+                    {
+                        create_shadows(thing, &ecor, &nearlgt.coord[i]);
+                    }
                 }
             }
         }
