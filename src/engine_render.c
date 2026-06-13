@@ -3911,6 +3911,63 @@ static void create_shadows(struct Thing *thing, struct EngineCoord *ecor, struct
     kspr->current_frame = current_frame;
 }
 
+/** Submit a GPU-only circle blob shadow centred under the creature.
+ *  `ecor` must be the floor-height coord (before height offset is applied). */
+static void create_circle_shadow(struct Thing *thing, struct EngineCoord *ecor)
+{
+    unsigned short animation_sprite = get_render_animation_sprite(thing->anim_sprite);
+    struct KeeperSprite *spr = keepersprite_array(animation_sprite);
+    if (spr == NULL)
+        return;
+
+    short dim_ow, dim_oh, dim_tw, dim_th;
+    get_keepsprite_unscaled_dimensions(animation_sprite, 0, thing->current_frame,
+                                       &dim_ow, &dim_oh, &dim_tw, &dim_th);
+    if (dim_ow <= 0 || dim_oh <= 0)
+        return;
+
+    /* Project the floor centre to screen space. */
+    struct EngineCoord centre = *ecor;
+    rotpers(&centre, &camera_matrix);
+    if (centre.z < BUCKETS_STEP)
+        return;
+
+    int bucket_idx = centre.z / BUCKETS_STEP;
+    if (bucket_idx >= BUCKETS_COUNT - 1)
+        bucket_idx = BUCKETS_COUNT - 2;
+
+    /* Radius in screen pixels based on sprite bounding box. */
+    int half = (dim_ow > dim_oh ? dim_ow : dim_oh) / 2;
+    if (half < 4) half = 4;
+
+    int cx = centre.view_width;
+    int cy = centre.view_height;
+
+    struct WorldShadowSubmitCmd scmd;
+    memset(&scmd, 0, sizeof(scmd));
+
+    scmd.verts[0].x = cx - half;  scmd.verts[0].y = cy + half;
+    scmd.verts[0].u = 0;          scmd.verts[0].v = TO_FIXED(63);
+
+    scmd.verts[1].x = cx - half;  scmd.verts[1].y = cy - half;
+    scmd.verts[1].u = 0;          scmd.verts[1].v = 0;
+
+    scmd.verts[2].x = cx + half;  scmd.verts[2].y = cy - half;
+    scmd.verts[2].u = TO_FIXED(63); scmd.verts[2].v = 0;
+
+    scmd.verts[3].x = cx + half;  scmd.verts[3].y = cy + half;
+    scmd.verts[3].u = TO_FIXED(63); scmd.verts[3].v = TO_FIXED(63);
+
+    scmd.darkness      = 0.75f;
+    scmd.ndc_z         = 2.0f * (float)bucket_idx / (float)(BUCKETS_COUNT - 1) - 1.0f;
+    scmd.wx            = (int32_t)ecor->x;
+    scmd.wy            = (int32_t)ecor->y;
+    scmd.wz            = (int32_t)ecor->z;
+    scmd.sort_key      = (uint32_t)bucket_idx;
+    scmd.is_circle     = 1;
+    WorldViewRenderer_SubmitWorldShadow(&scmd);
+}
+
 // Creature status flower above head in isometric view
 static void add_draw_status_box(struct Thing *thing, struct EngineCoord *ecor)
 {

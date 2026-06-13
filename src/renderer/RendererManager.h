@@ -370,6 +370,7 @@ struct WorldShadowSubmitCmd {
     int32_t        wy;
     int32_t        wz;
     uint32_t       sort_key;
+    unsigned char  is_circle;  /**< 1 = draw pre-baked circle, 0 = decode sprite */
 };
 
 /** Submit a creature shadow through the hardware world-renderer IR path.

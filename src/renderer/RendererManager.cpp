@@ -1089,6 +1089,7 @@ int WorldViewRenderer_SubmitWorldShadow(const struct WorldShadowSubmitCmd* cmd)
     ir_cmd.tex_w         = cmd->tex_w;
     ir_cmd.tex_h         = cmd->tex_h;
     ir_cmd.darkness      = cmd->darkness;
+    ir_cmd.is_circle     = cmd->is_circle;
     ir_cmd.ndc_z         = cmd->ndc_z;
     ir_cmd.wx            = cmd->wx;
     ir_cmd.wy            = cmd->wy;

@@ -126,6 +126,7 @@ struct IRWorldShadowCmd
     float            ndc_z         = 0.0f;  /**< NDC depth for depth test. */
     int32_t          wx            = 0, wy = 0, wz = 0;  /**< World-space caster origin. */
     uint32_t         sort_key      = 0;
+    unsigned char    is_circle     = 0;  /**< 1 = draw pre-baked circle, 0 = decode sprite. */
 };
 
 /******************************************************************************/

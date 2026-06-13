@@ -407,6 +407,7 @@ void GLWorldViewRenderer::free_gl_resources()
     if (m_shadow_vbo)             { glDeleteBuffers(1, &m_shadow_vbo);                 m_shadow_vbo = 0; }
     if (m_shadow_shader)          { glDeleteProgram(m_shadow_shader);                  m_shadow_shader = 0; }
     if (m_shadow_silhouette_tex)  { glDeleteTextures(1, &m_shadow_silhouette_tex);     m_shadow_silhouette_tex = 0; }
+    if (m_shadow_circle_tex)      { glDeleteTextures(1, &m_shadow_circle_tex);          m_shadow_circle_tex = 0; }
 
     if (m_kspr_vao)         { glDeleteVertexArrays(1, &m_kspr_vao);        m_kspr_vao = 0; }
     if (m_kspr_vbo)         { glDeleteBuffers(1, &m_kspr_vbo);              m_kspr_vbo = 0; }
@@ -530,6 +531,32 @@ bool GLWorldViewRenderer::init_shadow_shader()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glBindTexture(GL_TEXTURE_2D, 0);
+
+    // Pre-baked 64×64 R8 radial gradient for circle blob shadows
+    {
+        static const int k_circ = 64;
+        unsigned char circ_data[k_circ * k_circ];
+        for (int py = 0; py < k_circ; py++)
+        {
+            for (int px = 0; px < k_circ; px++)
+            {
+                float dx = (px + 0.5f) / k_circ * 2.0f - 1.0f;
+                float dy = (py + 0.5f) / k_circ * 2.0f - 1.0f;
+                float r2 = dx * dx + dy * dy;
+                float v  = (r2 < 1.0f) ? (1.0f - r2) : 0.0f;
+                circ_data[py * k_circ + px] = (unsigned char)(v * 255.0f + 0.5f);
+            }
+        }
+        glGenTextures(1, &m_shadow_circle_tex);
+        KFX_GL_LABEL(GL_TEXTURE, m_shadow_circle_tex, "WVR/ShadowCircleTex");
+        glBindTexture(GL_TEXTURE_2D, m_shadow_circle_tex);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, k_circ, k_circ, 0, GL_RED, GL_UNSIGNED_BYTE, circ_data);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
 
     return true;
 }
@@ -1763,19 +1790,33 @@ void GLWorldViewRenderer::ExecutePiPCapture(const PiPCapture& cap, int pip_w, in
 
 void GLWorldViewRenderer::DrawShadowGL(const IRWorldShadowCmd& sc, int screen_w, int screen_h)
 {
-    if (sc.tex_w <= 0 || sc.tex_h <= 0 || sc.tex_w > 256 || sc.tex_h > 256)
-        return;
+    /* ----- resolve texture and upload pixel data ----- */
+    GLuint tex_to_bind;
 
-    memset(s_kspr_decode_buf, 0, (size_t)sc.tex_h * 256);
-    draw_keepsprite_unscaled_in_buffer(sc.anim_sprite, sc.angle,
-                                       sc.current_frame, s_kspr_decode_buf);
+    if (sc.is_circle)
+    {
+        /* Circle blob: use the pre-baked radial gradient texture directly */
+        tex_to_bind = m_shadow_circle_tex;
+        if (!tex_to_bind)
+            return;
+    }
+    else
+    {
+        if (sc.tex_w <= 0 || sc.tex_h <= 0 || sc.tex_w > 256 || sc.tex_h > 256)
+            return;
 
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_shadow_silhouette_tex);
-    glPixelStorei(GL_UNPACK_ROW_LENGTH, 256);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, sc.tex_w, sc.tex_h,
-                    GL_RED, GL_UNSIGNED_BYTE, s_kspr_decode_buf);
-    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+        memset(s_kspr_decode_buf, 0, (size_t)sc.tex_h * 256);
+        draw_keepsprite_unscaled_in_buffer(sc.anim_sprite, sc.angle,
+                                           sc.current_frame, s_kspr_decode_buf);
+
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, m_shadow_silhouette_tex);
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, 256);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, sc.tex_w, sc.tex_h,
+                        GL_RED, GL_UNSIGNED_BYTE, s_kspr_decode_buf);
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+        tex_to_bind = m_shadow_silhouette_tex;
+    }
 
     float sv[6][4];
     const EnginePolyVertex* vp = sc.verts;
@@ -1784,9 +1825,22 @@ void GLWorldViewRenderer::DrawShadowGL(const IRWorldShadowCmd& sc, int screen_w,
     {
         sv[t][0] = (float)vp[idx[t]].x;
         sv[t][1] = (float)vp[idx[t]].y;
-        sv[t][2] = (float)(vp[idx[t]].u >> 16) / 256.0f;
-        sv[t][3] = (float)(vp[idx[t]].v >> 16) / 256.0f;
+        sv[t][2] = (float)(vp[idx[t]].u >> 16) / 64.0f;   // circle tex is 64×64
+        sv[t][3] = (float)(vp[idx[t]].v >> 16) / 64.0f;
     }
+    /* Sprite shadows need UV normalised to their own dimensions */
+    if (!sc.is_circle)
+    {
+        for (int t = 0; t < 6; t++)
+        {
+            sv[t][2] = (float)vp[idx[t]].u / 65536.0f / 256.0f;
+            sv[t][3] = (float)vp[idx[t]].v / 65536.0f / 256.0f;
+        }
+    }
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, tex_to_bind);
+
     glBindBuffer(GL_ARRAY_BUFFER, m_shadow_vbo);
     glBufferData(GL_ARRAY_BUFFER, sizeof(sv), nullptr, GL_DYNAMIC_DRAW);
     glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(sv), sv);

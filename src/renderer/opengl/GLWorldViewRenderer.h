@@ -276,6 +276,7 @@ private:
     // Shadow GL objects
     GLuint m_shadow_shader          = 0;
     GLuint m_shadow_silhouette_tex  = 0;
+    GLuint m_shadow_circle_tex      = 0;  // pre-baked 64×64 GL_R8 soft circle (generated at init)
     GLuint m_shadow_vao             = 0;
     GLuint m_shadow_vbo             = 0;
 
