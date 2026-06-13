@@ -307,15 +307,17 @@ constexpr const char* SHADOW_FRAGMENT_SHADER = R"glsl(
 #version 330 core
 in vec2 v_uv;
 uniform sampler2D u_silhouette;
-uniform float u_darkness;
+uniform float u_darkness;       // per-shadow distance-based alpha (scaled by shadow_darkness_scale)
+uniform vec4  u_shadow_colour;  // rgb=tint colour, a=intensity multiplier (from RendererSettings)
 out vec4 fragColor;
 void main()
 {
     float mask = texture(u_silhouette, v_uv).r;
     if (mask == 0.0) discard;
-    // Blend equation GL_ZERO / GL_ONE_MINUS_SRC_ALPHA darkens the framebuffer:
-    //   output = dst_color * (1.0 - darkness)
-    fragColor = vec4(0.0, 0.0, 0.0, u_darkness);
+    // Standard alpha blend (GL_SRC_ALPHA / GL_ONE_MINUS_SRC_ALPHA).
+    // When shadow_colour = (0,0,0,1) this is identical to the original multiply-darken:
+    //   result = black * alpha + dst * (1 - alpha) = dst * (1 - alpha)
+    fragColor = vec4(u_shadow_colour.rgb, u_darkness * u_shadow_colour.a);
 }
 )glsl";
 

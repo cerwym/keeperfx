@@ -341,6 +341,7 @@ private:
     GLint  m_shadow_loc_darkness   = -1;
     GLint  m_shadow_loc_silhouette = -1;
     GLint  m_shadow_loc_ndc_z      = -1;
+    GLint  m_shadow_loc_colour     = -1;  // u_shadow_colour (vec4: rgb tint + intensity)
 
     // Keeper-sprite uniform locations
     GLint  m_kspr_loc_viewport = -1;

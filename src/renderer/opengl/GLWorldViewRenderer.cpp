@@ -500,6 +500,7 @@ bool GLWorldViewRenderer::init_shadow_shader()
     m_shadow_loc_darkness   = glGetUniformLocation(m_shadow_shader, "u_darkness");
     m_shadow_loc_silhouette = glGetUniformLocation(m_shadow_shader, "u_silhouette");
     m_shadow_loc_ndc_z      = glGetUniformLocation(m_shadow_shader, "u_ndc_z");
+    m_shadow_loc_colour     = glGetUniformLocation(m_shadow_shader, "u_shadow_colour");
     glUniform1i(m_shadow_loc_silhouette, 0); // GL_TEXTURE0
     glUseProgram(0);
 
@@ -1848,14 +1849,19 @@ void GLWorldViewRenderer::DrawShadowGL(const IRWorldShadowCmd& sc, int screen_w,
     glBindVertexArray(m_shadow_vao);
     glUseProgram(m_shadow_shader);
     glUniform2f(m_shadow_loc_viewport, (float)screen_w, (float)screen_h);
-    glUniform1f(m_shadow_loc_darkness, sc.darkness);
+    glUniform1f(m_shadow_loc_darkness, sc.darkness * g_renderer_settings.shadow_darkness_scale);
+    glUniform4f(m_shadow_loc_colour,
+                g_renderer_settings.shadow_colour_r,
+                g_renderer_settings.shadow_colour_g,
+                g_renderer_settings.shadow_colour_b,
+                g_renderer_settings.shadow_colour_a);
     glUniform1f(m_shadow_loc_ndc_z,    sc.ndc_z);
 
     glDepthMask(GL_FALSE);
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LEQUAL);
     glEnable(GL_BLEND);
-    glBlendFunc(GL_ZERO, GL_ONE_MINUS_SRC_ALPHA);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     glDrawArrays(GL_TRIANGLES, 0, 6);
 
@@ -2027,23 +2033,33 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl, int screen_w
     // pass the test, while column face z-values are closer and fail it.
     if (ir_shadows)
     {
+        int shadow_count = 0;
+        const int shadow_limit = g_renderer_settings.shadow_max_count;
         for (const auto& sc : *ir_shadows)
         {
+            if (shadow_limit > 0 && shadow_count >= shadow_limit)
+                break;
             KFX_GL_PUSH("WorldPass/Shadows");
             DrawShadowGL(sc, screen_w, screen_h);
             KFX_GL_POP();
+            shadow_count++;
         }
     }
     else
     {
+        int shadow_count = 0;
+        const int shadow_limit = g_renderer_settings.shadow_max_count;
         for (const auto& cmd : m_rt_draw_cmds)
         {
             if (cmd.type != DrawCmd::CMD_SHADOWS) continue;
+            if (shadow_limit > 0 && shadow_count >= shadow_limit)
+                break;
 
             KFX_GL_PUSH("WorldPass/Shadows");
             assert(cmd.shadow_idx >= 0 && (size_t)cmd.shadow_idx < m_rt_shadow_cmds.size());
             DrawShadowGL(m_rt_shadow_cmds[cmd.shadow_idx], screen_w, screen_h);
             KFX_GL_POP();
+            shadow_count++;
         }
     }
 

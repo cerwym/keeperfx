@@ -955,7 +955,11 @@ void VKWorldViewRenderer::execute_passes(VkCommandBuffer cmd,
     // ── Pass 2: Shadows ───────────────────────────────────────────────────────
     VkPipeline shadow_pipeline = m_pipelines->GetPipeline(VKPassType::WorldShadow);
     if (shadow_pipeline) {
+        int shadow_count = 0;
+        const int shadow_limit = g_renderer_settings.shadow_max_count;
         for (const auto& sc : shadows) {
+            if (shadow_limit > 0 && shadow_count >= shadow_limit)
+                break;
             if (sc.tex_w <= 0 || sc.tex_h <= 0 || sc.tex_w > 256 || sc.tex_h > 256)
                 continue;
 
@@ -1020,7 +1024,7 @@ void VKWorldViewRenderer::execute_passes(VkCommandBuffer cmd,
             uint8_t full_pc[128] = {};
             memcpy(full_pc, &pc, sizeof(pc));
             float* darkness_field = reinterpret_cast<float*>(full_pc + 12);
-            *darkness_field = sc.darkness;
+            *darkness_field = sc.darkness * g_renderer_settings.shadow_darkness_scale;
             float* ndc_z_shadow   = reinterpret_cast<float*>(full_pc + 124);
             *ndc_z_shadow = sc.ndc_z;
 
@@ -1039,6 +1043,7 @@ void VKWorldViewRenderer::execute_passes(VkCommandBuffer cmd,
             VkDeviceSize sv_off = sv_byte_off;
             vkCmdBindVertexBuffers(cmd, 0, 1, &m_transient_buf, &sv_off);
             vkCmdDraw(cmd, k_shadow_verts, 1, 0, 0);
+            shadow_count++;
         }
     }
 
