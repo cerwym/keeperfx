@@ -43,6 +43,12 @@ void RendererSettings_Reset(void)
     /* Shadow */
     g_renderer_settings.shadow_darkness_scale = 1.0f;
     g_renderer_settings.shadow_depth_test     = 0;
+    g_renderer_settings.shadow_max_count      = 0;
+    g_renderer_settings.shadow_colour_r       = 0.0f;
+    g_renderer_settings.shadow_colour_g       = 0.0f;
+    g_renderer_settings.shadow_colour_b       = 0.0f;
+    g_renderer_settings.shadow_colour_a       = 1.0f;
+    g_renderer_settings.shadow_type           = RENDERER_SHADOW_4;
 
     /* Remap/tint — CPU fallback until Phase 3 GPU shader is wired in */
     g_renderer_settings.tint_mode             = RENDERER_TINT_CPU;
@@ -90,6 +96,8 @@ void RendererSettings_Sanitize(void)
     RS_CLAMP_I(glow_blend_mode,           0, 1);
     RS_CLAMP_I(zoom_box_mode,             0, 1);
     RS_CLAMP_I(shadow_depth_test,         0, 1);
+    RS_CLAMP_I(shadow_max_count,          0, 1024);
+    RS_CLAMP_I(shadow_type,               0, 5);
     RS_CLAMP_I(creature_outline_enable,   0, 1);
     RS_CLAMP_I(wireframe,                 0, 1);
     RS_CLAMP_I(show_depth,                0, 1);
@@ -108,6 +116,10 @@ void RendererSettings_Sanitize(void)
     RS_CLAMP_F(transpar4_alpha,           0.0f, 1.0f);
     RS_CLAMP_F(transpar8_alpha,           0.0f, 1.0f);
     RS_CLAMP_F(shadow_darkness_scale,     0.0f, 2.0f);
+    RS_CLAMP_F(shadow_colour_r,           0.0f, 1.0f);
+    RS_CLAMP_F(shadow_colour_g,           0.0f, 1.0f);
+    RS_CLAMP_F(shadow_colour_b,           0.0f, 1.0f);
+    RS_CLAMP_F(shadow_colour_a,           0.0f, 1.0f);
     RS_CLAMP_F(creature_outline_alpha,    0.0f, 1.0f);
     RS_CLAMP_F(fog_speed,                 0.1f, 5.0f);
     RS_CLAMP_F(fog_density,               0.0f, 1.0f);
@@ -167,6 +179,12 @@ void RendererSettings_Load(void)
         else if (strcmp(key, "transpar8_alpha")            == 0) g_renderer_settings.transpar8_alpha            = fval;
         else if (strcmp(key, "shadow_darkness_scale")      == 0) g_renderer_settings.shadow_darkness_scale      = fval;
         else if (strcmp(key, "shadow_depth_test")          == 0) g_renderer_settings.shadow_depth_test          = ival;
+        else if (strcmp(key, "shadow_max_count")           == 0) g_renderer_settings.shadow_max_count           = ival;
+        else if (strcmp(key, "shadow_colour_r")            == 0) g_renderer_settings.shadow_colour_r            = fval;
+        else if (strcmp(key, "shadow_colour_g")            == 0) g_renderer_settings.shadow_colour_g            = fval;
+        else if (strcmp(key, "shadow_colour_b")            == 0) g_renderer_settings.shadow_colour_b            = fval;
+        else if (strcmp(key, "shadow_colour_a")            == 0) g_renderer_settings.shadow_colour_a            = fval;
+        else if (strcmp(key, "shadow_type")                == 0) g_renderer_settings.shadow_type                = ival;
         else if (strcmp(key, "creature_outline_enable")    == 0) g_renderer_settings.creature_outline_enable    = ival;
         else if (strcmp(key, "creature_outline_alpha")     == 0) g_renderer_settings.creature_outline_alpha     = fval;
         else if (strcmp(key, "lighting_mode")              == 0) g_renderer_settings.lighting_mode              = ival;
@@ -218,6 +236,12 @@ void RendererSettings_Save(void)
     fprintf(f, "\n");
     fprintf(f, "shadow_darkness_scale   = %.4f\n", g_renderer_settings.shadow_darkness_scale);
     fprintf(f, "shadow_depth_test       = %d\n",   g_renderer_settings.shadow_depth_test);
+    fprintf(f, "shadow_max_count        = %d\n",   g_renderer_settings.shadow_max_count);
+    fprintf(f, "shadow_colour_r         = %.4f\n", g_renderer_settings.shadow_colour_r);
+    fprintf(f, "shadow_colour_g         = %.4f\n", g_renderer_settings.shadow_colour_g);
+    fprintf(f, "shadow_colour_b         = %.4f\n", g_renderer_settings.shadow_colour_b);
+    fprintf(f, "shadow_colour_a         = %.4f\n", g_renderer_settings.shadow_colour_a);
+    fprintf(f, "shadow_type             = %d\n",   g_renderer_settings.shadow_type);
     fprintf(f, "\n");
     fprintf(f, "creature_outline_enable = %d\n",   g_renderer_settings.creature_outline_enable);
     fprintf(f, "creature_outline_alpha  = %.4f\n", g_renderer_settings.creature_outline_alpha);
