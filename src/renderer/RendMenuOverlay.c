@@ -147,6 +147,32 @@ static const RendMenuEntry* get_focused_entry(void)
     return &entries[abs_idx];
 }
 
+/** Skip LABEL rows during navigation: advance focus by `dir` (+1 or -1)
+ *  until landing on a non-LABEL entry, staying within [0, count-1]. */
+static void nav_skip_labels(int dir)
+{
+    int tc = 0;
+    const RendMenuTab*   tabs    = RendMenu_GetTabs(&tc);
+    int ec = 0;
+    const RendMenuEntry* entries = RendMenu_GetEntries(&ec);
+    if (s_state.current_tab >= tc) return;
+    const RendMenuTab* tab = &tabs[s_state.current_tab];
+    int count = tab->count;
+    if (count <= 0) return;
+
+    int max_iters = count;
+    while (max_iters-- > 0)
+    {
+        int abs_idx = tab->first_entry_idx + s_state.focused_in_tab;
+        if (abs_idx < 0 || abs_idx >= ec) break;
+        if (entries[abs_idx].kind != RMENU_WIDGET_LABEL)
+            break;
+        s_state.focused_in_tab += dir;
+        if (s_state.focused_in_tab < 0)          s_state.focused_in_tab = 0;
+        if (s_state.focused_in_tab >= count)      s_state.focused_in_tab = count - 1;
+    }
+}
+
 /** Clamp focused_in_tab to the current tab's valid range. */
 static void clamp_focus(void)
 {
@@ -218,6 +244,15 @@ static void entry_adjust(const RendMenuEntry* e, int dir)
         }
         break;
 
+    case RMENU_WIDGET_SLIDER_I:
+        {
+            int v = *e->w.slider_i.val + dir;
+            if (v < e->w.slider_i.min_i) v = e->w.slider_i.min_i;
+            if (v > e->w.slider_i.max_i) v = e->w.slider_i.max_i;
+            *e->w.slider_i.val = v;
+        }
+        break;
+
     default:
         break;
     }
@@ -264,6 +299,23 @@ static void entry_value_str(const RendMenuEntry* e, char* buf, int buflen)
         }
         break;
 
+    case RMENU_WIDGET_SLIDER_I:
+        {
+            int v   = *e->w.slider_i.val;
+            int min = e->w.slider_i.min_i;
+            int max = e->w.slider_i.max_i;
+            int filled = (max > min) ? (int)(7.0f * (v - min) / (float)(max - min) + 0.5f) : 0;
+            if (filled < 0) filled = 0;
+            if (filled > 7) filled = 7;
+            char bar[10];
+            int j;
+            for (j = 0; j < 7; j++)
+                bar[j] = (j < filled) ? '=' : '-';
+            bar[7] = '\0';
+            snprintf(buf, buflen, "%d [%s]", v, bar);
+        }
+        break;
+
     default:
         buf[0] = '\0';
         break;
@@ -277,7 +329,8 @@ static void preview_set(void)
     int has_value = (e->kind == RMENU_WIDGET_TOGGLE   ||
                      e->kind == RMENU_WIDGET_TOGGLE_F ||
                      e->kind == RMENU_WIDGET_CYCLE     ||
-                     e->kind == RMENU_WIDGET_SLIDER_F);
+                     e->kind == RMENU_WIDGET_SLIDER_F  ||
+                     e->kind == RMENU_WIDGET_SLIDER_I);
     if (!has_value)
         return;
     int tc = 0;
@@ -369,6 +422,7 @@ int RendMenu_HandleKey(int kc)
             int new_count = tabs[s_state.current_tab].count;
             s_state.focused_in_tab = (new_count > 0) ? new_count - 1 : 0;
         }
+        nav_skip_labels(-1);
         scroll_to_focused(24);
         return 1;
 
@@ -379,6 +433,7 @@ int RendMenu_HandleKey(int kc)
             /* Wrap to next tab, first entry */
             switch_tab(s_state.current_tab + 1);
         }
+        nav_skip_labels(+1);
         scroll_to_focused(24);
         return 1;
 
@@ -574,6 +629,18 @@ void RendMenu_Draw(void)
             int ry           = rows_y + (i - s_state.scroll_top) * row_h;
             int is_focused   = (i == s_state.focused_in_tab);
             int is_available = (e->is_enabled == NULL || e->is_enabled());
+
+            /* LABEL rows: centred divider text, no interaction chrome */
+            if (e->kind == RMENU_WIDGET_LABEL)
+            {
+                UIRenderer_SubmitSolidBoxAlpha(mx, ry, pw, row_h, 0, 0.15f * panel_alpha);
+                int eff = style_begin(RMSTYLE_LABEL_DISABLED, ups);
+                int lw  = LbTextStringWidthM(e->label, eff);
+                int lx  = (pw - lw) / 2;
+                if (lx < 0) lx = 0;
+                LbTextDrawResized(mx + lx, ry + ups / 16, eff, e->label);
+                continue;
+            }
 
             if (is_focused)
                 UIRenderer_SubmitSolidBoxAlpha(mx, ry, pw, row_h, 15, 0.22f * panel_alpha);

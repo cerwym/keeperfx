@@ -28,6 +28,11 @@ typedef enum RendMenuWidgetKind {
     /** Non-interactive section header / divider row.  Only `label` is used. */
     RMENU_WIDGET_SECTION,
 
+    /** Non-interactive label / divider row within a tab.
+     *  Like SECTION it uses only `label`, but unlike SECTION it does NOT
+     *  create a new tab.  Navigation automatically skips these rows. */
+    RMENU_WIDGET_LABEL,
+
     /** int*   field — toggled between 0 and 1 on activation. */
     RMENU_WIDGET_TOGGLE,
 
@@ -43,6 +48,10 @@ typedef enum RendMenuWidgetKind {
     /** float* field — incremented/decremented by step_f on left/right,
      *  clamped to [min_f, max_f]. */
     RMENU_WIDGET_SLIDER_F,
+
+    /** int*   field — incremented/decremented by 1 on left/right,
+     *  clamped to [min_i, max_i]. */
+    RMENU_WIDGET_SLIDER_I,
 } RendMenuWidgetKind;
 
 /* ---------------------------------------------------------------------------
@@ -88,6 +97,13 @@ typedef struct RendMenuEntry {
             float  max_f;
             float  step_f;
         } slider_f;
+
+        /** RMENU_WIDGET_SLIDER_I */
+        struct {
+            int* val;
+            int  min_i;
+            int  max_i;
+        } slider_i;
     } w;
 
 } RendMenuEntry;
