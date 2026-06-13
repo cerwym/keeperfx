@@ -90,6 +90,21 @@ extern "C" {
 #define RENDERER_LIGHTING_MODERN   1
 
 /* ---------------------------------------------------------------------------
+ * Shadow type constants (shadow_type field)
+ * ------------------------------------------------------------------------- */
+/** Disable creature shadows entirely. */
+#define RENDERER_SHADOW_OFF    0
+/** Projected sprite shadow from the nearest 1 light source per creature. */
+#define RENDERER_SHADOW_1      1
+#define RENDERER_SHADOW_2      2
+#define RENDERER_SHADOW_3      3
+/** Projected sprite shadow from up to 4 light sources per creature.  Default. */
+#define RENDERER_SHADOW_4      4
+/** Pre-baked soft circle blob under each creature.  No directional projection;
+ *  GPU path only (software renderer falls back to RENDERER_SHADOW_4). */
+#define RENDERER_SHADOW_CIRCLE 5
+
+/* ---------------------------------------------------------------------------
  * Main settings struct
  * ------------------------------------------------------------------------- */
 typedef struct RendererSettings {
@@ -160,6 +175,28 @@ typedef struct RendererSettings {
     /** Shadow depth test.  0 = disabled (original); 1 = wall-clipped (future).
      *  Default: 0. */
     int   shadow_depth_test;
+
+    /** Maximum creature shadows rendered per frame.  0 = unlimited (default). */
+    int   shadow_max_count;
+
+    /** RGBA colour of the shadow tint.
+     *  r/g/b default to 0.0 (pure black — classic DK darkening behaviour).
+     *  a      is an overall intensity multiplier applied on top of the per-shadow
+     *         distance-based darkness; 1.0 = unchanged.
+     *  Default: (0, 0, 0, 1) = original black shadow. */
+    float shadow_colour_r;
+    float shadow_colour_g;
+    float shadow_colour_b;
+    float shadow_colour_a;
+
+    /** Creature shadow rendering style.
+     *  RENDERER_SHADOW_OFF    (0) — no shadows at all.
+     *  RENDERER_SHADOW_1..4   (1–4) — projected sprite shadow from up to N light
+     *         sources per creature (current default = 4).
+     *  RENDERER_SHADOW_CIRCLE (5) — pre-baked soft circle under each creature;
+     *         no directional sprite decode, GPU path only.
+     *  Default: RENDERER_SHADOW_4. */
+    int   shadow_type;
 
     /** Zoom-box render mode.
      *  RENDERER_ZBM_OVERHEAD (0) = flat palette-indexed tiles (default, all backends).
@@ -246,6 +283,25 @@ extern RendererSettings g_renderer_settings;
 /** Reset g_renderer_settings to all defaults.
  *  Defaults preserve exact original software-renderer visual behaviour. */
 void RendererSettings_Reset(void);
+
+/** Clamp all fields in g_renderer_settings to their valid ranges.
+ *  Call after loading from file or receiving console input to prevent
+ *  out-of-range enum values from causing array-index or UB issues.
+ *  Also rounds float-backed boolean fields (shade_fullbright) to 0.0f/1.0f. */
+void RendererSettings_Sanitize(void);
+
+/** Load renderer preferences from the platform user-pref directory.
+ *  File: <GetUserPrefDir()>/renderer_prefs.ini
+ *  Missing file is silently ignored (first run).  Only fields present in the
+ *  file are updated; absent fields retain whatever value Reset() or keeperfx.cfg
+ *  left them at.  Calls RendererApplySettings() on success. */
+void RendererSettings_Load(void);
+
+/** Save the current g_renderer_settings to the platform user-pref directory.
+ *  File: <GetUserPrefDir()>/renderer_prefs.ini
+ *  Call this whenever the player confirms a change via the settings menu, and
+ *  on clean game exit. */
+void RendererSettings_Save(void);
 
 #ifdef __cplusplus
 } /* extern "C" */

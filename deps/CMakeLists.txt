@@ -36,11 +36,9 @@ target_link_libraries(keeperfx PUBLIC ZLIB::ZLIB)
 find_package(unofficial-minizip CONFIG REQUIRED)
 target_link_libraries(keeperfx PUBLIC unofficial::minizip::minizip)
 
-## centitoml (compiled from bundled source; links against centijson from vcpkg)
-add_library(centitoml OBJECT "centitoml/toml_api.c")
-target_link_libraries(centitoml PUBLIC centijson::centijson)
-target_include_directories(centitoml INTERFACE "centitoml")
-target_link_libraries(keeperfx PUBLIC centitoml)
+## centitoml
+find_package(centitoml CONFIG REQUIRED)
+target_link_libraries(keeperfx PUBLIC centitoml::centitoml)
 
 ## ffmpeg
 find_package(FFMPEG COMPONENTS AVCODEC AVFORMAT AVUTIL SWRESAMPLE REQUIRED)

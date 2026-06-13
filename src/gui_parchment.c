@@ -85,19 +85,11 @@ void reload_parchment_file(TbBool hires)
   char *fname;
   if (hires)
   {
-#ifdef SPRITE_FORMAT_V2
-      fname = get_game_file_path_fmt(FGrp_StdData,"gmap-%d.raw",64);
-#else
       fname = prepare_file_path(FGrp_StdData,"gmap64.raw");
-#endif
       LbFileLoadAt(fname, hires_parchment);
   } else
   {
-#ifdef SPRITE_FORMAT_V2
-      fname = get_game_file_path_fmt(FGrp_StdData,"gmap-%d.raw",32);
-#else
       fname = prepare_file_path(FGrp_StdData,"gmap32.raw");
-#endif
       LbFileLoadAt(fname, poly_pool);
   }
   parchment_loaded = 1;
@@ -339,95 +331,76 @@ void draw_overhead_map(const struct TbRect *map_area, long block_size, PlayerNum
     //   0x02 = gems ghost:    palette[ 102 + (ghost_table[64, parchment_col] >> 6) ]
     //   0x03 = blink+gems:    palette[ ghost_table[R, parchment_col] + 2 ]
     // Ghost table rows are offset by +64 in the fade/ghost texture (rows 0-63 = fade).
-    if (RendererHasGPURenderPath())
+    int tiles_x = game.map_tiles_x;
+    int tiles_y = game.map_tiles_y;
+    unsigned char* tile_buf = (unsigned char*)KfxAlloc((size_t)tiles_x * (size_t)tiles_y * 2);
+    if (tile_buf)
     {
-        int tiles_x = game.map_tiles_x;
-        int tiles_y = game.map_tiles_y;
-        unsigned char* tile_buf = (unsigned char*)KfxAlloc((size_t)tiles_x * (size_t)tiles_y * 2);
-        if (tile_buf)
+        long stl_y = 1;
+        for (int ty = 0; ty < tiles_y; ty++, stl_y += STL_PER_SLB)
         {
-            long stl_y = 1;
-            for (int ty = 0; ty < tiles_y; ty++, stl_y += STL_PER_SLB)
+            long stl_x = 1;
+            for (int tx = 0; tx < tiles_x; tx++, stl_x += STL_PER_SLB)
             {
-                long stl_x = 1;
-                for (int tx = 0; tx < tiles_x; tx++, stl_x += STL_PER_SLB)
+                unsigned char r_val = 0;
+                unsigned char g_val = 0x00; // default: transparent
+                struct Map* mapblk = get_map_block_at(stl_x, stl_y);
+                struct SlabMap* slb = get_slabmap_for_subtile(stl_x, stl_y);
+                TbBool is_blink = (((mapblk->flags & SlbAtFlg_Unexplored) != 0) || ((mapblk->flags & SlbAtFlg_TaggedValuable) != 0))
+                    && ((get_gameturn() % (8 * gui_blink_rate)) >= 4 * gui_blink_rate);
+                if (is_blink)
                 {
-                    unsigned char r_val = 0;
-                    unsigned char g_val = 0x00; // default: transparent
-                    struct Map* mapblk = get_map_block_at(stl_x, stl_y);
-                    struct SlabMap* slb = get_slabmap_for_subtile(stl_x, stl_y);
-                    TbBool is_blink = (((mapblk->flags & SlbAtFlg_Unexplored) != 0) || ((mapblk->flags & SlbAtFlg_TaggedValuable) != 0))
-                        && ((get_gameturn() % (8 * gui_blink_rate)) >= 4 * gui_blink_rate);
-                    if (is_blink)
+                    // Ghost row 26, offset +64 = texture row 90
+                    r_val = 90;
+                    g_val = (slb->kind == SlbT_GEMS) ? 0x03 : 0x01;
+                }
+                else if (!map_block_revealed(mapblk, plyr_idx))
+                {
+                    g_val = 0x00; // unrevealed — transparent
+                }
+                else if ((slb->kind == SlbT_GOLD) || (slb->kind == SlbT_DENSEGOLD))
+                {
+                    // Ghost row 140, offset +64 = texture row 204
+                    r_val = 204;
+                    g_val = 0x01;
+                }
+                else if (slb->kind == SlbT_GEMS)
+                {
+                    // Ghost row 0, offset +64 = texture row 64; gems formula in shader
+                    r_val = 64;
+                    g_val = 0x02;
+                }
+                else
+                {
+                    // All remaining cases: compute on CPU (no ghost-table bg dependency)
+                    TbPixel col = get_overhead_mapblock_color(stl_x, stl_y, plyr_idx, 0);
+                    if (col == 0 && map_block_revealed(mapblk, plyr_idx))
                     {
-                        // Ghost row 26, offset +64 = texture row 90
-                        r_val = 90;
-                        g_val = (slb->kind == SlbT_GEMS) ? 0x03 : 0x01;
+                        // SlbT_ROCK returns 0 (true black) — keep it as palette 0
+                        r_val = 0;
+                        g_val = 0xFF;
                     }
-                    else if (!map_block_revealed(mapblk, plyr_idx))
+                    else if (col == 0)
                     {
-                        g_val = 0x00; // unrevealed — transparent
-                    }
-                    else if ((slb->kind == SlbT_GOLD) || (slb->kind == SlbT_DENSEGOLD))
-                    {
-                        // Ghost row 140, offset +64 = texture row 204
-                        r_val = 204;
-                        g_val = 0x01;
-                    }
-                    else if (slb->kind == SlbT_GEMS)
-                    {
-                        // Ghost row 0, offset +64 = texture row 64; gems formula in shader
-                        r_val = 64;
-                        g_val = 0x02;
+                        g_val = 0x00; // unrevealed/blocking → transparent
                     }
                     else
                     {
-                        // All remaining cases: compute on CPU (no ghost-table bg dependency)
-                        TbPixel col = get_overhead_mapblock_color(stl_x, stl_y, plyr_idx, 0);
-                        if (col == 0 && map_block_revealed(mapblk, plyr_idx))
+                        // Check if this is a ghost-table-dependent result that used bg=0.
+                        // Filled/earth and hidden doors use ghost row 16.
+                        if ((mapblk->flags & SlbAtFlg_Filled) != 0)
                         {
-                            // SlbT_ROCK returns 0 (true black) — keep it as palette 0
-                            r_val = 0;
-                            g_val = 0xFF;
+                            // Ghost row 16, offset +64 = texture row 80
+                            r_val = 80;
+                            g_val = 0x01;
                         }
-                        else if (col == 0)
+                        else if ((mapblk->flags & SlbAtFlg_IsDoor) != 0)
                         {
-                            g_val = 0x00; // unrevealed/blocking → transparent
-                        }
-                        else
-                        {
-                            // Check if this is a ghost-table-dependent result that used bg=0.
-                            // Filled/earth and hidden doors use ghost row 16.
-                            if ((mapblk->flags & SlbAtFlg_Filled) != 0)
+                            struct Thing* thing = get_door_for_position(stl_x, stl_y);
+                            if (!thing_is_invalid(thing) && door_is_hidden_to_player(thing, plyr_idx))
                             {
-                                // Ghost row 16, offset +64 = texture row 80
-                                r_val = 80;
+                                r_val = 80; // ghost row 16
                                 g_val = 0x01;
-                            }
-                            else if ((mapblk->flags & SlbAtFlg_IsDoor) != 0)
-                            {
-                                struct Thing* thing = get_door_for_position(stl_x, stl_y);
-                                if (!thing_is_invalid(thing) && door_is_hidden_to_player(thing, plyr_idx))
-                                {
-                                    r_val = 80; // ghost row 16
-                                    g_val = 0x01;
-                                }
-                                else
-                                {
-                                    r_val = col;
-                                    g_val = 0xFF;
-                                }
-                            }
-                            else if (slb->kind == SlbT_ROCK_FLOOR)
-                            {
-                                // ghost[3] is a constant (row 0, col 3) — no bg dependency
-                                r_val = col;
-                                g_val = 0xFF;
-                            }
-                            else if ((mapblk->flags & SlbAtFlg_Blocking) != 0)
-                            {
-                                // Other blocking slabs return background (transparent)
-                                g_val = 0x00;
                             }
                             else
                             {
@@ -435,19 +408,38 @@ void draw_overhead_map(const struct TbRect *map_area, long block_size, PlayerNum
                                 g_val = 0xFF;
                             }
                         }
+                        else if (slb->kind == SlbT_ROCK_FLOOR)
+                        {
+                            // ghost[3] is a constant (row 0, col 3) — no bg dependency
+                            r_val = col;
+                            g_val = 0xFF;
+                        }
+                        else if ((mapblk->flags & SlbAtFlg_Blocking) != 0)
+                        {
+                            // Other blocking slabs return background (transparent)
+                            g_val = 0x00;
+                        }
+                        else
+                        {
+                            r_val = col;
+                            g_val = 0xFF;
+                        }
                     }
-                    int idx = (ty * tiles_x + tx) * 2;
-                    tile_buf[idx + 0] = r_val;
-                    tile_buf[idx + 1] = g_val;
                 }
+                int idx = (ty * tiles_x + tx) * 2;
+                tile_buf[idx + 0] = r_val;
+                tile_buf[idx + 1] = g_val;
             }
-            RendererSubmitOverheadMap(tile_buf, tiles_x, tiles_y,
-                map_area->left, map_area->top,
-                map_area->right - map_area->left, map_area->bottom - map_area->top);
+        }
+        if (RendererSubmitOverheadMap(tile_buf, tiles_x, tiles_y,
+            map_area->left, map_area->top,
+            map_area->right - map_area->left, map_area->bottom - map_area->top))
+        {
             KfxFree(tile_buf);
             lbDisplay.DrawFlags = 0;
             return;
         }
+        KfxFree(tile_buf);
     }
 
     // CPU fallback: original per-pixel block write to WScreen.
@@ -813,7 +805,7 @@ void draw_map_level_name(void)
     if (lv_name != NULL)
     {
         LbTextSetWindow(x, y, w, h);
-        int tx_units_per_px = ( (MyScreenHeight < 400) && (dbc_language > 0) ) ? scale_ui_value(32) : (22 * units_per_pixel) / LbTextLineHeight();
+        int tx_units_per_px = ( (RendererGetScreenHeight() < 400) && (dbc_language > 0) ) ? scale_ui_value(32) : (22 * units_per_pixel) / LbTextLineHeight();
         LbTextDrawResized((w-LbTextStringWidth(lv_name)*units_per_pixel/16)/2, h/10 - 8*units_per_pixel/16, tx_units_per_px, lv_name);
     }
 }
@@ -907,34 +899,29 @@ void draw_zoom_box_terrain(long scrtop_x, long scrtop_y, int stl_x, int stl_y, P
     scrtop_x += 4*units_per_pixel/16;
     scrtop_y -= 4*units_per_pixel/16;
 
-    if (RendererHasGPURenderPath())
+    // Build a per-subtile texture-block index buffer and let the active renderer
+    // materialise it (GPU as textured quads, software via draw_texture).
+    unsigned short* tile_buf = (unsigned short*)KfxAlloc((size_t)draw_tiles_x * (size_t)draw_tiles_y * sizeof(unsigned short));
+    if (tile_buf)
     {
-        // GPU path: build a per-subtile texture-block index buffer and submit it
-        // as textured tile quads via the zoom-tile shader (actual tile textures,
-        // matching the software renderer's draw_texture appearance).
-        // Unrevealed tiles use sentinel 0xFFFF and are skipped (transparent).
-        unsigned short* tile_buf = (unsigned short*)KfxAlloc((size_t)draw_tiles_x * (size_t)draw_tiles_y * sizeof(unsigned short));
-        if (tile_buf)
-        {
-            for (int dy = 0; dy < draw_tiles_y; dy++)
-                for (int dx = 0; dx < draw_tiles_x; dx++)
+        for (int dy = 0; dy < draw_tiles_y; dy++)
+            for (int dx = 0; dx < draw_tiles_x; dx++)
+            {
+                struct Map* mapblk = get_map_block_at(stl_x + dx, stl_y + dy);
+                if (map_block_revealed(mapblk, plyr_idx))
                 {
-                    struct Map* mapblk = get_map_block_at(stl_x + dx, stl_y + dy);
-                    if (map_block_revealed(mapblk, plyr_idx))
-                    {
-                        int k = element_top_face_texture(mapblk);
-                        k = engine_remap_texture_blocks(stl_x + dx, stl_y + dy, k);
-                        tile_buf[dy * draw_tiles_x + dx] = (unsigned short)k;
-                    }
-                    else
-                    {
-                        tile_buf[dy * draw_tiles_x + dx] = 0xFFFF;  // unrevealed — show background
-                    }
+                    int k = element_top_face_texture(mapblk);
+                    k = engine_remap_texture_blocks(stl_x + dx, stl_y + dy, k);
+                    tile_buf[dy * draw_tiles_x + dx] = (unsigned short)k;
                 }
-            RendererSubmitZoomBoxTiles(tile_buf, draw_tiles_x, draw_tiles_y,
-                scrtop_x, scrtop_y, subtile_size, subtile_size);
-            KfxFree(tile_buf);
-        }
+                else
+                {
+                    tile_buf[dy * draw_tiles_x + dx] = 0xFFFF;  // unrevealed — show background
+                }
+            }
+        RendererSubmitZoomBoxTiles(tile_buf, draw_tiles_x, draw_tiles_y,
+            scrtop_x, scrtop_y, subtile_size, subtile_size);
+        KfxFree(tile_buf);
         return;
     }
 
@@ -968,32 +955,12 @@ void draw_zoom_box_terrain(long scrtop_x, long scrtop_y, int stl_x, int stl_y, P
 
 void draw_zoom_box_things(long scrtop_x, long scrtop_y, int stl_x, int stl_y, PlayerNumber plyr_idx, long draw_tiles_x, long draw_tiles_y, int subtile_size)
 {
-    if (RendererHasGPURenderPath())
-    {
-        UIRenderer_BeginTopOverlay();
-        int scr_y = scrtop_y;
-        for (int map_dy = 0; map_dy < draw_tiles_y; map_dy++)
-        {
-            int scr_x = scrtop_x;
-            for (int map_dx = 0; map_dx < draw_tiles_x; map_dx++)
-            {
-                struct Map* mapblk = get_map_block_at(stl_x + map_dx, stl_y + map_dy);
-                if (map_block_revealed(mapblk, plyr_idx))
-                    draw_zoom_box_things_on_mapblk(mapblk, subtile_size, scr_x, scr_y);
-                scr_x += subtile_size;
-            }
-            scr_y += subtile_size;
-        }
-        UIRenderer_EndTopOverlay();
-        return;
-    }
-
-    RendererSetViewport(scrtop_x + 2*units_per_pixel/16, scrtop_y + 2*units_per_pixel/16,
-        draw_tiles_x*subtile_size - 4*units_per_pixel/16, draw_tiles_y*subtile_size - 4*units_per_pixel/16);
-    int scr_y = 0;
+    UIRenderer_BeginZoomBoxOverlay(scrtop_x, scrtop_y,
+        draw_tiles_x * subtile_size, draw_tiles_y * subtile_size);
+    int scr_y = scrtop_y - lbDisplay.GraphicsWindowY;
     for (int map_dy = 0; map_dy < draw_tiles_y; map_dy++)
     {
-        int scr_x = 0;
+        int scr_x = scrtop_x - lbDisplay.GraphicsWindowX;
         for (int map_dx = 0; map_dx < draw_tiles_x; map_dx++)
         {
             struct Map* mapblk = get_map_block_at(stl_x + map_dx, stl_y + map_dy);
@@ -1005,6 +972,8 @@ void draw_zoom_box_things(long scrtop_x, long scrtop_y, int stl_x, int stl_y, Pl
       }
       scr_y += subtile_size;
     }
+    UIRenderer_EndZoomBoxOverlay(scrtop_x, scrtop_y,
+        draw_tiles_x * subtile_size, draw_tiles_y * subtile_size);
 }
 
 void redraw_minimal_overhead_view(void)

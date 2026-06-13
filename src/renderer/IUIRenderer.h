@@ -20,6 +20,7 @@
 
 #include "renderer/SpriteHandle.h"
 #include "renderer/GpuTypes.h"
+#include "bflib_basics.h"
 #include <unordered_map>
 #include <cstdint>
 
@@ -83,48 +84,75 @@ public:
 
     /**
      * Submit a panel/button sprite.
-     * CPU default: LbSpriteDrawResized (with optional horizontal flip).
+     * CPU default: LbSpriteDrawResized using the supplied Bullfrog draw flags.
      * @param flip_horiz  Mirror the sprite horizontally.
+     * @param draw_flags  Bullfrog draw flags captured at submission time.
      */
     virtual void SubmitPanelSprite(int32_t x, int32_t y, int units_per_px,
-                                   SpriteHandle spr, bool flip_horiz = false);
+                                   SpriteHandle spr, bool flip_horiz,
+                                   unsigned int draw_flags);
 
     /**
      * Submit a panel/button sprite with palette remap (player colour tinting).
-     * CPU default: LbSpriteDrawResizedRemap using pixmap.fade_tables[remap_row].
+     * CPU default: LbSpriteDrawResizedRemap using pixmap.fade_tables[remap_row]
+     * and the supplied Bullfrog draw flags.
      * GPU backends override with a remap shader that samples the fade-table texture.
-     * @param remap_row  Row index into pixmap.fade_tables (e.g. 12, 22, 44).
+     * @param remap_row   Row index into pixmap.fade_tables (e.g. 12, 22, 44).
+     * @param draw_flags  Bullfrog draw flags captured at submission time.
      */
     virtual void SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px,
-                                        SpriteHandle spr, int remap_row);
+                                        SpriteHandle spr, int remap_row,
+                                        unsigned int draw_flags);
 
     /**
      * Submit a panel/button sprite drawn entirely in a single flat colour (sprite used as a mask).
-     * CPU default: LbSpriteDrawResizedOneColour.
+     * CPU default: LbSpriteDrawResizedOneColour using the supplied Bullfrog draw flags.
      * GPU: uses the atlas R8 index as a discard mask; outputs color_idx as a flat colour.
-     * @param color_idx  DK palette index for the flat output colour.
+     * @param color_idx   DK palette index for the flat output colour.
+     * @param draw_flags  Bullfrog draw flags captured at submission time.
      */
     virtual void SubmitPanelSpriteColored(int32_t x, int32_t y, int units_per_px,
-                                          SpriteHandle spr, uint8_t color_idx);
+                                          SpriteHandle spr, uint8_t color_idx,
+                                          unsigned int draw_flags);
 
     /**
      * Submit a sprite with explicit pixel dimensions.
-     * CPU default: LbSpriteDrawScaled.
+     * CPU default: LbSpriteDrawScaled using the supplied Bullfrog draw flags.
+     * @param draw_flags  Bullfrog draw flags captured at submission time.
      */
     virtual void SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h,
-                                    SpriteHandle spr);
-
+                                    SpriteHandle spr, unsigned int draw_flags);
+ 
     /**
      * Submit a solid-color rectangle.
-     * CPU default: LbDrawBox.
+     * CPU default: direct LbDrawBox software rasterisation.
      */
     virtual void SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx);
-
+ 
     /**
      * Submit a solid-color rectangle with explicit alpha (e.g. 0.5 for TRANSPAR4 darkening).
-     * CPU default: LbDrawBox with Lb_SPRITE_TRANSPAR4 when alpha < 0.75.
+     * CPU default: direct GlassMap box blend.
      */
     virtual void SubmitSolidBoxAlpha(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx, float alpha);
+ 
+    /** Submit a filled circle.
+     *  CPU default: LbDrawCircle.  GPU callers may approximate this however they need. */
+    virtual void SubmitCircle(int32_t x, int32_t y, int32_t radius, uint8_t color_idx);
+ 
+    /** Submit a raw TbSprite draw with explicit Bullfrog draw flags.
+     *  CPU default: original LbSpriteDraw path. */
+    virtual TbResult SubmitRawSprite(long x, long y, const struct TbSprite* spr,
+                                    unsigned int draw_flags);
+ 
+    /** Submit a one-colour raw sprite draw with explicit Bullfrog draw flags.
+     *  CPU default: original LbSpriteDrawOneColour path. */
+    virtual TbResult SubmitRawSpriteOneColour(long x, long y, const struct TbSprite* spr,
+                                             unsigned char colour, unsigned int draw_flags);
+ 
+    /** Submit a remapped raw sprite draw with explicit Bullfrog draw flags.
+     *  CPU default: original LbSpriteDrawScaledRemap path at native sprite size. */
+    virtual TbResult SubmitRawSpriteRemap(long x, long y, const struct TbSprite* spr,
+                                         const unsigned char* cmap, unsigned int draw_flags);
 
     /**
      * Upload the 64×64 palette-indexed gui_slab tile to the GPU.
@@ -192,6 +220,22 @@ public:
     /** End the top-overlay batch. */
     virtual void ClearTopOverlay() { }
 
+    /** Begin drawing zoom-box thing sprites.
+     *  GPU: enters top-overlay layer so sprites render over the zoom-box tiles.
+     *  SW: pushes a clipped drawing viewport so sprites are confined to the box. */
+    virtual void BeginZoomBoxOverlay(int x, int y, int w, int h);
+
+    /** End zoom-box thing sprites drawing scope. */
+    virtual void EndZoomBoxOverlay(int x, int y, int w, int h);
+
+    /** Initialise NumBackColours/MapBackColours for minimap rendering.
+     *  SW: samples WScreen pixels; GPU: sets a single zeroed background entry. */
+    virtual void SetupMinimapBackground(int diaglen, int panel_x, int panel_y);
+
+    /** Return true and set *idx to the 'opaque black' palette index the GPU minimap
+     *  shader uses (to avoid transparent-sentinel 0). SW returns false. */
+    virtual bool GetMinimapOpaqueBlackIndex(uint8_t* idx) const;
+ 
     /** Draw layer-0 (back) elements before the CPU staging-buffer blit.
      *  CPU default: no-op. */
     virtual void DrawBack() { }
@@ -210,6 +254,13 @@ public:
     /** Draw layer-2/3 top-overlay elements (tooltip, zoom-box corner frames).
      *  Must be called after DrawFrontBase().  GPU default: no-op. */
     virtual void DrawFrontOverlay() {}
+
+    /** Draw world-depth sprites (layer 2, RT copy) between the world geometry
+     *  pass and the sidebar.  Creature status icons, room flags, floating gold
+     *  text etc. must appear in front of world geometry but BEHIND the sidebar.
+     *  Must be called after DrawBack() and before DrawFrontBase().
+     *  GPU default: no-op. */
+    virtual void DrawWorldSpriteLayerRT() {}
 
     /** Flip game-thread command lists to render-thread read copies.
      *  Called from EndFrame() on the game thread before signalling the

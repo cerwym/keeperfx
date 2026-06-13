@@ -43,6 +43,9 @@
 #include "room_list.h"
 #include "vidfade.h"
 #include "vidmode.h"
+#include "renderer/RendererManager.h"
+#include "kfx/assets/SpriteSheetManager.h"
+#include "kfx/assets/FontManager.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -149,9 +152,9 @@ static void set_packet_slap_frame(struct ScreenPacket *nspck, int32_t slap_frame
 void frontnetmap_unload(void)
 {
     unload_map_and_window();
-    free_font(&map_font);
-    free_spritesheet(&map_flag);
-    free_spritesheet(&map_hand);
+    FontMgr_Free(&map_font);
+    SpriteSheetMgr_Free(&map_flag);
+    SpriteSheetMgr_Free(&map_hand);
     fe_network_active = 0;
     stop_music();
     set_music_volume(settings.music_volume);
@@ -415,28 +418,29 @@ TbBool frontnetmap_load(void)
     }
     switch (campaign.land_markers) {
     case LndMk_PINPOINTS:
-        map_flag = load_spritesheet("ldata/netflag_pin.dat", "ldata/netflag_pin.tab");
+        SpriteSheetMgr_Load(&map_flag, "ldata/netflag_pin.dat", "ldata/netflag_pin.tab");
         break;
     default:
         ERRORLOG("Unsupported land markers type %d",(int)campaign.land_markers);
         // Fall Through
     case LndMk_ENSIGNS:
-        map_flag = load_spritesheet("ldata/netflag_ens.dat", "ldata/netflag_ens.tab");
+        SpriteSheetMgr_Load(&map_flag, "ldata/netflag_ens.dat", "ldata/netflag_ens.tab");
         break;
     }
-    map_font = load_spritesheet("ldata/netfont.dat", "ldata/netfont.tab");
+    FontMgr_Load(&map_font, "ldata/netfont.dat", "ldata/netfont.tab");
     prepare_file_path_buf(hand_data_path, sizeof(hand_data_path), FGrp_LandView, "maphand.dat");
     prepare_file_path_buf(hand_index_path, sizeof(hand_index_path), FGrp_LandView, "maphand.tab");
-    map_hand = load_spritesheet(hand_data_path, hand_index_path);
+    SpriteSheetMgr_Load(&map_hand, hand_data_path, hand_index_path);
     if (!map_flag || !map_font || !map_hand) {
         ERRORLOG("Unable to load MAP SCREEN sprites");
-        free_font(&map_font);
-        free_spritesheet(&map_flag);
-        free_spritesheet(&map_hand);
+        FontMgr_Free(&map_font);
+        SpriteSheetMgr_Free(&map_flag);
+        SpriteSheetMgr_Free(&map_hand);
         unload_map_and_window();
         frontend_load_data_reset();
         return false;
     }
+    RendererNotifyLandviewFlagLoaded();
     frontend_load_data_reset();
     frontmap_zoom_skip_init(SINGLEPLAYER_NOTSTARTED);
     fe_net_level_selected = SINGLEPLAYER_NOTSTARTED;

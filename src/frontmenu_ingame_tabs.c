@@ -1427,7 +1427,7 @@ void draw_centred_string64k(const char *text, short x, short y, short base_w, sh
     int tx_units_per_px;
     int text_x;
     int text_y = -6*dst_w/base_w;
-    if ( (MyScreenHeight < 400) && (dbc_language > 0) )
+    if ( (RendererGetScreenHeight() < 400) && (dbc_language > 0) )
     {
         tx_units_per_px = scale_ui_value(32);
         text_x = 12;
@@ -1435,9 +1435,9 @@ void draw_centred_string64k(const char *text, short x, short y, short base_w, sh
     else
     {
         tx_units_per_px = (22 * units_per_pixel_ui) / LbTextLineHeight();
-        if ( (dbc_language > 0) && (MyScreenWidth > 640) )
+        if ( (dbc_language > 0) && (RendererGetScreenWidth() > 640) )
         {
-            tx_units_per_px = scale_value_by_horizontal_resolution(12 + (MyScreenWidth / 640));
+            tx_units_per_px = scale_value_by_horizontal_resolution(12 + (RendererGetScreenWidth() / 640));
             text_y += 12;
         }
         else
@@ -1449,7 +1449,7 @@ void draw_centred_string64k(const char *text, short x, short y, short base_w, sh
     LbTextDrawResized(text_x, text_y, tx_units_per_px, text);
     LbTextSetJustifyWindow(0, 0, RendererScreenWidth());
     LbTextSetClipWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
-    LbTextSetWindow(0, 0, MyScreenWidth, MyScreenHeight);
+    LbTextSetWindow(0, 0, RendererGetScreenWidth(), RendererGetScreenHeight());
     lbDisplay.DrawFlags = flg_mem;
 }
 
@@ -1919,7 +1919,7 @@ void gui_area_instance_button(struct GuiButton *gbtn)
     }
 
     // Calculating text size.
-    int tx_units_per_px = ( (MyScreenHeight < 400) && (dbc_language > 0) ) ? scale_ui_value(32) : (gbtn->height * 11 / 12) * 16 / LbTextLineHeight();
+    int tx_units_per_px = ( (RendererGetScreenHeight() < 400) && (dbc_language > 0) ) ? scale_ui_value(32) : (gbtn->height * 11 / 12) * 16 / LbTextLineHeight();
     char text[16];
     snprintf(text, sizeof(text), "%d", (curbtn_avail_pos + 1) % 10);
     LbTextDrawResized(gbtn->scr_pos_x + 52*units_per_px/16, gbtn->scr_pos_y + 9*units_per_px/16, tx_units_per_px, text);
@@ -1946,7 +1946,7 @@ void gui_area_instance_button(struct GuiButton *gbtn)
     {
         spr_idx++;
     }
-    if (MyScreenHeight < 400)
+    if (RendererGetScreenHeight() < 400)
     {
         const struct TbSprite* spr = get_panel_sprite(GPS_plyrsym_symbol_player_red_std_b);
         ps_units_per_px = (22 * units_per_pixel) / spr->SHeight;
@@ -2172,7 +2172,7 @@ void gui_area_stat_button(struct GuiButton *gbtn)
         const char* text = creature_statistic_text(thing, gbtn->content.lval);
         int x = gbtn->scr_pos_x - 6*ps_units_per_px/16;
         int y = gbtn->scr_pos_y - 12*ps_units_per_px/16;
-        if (MyScreenHeight < 400)
+        if (RendererGetScreenHeight() < 400)
         {
             y += (gbtn->height / 2);
         }

@@ -28,7 +28,7 @@
 extern "C" {
 #endif
 /******************************************************************************/
-#pragma pack(1)
+#pragma pack(push, 1)
 
 enum VecModes {
     VM_FlatColor = 0,
@@ -61,34 +61,9 @@ enum VecModes {
     VM_Unusedparam27,
 };
 
+#pragma pack(pop)
 
-// These are used "per screen row"
-struct PolyPoint {
-    long X; // Horizontal coordinate within screen buffer
-    long Y; // Vertical coordinate within screen buffer
-    long U; // Texture UV mapping, U coordinate
-    long V; // Texture UV mapping, V coordinate
-    long S; // Shininess / brightness of the point
-};
-
-struct GtBlock { // sizeof = 48
-  unsigned char *texturedata;
-  unsigned long width;
-  unsigned long height;
-  unsigned long lightness0;
-  unsigned long lightness1;
-  unsigned long lightness3;
-  unsigned long lightness2;
-  unsigned long texturestride;
-  unsigned long scalingfactor;
-  unsigned long colorformat;
-  unsigned long renderflags;
-  unsigned long textureoffset;
-};
-
-/******************************************************************************/
-
-#pragma pack()
+#include "bflib_render_types.h" /* PolyPoint, GtBlock */
 /******************************************************************************/
 extern TbPixel vec_colour;
 extern unsigned char vec_mode;

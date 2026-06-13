@@ -278,7 +278,7 @@ TbBool OverlayEffect::Setup(long lens_idx)
     m_gpu_pass.Configure(renderer->GetData(), renderer->GetWidth(),
                          renderer->GetHeight(), renderer->GetAlphaF());
     m_gpu_pass.Init();
-#else
+#elif defined(RENDERER_OPENGL_ENABLED)
     if (!m_gl_pass_ready)
     {
         if (m_gl_pass.Init())
@@ -308,7 +308,7 @@ void OverlayEffect::Cleanup()
         m_current_lens = -1;
 #ifdef PLATFORM_VITA
         m_gpu_pass.Free();
-#else
+#elif defined(RENDERER_OPENGL_ENABLED)
         m_gl_pass.Free();
         m_gl_pass_ready = false;
 #endif

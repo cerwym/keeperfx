@@ -205,7 +205,6 @@ int load_game_chunks(TbFileHandle fhandle, struct CatalogueEntry *centry)
                 recheck_all_mod_exist();
                 WorldViewRenderer_ClearKeeperSpriteAtlas();
                 init_custom_sprites(centry->level_num);
-                RendererNotifyCustomSpritesReloaded();
                 WorldViewRenderer_PreloadKeeperSpriteAtlas();
                 load_stats_files();
                 check_and_auto_fix_stats();

@@ -19,8 +19,10 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <utility>
 #include "renderer/WorldVertex.h"
-#include "bflib_render.h"  // PolyPoint (for shadow geometry)
+#include "renderer/FlatPolyVertex.h"
+#include "renderer/EngineVertex.h"
 
 /******************************************************************************/
 
@@ -77,32 +79,33 @@ struct IRWorldFlatPolyBatchCmd
 // Sprites
 /******************************************************************************/
 
-/** Draw the world sprites in a single engine bucket.
- *  The actual sprite list is still walked via the bucket list on the render
- *  thread (pending full IR migration); this cmd captures the bucket number. */
-struct IRWorldSpriteBucketCmd
-{
-    WorldCmdLayer layer      = WorldCmdLayer::Sprites;
-    int           bucket_num = 0;   /**< Engine bucket index to render. */
-    uint32_t      sort_key   = 0;
-};
-
-/** Draw a single palette-indexed keeper sprite at world-screen coordinates. */
+/** Draw a single palette-indexed keeper sprite at world-screen coordinates.
+ *
+ *  Captured on the game thread during the bucket walk; the render thread
+ *  decodes the RLE, does atlas/CLUT management, and issues the GL draw.
+ *
+ *  Both @p data and @p remap point into static game-level arrays that remain
+ *  resident for the entire level lifetime, so raw pointers are safe across the
+ *  Flip() frame boundary.
+ */
 struct IRWorldKeeperSpriteCmd
 {
-    WorldCmdLayer layer         = WorldCmdLayer::Sprites;
-    int32_t       dst_x         = 0;   /**< Screen destination left. */
-    int32_t       dst_y         = 0;   /**< Screen destination top. */
-    int32_t       dst_w         = 0;   /**< Destination width. */
-    int32_t       dst_h         = 0;   /**< Destination height. */
-    int32_t       src_w         = 0;   /**< Source sprite width. */
-    int32_t       src_h         = 0;   /**< Source sprite height. */
-    uint32_t      draw_flags    = 0;   /**< Sprite draw flags. */
-    /* Pixel data is stored separately in the renderer's owned buffer;
-     * this index references that buffer rather than a raw pointer. */
-    uint32_t      pixel_buf_idx = 0;
-    uint32_t      remap_buf_idx = 0;   /**< 0 = no remap table. */
-    uint32_t      sort_key      = 0;
+    WorldCmdLayer         layer         = WorldCmdLayer::Sprites;
+    int32_t               dst_x         = 0;   /**< Screen destination left. */
+    int32_t               dst_y         = 0;   /**< Screen destination top. */
+    int32_t               dst_w         = 0;   /**< Destination width. */
+    int32_t               dst_h         = 0;   /**< Destination height. */
+    int32_t               src_w         = 0;   /**< Source sprite width. */
+    int32_t               src_h         = 0;   /**< Source sprite height. */
+    uint32_t              draw_flags    = 0;   /**< Sprite draw flags (Lb_SPRITE_*). */
+    /** RLE-compressed pixel data (keepersprite_array — stable for level lifetime). */
+    const unsigned char*  data          = nullptr;
+    /** 256-byte remap table (static global palette table), or nullptr for identity. */
+    const unsigned char*  remap         = nullptr;
+    float                 z_ndc         = 0.0f;  /**< Pre-computed NDC depth (half-bucket bias). */
+    int8_t                owner         = -1;    /**< Player owner index (-1 = none). */
+    int8_t                wants_outline =  0;    /**< Non-zero if depth-fail outline is wanted. */
+    uint32_t              sort_key      = 0;
 };
 
 /******************************************************************************/
@@ -113,7 +116,7 @@ struct IRWorldKeeperSpriteCmd
 struct IRWorldShadowCmd
 {
     WorldCmdLayer    layer         = WorldCmdLayer::Shadows;
-    struct PolyPoint verts[4]      = {};  /**< Screen-px coords + 16.16 UV. */
+    EnginePolyVertex verts[4]      = {};  /**< Screen-px coords + fixed-point UV. */
     unsigned short   anim_sprite   = 0;
     short            angle         = 0;
     unsigned char    current_frame = 0;
@@ -121,19 +124,9 @@ struct IRWorldShadowCmd
     int              tex_h         = 0;
     float            darkness      = 1.0f;  /**< Alpha for multiply-blend. */
     float            ndc_z         = 0.0f;  /**< NDC depth for depth test. */
+    int32_t          wx            = 0, wy = 0, wz = 0;  /**< World-space caster origin. */
     uint32_t         sort_key      = 0;
-};
-
-/******************************************************************************/
-// World-depth UI (depth-tested, inside game viewport)
-/******************************************************************************/
-
-/** Record a world-depth UI element by bucket (pending full IR migration). */
-struct IRWorldUIBucketCmd
-{
-    WorldCmdLayer layer      = WorldCmdLayer::WorldUI;
-    int           bucket_num = 0;
-    uint32_t      sort_key   = 0;
+    unsigned char    is_circle     = 0;  /**< 1 = draw pre-baked circle, 0 = decode sprite. */
 };
 
 /******************************************************************************/
@@ -143,33 +136,37 @@ struct IRWorldUIBucketCmd
 
 struct WorldCommandBuffers
 {
-    IRCommandBuffer<IRWorldTileBatchCmd>    tiles;
-    IRCommandBuffer<IRWorldTexQuadCmd>      tex_quads;
+    IRCommandBuffer<IRWorldTileBatchCmd>     tiles;
+    IRCommandBuffer<IRWorldTexQuadCmd>       tex_quads;
     IRCommandBuffer<IRWorldFlatPolyBatchCmd> flat_polys;
-    IRCommandBuffer<IRWorldSpriteBucketCmd> sprite_buckets;
-    IRCommandBuffer<IRWorldKeeperSpriteCmd> keeper_sprites;
-    IRCommandBuffer<IRWorldShadowCmd>       shadows;
-    IRCommandBuffer<IRWorldUIBucketCmd>     world_ui;
+    IRCommandBuffer<IRWorldKeeperSpriteCmd>  keeper_sprites;
+    IRCommandBuffer<IRWorldShadowCmd>        shadows;
+
+    // Vertex data backing vert_start/vert_count in tiles and flat_polys commands.
+    // Owned here so any backend's ExecuteWorldFromIR can access them without
+    // coupling to backend-private arrays.
+    std::vector<WorldVertex>    tile_verts;
+    std::vector<FlatPolyVertex> flat_poly_verts;
 
     void Reset()
     {
         tiles.Reset();
         tex_quads.Reset();
         flat_polys.Reset();
-        sprite_buckets.Reset();
         keeper_sprites.Reset();
         shadows.Reset();
-        world_ui.Reset();
+        tile_verts.clear();
+        flat_poly_verts.clear();
     }
 
     void Reserve(size_t tiles_n, size_t sprites_n, size_t shadows_n)
     {
         tiles.Reserve(tiles_n);
         flat_polys.Reserve(tiles_n / 4);
-        sprite_buckets.Reserve(sprites_n);
         keeper_sprites.Reserve(sprites_n);
         shadows.Reserve(shadows_n);
-        world_ui.Reserve(sprites_n / 2);
+        tile_verts.reserve(65536);
+        flat_poly_verts.reserve(8192);
     }
 
     void Swap(WorldCommandBuffers& other)
@@ -177,10 +174,10 @@ struct WorldCommandBuffers
         tiles.Swap(other.tiles);
         tex_quads.Swap(other.tex_quads);
         flat_polys.Swap(other.flat_polys);
-        sprite_buckets.Swap(other.sprite_buckets);
         keeper_sprites.Swap(other.keeper_sprites);
         shadows.Swap(other.shadows);
-        world_ui.Swap(other.world_ui);
+        std::swap(tile_verts, other.tile_verts);
+        std::swap(flat_poly_verts, other.flat_poly_verts);
     }
 };
 

@@ -25,11 +25,7 @@
 #include <cstdint>
 #include "bflib_sprite.h"
 #include "renderer/SpriteHandle.h"
-
-struct SpriteUV {
-    float u0, v0, u1, v1;
-    uint16_t pixel_w, pixel_h;  // original sprite pixel dimensions
-};
+#include "renderer/SpriteUV.h"
 
 class GLSpriteAtlas {
 public:
@@ -88,7 +84,6 @@ public:
 
 private:
     bool pack_sprite(const struct TbSprite* spr, SpriteUV& out);
-    void decode_rle(uint8_t* dst, int dst_stride, const struct TbSprite* spr);
     void flush_dirty();
 
     // Unlocked variants — called only while m_mutex is already held.

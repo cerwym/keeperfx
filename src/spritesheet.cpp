@@ -16,19 +16,11 @@ struct TbSpriteSheet {
 namespace {
 
 #pragma pack(1)
-#ifdef SPRITE_FORMAT_V2
-    struct sprite_entry {
-        uint32_t offset;
-        uint16_t width;
-        uint16_t height;
-    };
-#else
     struct sprite_entry {
         uint32_t offset;
         uint8_t width;
         uint8_t height;
     };
-#endif
 #pragma pack(0)
 
 using offset_list = std::vector<std::pair<uint32_t, size_t>>;
@@ -123,11 +115,7 @@ extern "C" const TbSprite * get_sprite(const TbSpriteSheet * sheet, const long i
     return &sheet->sprites[index];
 }
 
-#ifdef SPRITE_FORMAT_V2
-extern "C" TbBool add_sprite(TbSpriteSheet * sheet, unsigned short width, unsigned short height, int size, const void * data)
-#else
 extern "C" TbBool add_sprite(TbSpriteSheet * sheet, unsigned char width, unsigned char height, int size, const void * data)
-#endif
 {
     try {
         sheet->data.emplace_back(std::vector<unsigned char >(static_cast<const unsigned char *>(data), static_cast<const unsigned char *>(data) + size));

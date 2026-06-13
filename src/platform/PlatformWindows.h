@@ -41,6 +41,7 @@ public:
     void        SetArgv(int argc, char** argv) override;
     const char* GetDataPath() const override;
     const char* GetSavePath() const override;
+    const char* GetUserPrefDir() override;
 
     void   SetRedbookVolume(SoundVolume vol) override;
     TbBool PlayRedbookTrack(int track) override;
@@ -53,6 +54,7 @@ public:
 private:
     char data_path_[256] = ".";
     char save_path_[256] = ".";
+    char pref_path_[512] = {};
 };
 
 #endif // PLATFORM_WINDOWS_H

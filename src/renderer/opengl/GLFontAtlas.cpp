@@ -23,6 +23,19 @@
 
 /******************************************************************************/
 
+namespace {
+constexpr long kMaxFontSpriteCountSanity = 4096;
+constexpr int  kMinAtlasSide = 256;
+constexpr int  kMaxAtlasSide = 2048;
+
+inline bool IsSpriteCountSane(long sprite_count)
+{
+    return sprite_count >= 0 && sprite_count <= kMaxFontSpriteCountSanity;
+}
+}
+
+/******************************************************************************/
+
 GLFontAtlas::GLFontAtlas()
     : m_texture_id(0)
     , m_glyphs(nullptr)
@@ -67,6 +80,14 @@ bool GLFontAtlas::Init(const struct TbSpriteSheet* font_sheet)
         return false;
     }
 
+    const long sprite_count = num_sprites(font_sheet);
+    if (!IsSpriteCountSane(sprite_count))
+    {
+        ERRORLOG("GLFontAtlas: refusing init from suspicious font sheet %p (sprite_count=%ld)",
+                 (void*)font_sheet, sprite_count);
+        return false;
+    }
+
     // Allocate glyph array (256 characters)
     m_glyphs = (FontGlyph*)malloc(256 * sizeof(FontGlyph));
     if (!m_glyphs)
@@ -84,7 +105,7 @@ bool GLFontAtlas::Init(const struct TbSpriteSheet* font_sheet)
         return false;
     }
 
-    m_built_sprite_count = num_sprites(font_sheet);
+    m_built_sprite_count = sprite_count;
     SYNCLOG("GLFontAtlas: initialized %dx%d atlas with %ld characters", 
             m_atlas_width, m_atlas_height, m_built_sprite_count);
     return true;
@@ -93,14 +114,42 @@ bool GLFontAtlas::Init(const struct TbSpriteSheet* font_sheet)
 bool GLFontAtlas::NeedsRebuild(const struct TbSpriteSheet* font_sheet) const
 {
     if (!font_sheet) return false;
-    return num_sprites(font_sheet) != m_built_sprite_count;
+
+    const long sprite_count = num_sprites(font_sheet);
+    if (!IsSpriteCountSane(sprite_count))
+    {
+        ERRORLOG("GLFontAtlas: suspicious font sheet in NeedsRebuild %p (sprite_count=%ld); skipping rebuild",
+                 (void*)font_sheet, sprite_count);
+        return false;
+    }
+
+    return sprite_count != m_built_sprite_count;
 }
 
 void GLFontAtlas::CalculateAtlasDimensions(const struct TbSpriteSheet* font_sheet,
                                            int* width, int* height)
 {
+    if (!width || !height)
+        return;
+
+    // Safe defaults used when the source sheet is invalid/corrupt.
+    *width = kMinAtlasSide;
+    *height = kMinAtlasSide;
+    m_line_height = 0;
+    m_max_char_width = 0;
+
+    if (!font_sheet)
+        return;
+
     // Calculate total area needed for all sprites
-    long sprite_count = num_sprites(font_sheet);
+    const long sprite_count = num_sprites(font_sheet);
+    if (!IsSpriteCountSane(sprite_count))
+    {
+        ERRORLOG("GLFontAtlas: suspicious font sheet in CalculateAtlasDimensions %p (sprite_count=%ld)",
+                 (void*)font_sheet, sprite_count);
+        return;
+    }
+
     int total_area = 0;
     int max_char_width = 0;
     int max_char_height = 0;
@@ -121,25 +170,39 @@ void GLFontAtlas::CalculateAtlasDimensions(const struct TbSpriteSheet* font_shee
 
     // Estimate square dimensions with some padding
     int side = (int)sqrt(total_area * 1.5f);
-    
+
     // Round up to next power of two for better GPU compatibility
     int atlas_width = 1;
     while (atlas_width < side) atlas_width <<= 1;
-    
+
     int atlas_height = atlas_width;
-    
+
     // Clamp to reasonable limits
-    atlas_width = std::max(atlas_width, 256);
-    atlas_height = std::max(atlas_height, 256);
-    atlas_width = std::min(atlas_width, 2048);
-    atlas_height = std::min(atlas_height, 2048);
-    
+    atlas_width = std::max(atlas_width, kMinAtlasSide);
+    atlas_height = std::max(atlas_height, kMinAtlasSide);
+    atlas_width = std::min(atlas_width, kMaxAtlasSide);
+    atlas_height = std::min(atlas_height, kMaxAtlasSide);
+
     *width = atlas_width;
     *height = atlas_height;
 }
 
 bool GLFontAtlas::PackAndUploadAtlas(const struct TbSpriteSheet* font_sheet)
 {
+    if (!font_sheet)
+    {
+        ERRORLOG("GLFontAtlas: null font sheet in PackAndUploadAtlas");
+        return false;
+    }
+
+    const long sprite_count = num_sprites(font_sheet);
+    if (!IsSpriteCountSane(sprite_count))
+    {
+        ERRORLOG("GLFontAtlas: suspicious font sheet in PackAndUploadAtlas %p (sprite_count=%ld)",
+                 (void*)font_sheet, sprite_count);
+        return false;
+    }
+
     // Calculate atlas dimensions
     CalculateAtlasDimensions(font_sheet, &m_atlas_width, &m_atlas_height);
 
@@ -156,8 +219,7 @@ bool GLFontAtlas::PackAndUploadAtlas(const struct TbSpriteSheet* font_sheet)
     int current_x = 0;
     int current_y = 0;
     int row_height = 0;
-    
-    long sprite_count = num_sprites(font_sheet);
+
     for (long i = 0; i < sprite_count && i < 256; ++i)
     {
         const struct TbSprite* spr = get_sprite(font_sheet, i);
@@ -199,8 +261,9 @@ bool GLFontAtlas::PackAndUploadAtlas(const struct TbSpriteSheet* font_sheet)
         // Copy sprite data to atlas buffer
         // Decode RLE compressed sprite data
         unsigned char* char_buffer = (unsigned char*)malloc(char_width * char_height);
-        if (char_buffer && DecodeRLESprite(char_buffer, char_width, spr->Data, char_width, char_height))
+        if (char_buffer)
         {
+            LbSpriteDecode(char_buffer, char_width, spr->Data, char_width, char_height);
             for (int y = 0; y < char_height; ++y)
             {
                 for (int x = 0; x < char_width; ++x)
@@ -214,8 +277,8 @@ bool GLFontAtlas::PackAndUploadAtlas(const struct TbSpriteSheet* font_sheet)
                     atlas_buffer[atlas_offset + 3] = (palette_idx == 0) ? 0 : 255; // Alpha
                 }
             }
+            free(char_buffer);
         }
-        if (char_buffer) free(char_buffer);
 
         // Update position for next character
         current_x += char_width;
@@ -258,40 +321,6 @@ const FontGlyph* GLFontAtlas::GetGlyph(unsigned long chr) const
         return &m_glyphs[idx];
 
     return nullptr;
-}
-
-bool GLFontAtlas::DecodeRLESprite(unsigned char* dst, int dst_stride,
-                                 const unsigned char* sprite_data, int w, int h)
-{
-    if (!dst || !sprite_data || w <= 0 || h <= 0)
-        return false;
-
-    // Clear destination buffer
-    for (int y = 0; y < h; ++y)
-        memset(dst + y * dst_stride, 0, w);
-
-    const signed char* sp = reinterpret_cast<const signed char*>(sprite_data);
-    for (int y = 0; y < h; ++y) {
-        unsigned char* row = dst + y * dst_stride;
-        int x = 0;
-        while (true) {
-            signed char cmd = *sp++;
-            if (cmd == 0) break; // End of row
-            if (cmd < 0) {
-                // Transparent skip
-                x += (int)(-cmd);
-            } else {
-                // Run of palette bytes
-                int count = (int)cmd;
-                for (int i = 0; i < count; ++i) {
-                    if (x < w) row[x] = (unsigned char)(*sp);
-                    ++sp;
-                    ++x;
-                }
-            }
-        }
-    }
-    return true;
 }
 
 /******************************************************************************/

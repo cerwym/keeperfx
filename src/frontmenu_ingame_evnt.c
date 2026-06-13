@@ -238,7 +238,7 @@ void draw_battle_head(struct Thing *thing, long scr_x, long scr_y, int units_per
     // Draw experience level
     spr = get_button_sprite(GBS_creature_flower_level_01);
     int bs_units_per_px = (17 * units_per_px + spr->SHeight / 2) / spr->SHeight;
-    TbBool high_res = (MyScreenHeight >= 400);
+    TbBool high_res = (RendererGetScreenHeight() >= 400);
     curscr_y = (scr_y - ((spr->SHeight*bs_units_per_px/16) >> (unsigned char)high_res));
     curscr_x = (scr_x - ((spr->SWidth*bs_units_per_px/16) >> (unsigned char)high_res));
     spr = get_button_sprite(GBS_creature_flower_level_01 + cctrl->exp_level);
@@ -387,7 +387,7 @@ void draw_bonus_timer(void)
     LbTextSetFont(winfont);
     long width = 10 * (LbTextCharWidth('0') * units_per_pixel / 16);
     long height = LbTextLineHeight() * units_per_pixel / 16 + (LbTextLineHeight() * units_per_pixel / 16) / 2;
-    if (MyScreenHeight < 400)
+    if (RendererGetScreenHeight() < 400)
     {
         height *= 2;
         width *= 2;
@@ -397,7 +397,7 @@ void draw_bonus_timer(void)
         }
     }
     lbDisplay.DrawFlags = Lb_TEXT_HALIGN_CENTER;
-    long scr_x = MyScreenWidth - width - 16 * units_per_pixel / 16;
+    long scr_x = RendererGetScreenWidth() - width - 16 * units_per_pixel / 16;
     long scr_y = 16 * units_per_pixel / 16;
     if (game.armageddon_cast_turn != 0)
     {
@@ -409,14 +409,14 @@ void draw_bonus_timer(void)
     draw_slab64k(scr_x, scr_y, units_per_pixel, width, height);
     int tx_units_per_px;
     int y;
-    if ( (MyScreenHeight < 400) && (dbc_language > 0) )
+    if ( (RendererGetScreenHeight() < 400) && (dbc_language > 0) )
     {
         tx_units_per_px = scale_ui_value(32);
         y = 0;
     }
-    else if ( (MyScreenWidth > 1280) && (dbc_language > 0) )
+    else if ( (RendererGetScreenWidth() > 1280) && (dbc_language > 0) )
     {
-        tx_units_per_px = scale_ui_value(16 - (MyScreenWidth / 640));
+        tx_units_per_px = scale_ui_value(16 - (RendererGetScreenWidth() / 640));
         y = height / 4;
     }
     else
@@ -459,7 +459,7 @@ void draw_timer(void)
     LbTextSetFont(winfont);
     long width = 10 * (LbTextCharWidth('0') * units_per_pixel >> 4);
     long height = LbTextLineHeight() * units_per_pixel / 16 + (LbTextLineHeight() * units_per_pixel / 16) / 2;
-    if (MyScreenHeight < 400)
+    if (RendererGetScreenHeight() < 400)
     {
         height *= 2;
         width *= 2;
@@ -476,7 +476,7 @@ void draw_timer(void)
         }
     }
     lbDisplay.DrawFlags = Lb_TEXT_HALIGN_CENTER;
-    long scr_x = MyScreenWidth - width - 16 * units_per_pixel / 16;
+    long scr_x = RendererGetScreenWidth() - width - 16 * units_per_pixel / 16;
     long scr_y = 16 * units_per_pixel / 16;
     if ( (bonus_timer_enabled()) || (script_timer_enabled()) || (display_variable_enabled()) || (game.armageddon_cast_turn != 0) )
     {
@@ -487,14 +487,14 @@ void draw_timer(void)
     draw_slab64k(scr_x, scr_y, units_per_pixel, width, height);
     int tx_units_per_px;
     int y;
-    if ( (MyScreenHeight < 400) && (dbc_language > 0) )
+    if ( (RendererGetScreenHeight() < 400) && (dbc_language > 0) )
     {
         tx_units_per_px = scale_ui_value(32);
         y = 0;
     }
-    else if ( (MyScreenWidth > 1280) && (dbc_language > 0) )
+    else if ( (RendererGetScreenWidth() > 1280) && (dbc_language > 0) )
     {
-        tx_units_per_px = scale_ui_value(16 - (MyScreenWidth / 640));
+        tx_units_per_px = scale_ui_value(16 - (RendererGetScreenWidth() / 640));
         y = height / 4;
     }
     else
@@ -528,7 +528,7 @@ void draw_gameturn_timer(void)
 
     long width = textCharWidth * units_per_pixel / 16;
     long height = LbTextLineHeight() * units_per_pixel / 16 + (LbTextLineHeight() * units_per_pixel / 16) / 2;
-    if (MyScreenHeight < 400)
+    if (RendererGetScreenHeight() < 400)
     {
         height *= 2;
         width *= 2;
@@ -538,21 +538,21 @@ void draw_gameturn_timer(void)
         }
     }
     lbDisplay.DrawFlags = Lb_TEXT_HALIGN_CENTER;
-    long scr_x = MyScreenWidth - width - 16 * units_per_pixel / 16;
-    long scr_y = MyScreenHeight - height - 16 * units_per_pixel / 16;
+    long scr_x = RendererGetScreenWidth() - width - 16 * units_per_pixel / 16;
+    long scr_y = RendererGetScreenHeight() - height - 16 * units_per_pixel / 16;
 
     LbTextSetWindow(scr_x, scr_y, width, height);
     //draw_slab64k(scr_x, scr_y, units_per_pixel, width, height);
     int tx_units_per_px;
     int y;
-    if ( (MyScreenHeight < 400) && (dbc_language > 0) )
+    if ( (RendererGetScreenHeight() < 400) && (dbc_language > 0) )
     {
         tx_units_per_px = scale_ui_value(32);
         y = 0;
     }
-    else if ( (MyScreenWidth > 1280) && (dbc_language > 0) )
+    else if ( (RendererGetScreenWidth() > 1280) && (dbc_language > 0) )
     {
-        tx_units_per_px = scale_ui_value(16 - (MyScreenWidth / 640));
+        tx_units_per_px = scale_ui_value(16 - (RendererGetScreenWidth() / 640));
         y = height / 4;
     }
     else
@@ -619,7 +619,7 @@ void draw_script_timer(PlayerNumber plyr_idx, unsigned char timer_id, unsigned l
     LbTextSetFont(winfont);
     long width = 10 * (LbTextCharWidth('0') * units_per_pixel / 16);
     long height = LbTextLineHeight() * units_per_pixel / 16 + (LbTextLineHeight() * units_per_pixel / 16) / 2;
-    if (MyScreenHeight < 400)
+    if (RendererGetScreenHeight() < 400)
     {
         height *= 2;
         width *= 2;
@@ -629,7 +629,7 @@ void draw_script_timer(PlayerNumber plyr_idx, unsigned char timer_id, unsigned l
         }
     }
     lbDisplay.DrawFlags = Lb_TEXT_HALIGN_CENTER;
-    long scr_x = MyScreenWidth - width - 16 * units_per_pixel / 16;
+    long scr_x = RendererGetScreenWidth() - width - 16 * units_per_pixel / 16;
     long scr_y = 16 * units_per_pixel / 16;
     if (game.armageddon_cast_turn != 0)
     {
@@ -641,14 +641,14 @@ void draw_script_timer(PlayerNumber plyr_idx, unsigned char timer_id, unsigned l
     draw_slab64k(scr_x, scr_y, units_per_pixel, width, height);
     int tx_units_per_px;
     int y;
-    if ( (MyScreenHeight < 400) && (dbc_language > 0) )
+    if ( (RendererGetScreenHeight() < 400) && (dbc_language > 0) )
     {
         tx_units_per_px = scale_ui_value(32);
         y = 0;
     }
-    else if ( (MyScreenWidth > 1280) && (dbc_language > 0) )
+    else if ( (RendererGetScreenWidth() > 1280) && (dbc_language > 0) )
     {
-        tx_units_per_px = scale_ui_value(16 - (MyScreenWidth / 640));
+        tx_units_per_px = scale_ui_value(16 - (RendererGetScreenWidth() / 640));
         y = height / 4;
     }
     else
@@ -692,7 +692,7 @@ void draw_script_variable(PlayerNumber plyr_idx, unsigned char valtype, unsigned
     LbTextSetFont(winfont);
     long width = 10 * (LbTextCharWidth('0') * units_per_pixel / 16);
     long height = LbTextLineHeight() * units_per_pixel / 16 + (LbTextLineHeight() * units_per_pixel / 16) / 2;
-    if (MyScreenHeight < 400)
+    if (RendererGetScreenHeight() < 400)
     {
         height *= 2;
         width *= 2;
@@ -702,7 +702,7 @@ void draw_script_variable(PlayerNumber plyr_idx, unsigned char valtype, unsigned
         }
     }
     lbDisplay.DrawFlags = Lb_TEXT_HALIGN_CENTER;
-    long scr_x = MyScreenWidth - width - 16 * units_per_pixel / 16;
+    long scr_x = RendererGetScreenWidth() - width - 16 * units_per_pixel / 16;
     long scr_y = 16 * units_per_pixel / 16;
     if (game.armageddon_cast_turn != 0)
     {
@@ -722,14 +722,14 @@ void draw_script_variable(PlayerNumber plyr_idx, unsigned char valtype, unsigned
     draw_slab64k(scr_x, scr_y, units_per_pixel, width, height);
     int tx_units_per_px;
     int y;
-    if ( (dbc_language > 0) && (MyScreenWidth > 1280) )
+    if ( (dbc_language > 0) && (RendererGetScreenWidth() > 1280) )
     {
-        tx_units_per_px = scale_ui_value(16 - (MyScreenWidth / 640));
+        tx_units_per_px = scale_ui_value(16 - (RendererGetScreenWidth() / 640));
         y = height / 4;
     }
     else
     {
-        tx_units_per_px = ( (MyScreenHeight < 400) && (dbc_language > 0) ) ? scale_ui_value(32) : (22 * units_per_pixel) / LbTextLineHeight();
+        tx_units_per_px = ( (RendererGetScreenHeight() < 400) && (dbc_language > 0) ) ? scale_ui_value(32) : (22 * units_per_pixel) / LbTextLineHeight();
         y = 0;
     }
     LbTextDrawResized(0, y, tx_units_per_px, text);
@@ -801,7 +801,7 @@ void draw_frametime()
     if (tx_units_per_px < 16)
         tx_units_per_px = 16;
 
-    int iStartLine = (MyScreenHeight / tx_units_per_px) / 2 + 1;
+    int iStartLine = (RendererGetScreenHeight() / tx_units_per_px) / 2 + 1;
     memset(text, 0, sizeof(text));
     if(debug_display_frametime == 1) {
         snprintf(text, sizeof(text), "%-13s", "Current");

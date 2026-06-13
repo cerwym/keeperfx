@@ -518,12 +518,12 @@ short gui_move_box(struct GuiBox *gbox, long x, long y, unsigned short fdflags)
       result = false;
       break;
   }
-  if (gbox->pos_x+gbox->width > MyScreenWidth)
-    gbox->pos_x = MyScreenWidth-gbox->width;
+  if (gbox->pos_x+gbox->width > RendererGetScreenWidth())
+    gbox->pos_x = RendererGetScreenWidth()-gbox->width;
   if (gbox->pos_x < 0)
     gbox->pos_x = 0;
-  if (gbox->pos_y+gbox->height > MyScreenHeight)
-    gbox->pos_y = MyScreenHeight-gbox->height;
+  if (gbox->pos_y+gbox->height > RendererGetScreenHeight())
+    gbox->pos_y = RendererGetScreenHeight()-gbox->height;
   if (gbox->pos_y < 0)
     gbox->pos_y = 0;
   return result;

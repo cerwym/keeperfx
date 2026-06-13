@@ -1,0 +1,14 @@
+{
+  "_comment": "Override any entry from assets.json. This file is gitignored.",
+
+  "_example_fork": {
+    "repo": "cerwym/FXGraphics",
+    "tag": "my-feature-branch",
+    "dest": "gfx"
+  },
+
+  "_example_local_path": {
+    "path": "C:/source/repos/FXGraphics",
+    "dest": "gfx"
+  }
+}

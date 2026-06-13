@@ -2198,7 +2198,7 @@ static void get_isometric_or_front_view_mouse_inputs(struct Packet *pckt,int rot
             }
             camera_movement_x = -1.0f;
         }
-        if (mx >= MyScreenWidth-edge_scrolling_border)
+        if (mx >= RendererGetScreenWidth()-edge_scrolling_border)
         {
             if ( is_game_key_pressed(Gkey_MoveRight, false, false) || is_key_pressed(KC_RIGHT,KMod_DONTCARE) )
             {
@@ -2216,7 +2216,7 @@ static void get_isometric_or_front_view_mouse_inputs(struct Packet *pckt,int rot
             }
             camera_movement_y = -1.0f;
         }
-        if (my >= MyScreenHeight-edge_scrolling_border)
+        if (my >= RendererGetScreenHeight()-edge_scrolling_border)
         {
             if ( is_game_key_pressed(Gkey_MoveDown, false, false) || is_key_pressed(KC_DOWN,KMod_DONTCARE) )
             {
@@ -2306,11 +2306,11 @@ static void get_overhead_view_nonaction_inputs(void)
         }
         if (my <= 4)
           set_packet_control(pckt, PCtr_MoveUp);
-        if (my >= MyScreenHeight-4)
+        if (my >= RendererGetScreenHeight()-4)
           set_packet_control(pckt, PCtr_MoveDown);
         if (mx <= 4)
           set_packet_control(pckt, PCtr_MoveLeft);
-        if (mx >= MyScreenWidth-4)
+        if (mx >= RendererGetScreenWidth()-4)
           set_packet_control(pckt, PCtr_MoveRight);
     }
     set_local_camera_destination(player);
@@ -2584,17 +2584,17 @@ static void get_creature_control_nonaction_inputs(void)
     struct Thing* thing = thing_get(player->controlled_thing_idx);
     TRACE_THING(thing);
     TbBool cheat_menu_active = cheat_menu_is_active();
-    if (((MyScreenWidth >> 1) != x) || ((MyScreenHeight >> 1) != y))
+    if (((RendererGetScreenWidth() >> 1) != x) || ((RendererGetScreenHeight() >> 1) != y))
     {
         if (!cheat_menu_active && !a_menu_window_is_active())
         {
-            LbMouseSetPositionInitial((MyScreenWidth / pixel_size) >> 1, (MyScreenHeight / pixel_size) >> 1);
+            LbMouseSetPositionInitial((RendererGetScreenWidth() / pixel_size) >> 1, (RendererGetScreenHeight() / pixel_size) >> 1);
         }
     }
     if (!cheat_menu_active && !a_menu_window_is_active())
     {
-        long centerX = MyScreenWidth / 2;
-        long centerY = MyScreenHeight / 2;
+        long centerX = RendererGetScreenWidth() / 2;
+        long centerY = RendererGetScreenHeight() / 2;
         long deltaX = x - centerX;
         long deltaY = y - centerY;
         long k;

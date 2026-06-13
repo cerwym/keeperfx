@@ -11,21 +11,19 @@
 #include "renderer/FrameState.h"
 #include "renderer/RenderGraph.h"
 #include "renderer/RenderThreadManager.h"
+#include "renderer/opengl/GLWorldViewRenderer.h"
+#include "renderer/opengl/GLUIRenderer.h"
 #include <atomic>
 #include <vector>
 
-// engine_camera.h defines struct Camera, which RendererOpenGL stores by value
-// in PiPCmd.  The include chain is short (globals.h only) and the renderer
-// already has a conceptual dependency on Camera via its C API.
-#include "engine_camera.h"
+struct Camera;
 
 class GLTileAtlas;
 class GLSpriteAtlas;
 class GLFontAtlas;
-class GLWorldViewRenderer;
 class GLMapFadePass;
-class GLUIRenderer;
 class GLTextRenderer;
+class ICursorLayer;
 
 /******************************************************************************/
 
@@ -75,6 +73,7 @@ public:
         c.hasSwipeOverlay         = 1;
         c.supportsRuntimeSwitch   = 1;
         c.supportsGPUPasses       = 1;
+        c.supportsScreenshot      = 1;
         return c;
     }
 
@@ -111,8 +110,8 @@ public:
                             int dst_x, int dst_y, int tile_w, int tile_h) override;
 
     /** Schedule a picture-in-picture isometric render for draw_zoom_box (ZBM_ISOMETRIC).
-     *  The camera is copied immediately; the render executes in EndFrame() after the
-     *  overhead-map draw but before UIFlushFront. */
+     *  The game thread captures the PiP world/UI draw data immediately; the render
+     *  thread later executes the snapshot in EndFrame(). */
     void SubmitPiPRender(struct Camera* cam, int x, int y, int w, int h) override;
 
     /** Called when tile/block textures are reloaded — invalidates the tile atlas
@@ -122,6 +121,11 @@ public:
     /** Called after game tables (render_fade_tables etc.) are ready — schedules
      *  fade-table texture creation and palette wiring on the render thread. */
     void NotifyGameTablesReady() override;
+
+    /** Schedule a screenshot: game thread queues the path; capture happens in
+     *  EndFrame_GL() (render thread) after all draw calls, before the buffer swap.
+     *  Returns true immediately (optimistic); render thread logs save errors. */
+    bool ScheduleScreenshot(const char* path, int fmt) override;
 
     // Sub-renderer access
     IWorldViewRenderer* GetWorldViewRenderer() override;
@@ -159,6 +163,7 @@ public:
     ITextRenderer*      CreateGLTextRenderer();
     /** Returns null on failure (caller should fall back to SoftwareUIRenderer). */
     IUIRenderer*        CreateGLUIRenderer();
+    ICursorLayer*       CreateGLCursorLayer();
 
     /** Compile GLSL programs for all GL sub-renderers.
      *  Called once by RendererManager::RendererInit() after all sub-renderers
@@ -344,13 +349,15 @@ private:
     int               m_zoom_u_screen_h    = -1;
 
     // ── Picture-in-Picture isometric render (ZBM_ISOMETRIC zoom-box mode) ─
-    // SubmitPiPRender() appends to m_pip_queue; EndFrame() iterates the queue,
-    // renders each into its own FBO slot, submits the colour texture to
-    // GLUIRenderer::SubmitFBOQuad() for compositing, then clears the queue.
+    // SubmitPiPRender() appends pre-captured PiP snapshots to m_pip_queue;
+    // EndFrame() iterates the queue, renders each into its own FBO slot, submits
+    // the colour texture to GLUIRenderer::SubmitFBOQuad() for compositing, then
+    // clears the queue.
     struct PiPCmd {
-        Camera  cam_copy;
-        int     x = 0, y = 0, w = 0, h = 0;
-        float   clip_radius = -1.0f;
+        GLWorldViewRenderer::PiPCapture world_capture;
+        GLUIRenderer::PiPSpriteCapture  ui_capture;
+        int                             x = 0, y = 0, w = 0, h = 0;
+        float                           clip_radius = -1.0f;
     };
     struct PiPFBO {
         unsigned int fbo       = 0;
@@ -391,6 +398,13 @@ private:
     std::vector<ZoomBoxBgCmd>   m_rt_zoom_box_bg_cmds;
     float                       m_rt_zoom_clip_rect[4] = {0,0,0,0};
     float                       m_rt_zoom_clip_radius  = -1.0f;
+
+    // Screenshot: game thread stores pending path/fmt; EndFrame() snapshots into
+    // m_rt_screenshot_* alongside other per-frame state; EndFrame_GL() captures.
+    std::string                 m_pending_screenshot_path;
+    int                         m_pending_screenshot_fmt  = 0;
+    std::string                 m_rt_screenshot_path;
+    int                         m_rt_screenshot_fmt       = 0;
 
     /** Snapshot of all game-thread globals consumed by EndFrame_GL().
      *  Captured inside FlipBuffers() before the render thread is signalled,

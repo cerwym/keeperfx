@@ -36,8 +36,6 @@
 #include "config.h"
 
 #include <string.h>
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_image.h>
 #include <ctype.h>
 #include "post_inc.h"
 /******************************************************************************/
@@ -48,43 +46,7 @@ unsigned char cap_palette[768];
 /******************************************************************************/
 TbBool take_screenshot(char *fname)
 {
-    TbBool lock_mem = RendererIsScreenLocked();
-    if (!lock_mem)
-    {
-        if (!RendererLockScreen())
-        {
-            ERRORLOG("Can't lock canvas");
-            return false;
-        }
-    }
-    TbBool success;
-    switch (screenshot_format)
-    {
-        case 1:
-        {
-            success = (IMG_SavePNG(lbDrawSurface, fname) == 0);
-            break;
-        }
-        case 2:
-        {
-            success = (SDL_SaveBMP(lbDrawSurface, fname) == 0);
-            break;
-        }
-        default:
-        {
-            success = false;
-            break;
-        }
-    }
-    if (!success)
-    {
-        ERRORLOG("Unable to save to file %s: %s", fname, SDL_GetError());
-    }
-    if (!lock_mem)
-    {
-        RendererUnlockScreen();
-    }
-    return success;
+    return RendererScheduleScreenshot(fname, screenshot_format);
 }
 
 TbBool cumulative_screen_shot(void)

@@ -56,7 +56,6 @@
 #include "config.h"
 #include "config_strings.h"
 #include "config_terrain.h"
-#include "config_players.h"
 #include "config_magic.h"
 #include "config_spritecolors.h"
 #include "magic_powers.h"
@@ -67,6 +66,7 @@
 #include "custom_sprites.h"
 #include "keeperfx.hpp"
 #include "renderer/RendererManager.h"
+#include "renderer/RendMenuOverlay.h"
 #include "kfx/profiling/KfxProfilingC.h"
 #include "gui/gui_bridge.h"
 #include "post_inc.h"
@@ -83,9 +83,6 @@ extern "C" {
 int32_t xtab[640][2];
 int32_t ytab[480][2];
 
-static unsigned char * map_fade_ghost_table;
-static unsigned char * map_fade_dest;
-static unsigned char * map_fade_src;
 static long draw_spell_cost;
 /******************************************************************************/
 static void draw_creature_view_icons(struct Thing* creatng)
@@ -98,7 +95,7 @@ static void draw_creature_view_icons(struct Thing* creatng)
     {
         spr = get_panel_sprite(488);
         ps_units_per_px = (22 * units_per_pixel) / spr->SHeight;
-        y = MyScreenHeight - scale_ui_value_lofi(spr->SHeight * 2);
+        y = RendererGetScreenHeight() - scale_ui_value_lofi(spr->SHeight * 2);
     }
     struct CreatureControl *cctrl = creature_control_get_from_thing(creatng);
     for (SpellKind spell_idx = 0; spell_idx < CREATURE_MAX_SPELLS_CASTED_AT; spell_idx++)
@@ -124,7 +121,7 @@ static void draw_creature_view_icons(struct Thing* creatng)
             int w = scale_ui_value_lofi(spr->SWidth);
             if (dbc_language > 0)
             {
-                if (MyScreenHeight < 400)
+                if (RendererGetScreenHeight() < 400)
                 {
                     w *= 2;
                 }
@@ -144,7 +141,7 @@ static void draw_creature_view_icons(struct Thing* creatng)
     {
         struct Thing* dragtng = thing_get(cctrl->dragtng_idx);
         unsigned long spr_idx;
-        x = MyScreenWidth - (scale_value_by_horizontal_resolution(148) / 4);
+        x = RendererGetScreenWidth() - (scale_value_by_horizontal_resolution(148) / 4);
         switch(dragtng->class_id)
         {
             case TCls_Object:
@@ -189,7 +186,7 @@ static void draw_creature_view_icons(struct Thing* creatng)
         {
             if (!creature_instance_is_available(creatng, cctrl->active_instance_id))
             {
-                x = MyScreenWidth - (scale_value_by_horizontal_resolution(148) / 4);
+                x = RendererGetScreenWidth() - (scale_value_by_horizontal_resolution(148) / 4);
                 struct InstanceInfo* inst_inf = creature_instance_info_get(cctrl->active_instance_id % game.conf.crtr_conf.instances_count);
                 draw_gui_panel_sprite_left(x, y, ps_units_per_px, inst_inf->symbol_spridx);
             }
@@ -203,8 +200,8 @@ void setup_engine_window(long x, long y, long width, long height)
     struct PlayerInfo* player = get_my_player();
     if ((game.operation_flags & GOF_ShowGui) != 0)
     {
-      if (x > MyScreenWidth)
-        x = MyScreenWidth;
+      if (x > RendererGetScreenWidth())
+        x = RendererGetScreenWidth();
       // GPU renderers draw the world fullscreen and paint the sidebar on top,
       // so the engine window is NOT clamped to status_panel_width.
       if (!RendererWantsFullscreenViewport())
@@ -219,21 +216,21 @@ void setup_engine_window(long x, long y, long width, long height)
       }
     } else
     {
-      if (x > MyScreenWidth)
-        x = MyScreenWidth;
+      if (x > RendererGetScreenWidth())
+        x = RendererGetScreenWidth();
       if (x < 0)
         x = 0;
     }
-    if (y > MyScreenHeight)
-      y = MyScreenHeight;
+    if (y > RendererGetScreenHeight())
+      y = RendererGetScreenHeight();
     if (y < 0)
       y = 0;
-    if (x+width > MyScreenWidth)
-      width = MyScreenWidth-x;
+    if (x+width > RendererGetScreenWidth())
+      width = RendererGetScreenWidth()-x;
     if (width < 0)
       width = 0;
-    if (y+height > MyScreenHeight)
-      height = MyScreenHeight-y;
+    if (y+height > RendererGetScreenHeight())
+      height = RendererGetScreenHeight()-y;
     if (height < 0)
       height = 0;
     player->engine_window_x = x;
@@ -400,69 +397,19 @@ int get_place_door_pointer_graphics(ThingModel drmodel) {
 // Hardware path would replace with render-to-texture; both captures would be GPU framebuffers.
 void prepare_map_fade_buffers(unsigned char *fade_src, unsigned char *fade_dest, int scanline, int height)
 {
-    if (RendererHasGPURenderPath()) return;
-    struct PlayerInfo* player = get_my_player();
-    // render the 3D screen
-    if (player->view_mode_restore == PVM_IsoWibbleView || player->view_mode_restore == PVM_IsoStraightView)
-      redraw_isometric_view();
-    else
-      redraw_frontview();
-    // Copy the screen to fade source temp buffer
-    int i;
-    int fadebuf_pos = 0;
-    for (i = 0; i < height; i++)
-    {
-        unsigned char* src = RendererGetWScreen() + lbDisplay.GraphicsScreenWidth * i;
-        unsigned char* dst = &fade_src[fadebuf_pos];
-        fadebuf_pos += scanline;
-        memcpy(dst, src, RendererScreenWidth());
-    }
-    // create the parchment screen
-    load_parchment_file();
-    redraw_minimal_overhead_view();
-    // Copy the screen to fade destination temp buffer
-    fadebuf_pos = 0;
-    for (i = 0; i < height; i++)
-    {
-        unsigned char* src = RendererGetWScreen() + lbDisplay.GraphicsScreenWidth * i;
-        unsigned char* dst = &fade_dest[fadebuf_pos];
-        fadebuf_pos += scanline;
-        memcpy(dst, src, RendererScreenWidth());
-    }
+    MapFadePass_PrepareBuffers(fade_src, fade_dest, scanline, height);
 }
-
+ 
 long map_fade_in(long palette_fade_step)
 {
     SYNCDBG(6,"Starting");
-    if (RendererHasGPURenderPath()) return (8 - get_my_player()->instance_remain_turns) * 4;
-    if (palette_fade_step == 0)
-    {
-        map_fade_ghost_table = poly_pool;
-        map_fade_src = poly_pool + PALETTE_COLORS*PALETTE_COLORS;
-        map_fade_dest = map_fade_src + 320*200;
-        prepare_map_fade_buffers(map_fade_src, map_fade_dest, 320, RendererScreenHeight());
-        generate_map_fade_ghost_table("data/mapfadeg.dat", engine_palette, map_fade_ghost_table);
-    }
-    map_fade(RendererGetWScreen(), map_fade_dest, map_fade_src, pixmap.fade_tables, map_fade_ghost_table,
-        palette_fade_step, 320, 200, lbDisplay.GraphicsScreenWidth);
-    return (8 - get_my_player()->instance_remain_turns) * 4;
+    return MapFadePass_StepFadeIn(palette_fade_step);
 }
-
+ 
 long map_fade_out(long palette_fade_step)
 {
     SYNCDBG(6,"Starting");
-    if (RendererHasGPURenderPath()) return get_my_player()->instance_remain_turns * 4;
-    if (palette_fade_step == 32)
-    {
-        map_fade_ghost_table = poly_pool;
-        map_fade_src = poly_pool + PALETTE_COLORS*PALETTE_COLORS;
-        map_fade_dest = map_fade_src + 320*200;
-        prepare_map_fade_buffers(map_fade_src, map_fade_dest, 320, RendererScreenHeight());
-        generate_map_fade_ghost_table("data/mapfadeg.dat", engine_palette, map_fade_ghost_table);
-    }
-    map_fade(RendererGetWScreen(), map_fade_dest, map_fade_src, pixmap.fade_tables, map_fade_ghost_table,
-      palette_fade_step, 320, 200, lbDisplay.GraphicsScreenWidth);
-    return get_my_player()->instance_remain_turns * 4;
+    return MapFadePass_StepFadeOut(palette_fade_step);
 }
 
 long dummy_sound_line_of_sight(long a1, long a2, long a3, long a4, long a5, long a6)
@@ -540,7 +487,7 @@ void draw_overlay_compass(long base_x, long base_y)
     unsigned short flg_mem = lbDisplay.DrawFlags;
     LbTextSetFont(winfont);
     lbDisplay.DrawFlags |= Lb_SPRITE_TRANSPAR4;
-    LbTextSetWindow(0, 0, MyScreenWidth, MyScreenHeight);
+    LbTextSetWindow(0, 0, RendererGetScreenWidth(), RendererGetScreenHeight());
     int units_per_px = (16 * status_panel_width + 140 / 2) / 140;
     int tx_units_per_px = (22 * units_per_px) / LbTextLineHeight();
     int w = (LbSprFontCharWidth(winfont, '/') * tx_units_per_px / 16) / 2;
@@ -582,13 +529,16 @@ void redraw_creature_view(void)
         draw_whole_status_panel();
         UIRenderer_SetLayer(1);  // restore front layer for all other GUI draws
     }
-    draw_gui();
-    if ((game.operation_flags & GOF_ShowGui) != 0) {
-        draw_overlay_compass(player->minimap_pos_x, player->minimap_pos_y);
+    TbBool menu_open = RendMenu_IsOpen();
+    if (!menu_open) {
+        draw_gui();
+        if ((game.operation_flags & GOF_ShowGui) != 0) {
+            draw_overlay_compass(player->minimap_pos_x, player->minimap_pos_y);
+        }
+        message_draw();
+        draw_tooltip();
     }
-    message_draw();
     gui_draw_all_boxes();
-    draw_tooltip();
     struct CreatureControl* cctrl = creature_control_get_from_thing(thing);
     if (!creature_control_invalid(cctrl)) {
         draw_creature_view_icons(thing);
@@ -636,21 +586,28 @@ void redraw_frontview(void)
 // Draws 2D elements on top of 3D view, like spell cursor. Called from redraw_isometric_view() and redraw_frontview()
 // after 3D rendering is done.  
 void draw_2d_elements(struct PlayerInfo* player) {
+    TbBool menu_open = RendMenu_IsOpen();
     if (flag_is_set(game.operation_flags, GOF_ShowGui)) {
         UIRenderer_SetLayer(0);  // sidebar background must land before the staging blit
         draw_whole_status_panel();
         UIRenderer_SetLayer(1);  // restore front layer for all other GUI draws
     }
-    draw_gui();
-    if (flag_is_set(game.operation_flags, GOF_ShowGui)) {
-        draw_overlay_compass(player->minimap_pos_x, player->minimap_pos_y);
+    /* Active-menu buttons, event briefings and compass labels are all text-IR
+       draws that float above our solid-box backgrounds.  Suppress everything
+       except the sidebar sprites when the full-screen overlay is up. */
+    if (!menu_open) {
+        draw_gui();
+        if (flag_is_set(game.operation_flags, GOF_ShowGui)) {
+            draw_overlay_compass(player->minimap_pos_x, player->minimap_pos_y);
+        }
+        message_draw();
+        draw_tooltip();
     }
-    message_draw();
     draw_power_hand();
-    draw_tooltip();
     if (should_render_ui()) {
         gui_draw_all_boxes();
     }
+    RendMenu_Draw();
 }
 
 /**
@@ -953,11 +910,11 @@ void redraw_display(void)
         ERRORLOG("Unsupported drawing state, %d",(int)player->view_mode);
         break;
     }
-    //LbTextSetWindow(0, 0, MyScreenWidth, MyScreenHeight);
+    //LbTextSetWindow(0, 0, RendererGetScreenWidth(), RendererGetScreenHeight());
     LbTextSetFont(winfont);
     lbDisplay.DrawFlags &= ~Lb_TEXT_ONE_COLOR;
-    int tx_units_per_px = ( (MyScreenHeight < 400) && (dbc_language > 0) ) ? scale_ui_value(32) : (22 * units_per_pixel) / LbTextLineHeight();
-    LbTextSetWindow(0, 0, MyScreenWidth, MyScreenHeight);
+    int tx_units_per_px = ( (RendererGetScreenHeight() < 400) && (dbc_language > 0) ) ? scale_ui_value(32) : (22 * units_per_pixel) / LbTextLineHeight();
+    LbTextSetWindow(0, 0, RendererGetScreenWidth(), RendererGetScreenHeight());
     if ((player->allocflags & PlaF_NewMPMessage) != 0)
     {
         char text[sizeof(player->mp_message_text) + 4];
@@ -968,7 +925,7 @@ void redraw_display(void)
         {
             if ( (bonus_timer_enabled()) || (script_timer_enabled()) || display_variable_enabled() )
             {
-                pos_y = ((pos_y << 3) + ((LbTextLineHeight()*units_per_pixel/16) * (game.active_messages_count << (MyScreenHeight < 400))));
+                pos_y = ((pos_y << 3) + ((LbTextLineHeight()*units_per_pixel/16) * (game.active_messages_count << (RendererGetScreenHeight() < 400))));
             }
         }
         LbTextDrawResized(pos_x, pos_y, tx_units_per_px, text);
@@ -976,7 +933,7 @@ void redraw_display(void)
     if ( draw_spell_cost )
     {
         unsigned short drwflags_mem = lbDisplay.DrawFlags;
-        LbTextSetWindow(0, 0, MyScreenWidth, MyScreenHeight);
+        LbTextSetWindow(0, 0, RendererGetScreenWidth(), RendererGetScreenHeight());
         lbDisplay.DrawFlags = 0;
         LbTextSetFont(winfont);
         char text[32];
@@ -1023,7 +980,7 @@ void redraw_display(void)
         draw_consolelog();
     }
 
-    if (((game.operation_flags & GOF_Paused) != 0) && ((game.operation_flags & GOF_WorldInfluence) == 0) && !unpausing_in_progress)
+    if (((game.operation_flags & GOF_Paused) != 0) && ((game.operation_flags & GOF_WorldInfluence) == 0) && !unpausing_in_progress && !RendMenu_IsOpen())
     {
           LbTextSetFont(winfont);
           const char * text = get_string(GUIStr_PausedMsg);
@@ -1035,16 +992,16 @@ void redraw_display(void)
               player->view_mode == PVM_IsoStraightView ||
               player->view_mode == PVM_CreatureView
           ) {
-              pos_x = player->engine_window_x + (MyScreenWidth - w - player->engine_window_x) / 2;
+              pos_x = player->engine_window_x + (RendererGetScreenWidth() - w - player->engine_window_x) / 2;
           } else {
-              pos_x = (MyScreenWidth-w)/2;
+              pos_x = (RendererGetScreenWidth()-w)/2;
           }
           long pos_y = 16 * units_per_pixel / 16;
           lbDisplay.DrawFlags = Lb_TEXT_HALIGN_CENTER;
           long h = LbTextLineHeight() * units_per_pixel / 16;
           int text_w = w;
           int text_x = pos_x;
-          if (MyScreenHeight < 400)
+          if (RendererGetScreenHeight() < 400)
           {
               w *= 2;
               h *= 3;
@@ -1081,12 +1038,12 @@ void redraw_display(void)
         i = LbTextLineHeight()*units_per_pixel/16;
         lbDisplay.DrawFlags = Lb_TEXT_HALIGN_CENTER;
         long h = pixel_size * i + pixel_size * i / 2;
-        if (MyScreenHeight < 400)
+        if (RendererGetScreenHeight() < 400)
         {
             w *= 2;
             h *= 2;
         }
-        long pos_x = MyScreenWidth - w - 16 * units_per_pixel / 16;
+        long pos_x = RendererGetScreenWidth() - w - 16 * units_per_pixel / 16;
         long pos_y = 16 * units_per_pixel / 16;
         UIRenderer_BeginTopOverlay();
         LbTextSetWindow(pos_x, pos_y, w, h);

@@ -31,6 +31,9 @@ extern "C" {
 #define NUM_DRAWITEMS 238
 #define SPRITE_SCALING_XSTEPS max(MAX_SUPPORTED_SPRITE_DIM,MAX_SUPPORTED_SCREEN_WIDTH)
 #define SPRITE_SCALING_YSTEPS max(MAX_SUPPORTED_SPRITE_DIM,MAX_SUPPORTED_SCREEN_HEIGHT)
+
+/** Set to 1 while a renderer submit is in-flight to prevent recursive re-entry into submit wrappers. */
+extern int lb_in_sprite_submit;
 /******************************************************************************/
 #pragma pack(1)
 
@@ -174,6 +177,7 @@ extern int32_t ysteps_array[2*SPRITE_SCALING_YSTEPS];
 #pragma pack()
 
 /******************************************************************************/
+void LbDrawBoxClip(long x, long y, unsigned long width, unsigned long height, TbPixel colour);
 TbResult LbDrawBox(long x, long y, unsigned long width, unsigned long height, TbPixel colour);
 void LbDrawHVLine(long xpos1, long ypos1, long xpos2, long ypos2, TbPixel colour);
 

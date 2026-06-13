@@ -13,8 +13,12 @@
 
 #include "renderer/IUIRenderer.h"
 #include "renderer/opengl/IGLShaderCompilable.h"
+#include "renderer/RendererThread.h"
+#include "renderer/UIVertex.h"
+#include "renderer/UIBatch.h"
 #include <vector>
 #include <cstdint>
+#include <atomic>
 
 #ifdef RENDERER_OPENGL_ENABLED
 
@@ -27,33 +31,11 @@ class GLFontAtlas;
 
 /******************************************************************************/
 
-/** GPU vertex for UI element quad corners. */
-struct GLUIVertex {
-    float x, y;       // Screen position (pixels)
-    float u, v;       // Texture UV coordinates
-    float r, g, b, a; // RGBA color/tint
-    float z;          // NDC depth for z-ordering
-    float mode;       // Render mode: 0=sprite, 1=text, 2=line, 3=solid_color
-};
+/** GPU vertex for UI element quad corners.
+ *  Alias for UIVertex — layout shared with the Vulkan backend. */
+using GLUIVertex = UIVertex;
 
-/** Batched UI element data before vertex expansion. */
-struct UIQuad {
-    float x0, y0, x1, y1;  // Screen rectangle
-    float u0, v0, u1, v1;  // Texture coordinates  
-    float r, g, b, a;      // Color/tint
-    float z;               // Z-depth
-    float mode;            // Render mode (0=sprite, 1=font, 3=solid, 10=slab, 20=colored, 30=remap)
-    uint32_t texture_id;   // Sprite sheet texture ID
-    int remap_row;         // Fade-table row for remap quads (mode 30); -1 = unused
-};
-
-/** Line segment for slab selectors. */
-struct UILine {
-    float x1, y1, x2, y2;  // Line endpoints
-    float r, g, b, a;      // Line color
-    float z;               // Z-depth
-    float thickness;       // Line thickness
-};
+// UIQuad and UILine are defined in renderer/UIBatch.h (included above).
 
 /** Picture-in-picture FBO composite quad.  Uses the FBO colour texture directly
  *  (no palette lookup).  Rendered before layer-1 atlas sprites so the zoom-box
@@ -70,19 +52,27 @@ struct FBOQuad {
  */
 class GLUIRenderer : public IUIRenderer, public IGLShaderCompilable {
 public:
+    struct PiPSpriteCapture {
+        std::vector<UIQuad> quads[4];
+        std::vector<UILine> lines[4];
+    };
+
     GLUIRenderer();
     virtual ~GLUIRenderer();
 
     // IUIRenderer interface
     virtual void SubmitSlabSelector(int x1, int y1, int x2, int y2, unsigned char color, float z_depth) override;
     virtual void SubmitPanelSprite(int32_t x, int32_t y, int units_per_px,
-                                   SpriteHandle spr, bool flip_horiz = false) override;
+                                   SpriteHandle spr, bool flip_horiz,
+                                   unsigned int draw_flags) override;
     virtual void SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px,
-                                       SpriteHandle spr, int remap_row) override;
+                                       SpriteHandle spr, int remap_row,
+                                       unsigned int draw_flags) override;
     virtual void SubmitPanelSpriteColored(int32_t x, int32_t y, int units_per_px,
-                                          SpriteHandle spr, uint8_t color_idx) override;
+                                          SpriteHandle spr, uint8_t color_idx,
+                                          unsigned int draw_flags) override;
     virtual void SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h,
-                                    SpriteHandle spr) override;
+                                    SpriteHandle spr, unsigned int draw_flags) override;
     virtual void SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx) override;
     virtual void SubmitSolidBoxAlpha(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx, float alpha) override;
     virtual void UpdateSlabTexture(const uint8_t* data, int dim) override;
@@ -96,24 +86,36 @@ public:
     void SubmitFBOQuad(int x, int y, int w, int h, GpuTextureHandle tex_id, float clip_radius = -1.0f) override;
     /** IUIRenderer override: mark start of PiP sprite capture. */
     void BeginPiPSprites() override;
-    /** IUIRenderer override: flush PiP sprites into the bound FBO. */
+    /** Game-thread: extract all UI sprites submitted since BeginPiPSprites(). */
+    PiPSpriteCapture ExtractPiPSprites();
+    /** IUIRenderer override retained for interface compatibility; GL PiP uses
+     *  DrawPiPSpriteCapture() with a pre-extracted snapshot. */
     void DrawPiPSprites(int pip_w, int pip_h) override;
+    /** Render-thread: draw a pre-extracted PiP UI snapshot into the bound FBO. */
+    void DrawPiPSpriteCapture(const PiPSpriteCapture& cap, int pip_w, int pip_h);
     virtual void SetLayer(int layer) override;
     virtual void SetWorldDepth(float ndc_z) override;
     virtual void ClearWorldDepth() override;
     void SetGameViewport(int x, int y, int w, int h);
     virtual void SetTopOverlay() override;
     virtual void ClearTopOverlay() override;
+    void BeginZoomBoxOverlay(int x, int y, int w, int h) override;
+    void EndZoomBoxOverlay(int x, int y, int w, int h) override;
+    void SetupMinimapBackground(int diaglen, int panel_x, int panel_y) override;
+    bool GetMinimapOpaqueBlackIndex(uint8_t* idx) const override;
     virtual void DrawBack() override;
     virtual void DrawFront() override;
     /** IUIRenderer override: layer-1 portion of DrawFront: FBOQuads + layer-1 sprites
      *  + minimap + layer-1 lines.  Does NOT flush layer-2/3 or restore GL state.
      *  Must be followed by DrawFrontOverlay(). */
     void DrawFrontBase() override;
-    /** IUIRenderer override: layer-2/3 portion of DrawFront: depth-tested layer-2,
-     *  top-overlay layer-3, and GL state cleanup.  Call after DrawFrontBase() (and
-     *  any intermediate direct-GL passes between layer-1 and layer-3). */
+    /** IUIRenderer override: layer-3 top-overlay (tooltip, corner frames).
+     *  Call after DrawFrontBase() and DrawWorldSpriteLayerRT().
+     *  Layer-2 (world sprites) is now handled by DrawWorldSpriteLayerRT(). */
     void DrawFrontOverlay() override;
+    /** IUIRenderer override: flush RT layer-2 (world-depth sprites) before the
+     *  sidebar.  Must be called after DrawBack() and before DrawFrontBase(). */
+    void DrawWorldSpriteLayerRT() override;
     /** IUIRenderer override: flip game-thread command lists to render-thread copies. */
     void FlipBuffers() override;
     virtual void Draw() override;
@@ -137,7 +139,8 @@ public:
      *  Pushes to m_cursor_quads instead of the shared m_quads[layer], preventing
      *  the Phase-3C data race between the render thread (cursor path) and the game
      *  thread (UI build for the next frame) on m_quads[1]. */
-    void SubmitCursorPanelSprite(int32_t x, int32_t y, int units_per_px, SpriteHandle spr);
+    void SubmitCursorPanelSprite(int32_t x, int32_t y, int units_per_px, SpriteHandle spr,
+                                 unsigned int draw_flags);
 
     /** Initialize OpenGL resources.
      *  @return true if successful */
@@ -279,15 +282,17 @@ private:
     // Slab background tile texture (64×64 R8, GL_REPEAT) — uploaded via UpdateSlabTexture()
     GLuint         m_slab_texture      = 0;
     int            m_slab_dim          = 0;
-    // Pending upload latched by UpdateSlabTexture(); consumed on the render thread.
-    const uint8_t* m_slab_pending_data = nullptr;
-    int            m_slab_pending_dim  = 0;
+    // Pending upload latched by UpdateSlabTexture() (GT); consumed on the render thread by FlushPendingInit().
+    // Stored as atomics to avoid a data race between the two threads.
+    // Write order: store dim (relaxed) then data (release). Read order: load data (acquire) then dim (relaxed).
+    std::atomic<const uint8_t*> m_slab_pending_data {nullptr};
+    std::atomic<int>            m_slab_pending_dim  {0};
 
     // PiP sprite watermarks: queue sizes per layer recorded at BeginPiPSprites() time.
     // Quads at indices [0..watermark[L]) in m_quads[L] were submitted before the PiP
     // draw_view (corner-frame sprites) and must survive into FlushFront() untouched.
     // Quads from [watermark[L]..end) were submitted during draw_view(pip_cam) and are
-    // rendered into the FBO by DrawPiPSprites(), then erased.
+    // extracted by ExtractPiPSprites() and rendered later on the render thread.
     int  m_pip_quad_wm[4]      = {};
     int  m_pip_line_wm[4]      = {};
     bool m_pip_capture_active  = false;

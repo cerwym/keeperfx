@@ -39,6 +39,7 @@
 #include "keeperfx.hpp"
 #include "platform/PlatformManager.h"
 #include "platform/IWindowSystem.h"
+#include "renderer/RendMenuOverlay.h"
 #include <SDL2/SDL.h>
 #include "post_inc.h"
 
@@ -300,8 +301,18 @@ static void process_event(const SDL_Event *ev)
     {
     case SDL_KEYDOWN:
         x = keyboard_keys_mapping(&ev->key);
+        if (x == KC_F9)
+        {
+            RendMenu_ToggleOpen();
+            break;
+        }
         if (x != KC_UNASSIGNED)
         {
+            if (RendMenu_IsOpen())
+            {
+                RendMenu_HandleKey(x);
+                break;
+            }
             keyboardControl(KActn_KEYDOWN,x,keyboard_mods_mapping(&ev->key), ev->key.keysym.sym);
         }
         last_used_input_device = ID_Keyboard_Mouse;
@@ -309,6 +320,12 @@ static void process_event(const SDL_Event *ev)
 
     case SDL_KEYUP:
         x = keyboard_keys_mapping(&ev->key);
+        if (x == KC_F9 || RendMenu_IsOpen())
+        {
+            /* consume key-up events while menu is open */
+            last_used_input_device = ID_Keyboard_Mouse;
+            break;
+        }
         if (x != KC_UNASSIGNED)
         {
             keyboardControl(KActn_KEYUP,x,keyboard_mods_mapping(&ev->key), ev->key.keysym.sym);

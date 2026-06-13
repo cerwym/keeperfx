@@ -64,4 +64,28 @@ bool RendererHelper_SaveIndexedImage(const uint8_t* pixels, int w, int h, int pi
     return ok;
 }
 
+bool RendererHelper_SaveRGBAImage(const uint8_t* pixels, int w, int h, int pitch,
+                                  int fmt, const char* path)
+{
+    SDL_Surface* surf = SDL_CreateRGBSurfaceWithFormatFrom(
+        (void*)pixels, w, h, 32, pitch, SDL_PIXELFORMAT_RGBA32);
+    if (!surf) {
+        ERRORLOG("RendererHelper_SaveRGBAImage: SDL_CreateRGBSurfaceWithFormatFrom failed: %s",
+                 SDL_GetError());
+        return false;
+    }
+    bool ok = false;
+#ifndef PLATFORM_VITA
+    ok = (fmt == 2)
+        ? (SDL_SaveBMP(surf, path) == 0)
+        : (IMG_SavePNG(surf, path) == 0);
+#else
+    ok = (SDL_SaveBMP(surf, path) == 0);
+#endif
+    if (!ok)
+        ERRORLOG("RendererHelper_SaveRGBAImage: failed to save '%s': %s", path, SDL_GetError());
+    SDL_FreeSurface(surf);
+    return ok;
+}
+
 #endif // PLATFORM_3DS

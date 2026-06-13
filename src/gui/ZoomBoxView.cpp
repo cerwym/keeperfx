@@ -18,7 +18,7 @@
 // Game headers
 #include "player_data.h"    // PlayerInfo
 #include "engine_camera.h"  // Camera, get_camera_zoom, set_camera_zoom, CAMERA_ZOOM_MIN/MAX
-#include "bflib_video.h"    // MyScreenWidth/Height, pixel_size, units_per_pixel
+#include "bflib_video.h"    // RendererGetScreenWidth()/Height, pixel_size, units_per_pixel
 #include "bflib_vidraw.h"   // vec_window_height
 #include "bflib_planar.h"  // TbRect
 #include "bflib_sprite.h"   // TbSprite (SWidth/SHeight fields)

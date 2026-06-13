@@ -16,7 +16,26 @@
 #include <cstring>
 #include <cstdlib>
 #include <algorithm>
+#include <limits>
 #include "post_inc.h"
+
+/******************************************************************************/
+
+namespace {
+constexpr unsigned long kMaxDbcCharsSanity = 65536;
+constexpr int kMaxDbcGlyphDimSanity = 512;
+constexpr int kMaxDbcAtlasSide = 4096;
+
+inline bool IsDbcCharCountSane(unsigned long chars_count)
+{
+    return chars_count > 0 && chars_count <= kMaxDbcCharsSanity;
+}
+
+inline bool IsGlyphDimSane(int v)
+{
+    return v > 0 && v <= kMaxDbcGlyphDimSanity;
+}
+}
 
 /******************************************************************************/
 
@@ -64,6 +83,19 @@ bool GLDbcFontAtlas::Init(const struct AsianFont* dbc_font)
         return false;
     }
 
+    if (!IsDbcCharCountSane(dbc_font->chars_count)
+        || !IsGlyphDimSane((int)dbc_font->bits_width)
+        || !IsGlyphDimSane((int)dbc_font->bits_height)
+        || !IsGlyphDimSane((int)dbc_font->narrow_width)
+        || !IsGlyphDimSane((int)dbc_font->narrow_height))
+    {
+        ERRORLOG("GLDbcFontAtlas: refusing init from suspicious DBC font %p (chars=%lu wide=%ux%u narrow=%ux%u)",
+                 (void*)dbc_font, dbc_font->chars_count,
+                 (unsigned)dbc_font->bits_width, (unsigned)dbc_font->bits_height,
+                 (unsigned)dbc_font->narrow_width, (unsigned)dbc_font->narrow_height);
+        return false;
+    }
+
     m_wide_glyphs = (FontGlyph*)calloc(dbc_font->chars_count, sizeof(FontGlyph));
     m_narrow_glyphs = (FontGlyph*)calloc(256, sizeof(FontGlyph));
     if (!m_wide_glyphs || !m_narrow_glyphs)
@@ -90,6 +122,18 @@ bool GLDbcFontAtlas::Init(const struct AsianFont* dbc_font)
 bool GLDbcFontAtlas::NeedsRebuild(const struct AsianFont* dbc_font) const
 {
     if (!dbc_font) return false;
+
+    if (!IsDbcCharCountSane(dbc_font->chars_count)
+        || !IsGlyphDimSane((int)dbc_font->bits_width)
+        || !IsGlyphDimSane((int)dbc_font->bits_height)
+        || !IsGlyphDimSane((int)dbc_font->narrow_width)
+        || !IsGlyphDimSane((int)dbc_font->narrow_height))
+    {
+        ERRORLOG("GLDbcFontAtlas: suspicious DBC font in NeedsRebuild %p (chars=%lu); skipping rebuild",
+                 (void*)dbc_font, dbc_font->chars_count);
+        return false;
+    }
+
     return dbc_font->chars_count != m_built_chars_count
         || dbc_font->data != m_built_data;
 }
@@ -119,11 +163,28 @@ static void UnpackGlyph(unsigned char* atlas, int atlas_stride,
 
 bool GLDbcFontAtlas::PackAndUploadAtlas(const struct AsianFont* dbc_font)
 {
+    if (!dbc_font || !dbc_font->data)
+    {
+        ERRORLOG("GLDbcFontAtlas: null font or data in PackAndUploadAtlas");
+        return false;
+    }
+
     int wide_w  = (int)dbc_font->bits_width;
     int wide_h  = (int)dbc_font->bits_height;
     int nar_w   = (int)dbc_font->narrow_width;
     int nar_h   = (int)dbc_font->narrow_height;
     unsigned long chars_count = dbc_font->chars_count;
+
+    if (!IsDbcCharCountSane(chars_count)
+        || !IsGlyphDimSane(wide_w) || !IsGlyphDimSane(wide_h)
+        || !IsGlyphDimSane(nar_w)  || !IsGlyphDimSane(nar_h)
+        || dbc_font->sdata_scanline == 0 || dbc_font->ndata_scanline == 0)
+    {
+        ERRORLOG("GLDbcFontAtlas: suspicious DBC font in PackAndUploadAtlas %p (chars=%lu wide=%dx%d narrow=%dx%d sscan=%u nscan=%u)",
+                 (void*)dbc_font, chars_count, wide_w, wide_h, nar_w, nar_h,
+                 (unsigned)dbc_font->sdata_scanline, (unsigned)dbc_font->ndata_scanline);
+        return false;
+    }
 
     m_line_height = std::max(wide_h, nar_h);
 
@@ -135,12 +196,27 @@ bool GLDbcFontAtlas::PackAndUploadAtlas(const struct AsianFont* dbc_font)
     int nar_per_row  = atlas_w / std::max(nar_w, 1);
     int nar_rows     = (256 + nar_per_row - 1) / nar_per_row;
 
+    if (wide_rows <= 0 || nar_rows <= 0)
+    {
+        ERRORLOG("GLDbcFontAtlas: invalid row layout for DBC atlas (wide_rows=%d nar_rows=%d)",
+                 wide_rows, nar_rows);
+        return false;
+    }
+
+    if (wide_rows > (std::numeric_limits<int>::max() / wide_h)
+        || nar_rows > (std::numeric_limits<int>::max() / nar_h))
+    {
+        ERRORLOG("GLDbcFontAtlas: atlas dimension overflow risk (wide_rows=%d wide_h=%d nar_rows=%d nar_h=%d)",
+                 wide_rows, wide_h, nar_rows, nar_h);
+        return false;
+    }
+
     int needed_h = wide_rows * wide_h + nar_rows * nar_h;
 
     // Round up to next power of two
     int atlas_h = 1;
-    while (atlas_h < needed_h) atlas_h <<= 1;
-    atlas_h = std::min(atlas_h, 4096);
+    while (atlas_h < needed_h && atlas_h < kMaxDbcAtlasSide) atlas_h <<= 1;
+    atlas_h = std::min(atlas_h, kMaxDbcAtlasSide);
 
     if (needed_h > atlas_h)
     {

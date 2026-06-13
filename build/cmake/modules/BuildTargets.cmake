@@ -3,6 +3,8 @@
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 # ━━━ Source File Collection ━━━
+# Recursive globs intentionally pick up software rasteriser / blitter sources
+# under src/renderer/software/ after their implementation-file relocation.
 file(GLOB_RECURSE KEEPERFX_SOURCES_C   CONFIGURE_DEPENDS "src/*.c")
 file(GLOB_RECURSE KEEPERFX_SOURCES_CXX CONFIGURE_DEPENDS "src/*.cpp")
 
@@ -188,7 +190,7 @@ if(MSVC)
         RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/.deploy"
     )
 endif()
-target_include_directories(keeperfx PRIVATE src deps/centitoml deps/centijson/include)
+target_include_directories(keeperfx PRIVATE src deps/centijson/include)
 if(KEEPERFX_HVLOG)
     target_compile_definitions(keeperfx PUBLIC BFDEBUG_LEVEL=10)
 else()
@@ -236,6 +238,11 @@ kfx_link_sdl2_target(keeperfx)
 # Link glad for OpenGL renderer (MSVC/vcpkg path; MinGW deferred to keeperfx-deps)
 if(KEEPERFX_RENDERER_OPENGL AND TARGET glad::glad)
     target_link_libraries(keeperfx PRIVATE glad::glad)
+endif()
+
+# Link Vulkan renderer libs (collected by Dependencies.cmake into KFX_VK_LINK_LIBS)
+if(KEEPERFX_RENDERER_VULKAN AND KFX_VK_LINK_LIBS)
+    target_link_libraries(keeperfx PRIVATE ${KFX_VK_LINK_LIBS})
 endif()
 
 # Link Tracy profiler (FetchContent target — compiled from source, matches CRT)

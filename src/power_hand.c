@@ -713,6 +713,7 @@ void draw_power_hand(void)
             break;
         }
     }
+    
     if (player->hand_animationId == HndA_Hold)
     {
         inputpos_x = GetMouseX() + scale_ui_value(58*global_hand_scale);
@@ -720,7 +721,7 @@ void draw_power_hand(void)
         CursorLayer_SubmitKeeperHandSprite(inputpos_x / pixel_size, inputpos_y / pixel_size,
             thing->anim_sprite, 0, thing->current_frame, scale_ui_value(64*global_hand_scale));
         draw_mini_things_in_hand(GetMouseX()+scale_ui_value(60*global_hand_scale), GetMouseY());
-    } else
+    } else // All other animations (HoldGold, Hover, Pickup, SideHover, SideSlap, Slap) use the default offset
     {
         inputpos_x = GetMouseX() + scale_ui_value(60*global_hand_scale);
         inputpos_y = GetMouseY() + scale_ui_value(40*global_hand_scale);
@@ -1209,7 +1210,7 @@ void draw_mini_things_in_hand(long x, long y)
                 // Draw creature symbol
                 UIRenderer_SubmitPanelSprite(scrpos_x, scrpos_y, ps_units_per_px, spr_idx);
                 char ownshift_y;
-                if (MyScreenHeight < 400)
+                if (RendererGetScreenHeight() < 400)
                 {
                     char expshift_y = (irow > 0) ? 32 : -6;
                     UIRenderer_SubmitButtonSprite(scrpos_x, scrpos_y + scale_ui_value(expshift_y), ps_units_per_px, expspr_idx);
@@ -1220,16 +1221,7 @@ void draw_mini_things_in_hand(long x, long y)
                         long circ_y = scrpos_y + scale_ui_value(ownshift_y);
                         long circ_r = ps_units_per_px / 16;
                         TbPixel circ_c = player_path_colours[flash_color];
-                        if (RendererHasGPURenderPath())
-                        {
-                            // GPU: approximate filled circle as a box (radius is 1-2px)
-                            int32_t d = circ_r * 2 + 1;
-                            UIRenderer_SubmitSolidBox((int32_t)(circ_x - circ_r), (int32_t)(circ_y - circ_r), d, d, circ_c);
-                        }
-                        else
-                        {
-                            LbDrawCircle(circ_x, circ_y, circ_r, circ_c);
-                        }
+                        UIRenderer_SubmitCircle((int32_t)circ_x, (int32_t)circ_y, (int32_t)circ_r, circ_c);
                     }
                 }
                 else
@@ -1237,54 +1229,21 @@ void draw_mini_things_in_hand(long x, long y)
                     ownshift_y = (irow > 0) ? 44 : 10;
                     if (thing->owner != my_player_number)
                     {
-                        long relative_window_a = lbDisplay.GraphicsScreenWidth;
-                        long relative_window_b = lbDisplay.GraphicsScreenHeight;
                         short n = min(scale_ui_value(1),4);
                         ScreenCoord coord_y = scrpos_y + scale_ui_value(ownshift_y);
                         ScreenCoord draw_y;
                         ScreenCoord draw_x;
-                        if (RendererHasGPURenderPath())
+                        for (int p = 0; p < (n*n); p++)
                         {
-                            // GPU: emit 1×1 solid boxes for each pixel (same pattern as gui_parchment.c)
-                            for (int p = 0; p < (n*n); p++)
-                            {
-                                draw_y = coord_y + draw_square[p].delta_y;
-                                draw_x = scrpos_x + ((expshift_x * 3)) + draw_square[p].delta_x;
-                                UIRenderer_SubmitSolidBox((int32_t)draw_x, (int32_t)draw_y, 1, 1, player_flash_colours[flash_color]);
-                            }
-                            for (int p = (n * n); p < (n * n)+(4 * n + 4); p++)
-                            {
-                                draw_y = coord_y + draw_square[p].delta_y;
-                                draw_x = scrpos_x + ((expshift_x * 3)) + draw_square[p].delta_x;
-                                UIRenderer_SubmitSolidBox((int32_t)draw_x, (int32_t)draw_y, 1, 1, player_path_colours[flash_color]);
-                            }
+                            draw_y = coord_y + draw_square[p].delta_y;
+                            draw_x = scrpos_x + ((expshift_x * 3)) + draw_square[p].delta_x;
+                            UIRenderer_SubmitSolidBox((int32_t)draw_x, (int32_t)draw_y, 1, 1, player_flash_colours[flash_color]);
                         }
-                        else
+                        for (int p = (n * n); p < (n * n)+(4 * n + 4); p++)
                         {
-                            for (int p = 0; p < (n*n); p++)
-                            {
-                                draw_y = coord_y + draw_square[p].delta_y;
-                                if (draw_y >= 0)
-                                {
-                                    draw_x = scrpos_x + ((expshift_x * 3)) + draw_square[p].delta_x;
-                                    if ((draw_x >= 0) && (draw_x < relative_window_a) && (draw_y < relative_window_b))
-                                    {
-                                        LbDrawPixel(draw_x, draw_y, player_flash_colours[flash_color]);
-                                    }
-                                }
-                            }
-                            for (int p = (n * n); p < (n * n)+(4 * n + 4); p++)
-                            {
-                                draw_y = coord_y + draw_square[p].delta_y;
-                                if (draw_y >= 0)
-                                {
-                                    draw_x = scrpos_x + ((expshift_x * 3)) + draw_square[p].delta_x;
-                                    if ((draw_x >= 0) && (draw_x < relative_window_a) && (draw_y < relative_window_b))
-                                    {
-                                        LbDrawPixel(draw_x, draw_y, player_path_colours[flash_color]);
-                                    }
-                                }
-                            }
+                            draw_y = coord_y + draw_square[p].delta_y;
+                            draw_x = scrpos_x + ((expshift_x * 3)) + draw_square[p].delta_x;
+                            UIRenderer_SubmitSolidBox((int32_t)draw_x, (int32_t)draw_y, 1, 1, player_path_colours[flash_color]);
                         }
                     }
                     // Draw exp level

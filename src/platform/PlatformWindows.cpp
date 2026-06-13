@@ -289,11 +289,19 @@ void PlatformWindows::VideoInit()
     // platform_create_gl_context which runs after the window already exists.
     // DOUBLEBUFFER and DEPTH_SIZE are critical: failure means single-buffered or
     // depthless rendering, both of which cause severe visual artefacts.
+    //
+    // We request 8-bit per channel (standard sRGB pixel format). On Windows,
+    // a 10-bit (RGB10_A2) pixel format causes DWM to treat the framebuffer as
+    // scRGB (linear light), but all palette data is sRGB-gamma-encoded, so
+    // writing sRGB values into a linear framebuffer makes the image appear far
+    // too bright on SDR monitors. The 8-bit sRGB pipeline correctly matches the
+    // palette encoding. HDR support (10-bit + proper tone mapping) can be
+    // revisited once a dedicated HDR rendering path exists.
     struct { int attr; int value; const char* name; } gl_attrs[] = {
-        { SDL_GL_RED_SIZE,     10, "SDL_GL_RED_SIZE"     },
-        { SDL_GL_GREEN_SIZE,   10, "SDL_GL_GREEN_SIZE"   },
-        { SDL_GL_BLUE_SIZE,    10, "SDL_GL_BLUE_SIZE"    },
-        { SDL_GL_ALPHA_SIZE,    2, "SDL_GL_ALPHA_SIZE"   },
+        { SDL_GL_RED_SIZE,      8, "SDL_GL_RED_SIZE"     },
+        { SDL_GL_GREEN_SIZE,    8, "SDL_GL_GREEN_SIZE"   },
+        { SDL_GL_BLUE_SIZE,     8, "SDL_GL_BLUE_SIZE"    },
+        { SDL_GL_ALPHA_SIZE,    8, "SDL_GL_ALPHA_SIZE"   },
         { SDL_GL_DOUBLEBUFFER,  1, "SDL_GL_DOUBLEBUFFER" },
         { SDL_GL_DEPTH_SIZE,   24, "SDL_GL_DEPTH_SIZE"   },
     };
@@ -409,6 +417,27 @@ void PlatformWindows::SetArgv(int argc, char** argv)
 
 const char* PlatformWindows::GetDataPath() const { return data_path_; }
 const char* PlatformWindows::GetSavePath() const { return save_path_; }
+
+const char* PlatformWindows::GetUserPrefDir()
+{
+    if (pref_path_[0] != '\0')
+        return pref_path_;
+    char* sdl_path = SDL_GetPrefPath("keeperfx", "keeperfx");
+    if (sdl_path)
+    {
+        snprintf(pref_path_, sizeof(pref_path_), "%s", sdl_path);
+        // SDL appends a trailing separator — strip it for consistency.
+        size_t len = strlen(pref_path_);
+        if (len > 0 && (pref_path_[len - 1] == '\\' || pref_path_[len - 1] == '/'))
+            pref_path_[len - 1] = '\0';
+        SDL_free(sdl_path);
+    }
+    else
+    {
+        snprintf(pref_path_, sizeof(pref_path_), "%s", data_path_);
+    }
+    return pref_path_;
+}
 
 // ----- CDROM / Redbook audio -----
 

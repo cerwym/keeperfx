@@ -44,11 +44,12 @@ struct IRTextDrawCmd
     int32_t  clip_w         = 0;
     int32_t  clip_h         = 0;
 
-    /* Font references (non-owning; valid for the duration of the frame since
-     * game fonts are loaded statically and never freed mid-game). */
+    /* Font references (non-owning). Guarded by font_generation to reject
+     * stale pointers after sprite/font reload transitions. */
     const void* font        = nullptr;     /**< Pointer to TbSpriteSheet; opaque here. */
     const void* dbc_font    = nullptr;     /**< Pointer to AsianFont; null if N/A. */
     uint8_t     dbc_enabled = 0;
+    uint32_t    font_generation = 0;       /**< Snapshot from RendererGetTextFontGeneration(). */
     long        dbc_colour0 = 0;           /**< DBC face colour (from LbTextGetFontFaceColor). */
     long        dbc_colour1 = 0;           /**< DBC shadow colour (currently unused). */
 

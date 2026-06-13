@@ -31,8 +31,10 @@
 
 #include <cstdint>
 
-// Forward-declare Camera (defined in globals.h / game_legacy.h)
+// Forward declarations to avoid pulling renderer IR into every includer.
 struct Camera;
+struct WorldCommandBuffers;
+struct IRWorldShadowCmd;
 
 /******************************************************************************/
 
@@ -114,6 +116,15 @@ public:
      *  Only a pointer copy — safe to call without holding the GL context.
      *  Default: no-op. */
     virtual void SetPaletteSource(const uint8_t* /*palette*/) {}
+
+    /** Set the active world IR write buffer for this frame.
+     *  GPU backends use this as the target for game-thread world submissions.
+     *  Default: no-op. */
+    virtual void SetWorldCommandBuffers(struct WorldCommandBuffers* /*cmds*/) {}
+
+    /** Submit a creature-shadow world command during the bucket walk.
+     *  Returns 1 if captured by the active hardware renderer, 0 to fall back. */
+    virtual int SubmitWorldShadowCmd(const struct IRWorldShadowCmd& /*cmd*/) { return 0; }
 
     // ── IR (Intermediate Representation) dispatch ──────────────────────────────
 

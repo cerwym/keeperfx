@@ -42,11 +42,7 @@ extern "C" int setup_heap_manager(void)
     const char* fname;
     long i;
 
-#ifdef SPRITE_FORMAT_V2
-    fname = get_game_file_path_fmt(FGrp_StdData, "thingspr-%d.jty", 32);
-#else
     fname = prepare_file_path(FGrp_StdData, "creature.jty");
-#endif
     JUSTLOG("setup_heap_manager: opening \"%s\"", fname != nullptr ? fname : "");
     jty_file_handle = LbFileOpen(fname, Lb_FILE_MODE_READ_ONLY);
     if (!jty_file_handle) {

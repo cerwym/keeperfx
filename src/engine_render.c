@@ -3059,6 +3059,15 @@ static void do_a_trig_gourad_tr(struct EngineCoord *engine_coordinate_1, struct 
                 triangle_bucket_far->camera_z_first  = engine_coordinate_1->z;
                 triangle_bucket_far->camera_z_second = engine_coordinate_2->z;
                 triangle_bucket_far->camera_z_third  = engine_coordinate_3->z;
+                triangle_bucket_far->world_x_first   = engine_coordinate_1->x;
+                triangle_bucket_far->world_y_first   = engine_coordinate_1->y;
+                triangle_bucket_far->world_z_first   = engine_coordinate_1->z;
+                triangle_bucket_far->world_x_second  = engine_coordinate_2->x;
+                triangle_bucket_far->world_y_second  = engine_coordinate_2->y;
+                triangle_bucket_far->world_z_second  = engine_coordinate_2->z;
+                triangle_bucket_far->world_x_third   = engine_coordinate_3->x;
+                triangle_bucket_far->world_y_third   = engine_coordinate_3->y;
+                triangle_bucket_far->world_z_third   = engine_coordinate_3->z;
                 triangle_bucket_far->vertex_first.X = engine_coordinate_1->view_width;
                 triangle_bucket_far->vertex_first.Y = engine_coordinate_1->view_height;
                 triangle_bucket_far->vertex_first.U = 0;
@@ -3531,6 +3540,15 @@ static void do_a_trig_gourad_bl(struct EngineCoord *engine_coordinate_1, struct 
                 triangle_bucket_far->camera_z_first  = engine_coordinate_1->z;
                 triangle_bucket_far->camera_z_second = engine_coordinate_2->z;
                 triangle_bucket_far->camera_z_third  = engine_coordinate_3->z;
+                triangle_bucket_far->world_x_first   = engine_coordinate_1->x;
+                triangle_bucket_far->world_y_first   = engine_coordinate_1->y;
+                triangle_bucket_far->world_z_first   = engine_coordinate_1->z;
+                triangle_bucket_far->world_x_second  = engine_coordinate_2->x;
+                triangle_bucket_far->world_y_second  = engine_coordinate_2->y;
+                triangle_bucket_far->world_z_second  = engine_coordinate_2->z;
+                triangle_bucket_far->world_x_third   = engine_coordinate_3->x;
+                triangle_bucket_far->world_y_third   = engine_coordinate_3->y;
+                triangle_bucket_far->world_z_third   = engine_coordinate_3->z;
 
                 triangle_bucket_far->vertex_first.X = engine_coordinate_1->view_width;
                 triangle_bucket_far->vertex_first.Y = engine_coordinate_1->view_height;
@@ -3733,6 +3751,27 @@ static void create_shadows(struct Thing *thing, struct EngineCoord *ecor, struct
                 dim_ow, dim_oh, thing->index, animation_sprite, current_frame);
         return;
     }
+    unsigned char shadow_frame = current_frame;
+    int shadow_tex_w = 0;
+    int shadow_tex_h = 0;
+    if (spr->FramesCount > 0)
+    {
+        int quarter = abs(4 - (((sprite_angle + DEGREES_22_5) & ANGLE_MASK) >> 8));
+        if (shadow_frame >= spr->FramesCount)
+            shadow_frame = spr->FramesCount - 1;
+        if (spr->Rotable == 0)
+        {
+            struct KeeperSprite* frame_spr = &spr[shadow_frame];
+            shadow_tex_w = frame_spr->FrameWidth;
+            shadow_tex_h = frame_spr->FrameHeight;
+        }
+        else if (spr->Rotable == 2)
+        {
+            struct KeeperSprite* frame_spr = &spr[shadow_frame + quarter * spr->FramesCount];
+            shadow_tex_w = frame_spr->SWidth;
+            shadow_tex_h = frame_spr->SHeight;
+        }
+    }
     {
         int sh_angle_sin = LbSinL(sh_angle);
         int sh_angle_cos = LbCosL(sh_angle);
@@ -3786,6 +3825,53 @@ static void create_shadows(struct Thing *thing, struct EngineCoord *ecor, struct
     int min_cor_z = min(min(ecor1.z,ecor2.z),min(ecor3.z,ecor4.z));
     if (min_cor_z < BUCKETS_STEP)
         return;
+
+    int bucket_idx = min_cor_z / BUCKETS_STEP;
+    if (bucket_idx < 0)
+        bucket_idx = 0;
+    else if (bucket_idx > BUCKETS_COUNT - 2)
+        bucket_idx = BUCKETS_COUNT - 2;
+
+    if (RendererHasGPURenderPath())
+    {
+        struct WorldShadowSubmitCmd scmd;
+        memset(&scmd, 0, sizeof(scmd));
+
+        scmd.verts[0].x = ecor1.view_width;
+        scmd.verts[0].y = ecor1.view_height;
+        scmd.verts[0].u = 0;
+        scmd.verts[0].v = TO_FIXED(dim_oh - 1);
+
+        scmd.verts[1].x = ecor2.view_width;
+        scmd.verts[1].y = ecor2.view_height;
+        scmd.verts[1].u = 0;
+        scmd.verts[1].v = 0;
+
+        scmd.verts[2].x = ecor3.view_width;
+        scmd.verts[2].y = ecor3.view_height;
+        scmd.verts[2].u = TO_FIXED(dim_ow - 1);
+        scmd.verts[2].v = 0;
+
+        scmd.verts[3].x = ecor4.view_width;
+        scmd.verts[3].y = ecor4.view_height;
+        scmd.verts[3].u = TO_FIXED(dim_ow - 1);
+        scmd.verts[3].v = TO_FIXED(dim_oh - 1);
+
+        scmd.anim_sprite   = animation_sprite;
+        scmd.angle         = sprite_angle;
+        scmd.current_frame = shadow_frame;
+        scmd.tex_w         = shadow_tex_w;
+        scmd.tex_h         = shadow_tex_h;
+        scmd.darkness      = 1.0f - (float)dist_sq / 32.0f;
+        scmd.ndc_z         = 2.0f * (float)bucket_idx / (float)(BUCKETS_COUNT - 1) - 1.0f;
+        scmd.wx            = (int32_t)ecor->x;
+        scmd.wy            = (int32_t)ecor->y;
+        scmd.wz            = (int32_t)ecor->z;
+        scmd.sort_key      = (uint32_t)bucket_idx;
+        WorldViewRenderer_SubmitWorldShadow(&scmd);
+        return;
+    }
+
     struct BucketKindCreatureShadow *kspr = (struct BucketKindCreatureShadow *)get_bucket_item(min_cor_z, QK_CreatureShadow, sizeof(struct BucketKindCreatureShadow));
     if (kspr == NULL)
         return;
@@ -3823,6 +3909,63 @@ static void create_shadows(struct Thing *thing, struct EngineCoord *ecor, struct
     kspr->angle = sprite_angle;
     kspr->anim_sprite = animation_sprite;
     kspr->current_frame = current_frame;
+}
+
+/** Submit a GPU-only circle blob shadow centred under the creature.
+ *  `ecor` must be the floor-height coord (before height offset is applied). */
+static void create_circle_shadow(struct Thing *thing, struct EngineCoord *ecor)
+{
+    unsigned short animation_sprite = get_render_animation_sprite(thing->anim_sprite);
+    struct KeeperSprite *spr = keepersprite_array(animation_sprite);
+    if (spr == NULL)
+        return;
+
+    short dim_ow, dim_oh, dim_tw, dim_th;
+    get_keepsprite_unscaled_dimensions(animation_sprite, 0, thing->current_frame,
+                                       &dim_ow, &dim_oh, &dim_tw, &dim_th);
+    if (dim_ow <= 0 || dim_oh <= 0)
+        return;
+
+    /* Project the floor centre to screen space. */
+    struct EngineCoord centre = *ecor;
+    rotpers(&centre, &camera_matrix);
+    if (centre.z < BUCKETS_STEP)
+        return;
+
+    int bucket_idx = centre.z / BUCKETS_STEP;
+    if (bucket_idx >= BUCKETS_COUNT - 1)
+        bucket_idx = BUCKETS_COUNT - 2;
+
+    /* Radius in screen pixels based on sprite bounding box. */
+    int half = (dim_ow > dim_oh ? dim_ow : dim_oh) / 2;
+    if (half < 4) half = 4;
+
+    int cx = centre.view_width;
+    int cy = centre.view_height;
+
+    struct WorldShadowSubmitCmd scmd;
+    memset(&scmd, 0, sizeof(scmd));
+
+    scmd.verts[0].x = cx - half;  scmd.verts[0].y = cy + half;
+    scmd.verts[0].u = 0;          scmd.verts[0].v = TO_FIXED(63);
+
+    scmd.verts[1].x = cx - half;  scmd.verts[1].y = cy - half;
+    scmd.verts[1].u = 0;          scmd.verts[1].v = 0;
+
+    scmd.verts[2].x = cx + half;  scmd.verts[2].y = cy - half;
+    scmd.verts[2].u = TO_FIXED(63); scmd.verts[2].v = 0;
+
+    scmd.verts[3].x = cx + half;  scmd.verts[3].y = cy + half;
+    scmd.verts[3].u = TO_FIXED(63); scmd.verts[3].v = TO_FIXED(63);
+
+    scmd.darkness      = 0.75f;
+    scmd.ndc_z         = 2.0f * (float)bucket_idx / (float)(BUCKETS_COUNT - 1) - 1.0f;
+    scmd.wx            = (int32_t)ecor->x;
+    scmd.wy            = (int32_t)ecor->y;
+    scmd.wz            = (int32_t)ecor->z;
+    scmd.sort_key      = (uint32_t)bucket_idx;
+    scmd.is_circle     = 1;
+    WorldViewRenderer_SubmitWorldShadow(&scmd);
 }
 
 // Creature status flower above head in isometric view
@@ -4056,6 +4199,15 @@ static void do_a_gpoly_gourad_tr(struct EngineCoord *ec1, struct EngineCoord *ec
             current_polygon_bucket->camera_z_first  = ec1->z;
             current_polygon_bucket->camera_z_second = ec2->z;
             current_polygon_bucket->camera_z_third  = ec3->z;
+            current_polygon_bucket->world_x_first   = ec1->x;
+            current_polygon_bucket->world_y_first   = ec1->y;
+            current_polygon_bucket->world_z_first   = ec1->z;
+            current_polygon_bucket->world_x_second  = ec2->x;
+            current_polygon_bucket->world_y_second  = ec2->y;
+            current_polygon_bucket->world_z_second  = ec2->z;
+            current_polygon_bucket->world_x_third   = ec3->x;
+            current_polygon_bucket->world_y_third   = ec3->y;
+            current_polygon_bucket->world_z_third   = ec3->z;
             ec1_fieldA = ec1->shade_intensity;
             ec2_fieldA = ec2->shade_intensity;
             ec3_fieldA = ec3->shade_intensity;
@@ -4118,6 +4270,15 @@ static void do_a_gpoly_unlit_tr(struct EngineCoord *ec1, struct EngineCoord *ec2
             current_polygon_bucket->camera_z_first  = ec1->z;
             current_polygon_bucket->camera_z_second = ec2->z;
             current_polygon_bucket->camera_z_third  = ec3->z;
+            current_polygon_bucket->world_x_first   = ec1->x;
+            current_polygon_bucket->world_y_first   = ec1->y;
+            current_polygon_bucket->world_z_first   = ec1->z;
+            current_polygon_bucket->world_x_second  = ec2->x;
+            current_polygon_bucket->world_y_second  = ec2->y;
+            current_polygon_bucket->world_z_second  = ec2->z;
+            current_polygon_bucket->world_x_third   = ec3->x;
+            current_polygon_bucket->world_y_third   = ec3->y;
+            current_polygon_bucket->world_z_third   = ec3->z;
             current_polygon_bucket->vertex_first.X = ec1->view_width;
             current_polygon_bucket->vertex_first.Y = ec1->view_height;
             current_polygon_bucket->vertex_first.U = 0;
@@ -4167,6 +4328,15 @@ static void do_a_gpoly_unlit_bl(struct EngineCoord *ec1, struct EngineCoord *ec2
         current_polygon_bucket->camera_z_first  = ec1->z;
         current_polygon_bucket->camera_z_second = ec2->z;
         current_polygon_bucket->camera_z_third  = ec3->z;
+        current_polygon_bucket->world_x_first   = ec1->x;
+        current_polygon_bucket->world_y_first   = ec1->y;
+        current_polygon_bucket->world_z_first   = ec1->z;
+        current_polygon_bucket->world_x_second  = ec2->x;
+        current_polygon_bucket->world_y_second  = ec2->y;
+        current_polygon_bucket->world_z_second  = ec2->z;
+        current_polygon_bucket->world_x_third   = ec3->x;
+        current_polygon_bucket->world_y_third   = ec3->y;
+        current_polygon_bucket->world_z_third   = ec3->z;
         current_polygon_bucket->vertex_first.X = ec1->view_width;
         current_polygon_bucket->vertex_first.Y = ec1->view_height;
         current_polygon_bucket->vertex_first.U = 0x1FFFFF;
@@ -4225,6 +4395,15 @@ static void do_a_gpoly_gourad_bl(struct EngineCoord *ec1, struct EngineCoord *ec
             current_polygon_bucket->camera_z_first  = ec1->z;
             current_polygon_bucket->camera_z_second = ec2->z;
             current_polygon_bucket->camera_z_third  = ec3->z;
+            current_polygon_bucket->world_x_first   = ec1->x;
+            current_polygon_bucket->world_y_first   = ec1->y;
+            current_polygon_bucket->world_z_first   = ec1->z;
+            current_polygon_bucket->world_x_second  = ec2->x;
+            current_polygon_bucket->world_y_second  = ec2->y;
+            current_polygon_bucket->world_z_second  = ec2->z;
+            current_polygon_bucket->world_x_third   = ec3->x;
+            current_polygon_bucket->world_y_third   = ec3->y;
+            current_polygon_bucket->world_z_third   = ec3->z;
             ec1_fieldA = ec1->shade_intensity;
             ec2_fieldA = ec2->shade_intensity;
             ec3_fieldA = ec3->shade_intensity;
@@ -8970,17 +9149,33 @@ static void do_map_who_for_thing(struct Thing *thing)
         // Shadows
         if (thing_is_creature(thing) && ((thing->movement_flags & TMvF_BeingSacrificed) == 0))
         {
-            int count;
-            int i;
+            int shadow_type = g_renderer_settings.shadow_type;
 
-            unsigned short animation_sprite = get_render_animation_sprite(thing->anim_sprite);
-            struct KeeperSprite *spr = keepersprite_array(animation_sprite);
-            if ((spr != NULL) && ((spr->frame_flags & FFL_NoShadows) == 0))
+            /* GPU circle blob — one submission per creature, no light loop */
+            if (RendererHasGPURenderPath() && shadow_type == RENDERER_SHADOW_CIRCLE)
             {
-                count = find_closest_lights(&thing->mappos, &nearlgt);
-                for (i = 0; i < count; i++)
+                unsigned short animation_sprite = get_render_animation_sprite(thing->anim_sprite);
+                struct KeeperSprite *spr = keepersprite_array(animation_sprite);
+                if (spr != NULL && (spr->frame_flags & FFL_NoShadows) == 0)
+                    create_circle_shadow(thing, &ecor);
+            }
+            else if (shadow_type != RENDERER_SHADOW_OFF)
+            {
+                int count;
+                int i;
+
+                unsigned short animation_sprite = get_render_animation_sprite(thing->anim_sprite);
+                struct KeeperSprite *spr = keepersprite_array(animation_sprite);
+                if ((spr != NULL) && ((spr->frame_flags & FFL_NoShadows) == 0))
                 {
-                    create_shadows(thing, &ecor, &nearlgt.coord[i]);
+                    count = find_closest_lights(&thing->mappos, &nearlgt);
+                    /* Clamp to the configured type (1-4 = shadow count, default 4) */
+                    if (RendererHasGPURenderPath() && shadow_type >= 1 && shadow_type <= 4 && count > shadow_type)
+                        count = shadow_type;
+                    for (i = 0; i < count; i++)
+                    {
+                        create_shadows(thing, &ecor, &nearlgt.coord[i]);
+                    }
                 }
             }
         }

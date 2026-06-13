@@ -195,18 +195,18 @@ void draw_eastegg(void)
   SYNCDBG(5,"Starting");
   int ee_units_per_px = calculate_relative_upp(22, units_per_pixel_best, LbTextLineHeight());
   int width = 640, height = 400, skeksis_x_offset = 120, skeksis_y_offset = 200;
-  if (is_ar_wider_than_original(MyScreenWidth, MyScreenHeight))
+  if (is_ar_wider_than_original(RendererGetScreenWidth(), RendererGetScreenHeight()))
   {
-    width = height * (MyScreenWidth * 10 / MyScreenHeight) / 10;
+    width = height * (RendererGetScreenWidth() * 10 / RendererGetScreenHeight()) / 10;
   }
   else
   {
-    height = (width * 10) / (MyScreenWidth * 10 / MyScreenHeight);
+    height = (width * 10) / (RendererGetScreenWidth() * 10 / RendererGetScreenHeight());
   }
   
   skeksis_y_offset = height / 2;
   skeksis_x_offset = (width / 2) - 200;
-  LbTextSetWindow(0, 0, MyScreenWidth, MyScreenHeight);
+  LbTextSetWindow(0, 0, RendererGetScreenWidth(), RendererGetScreenHeight());
   if (eastegg_skeksis_cntr >= eastegg_skeksis_codes.length)
   {
       eastegg_skeksis_cntr++;

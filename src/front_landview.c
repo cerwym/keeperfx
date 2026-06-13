@@ -36,6 +36,8 @@
 #include "bflib_sound.h"
 #include "bflib_vidraw.h"
 #include "renderer/RendererManager.h"
+#include "kfx/assets/SpriteSheetManager.h"
+#include "kfx/assets/FontManager.h"
 
 #include "config_strings.h"
 #include "config_campaigns.h"
@@ -847,21 +849,19 @@ void compressed_window_draw(void)
     long xshift = map_info.screen_shift_x * landview_frame_movement_scale_x / default_movement_scale / 2; // X speed is slower on aspect ratios wider than 4:3
     long yshift = map_info.screen_shift_y *landview_frame_movement_scale_y / default_movement_scale / 2; // Y speed is slower on aspect ratios taller than 4:3
 
-    // In GL mode draw the huge sprite into a zero-initialized bounce buffer so
-    // lbDisplay.WScreen is not written (WScreen is imminent to be nulled).
-    if (RendererHasGPURenderPath())
+    int w = RendererScreenWidth();
+    int h = RendererPhysicalHeight();
+    unsigned char* bounce = (unsigned char*)KfxCalloc((size_t)w, (size_t)h);
+    if (bounce)
     {
-        int w = RendererScreenWidth();
-        int h = RendererPhysicalHeight();
-        unsigned char* bounce = (unsigned char*)KfxCalloc((size_t)w, (size_t)h);
-        if (bounce)
+        LbHugeSpriteDraw(&map_window, map_window_len,
+            bounce, w, h, xshift, yshift, units_per_pixel_landview_frame);
+        if (RendererSubmitTransparentBlit(bounce, w, h))
         {
-            LbHugeSpriteDraw(&map_window, map_window_len,
-                bounce, w, h, xshift, yshift, units_per_pixel_landview_frame);
-            RendererSubmitTransparentBlit(bounce, w, h);
             KfxFree(bounce);
             return;
         }
+        KfxFree(bounce);
     }
 
     LbHugeSpriteDraw(&map_window, map_window_len,
@@ -1052,18 +1052,21 @@ TbBool frontmap_load(void)
     }
     switch (campaign.land_markers) {
     case LndMk_PINPOINTS:
-        map_flag = load_spritesheet("ldata/lndflag_pin.dat", "ldata/lndflag_pin.tab");
+        SpriteSheetMgr_Load(&map_flag, "ldata/lndflag_pin.dat", "ldata/lndflag_pin.tab");
         break;
     default:
         ERRORLOG("Unsupported land markers type %d",(int)campaign.land_markers);
         // Fall through
     case LndMk_ENSIGNS:
-        map_flag = load_spritesheet("ldata/lndflag_ens.dat", "ldata/lndflag_ens.tab");
+        SpriteSheetMgr_Load(&map_flag, "ldata/lndflag_ens.dat", "ldata/lndflag_ens.tab");
         break;
     }
-    if (!map_flag)
+    FontMgr_Load(&map_font, "ldata/netfont.dat", "ldata/netfont.tab");
+    if (!map_flag || !map_font)
     {
         ERRORLOG("Unable to load Land View Screen sprites");
+        FontMgr_Free(&map_font);
+        SpriteSheetMgr_Free(&map_flag);
         frontend_load_data_reset();
         return false;
     }
@@ -1108,6 +1111,8 @@ TbBool frontmap_load(void)
     return true;
 }
 
+static void draw_ensign_name_tooltip(void);
+
 void frontmap_draw(void)
 {
     SYNCDBG(8,"Starting");
@@ -1123,6 +1128,7 @@ void frontmap_draw(void)
         draw_map_level_ensigns();
         set_pointer_graphic_spland(0);
         compressed_window_draw();
+        draw_ensign_name_tooltip();
     }
 }
 
@@ -1250,6 +1256,55 @@ void draw_map_level_descriptions(void)
   }
 }
 
+/**
+ * Draws a tooltip anchored to the cursor showing the name of the ensign
+ * currently under the mouse.Name will be read from LevelInformation
+ */
+static void draw_ensign_name_tooltip(void)
+{
+    if (mouse_over_lvnum <= 0)
+        return;
+    if ((map_info.fadeflags & MLInfoFlg_Zooming) != 0)
+        return;
+
+    struct LevelInformation* lvinfo = get_level_info(mouse_over_lvnum);
+    if (lvinfo == NULL)
+        return;
+
+    const char* lv_name = (lvinfo->name_stridx > 0) ? get_string(lvinfo->name_stridx) : lvinfo->name;
+    set_level_name_text(mouse_over_lvnum, lv_name);
+
+    // Measure text in logical units, then convert to screen pixels.
+    const long PAD_PX     = 4;
+    const long OFFSET_X   = 8;
+    const long OFFSET_Y   = 20;
+    long text_w = LbTextStringWidth(level_name);
+    long text_h = LbTextHeight(level_name);
+    long box_w  = scale_value_landview(text_w + PAD_PX * 2);
+    long box_h  = scale_value_landview(text_h);
+
+    // Anchor to the mouse cursor; clamp so the box stays on screen.
+    long x = GetMouseX() + OFFSET_X;
+    long y = GetMouseY() + OFFSET_Y;
+    if (x + box_w > RendererPhysicalWidth())
+        x = RendererPhysicalWidth() - box_w;
+    if (x < 0)
+        x = 0;
+    if (y + box_h > RendererPhysicalHeight())
+        y = RendererPhysicalHeight() - box_h;
+    if (y < 0)
+        y = 0;
+
+    UIRenderer_BeginTopOverlay();
+    UIRenderer_SubmitSolidBoxAlpha(x, y, box_w, box_h, 0, 0.75f);
+    UIRenderer_EndTopOverlay();
+
+    LbTextSetWindow(x, y, box_w, box_h);
+    lbDisplay.DrawFlags = 0;
+    LbTextDrawResized(scale_value_landview(PAD_PX), 0, units_per_pixel_landview, level_name);
+    LbTextSetWindow(0, 0, RendererPhysicalWidth(), RendererPhysicalHeight());
+}
+
 void frontmap_input(void)
 {
     SYNCDBG(8,"Starting");
@@ -1326,7 +1381,8 @@ void frontmap_unload(void)
     SYNCDBG(8,"Starting");
     set_pointer_graphic_none();
     unload_map_and_window();
-    free_spritesheet(&map_flag);
+    FontMgr_Free(&map_font);
+    SpriteSheetMgr_Free(&map_flag);
     StopAllSamples();
     stop_description_speech();
     stop_music();

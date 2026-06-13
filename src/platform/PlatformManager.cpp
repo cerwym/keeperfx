@@ -192,6 +192,11 @@ extern "C" const char* PlatformManager_GetDataPath()
     return PlatformManager::Get()->GetDataPath();
 }
 
+extern "C" const char* PlatformManager_GetUserPrefDir()
+{
+    return PlatformManager::Get()->GetUserPrefDir();
+}
+
 extern "C" void PlatformManager_SetArgv(int argc, char** argv)
 {
     PlatformManager::Get()->SetArgv(argc, argv);

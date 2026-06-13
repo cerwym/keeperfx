@@ -13,6 +13,7 @@
 #include "pre_inc.h"
 #include "renderer/RendererOpenGL.h"
 #include "renderer/RendererManager.h"
+#include "renderer/RendererThread.h"
 #include "renderer/VecMath.h"
 #include "renderer/opengl/GLTileAtlas.h"
 #include "renderer/opengl/GLSpriteAtlas.h"
@@ -20,17 +21,16 @@
 #include "renderer/opengl/GLUIRenderer.h"
 #include "renderer/opengl/GLTextRenderer.h"
 #include "renderer/opengl/GLMapFadePass.h"
-#include "renderer/backends/SoftwareTextRenderer.h"
+#include "renderer/opengl/GLCursorLayer.h"
 #include "renderer/opengl/GLShaders.h"
 #include "renderer/opengl/GLLensPass.h"
 #include "kfx/profiling/KfxProfiling.h"
 #include "kfx/lense/LensManager.h"
 #include "kfx/lense/LensEffect.h"
 #include "renderer/IPostProcessPass.h"
+#include "renderer/RendererHelper.h"
 
-#include "bflib_video.h"    // lbDisplay, MyScreenWidth/Height
-#include "bflib_render.h"   // render_fade_tables
-#include "bflib_vidraw.h"   // vec_window_width/height (PiP projection override), LbSpriteDrawResized
+#include "bflib_video.h"    // lbDisplay, RendererGetScreenWidth()/Height
 #include "bflib_sprite.h"   // TbSpriteSheet, get_sprite
 #include "platform.h"       // platform_create_gl_context / swap / destroy
 #include "engine_textures.h" // update_animating_texture_maps()
@@ -121,6 +121,8 @@ void APIENTRY DebugCallback(GLenum source, GLenum type, GLuint id, GLenum severi
 
 bool RendererOpenGL::Init()
 {
+    RendererThread_RegisterGameThread();
+
     // Create GL context (SDL2-based on desktop; see platform_gl_sdl2.cpp)
     if (!platform_create_gl_context(platform_get_sdl_window()))
     {
@@ -157,8 +159,8 @@ bool RendererOpenGL::Init()
     glBindVertexArray(0);
 
     // Screen dimensions (used throughout EndFrame for viewport sizing).
-    m_screenW = MyScreenWidth;
-    m_screenH = MyScreenHeight;
+    m_screenW = RendererGetScreenWidth();
+    m_screenH = RendererGetScreenHeight();
 
     // Transparent overlay texture — GL_R8, screen-sized.
     // SubmitTransparentBlit() uploads directly into this texture; EndFrame composites
@@ -600,6 +602,19 @@ bool RendererOpenGL::BeginFrame()
 {
     // Idempotent: multiple RendererLockScreen calls per frame must not clear the UI queue again.
     if (m_frame_begun) return true;
+
+    // If a deferred sprite-atlas rebuild is pending, drain it now — before any
+    // sprite handles are issued for this frame — so the generation bump is invisible
+    // to the game code that follows.  WaitForCompletion() ensures the render thread
+    // has finished consuming the previous frame's IR (old-generation handles) before
+    // Rebuild() increments the generation.  This is the only safe window: after the
+    // render thread retires the old atlas, and before new handles are stamped.
+    if (RendererHasDeferredAtlasRebuild())
+    {
+        m_render_thread.WaitForCompletion();
+        RendererDrainDeferredAtlasRebuild();
+    }
+
     m_frame_begun = true;
 
     // Reset IR write-side buffers for this frame so sub-renderers start clean.
@@ -607,10 +622,10 @@ bool RendererOpenGL::BeginFrame()
 
     // Refresh cached screen dimensions — screen mode may have changed since Init().
     // These are game-thread-only values; the render thread reads from m_rt_frame_state.
-    if (MyScreenWidth > 0 && MyScreenHeight > 0)
+    if (RendererGetScreenWidth() > 0 && RendererGetScreenHeight() > 0)
     {
-        m_screenW = (int)MyScreenWidth;
-        m_screenH = (int)MyScreenHeight;
+        m_screenW = (int)RendererGetScreenWidth();
+        m_screenH = (int)RendererGetScreenHeight();
     }
 
     // NOTE: sub-renderer SetScreenSize() is NOT called here (game thread).
@@ -690,10 +705,13 @@ void RendererOpenGL::EndFrame()
     // so the very first call passes through immediately (no prior frame).
     m_render_thread.WaitForCompletion();
 
-    // Execute any deferred atlas rebuild now: WaitForCompletion() guarantees the
-    // render thread has finished consuming the previous frame's IR (old-generation
-    // handles), and no sprites for this frame have been submitted yet — every
-    // handle emitted after this point will carry the new generation.
+    // Drain any deferred sprite-atlas rebuild not already handled by BeginFrame().
+    // BeginFrame() now drains when s_rebuild_deferred is set (the common load-time
+    // case), so this call is a no-op for the normal path.  It remains here as a
+    // fallback for the rare case where RendererNotifySpritesReloaded() is called
+    // mid-frame (after BeginFrame() but before EndFrame()); in that scenario the
+    // rebuild fires here and causes a one-frame sprite drop — acceptable for an
+    // in-flight reload that does not happen during normal gameplay.
     RendererDrainDeferredAtlasRebuild();
 
     // Lazily start the render thread on the first EndFrame() call.
@@ -776,6 +794,13 @@ void RendererOpenGL::EndFrame()
     // Double-buffer swipe overlay verts: same pattern as PiP/rawblit queues.
     m_rt_swipe_verts = std::move(m_swipe_verts);
 
+    // Screenshot: move pending path/fmt into render-thread copies; clear pending
+    // so that subsequent EndFrame() calls without a screenshot don't re-trigger.
+    m_rt_screenshot_path = std::move(m_pending_screenshot_path);
+    m_rt_screenshot_fmt  = m_pending_screenshot_fmt;
+    m_pending_screenshot_path.clear();
+    m_pending_screenshot_fmt = 0;
+
     // Snapshot all game-thread globals that EndFrame_GL() needs.
     // Must happen here (before signalling) so the render thread never reads live
     // globals that the game thread can modify concurrently once we return.
@@ -786,49 +811,39 @@ void RendererOpenGL::EndFrame()
     m_rt_frame_state.screen_w  = m_screenW;
     m_rt_frame_state.screen_h  = m_screenH;
 
-    // Flush the map-fade IR command to the render graph write slot.
-    // FlushToRenderGraph() checks view_mode (game thread safe), emits an
-    // IRMapFadeCmd if a transition is active, and clears m_capture_pending.
-    // Must happen before Flip()/UpdateFrameState() so the write slot is
-    // populated before it transfers to the render-side.
+    // Flush the map-fade IR command to the render graph's write-side
+    // post-process buffers. FlushToRenderGraph() checks view_mode (game thread
+    // safe), emits an IRMapFadeCmd if a transition is active, and clears
+    // m_capture_pending. Must happen before Flip()/UpdateFrameState().
     if (auto* mfp = RendererGetMapFadePass()) mfp->FlushToRenderGraph(m_render_graph);
 
     {
         const UICommandBuffers& wui [[maybe_unused]] = m_render_graph.GetWriteUIBuffers();
         SYNCDBG(1, "EndFrame: fade=%d ir_active=%d solid=%zu slabbg=%zu sprites=%zu sprR=%zu sprC=%zu "
-                   "slabsel=%zu fbo=%zu mm=%zu cptr=%zu chand=%zu",
+                   "slabsel=%zu cptr=%zu chand=%zu",
                 (int)RendererIsFadeCachePreserved(),
                 (int)wui.ir_active,
                 wui.solid_boxes.Size(),   wui.slab_backgrounds.Size(),
                 wui.sprites.Size(),       wui.sprites_remap.Size(),
                 wui.sprites_colored.Size(), wui.slab_selectors.Size(),
-                wui.fbo_quads.Size(),     wui.minimaps.Size(),
                 wui.cursor_pointers.Size(), wui.cursor_hands.Size());
     }
 
-    const bool has_ui_commands    = m_render_graph.GetWriteUIBuffers().HasAnyCommands();
-    const bool has_world_commands = m_world_renderer && m_world_renderer->HasPendingCommands();
-    const bool has_map_fade_cmd   = m_render_graph.HasWriteMapFadeCmd();
-
-    if (RendererIsFadeCachePreserved() ||
-        (!has_ui_commands && !has_world_commands && !has_map_fade_cmd))
+    if (RendererIsFadeCachePreserved())
     {
-        // Palette-fade loop OR a spurious second present with no UI submissions
-        // and no map-fade transition: preserve the render thread's read-side IR
-        // unchanged so it re-draws the same UI/world geometry as the last real
-        // frame.  Only update FrameState so palette darkening / tint changes
-        // are visible.
-        //
-        // Excluded when a map-fade cmd is pending: PVM_ParchFadeIn/Out frames
-        // submit no UI sprites, but we must Flip() with empty write buffers so
-        // the render thread reads fresh (empty) UI data.  Without this, stale
-        // quads from the last PVM_ParchmentView frame (sidebar background,
-        // minimap) would replay over the map-fade blend every transition frame.
+        // Palette-fade loop: preserve the render thread's read-side IR unchanged
+        // so it re-draws the same UI/world geometry as the last real frame.
+        // Only update FrameState so palette darkening / tint changes are visible.
         SYNCDBG(1, "EndFrame: UpdateFrameState (no flip) — preserving previous UI");
         m_render_graph.UpdateFrameState(m_rt_frame_state);
     }
     else
     {
+        // IMPORTANT: always flip on non-fade frames, even when write-side
+        // command buffers are empty. Preserving stale read-side IR across
+        // transitions can replay old text commands that carry dangling font
+        // pointers after resource reload/teardown (seen during quit).
+        //
         // Normal frame: flip sub-renderer command buffers so the render thread
         // reads from stable render-side copies while the game thread builds N+1.
         if (m_world_renderer)
@@ -842,8 +857,7 @@ void RendererOpenGL::EndFrame()
     }
 
     // Signal the render thread to execute EndFrame_GL() (GL submission + swap).
-    // Phase 3C: asynchronous — game thread returns immediately after signalling.
-    // The wait for completion has moved to the TOP of this function.
+    // Phase 3C: asynchronous by default.
     m_render_thread.Signal();
 
     // Reset the frame-begun flag HERE (game thread).
@@ -1010,13 +1024,13 @@ void RendererOpenGL::EndFrame_GL()
     // rawblit/overhead map draws (so those queues are still available for the
     // parchment FBO capture inside CaptureAndUploadFrames).
     // IRMapFadeCmd is written by GLMapFadePass::FlushToRenderGraph() on the
-    // game thread and transferred to the render-side by Flip()/UpdateFrameState().
+    // game thread and consumed from the render-side post-process buffers here.
     {
-        const auto& map_fade_cmd = m_render_graph.GetMapFadeCmdRT();
-        if (map_fade_cmd)
+        const auto& post_process = m_render_graph.GetPostProcessBuffersRT();
+        if (post_process.map_fade)
         {
             IMapFadePass* mfp = RendererGetMapFadePass();
-            if (mfp) mfp->ExecuteFromIR(*map_fade_cmd);
+            if (mfp) mfp->ExecuteFromIR(*post_process.map_fade);
         }
     }
 
@@ -1025,6 +1039,11 @@ void RendererOpenGL::EndFrame_GL()
 
     // Draw layer-0 (back) GPU UI elements — sidebar background panels.
     UIRenderer_DrawBack();
+
+    // Draw layer-2 world-depth sprites (creature status icons, room flags,
+    // floating gold text) BEFORE the sidebar.  These must be depth-tested
+    // against world geometry but must not appear over the sidebar UI.
+    UIRenderer_DrawWorldSpriteLayerRT();
 
     // Raw-image GPU blit — frontend background images (legal, loading, menu bg,
     // map bg, torture, etc.).  Queued by BlitRaw8GPU() during the frame; drawn
@@ -1206,7 +1225,7 @@ void RendererOpenGL::EndFrame_GL()
     // demand) then submitted to GLUIRenderer for compositing.  Queue cleared.
     if (m_world_renderer && !m_rt_pip_queue.empty())
     {
-        IUIRenderer* ui = RendererGetUIRenderer();
+        GLUIRenderer* pip_ui = m_gl_ui_renderer;
 
         for (std::size_t qi = 0; qi < m_rt_pip_queue.size(); ++qi)
         {
@@ -1221,58 +1240,19 @@ void RendererOpenGL::EndFrame_GL()
             if (!fbo.fbo)
                 continue;
 
-            SYNCDBG(7, "PiP[%zu]: fbo=%u pos=(%d,%d) size=(%dx%d) cam=(%d,%d,%d)",
-                    qi, fbo.fbo, pcmd.x, pcmd.y, pw, ph,
-                    (int)pcmd.cam_copy.mappos.x.val,
-                    (int)pcmd.cam_copy.mappos.y.val,
-                    (int)pcmd.cam_copy.zoom);
-
-            const int32_t saved_vw = vec_window_width;
-            const int32_t saved_vh = vec_window_height;
-            vec_window_width  = pw;
-            vec_window_height = ph;
-
-            TbGraphicsWindow saved_ewnd;
-            store_engine_window(&saved_ewnd, 1);
-            setup_engine_window(0, 0, pw, ph);
-
-            if (ui)
-                ui->BeginPiPSprites();
-
-            m_world_renderer->BeginPiPCapture();
-            m_world_renderer->BeginWorldPass(nullptr, 0, pw, ph, 0, 0);
-
-            // Save projection globals so main-view mouse→world unprojection is unaffected.
-            const Offset saved_vert[3] = { vert_offset[0], vert_offset[1], vert_offset[2] };
-            const Offset saved_hori[3] = { hori_offset[0], hori_offset[1], hori_offset[2] };
-            const int32_t saved_x_init  = x_init_off;
-            const int32_t saved_y_init  = y_init_off;
-
-            draw_view(const_cast<Camera*>(&pcmd.cam_copy), 0);
-
-            vert_offset[0] = saved_vert[0]; vert_offset[1] = saved_vert[1]; vert_offset[2] = saved_vert[2];
-            hori_offset[0] = saved_hori[0]; hori_offset[1] = saved_hori[1]; hori_offset[2] = saved_hori[2];
-            x_init_off = saved_x_init;
-            y_init_off = saved_y_init;
-
-            setup_engine_window(saved_ewnd.x, saved_ewnd.y,
-                                saved_ewnd.width, saved_ewnd.height);
-            vec_window_width  = saved_vw;
-            vec_window_height = saved_vh;
-
             glDisable(GL_SCISSOR_TEST);
             glBindFramebuffer(GL_FRAMEBUFFER, fbo.fbo);
             glViewport(0, 0, pw, ph);
             glClearColor(KFX_GL_CLEAR_COLOR);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-            m_world_renderer->GPURenderToFBO(pw, ph);
-            if (ui)
-                ui->DrawPiPSprites(pw, ph);
+            m_world_renderer->ExecutePiPCapture(pcmd.world_capture, pw, ph);
+            if (pip_ui)
+                pip_ui->DrawPiPSpriteCapture(pcmd.ui_capture, pw, ph);
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
             glViewport(0, 0, m_rt_frame_state.screen_w, m_rt_frame_state.screen_h);
 
-            if (ui)
-                ui->SubmitFBOQuad(pcmd.x, pcmd.y, pw, ph, static_cast<GpuTextureHandle>(fbo.color_tex), pcmd.clip_radius);
+            if (pip_ui)
+                pip_ui->SubmitFBOQuad(pcmd.x, pcmd.y, pw, ph, static_cast<GpuTextureHandle>(fbo.color_tex), pcmd.clip_radius);
         }
 
         m_rt_pip_queue.clear();
@@ -1615,6 +1595,27 @@ void RendererOpenGL::EndFrame_GL()
     SYNCDBG(0, "EndFrame_GL step 5: before cursor draw");
     if (auto* cursor = RendererGetCursorLayer())
         cursor->ExecuteCursorFromIR(m_render_graph.GetUIBuffersRT());
+
+    // Screenshot capture: after all draw calls, before buffer swap so that the
+    // default framebuffer holds the fully-composited frame.
+    if (!m_rt_screenshot_path.empty())
+    {
+        const int w = m_rt_frame_state.screen_w;
+        const int h = m_rt_frame_state.screen_h;
+        std::vector<uint8_t> pixels(static_cast<size_t>(w) * h * 4);
+        glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+        // GL origin is bottom-left; flip rows for top-down image formats.
+        std::vector<uint8_t> flipped(pixels.size());
+        const size_t row_bytes = static_cast<size_t>(w) * 4;
+        for (int row = 0; row < h; ++row)
+            std::memcpy(flipped.data() + row * row_bytes,
+                        pixels.data() + (h - 1 - row) * row_bytes,
+                        row_bytes);
+        RendererHelper_SaveRGBAImage(flipped.data(), w, h, static_cast<int>(row_bytes),
+                                     m_rt_screenshot_fmt, m_rt_screenshot_path.c_str());
+        m_rt_screenshot_path.clear();
+    }
+
     platform_swap_gl_buffers(platform_get_sdl_window());
 
     KFX_GPU_COLLECT();
@@ -2094,12 +2095,56 @@ void RendererOpenGL::SubmitZoomBoxTiles(const uint16_t* tile_block_ids, int tile
 
 void RendererOpenGL::SubmitPiPRender(struct Camera* cam, int x, int y, int w, int h)
 {
-    if (!cam) return;
+    ASSERT_GAME_THREAD();
+    if (!cam || !m_world_renderer) return;
+    if (w <= 0 || h <= 0) return;
+
+    KFX_ZONE_COLOR("PiPRender::Capture", KFX_COLOR_RENDER_CPU);
+
     PiPCmd cmd;
-    cmd.cam_copy = *cam;
     cmd.x = x; cmd.y = y; cmd.w = w; cmd.h = h;
     cmd.clip_radius = RendererGetZoomBoxClipRadius();
-    m_pip_queue.push_back(cmd);
+
+    const int32_t saved_vw = vec_window_width;
+    const int32_t saved_vh = vec_window_height;
+
+    TbGraphicsWindow saved_ewnd;
+    store_engine_window(&saved_ewnd, 1);
+    setup_engine_window(0, 0, w, h);
+
+    const Offset saved_vert[3] = { vert_offset[0], vert_offset[1], vert_offset[2] };
+    const Offset saved_hori[3] = { hori_offset[0], hori_offset[1], hori_offset[2] };
+    const int32_t saved_x_init = x_init_off;
+    const int32_t saved_y_init = y_init_off;
+
+    GLUIRenderer* ui = m_gl_ui_renderer;
+    const bool reopen_ui_ir = !RendererIsFadeCachePreserved();
+    if (ui) {
+        ui->SetUICommandBuffers(nullptr);
+        ui->BeginPiPSprites();
+    }
+
+    m_world_renderer->BeginPiPCapture();
+    m_world_renderer->BeginWorldPass(nullptr, 0, w, h, 0, 0);
+    draw_view(cam, 0);
+    cmd.world_capture = m_world_renderer->FinalizePiPCapture();
+
+    if (ui)
+    {
+        cmd.ui_capture = ui->ExtractPiPSprites();
+        if (reopen_ui_ir)
+            ui->SetUICommandBuffers(&m_render_graph.GetUIBuffers());
+    }
+
+    vert_offset[0] = saved_vert[0]; vert_offset[1] = saved_vert[1]; vert_offset[2] = saved_vert[2];
+    hori_offset[0] = saved_hori[0]; hori_offset[1] = saved_hori[1]; hori_offset[2] = saved_hori[2];
+    x_init_off = saved_x_init;
+    y_init_off = saved_y_init;
+    setup_engine_window(saved_ewnd.x, saved_ewnd.y, saved_ewnd.width, saved_ewnd.height);
+    vec_window_width  = saved_vw;
+    vec_window_height = saved_vh;
+
+    m_pip_queue.push_back(std::move(cmd));
 }
 
 void RendererOpenGL::ensure_pip_fbo(std::size_t idx, int w, int h)
@@ -2170,10 +2215,6 @@ void RendererOpenGL::FlushSceneToFBO(int w, int h)
 
     // ── Palette ──────────────────────────────────────────────────────────
     upload_palette_texture();
-
-    // ── 3D world geometry ────────────────────────────────────────────────
-    if (m_world_renderer)
-        m_world_renderer->GPURenderToFBO(w, h);
 
     // ── Raw blit (parchment background image) ────────────────────────────
     if (m_rt_rawblit_pending)
@@ -2464,7 +2505,7 @@ IWorldViewRenderer* RendererOpenGL::CreateGLWorldViewRenderer()
 
 IMapFadePass* RendererOpenGL::CreateGLMapFadePass()
 {
-    auto* glmf = new GLMapFadePass();
+    auto* glmf = new GLMapFadePass{this};
     glmf->SetScreenSize(lbDisplay.PhysicalScreenWidth, lbDisplay.PhysicalScreenHeight);
     SetGLMapFadePass(glmf);
     return glmf;
@@ -2475,9 +2516,9 @@ ITextRenderer* RendererOpenGL::CreateGLTextRenderer()
     auto* glt = new GLTextRenderer();
     if (!glt->Init())
     {
-        WARNLOG("GLTextRenderer::Init() failed, falling back to software");
+        WARNLOG("GLTextRenderer::Init() failed");
         delete glt;
-        return new SoftwareTextRenderer();
+        return nullptr;
     }
     glt->SetPaletteTexture(m_texPalette);
     glt->SetScreenSize(lbDisplay.PhysicalScreenWidth, lbDisplay.PhysicalScreenHeight);
@@ -2501,6 +2542,15 @@ IUIRenderer* RendererOpenGL::CreateGLUIRenderer()
     glui->SetScreenDimensions(lbDisplay.PhysicalScreenWidth, lbDisplay.PhysicalScreenHeight);
     SetGLUIRenderer(glui);
     return glui;
+}
+
+ICursorLayer* RendererOpenGL::CreateGLCursorLayer()
+{
+    auto* glcur = new GLCursorLayer();
+    glcur->SetWorldViewRenderer(m_world_renderer);
+    glcur->SetSpriteAtlas(m_sprite_atlas);
+    glcur->SetGLUIRenderer(m_gl_ui_renderer);
+    return glcur;
 }
 
 bool RendererOpenGL::CompileSubRendererShaders()
@@ -2601,4 +2651,11 @@ void RendererOpenGL::NotifyGameTablesReady()
         ui->SetPaletteSource(lbPalette);
     if (auto* wr = RendererGetWorldViewRenderer())
         wr->SetPaletteSource(lbPalette);
+}
+
+bool RendererOpenGL::ScheduleScreenshot(const char* path, int fmt)
+{
+    m_pending_screenshot_path = path ? path : "";
+    m_pending_screenshot_fmt  = fmt;
+    return true;  // optimistic — render thread will log errors on failure
 }

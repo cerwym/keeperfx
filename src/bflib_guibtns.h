@@ -115,6 +115,10 @@ struct DraggingBox {
   long start_y;
 };
 
+// Runtime GUI structs contain pointers/function pointers.
+// Do not keep them under byte packing on 64-bit builds.
+#pragma pack()
+
 struct GuiButtonInit {
     char gbtype; /**< GUI Button Type, directly copied to button instance. */
     short id_num; /**< GUI Button ID, directly copied to button instance. If there is no need of identifying the button within game code, it should be set to BID_DEFAULT.*/

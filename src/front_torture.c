@@ -33,6 +33,7 @@
 #include "bflib_video.h"
 #include "bflib_vidraw.h"
 #include "renderer/RendererManager.h"
+#include "kfx/assets/SpriteSheetManager.h"
 #include "bflib_mouse.h"
 #include "bflib_sound.h"
 #include "bflib_sndlib.h"
@@ -112,9 +113,9 @@ long torture_door_over_point(long x,long y)
 void fronttorture_unload(void)
 {
   for (int i = 0; i < TORTURE_DOORS_COUNT; ++i) {
-    free_spritesheet(&doors[i].sprites);
+    SpriteSheetMgr_Free(&doors[i].sprites);
   }
-  free_spritesheet(&fronttor_sprites);
+  SpriteSheetMgr_Free(&fronttor_sprites);
   memcpy(&frontend_palette, frontend_backup_palette, PALETTE_SIZE);
   StopAllSamples();
   // Clearing the space used for torture graphics
@@ -150,10 +151,11 @@ void fronttorture_load(void)
         strcpy(tab_name, tmp_fname != NULL ? tmp_fname : "");
         tmp_fname = get_game_file_path_fmt(FGrp_LoData,"door%02d.dat", idx + 1);
         strcpy(dat_name, tmp_fname != NULL ? tmp_fname : "");
-        doors[idx].sprites = load_spritesheet(dat_name, tab_name);
+        doors[idx].sprites = NULL;
+        SpriteSheetMgr_Load(&doors[idx].sprites, dat_name, tab_name);
         if (!doors[idx].sprites) ERRORLOG("Unable to load torture door %d", idx + 1);
     }
-    fronttor_sprites = load_spritesheet("ldata/fronttor.dat", "ldata/fronttor.tab");
+    SpriteSheetMgr_Load(&fronttor_sprites, "ldata/fronttor.dat", "ldata/fronttor.tab");
     if (!fronttor_sprites) ERRORLOG("Unable to load torture sprites");
     frontend_load_data_reset();
     memcpy(&frontend_palette, torture_palette, PALETTE_SIZE);

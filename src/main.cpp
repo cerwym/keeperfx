@@ -130,6 +130,7 @@
 #include "config_keeperfx.h"
 #include "platform/PlatformManager.h"
 #include "renderer/RendererManager.h"
+#include "renderer/RendererSettings.h"
 #include "gui/gui_bridge.h"
 #include "game_legacy.h"
 #include "room_list.h"
@@ -781,7 +782,6 @@ void init_keeper(void)
     // Load configs which may have per-campaign part, and even be modified within a level
     recheck_all_mod_exist();
     init_custom_sprites(SPRITE_LAST_LEVEL);
-    RendererNotifyCustomSpritesReloaded();
     load_stats_files();
     check_and_auto_fix_stats();
     init_creature_scores();
@@ -947,6 +947,9 @@ short setup_game(void)
       }
   }
   VITA_TICK("RendererInit");
+
+  // Load user renderer preferences — wins over keeperfx.cfg defaults.
+  RendererSettings_Load();
 
   if (flag_is_set(start_params.startup_flags, SFlg_Legal))
   {
@@ -1725,10 +1728,10 @@ void centre_engine_window(void)
     long window_center_y;
     struct PlayerInfo *player=get_my_player();
     if ((game.operation_flags & GOF_ShowGui) != 0 && !RendererWantsFullscreenViewport())
-      window_center_x = (MyScreenWidth-player->engine_window_width-status_panel_width) / 2 + status_panel_width;
+      window_center_x = (RendererGetScreenWidth()-player->engine_window_width-status_panel_width) / 2 + status_panel_width;
     else
-      window_center_x = (MyScreenWidth-player->engine_window_width) / 2;
-    window_center_y = (MyScreenHeight-player->engine_window_height) / 2;
+      window_center_x = (RendererGetScreenWidth()-player->engine_window_width) / 2;
+    window_center_y = (RendererGetScreenHeight()-player->engine_window_height) / 2;
     setup_engine_window(window_center_x, window_center_y, player->engine_window_width, player->engine_window_height);
 }
 

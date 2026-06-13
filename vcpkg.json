@@ -8,6 +8,7 @@
         "enet6",
         "libspng",
         "centijson",
+        "centitoml",
         "astronomy",
         "minizip",
         "miniupnpc",
@@ -27,6 +28,10 @@
         },
         {
             "name": "vulkan-memory-allocator",
+            "platform": "windows"
+        },
+        {
+            "name": "shaderc",
             "platform": "windows"
         }
     ]

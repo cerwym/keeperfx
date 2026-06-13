@@ -20,7 +20,8 @@
 #include "sounds.h"                /* sound_reinit_after_load */
 #include "ui_init.h"               /* init_gameplay_ui */
 #include "creature_states_combt.h" /* reset_postal_instance_cache */
-#include "renderer/RendererManager.h" /* RendererNeedsUIReinitAfterLoad */
+#include "renderer/RendererManager.h"
+#include "kfx/assets/SpriteSheetManager.h"
 
 /******************************************************************************/
 
@@ -61,7 +62,9 @@ void LevelSession_ReinitMapData(void)
 
 void LevelSession_ReinitUI(void)
 {
-    if (RendererNeedsUIReinitAfterLoad()) {
+    // Software renderer always reinits; GL only reinits when a full GUI
+    // sprite reload happened (resolution change, etc.).
+    if (!RendererHasGPURenderPath() || SpriteSheetManager::Get().ConsumeGUIDirty()) {
         init_gui();
         init_gameplay_ui(UIPROLE_ACTIVE_PLAYER, game.active_players_count > 1);
     }

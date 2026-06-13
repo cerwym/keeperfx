@@ -17,7 +17,7 @@
 
 #include <cstdint>
 #include "renderer/ir/IRCommandBuffer.h"
-#include "bflib_render.h"  // PolyPoint
+#include "renderer/EngineVertex.h"
 
 /******************************************************************************/
 
@@ -25,7 +25,7 @@
  *  Mirrors GLWorldViewRenderer::ShadowCmd for IR compatibility. */
 struct IRShadowCasterCmd
 {
-    struct PolyPoint verts[4]    = {};  /**< Screen-px coords + 16.16 UV. */
+    EnginePolyVertex verts[4]    = {};  /**< Screen-px coords + fixed-point UV. */
     unsigned short   anim_sprite = 0;
     short            angle       = 0;
     unsigned char    current_frame = 0;

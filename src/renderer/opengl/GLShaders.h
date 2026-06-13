@@ -307,15 +307,17 @@ constexpr const char* SHADOW_FRAGMENT_SHADER = R"glsl(
 #version 330 core
 in vec2 v_uv;
 uniform sampler2D u_silhouette;
-uniform float u_darkness;
+uniform float u_darkness;       // per-shadow distance-based alpha (scaled by shadow_darkness_scale)
+uniform vec4  u_shadow_colour;  // rgb=tint colour, a=intensity multiplier (from RendererSettings)
 out vec4 fragColor;
 void main()
 {
     float mask = texture(u_silhouette, v_uv).r;
     if (mask == 0.0) discard;
-    // Blend equation GL_ZERO / GL_ONE_MINUS_SRC_ALPHA darkens the framebuffer:
-    //   output = dst_color * (1.0 - darkness)
-    fragColor = vec4(0.0, 0.0, 0.0, u_darkness);
+    // Standard alpha blend (GL_SRC_ALPHA / GL_ONE_MINUS_SRC_ALPHA).
+    // When shadow_colour = (0,0,0,1) this is identical to the original multiply-darken:
+    //   result = black * alpha + dst * (1 - alpha) = dst * (1 - alpha)
+    fragColor = vec4(u_shadow_colour.rgb, u_darkness * u_shadow_colour.a);
 }
 )glsl";
 
@@ -328,10 +330,12 @@ layout(location = 2) in float a_shade;
 layout(location = 3) in vec2  a_stl;       // subtile coords for lightmap (mode 1)
 layout(location = 4) in float a_camera_z;  // camera-space Z for perspective correction
 layout(location = 5) in float a_layer;     // texture array layer (atlas variation)
+layout(location = 6) in vec3  aWorldPos;   // pre-projection world-space position
 out vec2  v_uv;
 out float v_shade;
 out vec2  v_stl;
 flat out float v_layer;
+out vec3  vWorldPos;
 void main()
 {
     // Perspective-correct interpolation trick: multiply clip-space position by
@@ -345,6 +349,7 @@ void main()
     v_shade     = a_shade;
     v_stl       = a_stl;
     v_layer     = a_layer;
+    vWorldPos   = aWorldPos;
 }
 )glsl";
 
@@ -354,6 +359,7 @@ in vec2  v_uv;
 in float v_shade;
 in vec2  v_stl;                         // subtile coords [0..511], mode 1 only
 flat in float v_layer;                  // texture array layer (atlas variation)
+in vec3  vWorldPos;                     // reserved for future dynamic lighting / shadow mapping
 uniform sampler2DArray u_tile_atlas;    // R8 palette-index atlas array (unit 0)
 uniform sampler2D  u_palette;           // RGBA8 256×1 palette (unit 1)
 uniform usampler2D u_lightmap;          // R16UI subtile_lightness map (unit 2), mode 1
@@ -487,6 +493,15 @@ void main()
         pal_idx = texture(u_tile_atlas, vec3(v_uv, v_layer)).r;
         col = texture(u_palette, vec2(pal_idx, 0.5));
     }
+
+    // Palette index 0 = void/transparent in DK1 paletted data.
+    // The same convention applies here as in the sprite/UI shader (which also discards index 0).
+    // Without this, world-geometry tiles whose data is all-zero bytes (e.g. the entrance-portal
+    // centre column, or unclaimed portal-floor tiles whose atlas variation is empty) render as
+    // a solid opaque black quad, which is visually wrong.  Making them transparent is correct:
+    // the portal centre is a gateway void, and unset tiles should not occlude anything beneath.
+    if (pal_idx < 0.5 / 255.0)
+        discard;
 
     // --- Palette fade-table lookup (PALETTE and FOG modes, nearest path only) ---
     // In the bilinear path (u_tile_filter == 1) each neighbour is already shaded

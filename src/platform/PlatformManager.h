@@ -27,6 +27,7 @@ extern "C" {
 /** C-callable wrappers — safe to include and call from C translation units. */
 const char* PlatformManager_GetDataPath(void);
 const char* PlatformManager_GetSavePath(void);
+const char* PlatformManager_GetUserPrefDir(void);
 void        PlatformManager_SetArgv(int argc, char** argv);
 void        PlatformManager_ErrorParachuteInstall(void);
 void        PlatformManager_ErrorParachuteUpdate(void);

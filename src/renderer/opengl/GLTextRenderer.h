@@ -104,6 +104,7 @@ private:
         std::string text;
         const struct TbSpriteSheet* font;   // Active font captured at call time
         const struct AsianFont* dbc_font;   // DBC font (nullptr when DBC off)
+        uint32_t font_generation;           // RendererGetTextFontGeneration() snapshot
         long  dbc_colour0;                  // DBC face colour
         long  dbc_colour1;                  // DBC shadow colour
         TbBool dbc_enabled;                 // Whether DBC is active
@@ -193,6 +194,10 @@ private:
 
     /** Convert screen pixel coordinates to NDC. */
     void ScreenToNDC(float screen_x, float screen_y, float* ndc_x, float* ndc_y) const;
+
+    /** Re-issue the u_text_color uniform based on m_text_draw_flags.
+     *  Call whenever m_text_draw_flags changes (per-draw and at TRANSPAR control codes). */
+    void ApplyTextColorUniform();
 
     /**************************************************************************/
     /* Font / window state (owned, not delegated to globals)                  */

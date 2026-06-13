@@ -48,7 +48,7 @@ public:
     virtual void DrawNow() {}
 
     // Override the screen dimensions used for NDC conversion during the next draw.
-    // Pass (0, 0) to restore the default (MyScreenWidth / MyScreenHeight).
+    // Pass (0, 0) to restore the default (RendererGetScreenWidth() / RendererGetScreenHeight()).
     // Used by GLWorldViewRenderer when sprites are rendered inside the game viewport
     // rather than in full-screen space.
     virtual void SetScreenSize(int /*w*/, int /*h*/) {}

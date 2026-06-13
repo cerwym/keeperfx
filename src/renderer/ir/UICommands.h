@@ -51,6 +51,7 @@ struct IRUISolidBoxCmd
     uint8_t   colour_idx = 0;   /**< Palette index. */
     float     alpha      = 1.0f; /**< 1.0 = opaque. */
     float     ndc_z      = 0.5f; /**< NDC depth for WorldDepth layer; ignored for other layers. */
+    uint32_t  seq        = 0;   /**< Global submission order across all IR command types. */
 };
 
 /** Slab background tile fill. */
@@ -61,6 +62,7 @@ struct IRUISlabBackgroundCmd
     int32_t   y     = 0;
     int32_t   w     = 0;
     int32_t   h     = 0;
+    uint32_t  seq   = 0; /**< Global submission order across all IR command types. */
 };
 
 /******************************************************************************/
@@ -84,6 +86,7 @@ struct IRUISpriteCmd
     uint32_t     flags         = 0;   /**< kIRSpriteFlipHoriz | kIRSpriteScaled */
     float        alpha         = 1.0f; /**< 1.0 = opaque; 0.333 = ghost transparent. */
     float        ndc_z         = 0.5f; /**< NDC depth for WorldDepth layer; ignored for other layers. */
+    uint32_t     seq           = 0;   /**< Global submission order across all IR command types. */
 };
 
 /** Draw a palette-remap sprite (player colour recolour). */
@@ -97,6 +100,7 @@ struct IRUISpriteRemapCmd
     int32_t      remap_row    = 0;   /**< Row into fade_tables[]. */
     float        alpha        = 1.0f;
     float        ndc_z        = 0.5f; /**< NDC depth for WorldDepth layer; ignored for other layers. */
+    uint32_t     seq          = 0;   /**< Global submission order across all IR command types. */
 };
 
 /** Draw a single-colour tinted sprite. */
@@ -110,6 +114,7 @@ struct IRUISpriteColoredCmd
     uint8_t      colour_idx   = 0;   /**< Palette index for flat output. */
     float        alpha        = 1.0f;
     float        ndc_z        = 0.5f; /**< NDC depth for WorldDepth layer; ignored for other layers. */
+    uint32_t     seq          = 0;   /**< Global submission order across all IR command types. */
 };
 
 /******************************************************************************/
@@ -134,37 +139,6 @@ struct IRUISlabSelectorCmd
     uint32_t  game_turn   = 0;    /**< Animated phase (gameturn & mask).     */
 };
 
-/** FBO quad composite (Picture-in-Picture zoom box). */
-struct IRUIFBOQuadCmd
-{
-    IRUILayer        layer          = IRUILayer::Front;
-    int32_t          x              = 0;
-    int32_t          y              = 0;
-    int32_t          w              = 0;
-    int32_t          h              = 0;
-    GpuTextureHandle fbo_texture_id = kInvalidGpuTexture; /**< Opaque backend texture handle. */
-    float            clip_radius    = -1.0f; /**< < 0 = no rounded clip. */
-};
-
-/** Minimap pixel buffer submission. */
-struct IRUIMinimapCmd
-{
-    IRUILayer layer          = IRUILayer::Front;
-    int32_t   screen_x       = 0;
-    int32_t   screen_y       = 0;
-    int32_t   size           = 0;    /**< NxN pixel square. */
-    /* Pointer to the palette-indexed pixel buffer valid for this frame.
-     * The render thread must not access this after the next BeginFrame(). */
-    const uint8_t* pixels    = nullptr;
-};
-
-/** Fullscreen map-fade transition wipe composite. */
-struct IRMapFadeCmd
-{
-    float step            = 0.f;   ///< Interpolated wipe step [0.0..32.0].
-    bool  capture_pending = false; ///< Render thread must re-capture both views before compositing.
-};
-
 /******************************************************************************/
 // Cursor layer
 /******************************************************************************/
@@ -177,21 +151,13 @@ struct IRUICursorPointerCmd
     int32_t           x             = 0;
     int32_t           y             = 0;
     int32_t           units_per_px  = 16;
+    unsigned int      draw_flags    = 0;        /**< lbDisplay.DrawFlags captured at submit time. */
 };
 
-/** Draw the keeper hand sprite at the cursor position. */
-struct IRUICursorKeeperHandCmd
-{
-    IRUILayer  layer        = IRUILayer::Cursor;
-    int16_t    x            = 0;
-    int16_t    y            = 0;
-    uint16_t   kspr_base    = 0;
-    int16_t    angle        = 0;
-    uint8_t    sprgroup     = 0;
-    int32_t    scale        = 0;
-    uint32_t   draw_flags   = 0;
-    uint8_t    draw_alpha   = 255;
-};
+/* IRUICursorKeeperHandCmd removed: keeper-hand sprites are now pre-computed on
+ * the game thread via IWorldViewRenderer::BeginCursorCapture() /
+ * EndCursorCapture() and stored as IRWorldKeeperSpriteCmd in the WVR's own
+ * shadow buffer.  No game-side globals are touched from the render thread. */
 
 /******************************************************************************/
 
@@ -214,15 +180,16 @@ struct UICommandBuffers
     IRCommandBuffer<IRUISpriteRemapCmd>      sprites_remap;
     IRCommandBuffer<IRUISpriteColoredCmd>    sprites_colored;
     IRCommandBuffer<IRUISlabSelectorCmd>     slab_selectors;
-    IRCommandBuffer<IRUIFBOQuadCmd>          fbo_quads;
-    IRCommandBuffer<IRUIMinimapCmd>          minimaps;
     IRCommandBuffer<IRUICursorPointerCmd>    cursor_pointers;
-    IRCommandBuffer<IRUICursorKeeperHandCmd> cursor_hands;
 
     /** Game viewport captured at SetGameViewport() — restored by ExecuteUIFromIR(). */
     UIGameViewport game_vp;
     /** True when this buffer was populated via the IR path (not stale-replay). */
     bool           ir_active = false;
+    /** Monotonically increasing counter assigned to each command Append() call.
+     *  Stored in each command's seq field so ExecuteUIFromIR() can restore the
+     *  original game-thread submission order after processing commands by type. */
+    uint32_t       next_seq  = 0;
 
     void Reset()
     {
@@ -232,12 +199,10 @@ struct UICommandBuffers
         sprites_remap.Reset();
         sprites_colored.Reset();
         slab_selectors.Reset();
-        fbo_quads.Reset();
-        minimaps.Reset();
         cursor_pointers.Reset();
-        cursor_hands.Reset();
         game_vp   = {};
         ir_active = false;
+        next_seq  = 0;
     }
 
     void Reserve(size_t sprites_n)
@@ -248,10 +213,7 @@ struct UICommandBuffers
         sprites_remap.Reserve(sprites_n / 4);
         sprites_colored.Reserve(sprites_n / 4);
         slab_selectors.Reserve(8);
-        fbo_quads.Reserve(8);
-        minimaps.Reserve(2);
         cursor_pointers.Reserve(4);
-        cursor_hands.Reserve(4);
     }
 
     /** Returns true if any drawable commands were submitted this frame.
@@ -262,8 +224,7 @@ struct UICommandBuffers
         return !solid_boxes.Empty()     || !slab_backgrounds.Empty() ||
                !sprites.Empty()         || !sprites_remap.Empty()    ||
                !sprites_colored.Empty() || !slab_selectors.Empty()   ||
-               !fbo_quads.Empty()       || !minimaps.Empty()         ||
-               !cursor_pointers.Empty() || !cursor_hands.Empty();
+               !cursor_pointers.Empty();
     }
 
     void Swap(UICommandBuffers& other)
@@ -274,12 +235,10 @@ struct UICommandBuffers
         sprites_remap.Swap(other.sprites_remap);
         sprites_colored.Swap(other.sprites_colored);
         slab_selectors.Swap(other.slab_selectors);
-        fbo_quads.Swap(other.fbo_quads);
-        minimaps.Swap(other.minimaps);
         cursor_pointers.Swap(other.cursor_pointers);
-        cursor_hands.Swap(other.cursor_hands);
         std::swap(game_vp,   other.game_vp);
         std::swap(ir_active, other.ir_active);
+        std::swap(next_seq,  other.next_seq);
     }
 };
 

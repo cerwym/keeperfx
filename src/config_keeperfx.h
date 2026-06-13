@@ -120,6 +120,8 @@ extern const struct NamedCommand renderer_type_names[];
 extern const struct NamedCommand renderer_palette_mode_names[];
 extern const struct NamedCommand renderer_zoom_box_mode_names[];
 extern int cfg_renderer_type;
+/** If non-zero, the game is paused when the renderer settings menu is open. Default: 1. */
+extern TbBool cfg_renderer_menu_pause;
 extern char cmd_char;
 extern short api_enabled;
 extern uint16_t api_port;

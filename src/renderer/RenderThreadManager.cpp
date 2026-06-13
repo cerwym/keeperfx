@@ -7,6 +7,7 @@
  */
 /******************************************************************************/
 #include "renderer/RenderThreadManager.h"
+#include "renderer/RendererThread.h"
 
 /******************************************************************************/
 
@@ -69,6 +70,7 @@ void RenderThreadManager::Stop()
 void RenderThreadManager::ThreadProc(Fn init_fn, Fn work_fn, Fn cleanup_fn)
 {
     g_on_render_thread = true;
+    RendererThread_RegisterRenderThread();
     init_fn();
 
     {

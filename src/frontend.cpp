@@ -28,6 +28,7 @@
 #include "bflib_sprite.h"
 #include "bflib_sprfnt.h"
 #include "renderer/RendererManager.h"
+#include "kfx/assets/SpriteSheetManager.h"
 #include "bflib_dernc.h"
 #include "bflib_datetm.h"
 #include "bflib_keybrd.h"
@@ -86,7 +87,6 @@
 #include "gui_soundmsgs.h"
 #include "vidfade.h"
 #include "config_settings.h"
-#include "config_strings.h"
 #include "game_legacy.h"
 #include "keeperfx.hpp"
 #include "custom_sprites.h"
@@ -756,14 +756,10 @@ TbResult frontend_load_data(void)
     TbResult ret;
     long len;
     // TODO: There is no "frontend_unload_data", find a better spot for this
-    free_spritesheet(&frontend_sprite);
+    SpriteSheetMgr_Free(&frontend_sprite);
     ret = Lb_SUCCESS;
     frontend_background = (unsigned char *)game.map;
-#ifdef SPRITE_FORMAT_V2
-    fname = get_game_file_path_fmt(FGrp_LoData,"front-%d.raw",64);
-#else
     fname = prepare_file_path(FGrp_LoData,"front.raw");
-#endif
     len = LbFileLoadAt(fname, frontend_background);
     if (len < 307200) {
         ret = Lb_FAIL;
@@ -773,21 +769,13 @@ TbResult frontend_load_data(void)
     }
     char dat_fname[2048];
     char tab_fname[2048];
-#ifdef SPRITE_FORMAT_V2
-    const char *tmp_path = get_game_file_path_fmt(FGrp_LoData,"frontbit-%d.dat",64);
-    strcpy(dat_fname, tmp_path != NULL ? tmp_path : "");
-    tmp_path = get_game_file_path_fmt(FGrp_LoData,"frontbit-%d.tab",64);
-    strcpy(tab_fname, tmp_path != NULL ? tmp_path : "");
-#else
     strcpy(dat_fname, prepare_file_path(FGrp_LoData,"frontbit.dat"));
     strcpy(tab_fname, prepare_file_path(FGrp_LoData,"frontbit.tab"));
-#endif
-    frontend_sprite = load_spritesheet(dat_fname, tab_fname);
+    SpriteSheetMgr_Load(&frontend_sprite, dat_fname, tab_fname);
     if (!frontend_sprite) {
         ERRORLOG("Cannot load frontend sprites.");
         return Lb_FAIL;
     }
-    RendererNotifyFrontendSpritesLoaded();
     return ret;
 }
 
@@ -970,7 +958,7 @@ void draw_slider64k(long scr_x, long scr_y, int units_per_px, long width)
     // Inner size
     ScreenCoord x = scr_x;
     ScreenCoord y = scr_y;
-    TbBool low_res = (MyScreenHeight < 400);
+    TbBool low_res = (RendererGetScreenHeight() < 400);
     if (low_res)
     {
         x -= 16;
@@ -1011,7 +999,7 @@ void gui_area_slider(struct GuiButton *gbtn)
     int units_per_px = (gbtn->height*16 + 30/2) / 30;
     int bs_units_per_px = simple_button_sprite_height_units_per_px(gbtn, GBS_frontend_button_std_c, 100);
     int bar_width = gbtn->width;
-    if (MyScreenHeight < 400)
+    if (RendererGetScreenHeight() < 400)
     {
         bar_width += 32;
     }
@@ -1171,7 +1159,7 @@ void gui_area_text(struct GuiButton *gbtn)
     }
     int bs_units_per_px = simple_button_sprite_height_units_per_px(gbtn, GBS_frontend_button_std_c, 94);
     int width = gbtn->width;
-    TbBool low_res = (MyScreenHeight < 400);
+    TbBool low_res = (RendererGetScreenHeight() < 400);
     if (low_res)
     {
         width += 32;
@@ -1236,7 +1224,7 @@ void frontend_set_player_number(long plr_num)
     my_player_number = plr_num;
     player = get_my_player();
     player->id_number = plr_num;
-    setup_engine_window(0, 0, MyScreenWidth, MyScreenHeight);
+    setup_engine_window(0, 0, RendererGetScreenWidth(), RendererGetScreenHeight());
 }
 
 const char *frontend_button_caption_text(const struct GuiButton *gbtn)
@@ -1411,7 +1399,7 @@ void draw_scrolling_button_string(struct GuiButton *gbtn, const char *text)
   int tx_units_per_px;
   if (dbc_language > 0)
   {
-      tx_units_per_px = scale_value_by_horizontal_resolution((MyScreenWidth >= 640) ? 16 : 32);
+      tx_units_per_px = scale_value_by_horizontal_resolution((RendererGetScreenWidth() >= 640) ? 16 : 32);
   }
   else
   {
@@ -2040,9 +2028,9 @@ int create_button(struct GuiMenu *gmnu, struct GuiButtonInit *gbinit, int units_
     }
     if (gbtn->gbtype == LbBtnT_RadioBtn)
     {
-        struct TextScrollWindow *scrollwnd;
-        scrollwnd = (struct TextScrollWindow *)gbtn->content.ptr;
-        if ((scrollwnd != NULL) && (scrollwnd->text[0] == 1))
+        unsigned char *rbstate;
+        rbstate = (unsigned char *)gbtn->content.ptr;
+        if ((rbstate != NULL) && (*rbstate == 1))
         {
             gbtn->button_state_left_pressed = 1;
             gbtn->button_state_right_pressed = 0;
@@ -2103,10 +2091,10 @@ long compute_menu_position_x(long desired_pos,int menu_width, int units_per_px)
       pos = old_menu_mouse_x - (scaled_width >> 1);
       break;
   case POS_SCRCTR:
-      pos = (MyScreenWidth >> 1) - (scaled_width >> 1);
+      pos = (RendererGetScreenWidth() >> 1) - (scaled_width >> 1);
       break;
   case POS_SCRBTM:
-      pos = MyScreenWidth - scaled_width;
+      pos = RendererGetScreenWidth() - scaled_width;
       break;
   default: // Desired position have direct coordinates
       pos = ((desired_pos*(long)units_per_pixel)>>4)*((long)pixel_size);
@@ -2121,14 +2109,14 @@ long compute_menu_position_x(long desired_pos,int menu_width, int units_per_px)
   // Clipping position X
   if (desired_pos == POS_GAMECTR)
   {
-    if (pos+scaled_width > MyScreenWidth)
-      pos = MyScreenWidth-scaled_width;
+    if (pos+scaled_width > RendererGetScreenWidth())
+      pos = RendererGetScreenWidth()-scaled_width;
     if (pos < player->engine_window_x)
       pos = player->engine_window_x;
   } else
   {
-    if (pos+scaled_width > MyScreenWidth)
-      pos = MyScreenWidth-scaled_width;
+    if (pos+scaled_width > RendererGetScreenWidth())
+      pos = RendererGetScreenWidth()-scaled_width;
     if (pos < 0)
       pos = 0;
   }
@@ -2153,10 +2141,10 @@ long compute_menu_position_y(long desired_pos,int menu_height, int units_per_px)
         pos = old_menu_mouse_y - (scaled_height >> 1);
         break;
     case POS_SCRCTR:
-        pos = (MyScreenHeight >> 1) - (scaled_height >> 1);
+        pos = (RendererGetScreenHeight() >> 1) - (scaled_height >> 1);
         break;
     case POS_SCRBTM:
-        pos = MyScreenHeight - scaled_height;
+        pos = RendererGetScreenHeight() - scaled_height;
         break;
     default: // Desired position have direct coordinates
         pos = ((desired_pos*((long)units_per_pixel))>>4)*((long)pixel_size);
@@ -2165,8 +2153,8 @@ long compute_menu_position_y(long desired_pos,int menu_height, int units_per_px)
         break;
     }
     // Clipping position Y
-    if (pos+scaled_height > MyScreenHeight)
-      pos = MyScreenHeight-scaled_height;
+    if (pos+scaled_height > RendererGetScreenHeight())
+      pos = RendererGetScreenHeight()-scaled_height;
     if (pos < 0)
       pos = 0;
     return pos;
@@ -2236,6 +2224,56 @@ MenuNumber create_menu(struct GuiMenu *gmnu)
     callback = amnu->create_cb;
     if (callback != NULL)
         callback(amnu);
+
+    // Some static GuiButtonInit content pointers reference game fields.
+    // Ensure they are bound after runtime game state exists.
+    if (gmnu->ident == GMnu_AUTOPILOT)
+    {
+        for (i = 0; gmnu->buttons[i].gbtype != -1; i++)
+        {
+            struct GuiButtonInit *btn = &gmnu->buttons[i];
+            if ((btn->gbtype == LbBtnT_RadioBtn) && (btn->click_event == gui_set_autopilot))
+            {
+                switch (btn->btype_value)
+                {
+                case 0:
+                    btn->content.ptr = &game.comp_player_aggressive;
+                    break;
+                case 1:
+                    btn->content.ptr = &game.comp_player_defensive;
+                    break;
+                case 2:
+                    btn->content.ptr = &game.comp_player_construct;
+                    break;
+                case 3:
+                    btn->content.ptr = &game.comp_player_creatrsonly;
+                    break;
+                default:
+                    break;
+                }
+            }
+        }
+    }
+    else if (gmnu->ident == GMnu_VIDEO)
+    {
+        for (i = 0; gmnu->buttons[i].gbtype != -1; i++)
+        {
+            struct GuiButtonInit *btn = &gmnu->buttons[i];
+            if (btn->click_event == gui_video_shadows)
+                btn->content.ptr = &video_shadows;
+            else if (btn->click_event == gui_video_view_distance_level)
+                btn->content.ptr = &video_view_distance_level;
+            else if (btn->click_event == gui_video_rotate_mode)
+                btn->content.ptr = &settings.video_rotate_mode;
+            else if (btn->click_event == gui_video_cluedo_mode)
+                btn->content.ptr = &video_cluedo_mode;
+            else if (btn->click_event == gui_video_gamma_correction)
+                btn->content.ptr = &video_gamma_correction;
+            else if (btn->click_event == gui_video_renderer)
+                btn->content.ptr = &video_renderer;
+        }
+    }
+
     btninit = gmnu->buttons;
     for (i=0; btninit[i].gbtype != -1; i++)
     {
@@ -2500,16 +2538,16 @@ void set_gui_visible(TbBool visible)
           && player->view_type != PVT_CreatureContrl
           && player->view_type != PVT_CreaturePasngr)
       {
-          setup_engine_window(0, 0, MyScreenWidth, MyScreenHeight);
+          setup_engine_window(0, 0, RendererGetScreenWidth(), RendererGetScreenHeight());
       }
       else
       {
-          setup_engine_window(status_panel_width, 0, MyScreenWidth, MyScreenHeight);
+          setup_engine_window(status_panel_width, 0, RendererGetScreenWidth(), RendererGetScreenHeight());
       }
   }
   else
   {
-      setup_engine_window(0, 0, MyScreenWidth, MyScreenHeight);
+      setup_engine_window(0, 0, RendererGetScreenWidth(), RendererGetScreenHeight());
   }
 }
 

@@ -92,14 +92,6 @@ private:
     void CalculateAtlasDimensions(const struct TbSpriteSheet* font_sheet, 
                                   int* width, int* height);
 
-    /** Decode RLE sprite data to palette indices.
-     *  @param dst Output buffer (stride = dst_stride)
-     *  @param dst_stride Row stride in output buffer
-     *  @param sprite_data RLE compressed sprite data
-     *  @param w, h Sprite dimensions
-     *  @return true if successful */
-    bool DecodeRLESprite(unsigned char* dst, int dst_stride, 
-                        const unsigned char* sprite_data, int w, int h);
 };
 
 /******************************************************************************/

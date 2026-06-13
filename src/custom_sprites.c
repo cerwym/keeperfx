@@ -34,6 +34,7 @@
 #include <minizip/unzip.h>
 #include "platform/PlatformManager.h"
 #include "renderer/RendererManager.h"
+#include "kfx/assets/SpriteSheetManager.h"
 #ifdef PLATFORM_VITA
 #include "custom_sprites_cache.h"
 #endif
@@ -443,7 +444,7 @@ static void load_sprites_for_mod_list(LevelNumber lvnum, const struct ModConfigI
 void init_custom_sprites(LevelNumber lvnum)
 {
     SYNCDBG(8, "Starting");
-    free_spritesheet(&custom_sprites);
+    SpriteSheetMgr_Free(&custom_sprites);
     custom_sprites = create_spritesheet();
     total_sprite_zip_count = 0;
     sprite_zip_combined_checksum = 0;
@@ -609,6 +610,9 @@ void init_custom_sprites(LevelNumber lvnum)
             load_sprites_for_mod_list(lvnum, mods_conf.after_map_item, mods_conf.after_map_cnt);
     }
 #endif
+    // Ensure atlas is rebuilt after incremental population, even if a drain
+    // fired between SpriteSheetMgr_Free and here.
+    SpriteSheetMgr_ScheduleRebuild();
 }
 
 /**

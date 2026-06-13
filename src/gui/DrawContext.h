@@ -6,7 +6,7 @@
  *
  *     Captured once at the start of each frame by SceneManager before any
  *     scene draws.  Passed by const-ref down to every IScene and IView so
- *     that no draw code ever touches MyScreenWidth, pixel_size, GetMouseX()
+ *     that no draw code ever touches RendererGetScreenWidth(), pixel_size, GetMouseX()
  *     etc. directly.  This is the single crossing-point where C globals
  *     enter the new C++ GUI layer.
  */
@@ -17,8 +17,8 @@
 
 struct DrawContext
 {
-    int screen_w;           ///< MyScreenWidth  (physical pixels)
-    int screen_h;           ///< MyScreenHeight (physical pixels)
+    int screen_w;           ///< RendererGetScreenWidth()  (physical pixels)
+    int screen_h;           ///< RendererGetScreenHeight() (physical pixels)
     int pixel_size;         ///< Logical-to-physical scale factor (usually 1)
     int units_per_pixel;    ///< Sprite scaling factor for current resolution
     int mouse_x;            ///< GetMouseX() — physical pixel coordinate

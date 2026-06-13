@@ -89,6 +89,17 @@ public:
      *  Homebrew: same convention under the data path. */
     virtual const char* GetSavePath() const = 0;
 
+    /** OS-appropriate directory for per-user preference files.
+     *  Desktop (via SDL_GetPrefPath("keeperfx","keeperfx")):
+     *    Windows : %APPDATA%\keeperfx\keeperfx
+     *    Linux   : $XDG_DATA_HOME/keeperfx/keeperfx  (~/.local/share/…)
+     *    macOS   : ~/Library/Application Support/keeperfx/keeperfx
+     *  Vita     : ux0:data/keeperfx
+     *  3DS/Switch: sdmc:/keeperfx
+     *  Directory is created by the implementation if it does not exist.
+     *  Returned pointer is valid for the lifetime of the platform object. */
+    virtual const char* GetUserPrefDir() = 0;
+
     // ----- CDROM / Redbook audio -----
     virtual void   SetRedbookVolume(SoundVolume vol) = 0;
     virtual TbBool PlayRedbookTrack(int track) = 0;

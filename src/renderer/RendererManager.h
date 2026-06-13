@@ -178,6 +178,14 @@ TbScreenCoord RendererScreenWidth(void);
  *  Replaces lbDisplay.GraphicsScreenHeight reads. */
 TbScreenCoord RendererScreenHeight(void);
 
+/** Active screen width in physical pixels.
+ *  Replaces direct screen-width global reads. */
+unsigned short RendererGetScreenWidth(void);
+
+/** Active screen height in physical pixels.
+ *  Replaces direct screen-height global reads. */
+unsigned short RendererGetScreenHeight(void);
+
 /** Pointer to the locked CPU framebuffer, or NULL if not locked.
  *  Replaces lbDisplay.WScreen reads. */
 unsigned char* RendererGetWScreen(void);
@@ -247,51 +255,32 @@ TbResult RendererWaitVbi(void);
  *  call at any time; no-op if no GL renderer is active. */
 void RendererNotifyTexturesReloaded(void);
 
-/** Call immediately after LoadVRes256Data() / LoadMcgaData() to rebuild the
- *  sprite atlas with the freshly-loaded gui_panel_sprites / button_sprites.
- *  Safe to call at any time; no-op if no GL renderer is active. */
+/** Call immediately after LoadVRes256Data() / LoadMcgaData() to mark GUI dirty,
+ *  bump font generation and re-latch the slab texture.
+ *  Atlas rebuild is now driven automatically by SpriteSheetManager Load/Free calls. */
 void RendererNotifySpritesReloaded(void);
 
-/** Append per-level custom_sprites into the live atlas after init_custom_sprites().
- *  Does NOT reinit the atlas — existing gui_panel_sprites / button_sprites entries
- *  are preserved.  Safe to call whenever custom_sprites is rebuilt. */
-void RendererNotifyCustomSpritesReloaded(void);
+/** Monotonic generation for text font pointer validity across IR frames.
+ *  Incremented when sprite/font sheets are reloaded so render-thread text
+ *  commands can reject stale non-owning font pointers captured pre-reload.
+ *  @deprecated Use FontManager::Get().GetGeneration() from C++ code. */
+uint32_t RendererGetTextFontGeneration(void);
 
-/** Append pointer_sprites into the live atlas after load_pointer_file().
- *  pointer_sprites are loaded separately from the main GUI sprite sheets,
- *  so they must be registered after loading completes. */
-void RendererNotifyPointerSpritesLoaded(void);
-
-/** Append frontend_sprite into the live atlas after frontend_load_data().
- *  frontend_sprite is loaded independently from the main GUI sprite sheets
- *  and must be registered so UIRenderer_SubmitPanelSpriteRaw can resolve
- *  handles for frontend menu / button sprites. */
-void RendererNotifyFrontendSpritesLoaded(void);
-
-/** Append map_flag into the live atlas after load_spritesheet() in front_landview.c.
- *  map_flag is loaded fresh on each landview entry (singleplayer + network); call
- *  this after every successful load so UIRenderer_SubmitPanelSpriteRaw can draw
- *  campaign-map ensign / pin sprites without the staging-buffer fallback. */
+/** Notify that map_flag was loaded.  Software renderer: registers sprites into
+ *  the handle table.  GL: atlas rebuild is driven by SpriteSheetMgr_Load(). */
 void RendererNotifyLandviewFlagLoaded(void);
-
-/** Append swipe_sprites into the live atlas after load_swipe_graphic_for_creature().
- *  Swipe sprites are loaded dynamically per creature when entering possession mode.
- *  Must be called after every successful load so DrawSwipeOverlay can look up UVs. */
-void RendererNotifySwipeSpritesLoaded(void);
 
 /** Call after setup_stuff() to initialise GPU resources that depend on game
  *  lookup tables (render_fade_tables, etc.) which aren't available yet when
  *  RendererInit() runs.  Must be called exactly once during startup. */
 void RendererNotifyGameTablesReady(void);
 
-/** Returns non-zero if the UI (init_gui + init_gameplay_ui) must be reinitialised
- *  after a save-game load.  For the software renderer this is always true.
- *  For GPU renderers (OpenGL) this returns true only when the sprite atlas has
- *  been rebuilt since the last reinit — i.e. after a resolution change.  On a
- *  plain save-load at the same resolution the atlas is still valid, so the CPU
- *  menu slot state can be carried forward and reset_gui_based_on_player_mode()
- *  will open the right panels without a full slot wipe. */
-int RendererNeedsUIReinitAfterLoad(void);
+/** Schedule a screenshot to be saved to @p path.
+ *  Dispatches to the active backend's ScheduleScreenshot().
+ *  Returns non-zero if the backend accepted the request; zero if screenshots
+ *  are not supported (e.g. Vita, 3DS) or no backend is active.
+ *  The actual save happens asynchronously in GPU mode (next EndFrame_GL). */
+TbBool RendererScheduleScreenshot(const char* path, int fmt);
 
 /******************************************************************************/
 /* C-callable world-view renderer wrappers (safe to call from C files)        */
@@ -332,11 +321,20 @@ void WorldViewRenderer_PreloadKeeperSpriteAtlas(void);
  *  and deferred glDeleteTextures (after GLSpriteAtlas::Free()). */
 void RendererFlushPendingSpriteAtlas(void);
 
+/** Returns true when a deferred sprite-atlas rebuild is pending.
+ *  Used by RendererOpenGL::BeginFrame() to decide whether to stall the render
+ *  thread (WaitForCompletion) before draining — ensures the old-generation atlas
+ *  is no longer in use before Rebuild() increments the generation. */
+bool RendererHasDeferredAtlasRebuild(void);
+
 /** Execute a deferred sprite-atlas rebuild, if one is pending.
- *  Must be called from the game thread at the top of EndFrame(), after
- *  WaitForCompletion() and before any sprite IR commands are submitted for the
- *  new frame.  Calling at this point guarantees the render thread is idle (no
- *  old-generation handles in flight) and all new handles use the new generation. */
+ *  Preferred call-site: RendererOpenGL::BeginFrame(), after WaitForCompletion(),
+ *  before any sprite IR commands are submitted for the new frame.  This is the
+ *  only window where the render thread is idle AND no sprite handles for the
+ *  current frame have been issued yet, so the generation bump is invisible to
+ *  both the retiring and the incoming frame.
+ *  A secondary call in EndFrame() acts as a fallback for mid-frame notifications
+ *  (rare; still produces a one-frame sprite drop in that edge case). */
 void RendererDrainDeferredAtlasRebuild(void);
 
 /** Set the game-entity context for the next keeper-sprite draw.
@@ -352,9 +350,39 @@ int WorldViewRenderer_GetCurrentSpriteOwner(void);
  *  requested a depth-fail outline for this sprite. */
 int WorldViewRenderer_GetCurrentSpriteWantsOutline(void);
 
+struct WorldShadowSubmitVertex {
+    int32_t x;
+    int32_t y;
+    int32_t u;
+    int32_t v;
+};
+
+struct WorldShadowSubmitCmd {
+    struct WorldShadowSubmitVertex verts[4];
+    unsigned short anim_sprite;
+    short          angle;
+    unsigned char  current_frame;
+    int32_t        tex_w;
+    int32_t        tex_h;
+    float          darkness;
+    float          ndc_z;
+    int32_t        wx;
+    int32_t        wy;
+    int32_t        wz;
+    uint32_t       sort_key;
+    unsigned char  is_circle;  /**< 1 = draw pre-baked circle, 0 = decode sprite */
+};
+
+/** Submit a creature shadow through the hardware world-renderer IR path.
+ *  Returns 1 if captured by the active world renderer, 0 to fall back. */
+int WorldViewRenderer_SubmitWorldShadow(const struct WorldShadowSubmitCmd* cmd);
+
 /******************************************************************************/
 /* C-callable map fade pass wrappers                                          */
 /******************************************************************************/
+
+/** Prepare source and destination frame buffers for the map-fade transition. */
+void MapFadePass_PrepareBuffers(unsigned char* fade_src, unsigned char* fade_dest, int scanline, int height);
 
 /** Render one fade-in step (parchment → 3D view) and return next step value. */
 int32_t MapFadePass_StepFadeIn(int32_t step);
@@ -490,6 +518,12 @@ TbBool RendererSubmitTransparentBlit(const unsigned char* buf, int w, int h);
 void RendererDrawSwipeOverlay(struct TbSpriteSheet* sprites, int frame,
                               int draw_lr, int engine_window_x);
 
+/** Begin first-person lens capture around engine() for the active renderer. */
+void RendererBeginLensCapture(void);
+
+/** Finish first-person lens capture and restore the active framebuffer. */
+void RendererEndLensCapture(void);
+
 /** Submit the overhead (parchment) map tile colours for GPU rendering.
  *  The caller provides one palette index per map tile (tiles_x × tiles_y,
  *  row-major, background=0 for unrevealed tiles that need ghost effects).
@@ -585,6 +619,12 @@ void UIRenderer_BeginTopOverlay(void);
 /** End the top-overlay batch. */
 void UIRenderer_EndTopOverlay(void);
 
+/** Begin drawing zoom-box thing sprites. */
+void UIRenderer_BeginZoomBoxOverlay(int x, int y, int w, int h);
+
+/** End zoom-box thing sprites drawing scope. */
+void UIRenderer_EndZoomBoxOverlay(int x, int y, int w, int h);
+
 /** Draw deferred cursor sprites (OS pointer + power-hand).
  *  Must be called AFTER TextRenderer_Draw() so the cursor composites above
  *  all text.  Replaces UIRenderer_DrawHandSprites(). */
@@ -671,6 +711,10 @@ void UIRenderer_SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, unsig
  *  GPU: solid shader with vertex alpha; CPU: GlassMap blend via Lb_SPRITE_TRANSPAR4. */
 void UIRenderer_SubmitSolidBoxAlpha(int32_t x, int32_t y, int32_t w, int32_t h, unsigned char color_idx, float alpha);
 
+/** Submit a filled circle.
+ *  GPU backends may approximate the circle; software matches LbDrawCircle exactly. */
+void UIRenderer_SubmitCircle(int32_t x, int32_t y, int32_t radius, unsigned char color_idx);
+
 /** Upload the 64×64 R8 gui_slab tile to the GPU for use by UIRenderer_SubmitSlabBackground.
  *  Call after gui_slab data is loaded (typically inside RendererNotifySpritesReloaded). */
 void UIRenderer_SetSlabTexture(void);
@@ -693,6 +737,13 @@ unsigned char* UIRenderer_AcquireMinimapBuffer(int size);
  *  In software mode: no-op (pixels were already in WScreen). */
 void UIRenderer_SubmitMinimap(int screen_x, int screen_y, int size);
 
+/** Initialise minimap background colours from the active UI renderer. */
+void UIRenderer_SetupMinimapBackground(int diaglen, int panel_x, int panel_y);
+
+/** Query the minimap renderer's opaque-black palette index.
+ *  Returns non-zero when a GPU renderer wants a non-zero black replacement. */
+TbBool UIRenderer_GetMinimapOpaqueBlackIndex(unsigned char* idx);
+
 /** Submit a TiledSprite (like the status panel) through the UI renderer.
  *  Iterates tiles in the same order as LbTiledSpriteDraw, resolving each sprite
  *  to a SpriteHandle and calling SubmitScaledSprite.  Replaces LbTiledSpriteDraw
@@ -703,6 +754,7 @@ void UIRenderer_SubmitTiledSprite(int32_t x, int32_t y, int units_per_px, const 
 void UIRenderer_SetLayer(int layer);
 void UIRenderer_SetGameViewport(int x, int y, int w, int h);
 void UIRenderer_DrawBack(void);
+void UIRenderer_DrawWorldSpriteLayerRT(void);
 void UIRenderer_DrawFront(void);
 void UIRenderer_Draw(void);
 void UIRenderer_Clear(void);
@@ -717,9 +769,9 @@ void UIRenderer_Clear(void);
 unsigned char* UIRenderer_QueryPanelSpriteMask(int32_t spridx, int* out_w, int* out_h, int* out_stride);
 
 // ── Raw sprite submission (intercept path from LbSpriteDraw) ─────────────────
-// Called from bflib_vidraw.c when g_render_pass_active is set.
-// Returns Lb_OK on success; Lb_FAIL on atlas miss so the caller can fall
-// through to the CPU blitter.
+// Called from bflib_vidraw.c whenever a sprite draw is not already executing
+// inside a submit wrapper. Returns Lb_OK on success; Lb_FAIL on atlas miss so
+// the caller can fall through to the CPU blitter.
 
 /** Submit a raw TbSprite at (x,y) — equivalent to LbSpriteDraw.
  *  Returns Lb_FAIL on atlas miss; the caller should then run the SW path. */

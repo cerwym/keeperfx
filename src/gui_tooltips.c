@@ -498,7 +498,7 @@ void draw_tooltip_slab64k(char *tttext, long pos_x, long pos_y, long ttwidth, lo
             if (-ttwidth >= render_tooltip_scroll_offset)
               render_tooltip_scroll_offset = viswidth;
             else
-              render_tooltip_scroll_offset -= ((MyScreenHeight >= 400) ? 4.0 : 2.0) * game.delta_time;
+              render_tooltip_scroll_offset -= ((RendererGetScreenHeight() >= 400) ? 4.0 : 2.0) * game.delta_time;
         } else
         {
             render_tooltip_scroll_timer -= 1.0 * game.delta_time;
@@ -511,24 +511,24 @@ void draw_tooltip_slab64k(char *tttext, long pos_x, long pos_y, long ttwidth, lo
         long x = pos_x + scale_ui_value(26);
         lbDisplay.DrawFlags &= ~Lb_TEXT_ONE_COLOR;
         long y = pos_y - scale_ui_value(ttheight + 28);
-        if (x > MyScreenWidth)
-          x = MyScreenWidth;
+        if (x > RendererGetScreenWidth())
+          x = RendererGetScreenWidth();
         if (x < scale_ui_value(6))
           x = scale_ui_value(6);
-        if (y > MyScreenHeight)
-          y = MyScreenHeight;
+        if (y > RendererGetScreenHeight())
+          y = RendererGetScreenHeight();
         if (y < scale_ui_value(4))
           y = scale_ui_value(4);
-        if (x + scale_ui_value(viswidth) >= MyScreenWidth)
-          x = MyScreenWidth - scale_ui_value(viswidth);
-        if (y + scale_ui_value(ttheight) >= MyScreenHeight)
-          y = MyScreenHeight - scale_ui_value(ttheight);
+        if (x + scale_ui_value(viswidth) >= RendererGetScreenWidth())
+          x = RendererGetScreenWidth() - scale_ui_value(viswidth);
+        if (y + scale_ui_value(ttheight) >= RendererGetScreenHeight())
+          y = RendererGetScreenHeight() - scale_ui_value(ttheight);
         if (tttext[0] != '\0')
         {
             draw_slab64k(x, y, units_per_pixel_ui, scale_ui_value_lofi(viswidth), scale_ui_value_lofi(ttheight));
             lbDisplay.DrawFlags = 0;
             int tx_units_per_px, tx, ty;
-            if ( (MyScreenHeight < 400) && (dbc_language > 0) )
+            if ( (RendererGetScreenHeight() < 400) && (dbc_language > 0) )
             {
                 LbTextSetWindow(x, y, scale_ui_value(viswidth * 2), scale_ui_value(ttheight * 2));
                 tx_units_per_px = scale_value_by_horizontal_resolution(32);
@@ -617,8 +617,8 @@ void draw_tooltip_at(long ttpos_x,long ttpos_y,char *tttext)
   if (player->view_type == PVT_MapScreen)
   {
       pos_y = GetMouseY() + scale_ui_value(24);
-      if (pos_y > MyScreenHeight - scale_ui_value(104))
-          pos_y = MyScreenHeight - scale_ui_value(104);
+      if (pos_y > RendererGetScreenHeight() - scale_ui_value(104))
+          pos_y = RendererGetScreenHeight() - scale_ui_value(104);
       if (pos_y < 0)
           pos_y = 0;
   }
