@@ -47,15 +47,23 @@ static int en_outline_enabled(void)
     return g_renderer_settings.creature_outline_enable != 0;
 }
 
+/** Shadow colour / transparency sliders are only meaningful when shadows are
+ *  not disabled (shadow_type != RENDERER_SHADOW_OFF). */
+static int en_shadow_active(void)
+{
+    return g_renderer_settings.shadow_type != RENDERER_SHADOW_OFF;
+}
+
 /* ---------------------------------------------------------------------------
  * Shared option-label arrays (shared across entries that use the same labels)
  * ------------------------------------------------------------------------- */
 
-static const char* s_filter_opts[]     = { "Nearest", "Linear" };
-static const char* s_darkness_opts[]   = { "Linear", "Palette", "Fog" };
-static const char* s_lighting_opts[]   = { "Software", "Modern" };
-static const char* s_glow_blend_opts[] = { "Additive", "Screen" };
-static const char* s_zoom_opts[]       = { "Overhead", "Isometric" };
+static const char* s_filter_opts[]      = { "Nearest", "Linear" };
+static const char* s_darkness_opts[]    = { "Linear", "Palette", "Fog" };
+static const char* s_lighting_opts[]    = { "Software", "Modern" };
+static const char* s_glow_blend_opts[]  = { "Additive", "Screen" };
+static const char* s_zoom_opts[]        = { "Overhead", "Isometric" };
+static const char* s_shadow_type_opts[] = { "Off", "1", "2", "3", "4", "Circle" };
 
 /* ---------------------------------------------------------------------------
  * Entry table
@@ -176,7 +184,7 @@ static RendMenuEntry s_entries[] = {
 
     { RMENU_WIDGET_SLIDER_F, "Shadow darkness",
       "Multiplier on creature and object shadow opacity  [0..2]",
-      NULL,
+      en_shadow_active,
       .w.slider_f = { &g_renderer_settings.shadow_darkness_scale,
                       0.0f, 2.0f, 0.05f } },
 
@@ -184,6 +192,45 @@ static RendMenuEntry s_entries[] = {
       "Clip shadows against geometry so they don't bleed through walls",
       NULL,
       .w.toggle = { &g_renderer_settings.shadow_depth_test } },
+
+    /* -- Creature Shadows divider -- */
+    { RMENU_WIDGET_LABEL, "── Creature Shadows ──" },
+
+    { RMENU_WIDGET_CYCLE, "Shadow type",
+      "Off: disabled.  1-4: sprite shadow from N light sources.  Circle: soft circle blob",
+      en_gpu,
+      .w.cycle = { &g_renderer_settings.shadow_type,
+                   s_shadow_type_opts, 6 } },
+
+    { RMENU_WIDGET_SLIDER_I, "Max shadows / frame",
+      "Global cap on creature shadows drawn per frame; 0 = unlimited  [0..64]",
+      en_shadow_active,
+      .w.slider_i = { &g_renderer_settings.shadow_max_count,
+                      0, 64 } },
+
+    { RMENU_WIDGET_SLIDER_F, "Shadow colour R",
+      "Red tint of creature shadows; 0 = classic black darkening  [0..1]",
+      en_shadow_active,
+      .w.slider_f = { &g_renderer_settings.shadow_colour_r,
+                      0.0f, 1.0f, 0.05f } },
+
+    { RMENU_WIDGET_SLIDER_F, "Shadow colour G",
+      "Green tint of creature shadows  [0..1]",
+      en_shadow_active,
+      .w.slider_f = { &g_renderer_settings.shadow_colour_g,
+                      0.0f, 1.0f, 0.05f } },
+
+    { RMENU_WIDGET_SLIDER_F, "Shadow colour B",
+      "Blue tint of creature shadows  [0..1]",
+      en_shadow_active,
+      .w.slider_f = { &g_renderer_settings.shadow_colour_b,
+                      0.0f, 1.0f, 0.05f } },
+
+    { RMENU_WIDGET_SLIDER_F, "Shadow transparency",
+      "Overall shadow intensity multiplier; 1 = full, 0 = invisible  [0..1]",
+      en_shadow_active,
+      .w.slider_f = { &g_renderer_settings.shadow_colour_a,
+                      0.0f, 1.0f, 0.05f } },
 
     /* ------------------------------------------------------------------ */
     { RMENU_WIDGET_SECTION, "CREATURES" },
