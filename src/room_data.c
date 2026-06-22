@@ -52,6 +52,7 @@
 #include "magic_powers.h"
 #include "room_util.h"
 #include "game_legacy.h"
+#include "config_sounds.h"
 #include "frontmenu_ingame_map.h"
 #include "keeperfx.hpp"
 #include "config_spritecolors.h"
@@ -2160,7 +2161,7 @@ TbBool creature_can_get_to_any_of_players_rooms(struct Thing *thing, PlayerNumbe
 {
     for (RoomKind rkind = 1; rkind < game.conf.slab_conf.room_types_count; rkind++)
     {
-        struct Room* room = find_room_of_kind_creature_can_navigate_to(thing, owner, rkind, NavRtF_NoOwner);
+        struct Room* room = find_room_of_kind_creature_can_navigate_to(thing, owner, rkind, NavRtF_Default);
         if (!room_is_invalid(room))
             return true;
     }
@@ -3298,10 +3299,6 @@ struct Room *place_room(PlayerNumber owner, RoomKind rkind, MapSubtlCoord stl_x,
     if (rkind == RoK_BRIDGE) //todo Make configurable
     {
         place_animating_slab_type_on_map(roomst->assigned_slab, subtile_has_lava_on_top(stl_x, stl_y), stl_x, stl_y, owner);
-    }
-    else if (rkind == RoK_GUARDPOST)
-    {
-        place_animating_slab_type_on_map(roomst->assigned_slab, 0, stl_x, stl_y, owner);
     } else
     {
         place_slab_type_on_map(roomst->assigned_slab, stl_x, stl_y, owner, 0);
@@ -3843,7 +3840,7 @@ long claim_room(struct Room *room, struct Thing *claimtng)
     event_create_event(subtile_coord_center(room->central_stl_x), subtile_coord_center(room->central_stl_y),
         EvKind_RoomTakenOver, claimtng->owner, room->kind);
     do_room_integration(room);
-    thing_play_sample(claimtng, 116, NORMAL_PITCH, 0, 3, 0, 4, FULL_LOUDNESS);
+    thing_play_sample(claimtng, snd_room_claim, NORMAL_PITCH, 0, 3, 0, 4, FULL_LOUDNESS);
     output_room_takeover_message(room, oldowner, claimtng->owner);
     return 1;
 }

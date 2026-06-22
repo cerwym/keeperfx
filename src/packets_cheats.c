@@ -30,6 +30,7 @@
 #include "creature_states.h"
 #include "kjm_input.h"
 #include "bflib_sound.h"
+#include "config_sounds.h"
 #include "thing_effects.h"
 #include "config_effects.h"
 #include "map_utils.h"
@@ -88,7 +89,7 @@ TbBool packets_process_cheats(
             {
                 if (is_my_player(player))
                 {
-                    play_non_3d_sample(119);
+                    play_non_3d_sample(snd_refusal);
                 }
             }
             unset_packet_control(pckt, PCtr_LBtnRelease);
@@ -147,7 +148,7 @@ TbBool packets_process_cheats(
             {
                 if (is_my_player(player))
                 {
-                    play_non_3d_sample(119);
+                    play_non_3d_sample(snd_refusal);
                 }
             }
             unset_packet_control(pckt, PCtr_LBtnRelease);
@@ -181,7 +182,7 @@ TbBool packets_process_cheats(
             {
                 if (is_my_player(player))
                 {
-                    play_non_3d_sample(119);
+                    play_non_3d_sample(snd_refusal);
                 }
             }
             unset_packet_control(pckt, PCtr_LBtnRelease);
@@ -232,7 +233,7 @@ TbBool packets_process_cheats(
               {
                 if (is_my_player(player))
                 {
-                    play_non_3d_sample(119);
+                    play_non_3d_sample(snd_refusal);
                 }
               }
             }
@@ -298,7 +299,7 @@ TbBool packets_process_cheats(
             {
                 if (is_my_player(player))
                 {
-                    play_non_3d_sample(119);
+                    play_non_3d_sample(snd_refusal);
                 }
             }
             unset_packet_control(pckt, PCtr_LBtnRelease);
@@ -474,7 +475,7 @@ TbBool packets_process_cheats(
             {
                 if (is_my_player(player))
                 {
-                    play_non_3d_sample(119);
+                    play_non_3d_sample(snd_refusal);
                 }
             }
             unset_packet_control(pckt, PCtr_LBtnRelease);
@@ -1010,7 +1011,7 @@ TbBool process_players_dungeon_control_cheats_packet_action(PlayerNumber plyr_id
                     pos.z.val = subtile_coord_center(1);
                     if (is_my_player(player))
                     {
-                        play_non_3d_sample(76);
+                        play_non_3d_sample(snd_spell_stars);
                     }
                     create_effect(&pos, imp_spangle_effects[get_player_color_idx(id)], id);
                 }
@@ -1018,7 +1019,7 @@ TbBool process_players_dungeon_control_cheats_packet_action(PlayerNumber plyr_id
                 {
                     if (is_my_player(player))
                     {
-                        play_non_3d_sample(41);
+                        play_non_3d_sample(snd_spell_wall);
                     }
                     for (long n = 0; n < SMALL_AROUND_LENGTH; n++)
                     {
@@ -1061,7 +1062,7 @@ TbBool process_players_dungeon_control_cheats_packet_action(PlayerNumber plyr_id
                 {
                     if (is_my_player(player))
                     {
-                        play_non_3d_sample(116);
+                        play_non_3d_sample(snd_room_claim);
                     }
                     create_effects_on_room_slabs(room, imp_spangle_effects[get_player_color_idx(pckt->actn_par1)], 0, pckt->actn_par1);
                 }

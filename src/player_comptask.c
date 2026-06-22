@@ -30,6 +30,7 @@
 #include "bflib_fileio.h"
 #include "bflib_dernc.h"
 #include "bflib_sound.h"
+#include "config_sounds.h"
 #include "bflib_math.h"
 
 #include "config.h"
@@ -352,7 +353,7 @@ TbResult game_action(PlayerNumber plyr_idx, unsigned short gaction, KeepPwrLevel
             const MapSubtlCoord stl_cy = slab_subtile(slb_y,0);
             if (tag_blocks_for_digging_in_area(stl_cx & ((stl_cx < 0) - 1), stl_cy & ((stl_cy < 0) - 1), plyr_idx)) {
                 if (is_my_player_number(plyr_idx)) {
-                    play_non_3d_sample(118);
+                    play_non_3d_sample(snd_tile_dig);
                 }
                 return Lb_SUCCESS;
             }
@@ -2859,7 +2860,7 @@ struct Thing *find_creature_for_defend_pickup(struct Computer2 *comp)
                     {
                         if (!creature_is_doing_lair_activity(thing) && !creature_is_being_dropped(thing))
                         {
-                            if (cctrl->dropped_turn < (COMPUTER_REDROP_DELAY + get_gameturn()))
+                            if ((cctrl->dropped_turn + COMPUTER_REDROP_DELAY) < get_gameturn())
                             {
                                 struct PerExpLevelValues* expvalues;
                                 struct CreatureModelConfig* crconf = creature_stats_get(thing->model);
@@ -3400,7 +3401,7 @@ long task_sell_traps_and_doors(struct Computer2 *comp, struct ComputerTask *ctas
                         destroy_door(doortng);
                         if (is_my_player_number(dungeon->owner))
                         {
-                            play_non_3d_sample(115);
+                            play_non_3d_sample(snd_tile_sell);
                         }
                         dungeon->camera_deviate_jump = 192;
                         if (value != 0)
@@ -3441,7 +3442,7 @@ long task_sell_traps_and_doors(struct Computer2 *comp, struct ComputerTask *ctas
                         dungeon->manufacture_gold += value;
                         if (is_my_player_number(dungeon->owner))
                         {
-                            play_non_3d_sample(115);
+                            play_non_3d_sample(snd_tile_sell);
                         }
                         dungeon->camera_deviate_jump = 192;
                         if (value != 0)

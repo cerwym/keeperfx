@@ -25,12 +25,12 @@
 #include "bflib_dernc.h"
 #include "config.h"
 #include "config_creature.h"
+#include "config_sounds.h"
 #include "config_crtrmodel.h"
 #include "config_cubes.h"
 #include "config_effects.h"
-#include "config_effects.h"
 #include "config_objects.h"
-#include "config_objects.h"
+#include "config_translation.h"
 #include "config_players.h"
 #include "config_rules.h"
 #include "console_cmd.h"
@@ -219,8 +219,8 @@ const struct NamedField magic_shot_named_fields[] = {
   {"SPEED",                 0, field_t(struct ShotConfigStats, speed),                       0,  INT32_MIN,  UINT32_MAX, NULL,                         value_default,   assign_default},
   {"PROPERTIES",           -1, field_t(struct ShotConfigStats, model_flags),                 0,  INT32_MIN,  UINT32_MAX, shotmodel_properties_commands,value_flagsfield,assign_default},
   {"PUSHONHIT",             0, field_t(struct ShotConfigStats, push_on_hit),                 0,  INT32_MIN,  UINT32_MAX, NULL,                         value_default,   assign_default},
-  {"FIRINGSOUND",           0, field_t(struct ShotConfigStats, firing_sound),                0,  INT32_MIN,  UINT32_MAX, NULL,                         value_default,   assign_default},
-  {"SHOTSOUND",             0, field_t(struct ShotConfigStats, shot_sound),                  0,  INT32_MIN,  UINT32_MAX, NULL,                         value_default,   assign_default},
+  {"FIRINGSOUND",           0, field_t(struct ShotConfigStats, firing_sound),                0,  INT32_MIN,  UINT32_MAX, NULL,                         value_sound_id,   assign_default},
+  {"SHOTSOUND",             0, field_t(struct ShotConfigStats, shot_sound),                  0,  INT32_MIN,  UINT32_MAX, NULL,                         value_sound_id,   assign_default},
   {"FIRINGSOUNDVARIANTS",   0, field_t(struct ShotConfigStats, firing_sound_variants),       0,  INT32_MIN,  UINT32_MAX, NULL,                         value_default,   assign_default},
   {"MAXRANGE",              0, field_t(struct ShotConfigStats, max_range),                   0,  INT32_MIN,  UINT32_MAX, NULL,                         value_default,   assign_default},
   {"ANIMATION",             0, field_t(struct ShotConfigStats, sprite_anim_idx),             0,  INT32_MIN,  UINT32_MAX, NULL,                         value_animid,    assign_animid},
@@ -236,22 +236,22 @@ const struct NamedField magic_shot_named_fields[] = {
   {"VISUALEFFECTSPREAD",    0, field_t(struct ShotConfigStats, visual.random_range),         0,  INT32_MIN,  UINT32_MAX, NULL,                         value_default,   assign_default},
   {"VISUALEFFECTHEALTH",    0, field_t(struct ShotConfigStats, visual.shot_health),          0,  INT32_MIN,  UINT32_MAX, NULL,                         value_default,   assign_default},
   {"HITWALLEFFECT",         0, field_t(struct ShotConfigStats, hit_generic.effect_model),    0,  INT32_MIN,  UINT32_MAX, NULL,                         value_effOrEffEl,   assign_default},
-  {"HITWALLSOUND",          0, field_t(struct ShotConfigStats, hit_generic.sndsample_idx),   0,  INT32_MIN,  UINT32_MAX, NULL,                         value_default,   assign_default},
+  {"HITWALLSOUND",          0, field_t(struct ShotConfigStats, hit_generic.sndsample_idx),   0,  INT32_MIN,  UINT32_MAX, NULL,                         value_sound_id,   assign_default},
   {"HITWALLSOUND",          1, field_t(struct ShotConfigStats, hit_generic.sndsample_range),   0,  INT32_MIN,  UINT32_MAX, NULL,                         value_default,   assign_default},
   {"HITCREATUREEFFECT",     0, field_t(struct ShotConfigStats, hit_creature.effect_model),   0,  INT32_MIN,  UINT32_MAX, NULL,                         value_effOrEffEl,   assign_default},
-  {"HITCREATURESOUND",      0, field_t(struct ShotConfigStats, hit_creature.sndsample_idx),  0,  INT32_MIN,  UINT32_MAX, NULL,                         value_default,   assign_default},
+  {"HITCREATURESOUND",      0, field_t(struct ShotConfigStats, hit_creature.sndsample_idx),  0,  INT32_MIN,  UINT32_MAX, NULL,                         value_sound_id,   assign_default},
   {"HITCREATURESOUND",      1, field_t(struct ShotConfigStats, hit_creature.sndsample_range),  0,  INT32_MIN,  UINT32_MAX, NULL,                         value_default,   assign_default},
   {"HITDOOREFFECT",         0, field_t(struct ShotConfigStats, hit_door.effect_model),       0,  INT32_MIN,  UINT32_MAX, NULL,                         value_effOrEffEl,   assign_default},
-  {"HITDOORSOUND",          0, field_t(struct ShotConfigStats, hit_door.sndsample_idx),      0,  INT32_MIN,  UINT32_MAX, NULL,                         value_default,   assign_default},
+  {"HITDOORSOUND",          0, field_t(struct ShotConfigStats, hit_door.sndsample_idx),      0,  INT32_MIN,  UINT32_MAX, NULL,                         value_sound_id,   assign_default},
   {"HITDOORSOUND",          1, field_t(struct ShotConfigStats, hit_door.sndsample_range),      0,  INT32_MIN,  UINT32_MAX, NULL,                         value_default,   assign_default},
   {"HITWATEREFFECT",        0, field_t(struct ShotConfigStats, hit_water.effect_model),      0,  INT32_MIN,  UINT32_MAX, NULL,                         value_effOrEffEl,   assign_default},
-  {"HITWATERSOUND",         0, field_t(struct ShotConfigStats, hit_water.sndsample_idx),     0,  INT32_MIN,  UINT32_MAX, NULL,                         value_default,   assign_default},
+  {"HITWATERSOUND",         0, field_t(struct ShotConfigStats, hit_water.sndsample_idx),     0,  INT32_MIN,  UINT32_MAX, NULL,                         value_sound_id,   assign_default},
   {"HITWATERSOUND",         1, field_t(struct ShotConfigStats, hit_water.sndsample_range),     0,  INT32_MIN,  UINT32_MAX, NULL,                         value_default,   assign_default},
   {"HITLAVAEFFECT",         0, field_t(struct ShotConfigStats, hit_lava.effect_model),       0,  INT32_MIN,  UINT32_MAX, NULL,                         value_effOrEffEl,   assign_default},
-  {"HITLAVASOUND",          0, field_t(struct ShotConfigStats, hit_lava.sndsample_idx),      0,  INT32_MIN,  UINT32_MAX, NULL,                         value_default,   assign_default},
+  {"HITLAVASOUND",          0, field_t(struct ShotConfigStats, hit_lava.sndsample_idx),      0,  INT32_MIN,  UINT32_MAX, NULL,                         value_sound_id,   assign_default},
   {"HITLAVASOUND",          1, field_t(struct ShotConfigStats, hit_lava.sndsample_range),      0,  INT32_MIN,  UINT32_MAX, NULL,                         value_default,   assign_default},
   {"DIGHITEFFECT",          0, field_t(struct ShotConfigStats, dig.effect_model),            0,  INT32_MIN,  UINT32_MAX, NULL,                         value_effOrEffEl,   assign_default},
-  {"DIGHITSOUND",           0, field_t(struct ShotConfigStats, dig.sndsample_idx),           0,  INT32_MIN,  UINT32_MAX, NULL,                         value_default,   assign_default},
+  {"DIGHITSOUND",           0, field_t(struct ShotConfigStats, dig.sndsample_idx),           0,  INT32_MIN,  UINT32_MAX, NULL,                         value_sound_id,   assign_default},
   {"DIGHITSOUND",           1, field_t(struct ShotConfigStats, dig.sndsample_range),           0,  INT32_MIN,  UINT32_MAX, NULL,                         value_default,   assign_default},
   {"EXPLOSIONEFFECTS",      0, field_t(struct ShotConfigStats, explode.effect1_model),       0,  INT32_MIN,  UINT32_MAX, NULL,                         value_effOrEffEl,   assign_default},
   {"EXPLOSIONEFFECTS",      1, field_t(struct ShotConfigStats, explode.effect2_model),       0,  INT32_MIN,  UINT32_MAX, NULL,                         value_effOrEffEl,   assign_default},
@@ -503,12 +503,12 @@ static const struct NamedField magic_powers_named_fields[] = {
     {"SYMBOLSPRITES",  1, field_t(struct PowerConfigStats, medsym_sprite_idx),      0, INT32_MIN,UINT32_MAX, NULL,                                value_icon,      assign_icon},
     {"POINTERSPRITES", 0, field_t(struct PowerConfigStats, pointer_sprite_idx),     0, INT32_MIN,UINT32_MAX, NULL,                                value_icon,      assign_icon},
     {"PANELTABINDEX",  0, field_t(struct PowerConfigStats, panel_tab_idx),          0, INT32_MIN,UINT32_MAX, NULL,                                value_default,   assign_default},
-    {"SOUNDSAMPLES",   0, field_t(struct PowerConfigStats, select_sample_idx),      0, INT32_MIN,UINT32_MAX, NULL,                                value_default,   assign_default},
+    {"SOUNDSAMPLES",   0, field_t(struct PowerConfigStats, select_sample_idx),      0, INT32_MIN,UINT32_MAX, NULL,                                value_sound_id,   assign_default},
     {"PROPERTIES",     0, field_t(struct PowerConfigStats, config_flags),           0, INT32_MIN,UINT32_MAX, powermodel_properties_commands,      value_flagsfield,assign_default},
     {"CASTEXPANDFUNC", 0, field_t(struct PowerConfigStats, overcharge_check_idx),   0, INT32_MIN,UINT32_MAX, powermodel_expand_check_func_type,   value_default,   assign_default},
     {"PLAYERSTATE",    0, field_t(struct PowerConfigStats, work_state),             0, INT32_MIN,UINT32_MAX, player_state_commands,               value_default,   assign_default},
     {"PARENTPOWER",    0, field_t(struct PowerConfigStats, parent_power),           0, INT32_MIN,UINT32_MAX, power_desc,                          value_default,   assign_default},
-    {"SOUNDPLAYED",    0, field_t(struct PowerConfigStats, select_sound_idx),       0, INT32_MIN,UINT32_MAX, NULL,                                value_default,   assign_default},
+    {"SOUNDPLAYED",    0, field_t(struct PowerConfigStats, select_sound_idx),       0, INT32_MIN,UINT32_MAX, NULL,                                value_sound_id,   assign_default},
     {"COOLDOWN",       0, field_t(struct PowerConfigStats, cast_cooldown),          0, INT32_MIN,UINT32_MAX, NULL,                                value_default,   assign_default},
     {"SPELL",          0, field_t(struct PowerConfigStats, spell_idx),              0, INT32_MIN,UINT32_MAX, spell_desc,                          value_default,   assign_default},
     {"EFFECT",         0, field_t(struct PowerConfigStats, effect_id),              0, INT32_MIN,UINT32_MAX, NULL,                                value_effOrEffEl,assign_default},
@@ -752,6 +752,8 @@ TbBool parse_magic_spell_blocks(char *buf, long len, const char *config_textname
           if (get_conf_parameter_single(buf,&pos,len,word_buf,sizeof(word_buf)) > 0)
           {
               k = atoi(word_buf);
+              if (k == 0 && word_buf[0] != '0')
+                  k = (int)get_sound_id(word_buf);
               spconf->caster_affect_sound = k;
               n++;
           }
@@ -1123,6 +1125,7 @@ TbBool parse_magic_special_blocks(char *buf, long len, const char *config_textna
           memset(specst->code_name, 0, COMMAND_WORD_LEN);
           specst->artifact_model = 0;
           specst->tooltip_stridx = 0;
+          memset(&specst->speech, 0, sizeof(SpeechRef));
           special_desc[i].name = specst->code_name;
           special_desc[i].num = i;
           game.conf.object_conf.object_to_special_artifact[i] = 0;
@@ -1193,7 +1196,7 @@ TbBool parse_magic_special_blocks(char *buf, long len, const char *config_textna
       case 3: // TOOLTIPTEXTID
           if (get_conf_parameter_single(buf,&pos,len,word_buf,sizeof(word_buf)) > 0)
           {
-            k = atoi(word_buf);
+            k = get_string_id_by_alias(word_buf);
             if (k > 0)
             {
                 specst->tooltip_stridx = k;
@@ -1209,12 +1212,8 @@ TbBool parse_magic_special_blocks(char *buf, long len, const char *config_textna
       case 4: // SPEECHPLAYED
           if (get_conf_parameter_single(buf, &pos, len, word_buf, sizeof(word_buf)) > 0)
           {
-              k = atoi(word_buf);
-              if (k >= 0)
-              {
-                  specst->speech = k;
-                  n++;
-              }
+              speech_ref_parse(&specst->speech, word_buf);
+              n++;
           }
           if (n < 1)
           {

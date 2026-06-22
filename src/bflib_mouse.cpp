@@ -24,7 +24,6 @@
 #include <string.h>
 #include <stdarg.h>
 #include <stdlib.h>
-#include <SDL2/SDL.h>
 
 #include "bflib_basics.h"
 #include "globals.h"
@@ -112,31 +111,15 @@ TbResult LbMouseSetPositionInitial(long x, long y)
 
 TbResult LbMouseSetPosition(long x, long y)
 {
-  if (!lbMouseInstalled)
+  if (!lbMouseInstalled) {
     return Lb_FAIL;
-  if (!lbMouseGrabbed)
-  {
-    SDL_Window* window = SDL_GetKeyboardFocus();
-    if (IsMouseInsideWindow())
-    {
-      // in altinput mode: first sync the game cursor to the host cursor position,
-      // then warp the host cursor to the requested x,y.
-      if (!LbMoveGameCursorToHostCursor())
-      {
-        return Lb_FAIL;
-      }
-    }
-    if (window != NULL)
-        SDL_WarpMouseInWindow(window, x, y);
   }
-  else
-  {
-      if (!pointerHandler.SetMousePosition(x, y))
-      {
-        return Lb_FAIL;
-      }
-      PlatformManager_WarpCursor(x, y);
+
+  if (!pointerHandler.SetMousePosition(x,y)) {
+    return Lb_FAIL;
   }
+
+  PlatformManager_WarpCursor(x,y);
   return Lb_SUCCESS;
 }
 

@@ -62,6 +62,7 @@
 #include "thing_traps.h"
 #include "magic_powers.h"
 #include "sounds.h"
+#include "config_sounds.h"
 #include "game_legacy.h"
 #include "sprites.h"
 #include "lua_cfg_funcs.h"
@@ -755,6 +756,14 @@ TbBool creature_is_being_tortured(const struct Thing *thing)
     return false;
 }
 
+TbBool creature_is_being_tortured_including_kinky(const struct Thing* thing)
+{
+    CrtrStateId i = get_creature_state_besides_interruptions(thing);
+    if ((i == CrSt_Torturing) || (i == CrSt_AtTortureRoom) || (i == CrSt_AtKinkyTortureRoom) || (i == CrSt_KinkyTorturing))
+        return true;
+    return false;
+}
+
 TbBool creature_is_leaving_and_cannot_be_stopped(const struct Thing *thing)
 {
     CrtrStateId i = get_creature_state_besides_interruptions(thing);
@@ -1085,10 +1094,10 @@ TbBool attempt_to_destroy_enemy_room(struct Thing *thing, MapSubtlCoord stl_x, M
         return false;
     if (!find_first_valid_position_for_thing_anywhere_in_room(thing, room, &pos))
         return false;
-    if (!creature_can_navigate_to_with_storage(thing, &pos, NavRtF_NoOwner))
+    if (!creature_can_navigate_to_with_storage(thing, &pos, NavRtF_Default))
         return false;
 
-    if (!setup_head_for_room(thing, room, NavRtF_NoOwner))
+    if (!setup_head_for_room(thing, room, NavRtF_Default))
     {
         ERRORLOG("The %s cannot destroy %s because it can't reach it",thing_model_name(thing),room_code_name(room->kind));
         return false;
@@ -2813,7 +2822,7 @@ short creature_present_to_dungeon_heart(struct Thing *creatng)
 {
     TRACE_THING(creatng);
     create_effect(&creatng->mappos, imp_spangle_effects[get_player_color_idx(creatng->owner)], creatng->owner);
-    thing_play_sample(creatng, 76, NORMAL_PITCH, 0, 3, 0, 2, FULL_LOUDNESS);
+    thing_play_sample(creatng, snd_spell_stars, NORMAL_PITCH, 0, 3, 0, 2, FULL_LOUDNESS);
     if ( !external_set_thing_state(creatng, CrSt_CreatureDoingNothing) )
       set_start_state(creatng);
     return 1;
@@ -3165,7 +3174,7 @@ short creature_take_salary(struct Thing *creatng)
     {
         anger_apply_anger_to_creature_all_types(creatng, crconf->annoy_got_wage);
     }
-    thing_play_sample(efftng, 32, NORMAL_PITCH, 0, 3, 0, 2, FULL_LOUDNESS);
+    thing_play_sample(efftng, snd_gold_pickup, NORMAL_PITCH, 0, 3, 0, 2, FULL_LOUDNESS);
     dungeon->lvstats.salary_cost += salary;
     return 1;
 }
@@ -4681,7 +4690,8 @@ short seek_the_enemy(struct Thing *creatng)
                 if ((dist < 2304) && (get_gameturn()-cctrl->countdown < 20))
                 {
                     crsound = get_creature_sound(creatng, CrSnd_Fight);
-                    thing_play_sample(creatng, crsound->index + SOUND_RANDOM(crsound->count), NORMAL_PITCH, 0, 3, 0, 2, FULL_LOUDNESS);
+                    long fight_i = SOUND_RANDOM(crsound->count);
+                    thing_play_sample(creatng, creature_sound_unified_id(crsound, fight_i), NORMAL_PITCH, 0, 3, 0, 2, FULL_LOUDNESS);
                     set_creature_instance(creatng, CrInst_CELEBRATE_SHORT, 0, 0);
                     return 1;
                 }

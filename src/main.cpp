@@ -32,6 +32,7 @@
 #include "bflib_vidraw.h"
 #include "bflib_guibtns.h"
 #include "bflib_sound.h"
+#include "config_sounds.h"
 #include "bflib_mouse.h"
 #include "bflib_mshandler.hpp"
 #include "bflib_filelst.h"
@@ -269,6 +270,7 @@ TbBool should_use_delta_time_on_menu()
         case FeSt_NET_SERVICE: /**< Network service selection, where player can select Serial/Modem/IPX/TCP IP/1 player. */
         case FeSt_NET_SESSION: /**< Network session selection screen, where list of games is displayed, with possibility to join or create own game. */
         case FeSt_NET_START: /**< Network game start screen (the menu with chat), when created new session or joined existing session. */
+        case FeSt_LEVEL_STATS:
         case FeSt_HIGH_SCORES:
         case FeSt_FEDEFINE_KEYS:
         case FeSt_FEOPTIONS:
@@ -1858,7 +1860,7 @@ short lose_level(struct PlayerInfo *player)
 {
     if (!is_my_player(player))
         return false;
-    if ((game.system_flags & GSF_NetworkActive) != 0)
+    if (network_is_active())
     {
         LbNetwork_Stop();
     }
@@ -1870,7 +1872,7 @@ short resign_level(struct PlayerInfo *player)
 {
     if (!is_my_player(player))
         return false;
-    if ((game.system_flags & GSF_NetworkActive) != 0)
+    if (network_is_active())
     {
         LbNetwork_Stop();
     }
@@ -1883,7 +1885,7 @@ short complete_level(struct PlayerInfo *player)
     SYNCDBG(6,"Starting");
     if (!is_my_player(player))
         return false;
-    if ((game.system_flags & GSF_NetworkActive) != 0)
+    if (network_is_active())
     {
         LbNetwork_Stop();
         quit_game = 1;
@@ -1971,7 +1973,7 @@ void check_players_won(void)
 {
   SYNCDBG(8,"Starting");
 
-    if (!flag_is_set(game.system_flags,GSF_NetworkActive))
+    if (!network_is_active())
         return;
 
     struct PlayerInfo* curPlayer;
@@ -2250,7 +2252,7 @@ void update_near_creatures_for_footsteps(int32_t *near_creatures, const struct C
         {
             struct CreatureSound *crsound;
             crsound = get_creature_sound(thing, CrSnd_Foot);
-            if (crsound->index > 0)
+            if (crsound->index != 0)
             {
                 struct CreatureControl *cctrl;
                 cctrl = creature_control_get_from_thing(thing);
@@ -2307,8 +2309,8 @@ long stop_playing_flight_sample_in_all_flying_creatures(void)
         // Per-thing code
         if ((get_creature_model_flags(thing) & CMF_IsDiptera) && ((thing->state_flags & TF1_DoFootsteps) == 0))
         {
-            if ( S3DEmitterIsPlayingSample(thing->snd_emitter_id, 25, 0) ) {
-                S3DDeleteSampleFromEmitter(thing->snd_emitter_id, 25, 0);
+            if ( S3DEmitterIsPlayingSample(thing->snd_emitter_id, 25) ) {
+                S3DDeleteSampleFromEmitter(thing->snd_emitter_id, 25);
             }
         }
         // Per-thing code ends
@@ -2518,11 +2520,15 @@ long update_cave_in(struct Thing *thing)
 }
 
 /**
+ * rules can change by dkscript/lua.
  * Checks if a gamerule for lighting has changed and updates the lights if they are.
  * This function also refreshes the light status of the map.
 */
 void update_global_lighting()
 {
+    if (!game.lish.light_auto_sync)
+        return;
+
     // Check if any values have changed
     if (
         game.conf.rules[0].gameplay.global_ambient_light != game.lish.global_ambient_light ||
@@ -2979,20 +2985,20 @@ void update_block_pointed(int i,long x, long x_frac, long y, long y_frac)
 
 void update_blocks_pointed(void)
 {
-    long x;
-    long y;
-    long x_frac;
-    long y_frac;
-    long hori_ptr_y;
-    long vert_ptr_y;
-    long hori_hdelta_y;
-    long vert_hdelta_y;
-    long hori_ptr_x;
-    long vert_ptr_x;
-    long hvdiv_x;
-    long hvdiv_y;
-    long long lltmp;
-    long k;
+    int32_t x;
+    int32_t y;
+    int32_t x_frac;
+    int32_t y_frac;
+    int64_t hori_ptr_y;
+    int64_t vert_ptr_y;
+    int64_t hori_hdelta_y;
+    int64_t vert_hdelta_y;
+    int64_t hori_ptr_x;
+    int64_t vert_ptr_x;
+    int64_t hvdiv_x;
+    int64_t hvdiv_y;
+    int64_t lltmp;
+    int64_t k;
     int i;
     SYNCDBG(19,"Starting");
     if ((!vert_offset[1]) && (!hori_offset[1]))
@@ -3002,16 +3008,16 @@ void update_blocks_pointed(void)
         me_pointed_at = INVALID_MAP_BLOCK;//get_map_block_at(0,0);
     } else
     {
-        hori_ptr_y = (long)hori_offset[0] * (pointer_y - y_init_off);
-        vert_ptr_y = (long)vert_offset[0] * (pointer_y - y_init_off);
-        hori_hdelta_y = (long)hori_offset[0] * ((long)high_offset[1] >> 8);
-        vert_hdelta_y = (long)vert_offset[0] * ((long)high_offset[1] >> 8);
-        vert_ptr_x = (long)(vert_offset[1] * (pointer_x - x_init_off)) >> 1;
-        hori_ptr_x = (long)(hori_offset[1] * (pointer_x - x_init_off)) >> 1;
-        lltmp = hori_offset[0] * (long long)vert_offset[1] - vert_offset[0] * (long long)hori_offset[1];
+        hori_ptr_y = (int64_t)hori_offset[0] * (pointer_y - y_init_off);
+        vert_ptr_y = (int64_t)vert_offset[0] * (pointer_y - y_init_off);
+        hori_hdelta_y = (int64_t)hori_offset[0] * ((long)high_offset[1] >> 8);
+        vert_hdelta_y = (int64_t)vert_offset[0] * ((long)high_offset[1] >> 8);
+        vert_ptr_x = ((int64_t)vert_offset[1] * (pointer_x - x_init_off)) >> 1;
+        hori_ptr_x = ((int64_t)hori_offset[1] * (pointer_x - x_init_off)) >> 1;
+        lltmp = hori_offset[0] * (int64_t)vert_offset[1] - vert_offset[0] * (int64_t)hori_offset[1];
         hvdiv_x = (lltmp >> 11);
         if (hvdiv_x == 0) hvdiv_x = 1;
-        lltmp = vert_offset[0] * (long long)hori_offset[1] - hori_offset[0] * (long long)vert_offset[1];
+        lltmp = vert_offset[0] * (int64_t)hori_offset[1] - hori_offset[0] * (int64_t)vert_offset[1];
         hvdiv_y = (lltmp >> 11);
         if (hvdiv_y == 0) hvdiv_y = 1;
         for (i=0; i < 8; i++)
@@ -3225,7 +3231,7 @@ TbBool keeper_wait_for_screen_focus(void)
         }
         if (PlatformManager::Get()->GetWindowSystem()->IsAppActive())
           return true;
-        if ((game.system_flags & GSF_NetworkActive) != 0)
+        if (network_is_active())
           return true;
         if (!freeze_game_on_focus_lost())
           return true;
@@ -3362,9 +3368,11 @@ extern "C" void network_yield_waiting_gameplay_packets()
     poll_inputs();
     gameplay_loop_draw();
     gameplay_loop_timestep();
+    game.process_turn_time = min(game.process_turn_time, (long double)1.0);
     frametime_start_measurement(Frametime_Logic);
-    if (frametime_enabled())
+    if (frametime_enabled()) {
         framerate_measurement_capture(Framerate_Logic);
+    }
 }
 
 extern "C" void update_velocity(void);
@@ -3476,7 +3484,7 @@ long packet_place_door(MapSubtlCoord stl_x, MapSubtlCoord stl_y, PlayerNumber pl
 {
     if (!allowed) {
         if (is_my_player_number(plyr_idx))
-            play_non_3d_sample(119);
+            play_non_3d_sample(snd_refusal);
         return 0;
     }
     if (!player_place_door_at(stl_x, stl_y, plyr_idx, tngmodel)) {
@@ -3656,6 +3664,11 @@ static TbBool wait_at_frontend(void)
     memset(scratch, 0, PALETTE_SIZE);
     RendererPaletteSet(scratch);
     frontend_set_state(get_startup_menu_state());
+
+    // Once the Mouse Sprite initialization is complete, the sprite's position needs to be reset because it defaults to (0, 0).
+    // Note that we cannot use LbMoveGameCursorToHostCursor for this, because the buffer position may remain unchanged.
+    LbMouseSetPositionInitial(lbDisplay.MMouseX, lbDisplay.MMouseY);
+
     try_restore_frontend_error_box();
 
     poll_inputs();
@@ -3754,6 +3767,7 @@ static TbBool wait_at_frontend(void)
           break;
     case FeSt_START_MPLEVEL:
           set_flag(game.system_flags, GSF_NetworkActive);
+          skip_high_score_screen = 1;
           game.game_kind = GKind_MultiGame;
           player = get_my_player();
           player->is_active = 1;
@@ -3808,6 +3822,10 @@ void game_loop(void)
       }
       if ( exit_keeper )
         break;
+
+      int32_t mspos_x_bak = lbDisplay.MMouseX;
+      int32_t mspos_y_bak = lbDisplay.MMouseY;
+
       if (game.game_kind == GKind_LocalGame)
       {
         if (game.save_game_slot == -1)
@@ -3827,7 +3845,6 @@ void game_loop(void)
         } else
         {
           game.save_game_slot = -1;
-          clear_flag(game.operation_flags, GOF_Paused);
         }
       } else {
           for (int i = 0; i < PLAYERS_COUNT; i++) {
@@ -3837,6 +3854,12 @@ void game_loop(void)
               }
           }
       }
+
+      // Try to keep the mouse position unchanged when entering the level.
+      // The main considerations are:
+      // 1. SKIP_HEART_ZOOM: the mouse icon position will be reset to the top-left corner (0, 0), but the actual mouse position remains unchanged.
+      // 2. PI_HeartZoom: the mouse will be moved to the center of the screen.
+      LbMouseSetPosition(mspos_x_bak, mspos_y_bak);
 
       unsigned long starttime;
       unsigned long endtime;
@@ -3871,6 +3894,9 @@ void game_loop(void)
       turn_off_all_menus();
       delete_all_structures();
       clear_mapwho();
+      // Reset sounds back to the fxdata baseline so the main menu (and any
+      // subsequent campaign/freeplay selection) hears unmodified defaults.
+      sound_reset_to_fxdata_baseline();
       endtime = LbTimerClock();
       quit_game = 0;
       if ((game.operation_flags & GOF_SingleLevel) != 0)
@@ -4298,31 +4324,13 @@ int LbBullfrogMain(unsigned short argc, char *argv[])
     }
     if (retval == 1)
     {
-      if ((install_info.lang_id == Lang_Japanese) ||
-          (install_info.lang_id == Lang_ChineseInt) ||
-          (install_info.lang_id == Lang_ChineseTra) ||
-          (install_info.lang_id == Lang_Korean))
-      {
-        switch (install_info.lang_id)
-        {
-        case Lang_Japanese:
-            dbc_set_language(1);
-            break;
-        case Lang_ChineseInt:
-            dbc_set_language(2);
-            break;
-        case Lang_ChineseTra:
-            dbc_set_language(3);
-            break;
-        case Lang_Korean:
-            dbc_set_language(4);
-            break;
+        if (is_dbc_language(install_info.lang_id))
+        {            
+            if (dbc_initialize("fxdata"))
+            {
+                ERRORLOG("DBC fonts Initialization failed.");
+            }
         }
-        if (dbc_initialize("fxdata"))
-        {
-          ERRORLOG("DBC fonts Initialization failed.");
-        }
-      }
     }
     if ( retval == 1 )
     {
