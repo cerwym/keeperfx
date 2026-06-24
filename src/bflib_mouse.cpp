@@ -24,6 +24,7 @@
 #include <string.h>
 #include <stdarg.h>
 #include <stdlib.h>
+#include <SDL2/SDL.h>
 
 #include "bflib_basics.h"
 #include "globals.h"
@@ -38,21 +39,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-/******************************************************************************/
-/*
 
-struct mouse_buffer mbuffer;
-struct mouse_info minfo;
-char ptr[4096];
-unsigned int redraw_active=0;
-unsigned int mouse_initialised=0;
-short volatile mouse_mickey_x;
-short volatile mouse_mickey_y;
-long volatile mouse_dx;
-long volatile mouse_dy;
-unsigned long mouse_pos_change_saved;
-struct DevInput joy;
-*/
 volatile TbBool lbMouseGrab = true;
 volatile TbBool lbMouseGrabbed = true;
 volatile TbDisplayStructEx lbDisplayEx;

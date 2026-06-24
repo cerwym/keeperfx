@@ -4931,8 +4931,7 @@ static void set_power_configuration_check(const struct ScriptLine *scline)
                 }
                 else
                 {
-                    char *saveptr = NULL;
-                    char *flag = strtok_r(new_value," ",&saveptr);
+                    char *flag = strtok(new_value," ");
                     while ( flag != NULL )
                     {
                         j = get_long_id(powermodel_castability_commands, flag);
@@ -4945,7 +4944,7 @@ static void set_power_configuration_check(const struct ScriptLine *scline)
                             DEALLOCATE_SCRIPT_VALUE
                             return;
                         }
-                        flag = strtok_r(NULL, " ", &saveptr);
+                        flag = strtok(NULL, " ");
                     }
                 }
                 value->chars[3] = -1;
@@ -4994,8 +4993,7 @@ static void set_power_configuration_check(const struct ScriptLine *scline)
                 }
                 else
                 {
-                    char *saveptr = NULL;
-                    char *flag = strtok_r(new_value," ",&saveptr);
+                    char *flag = strtok(new_value," ");
                     while ( flag != NULL )
                     {
                         k = get_id(powermodel_properties_commands, flag);
@@ -5008,7 +5006,7 @@ static void set_power_configuration_check(const struct ScriptLine *scline)
                             DEALLOCATE_SCRIPT_VALUE
                             return;
                         }
-                        flag = strtok_r(NULL, " ", &saveptr);
+                        flag = strtok(NULL, " ");
                     }
                 }
                 value->chars[3] = -1;

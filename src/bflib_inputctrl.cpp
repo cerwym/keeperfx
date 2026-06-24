@@ -296,6 +296,7 @@ static void process_event(const SDL_Event *ev)
     struct TbPoint mouseDelta;
     int x;
     SYNCDBG(10, "Starting");
+    static int frac_x = 0, frac_y = 0;
 
     switch (ev->type)
     {
@@ -338,7 +339,6 @@ static void process_event(const SDL_Event *ev)
         {
           return;
         }
-        static int frac_x = 0, frac_y = 0;
         if (lbMouseGrabbed && lbDisplay.MouseMoveRatio > 0)
         {
             int dx = ev->motion.xrel * lbDisplay.MouseMoveRatio + frac_x;

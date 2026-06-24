@@ -586,445 +586,423 @@ void process_players_dungeon_control_packet_control(long plyr_idx)
     set_mouse_light(player);
 }
 
-TbBool process_players_global_packet_action(PlayerNumber plyr_idx)
-{
-  //TODO PACKET add commands from beta
-  struct PlayerInfo* player = get_player(plyr_idx);
-  struct Packet* pckt = get_packet_direct(player->packet_num);
-  SYNCDBG(6,"Processing player %d action %d",(int)plyr_idx,(int)pckt->action);
-  struct Dungeon *dungeon;
-  struct Thing *thing;
-  int i;
-  switch (pckt->action)
-  {
-  case PckA_QuitToMainMenu:
-      if (is_my_player(player))
-      {
-        turn_off_all_menus();
-        frontend_save_continue_game(true);
-        free_swipe_graphic();
-      }
-      player->display_flags |= PlaF6_PlyrHasQuit;
-      process_player_leave_game_packet(player);
-      return 1;
-  case PckA_ForceApplicationClose:
-      {
-        if (is_my_player(player))
-        {
-          turn_off_all_menus();
-          frontend_save_continue_game(true);
-          free_swipe_graphic();
-          exit_keeper = 1;
+TbBool process_players_global_packet_action(PlayerNumber plyr_idx) {
+    // TODO PACKET add commands from beta
+    struct PlayerInfo* player = get_player(plyr_idx);
+    struct Packet* pckt = get_packet_direct(player->packet_num);
+    SYNCDBG(6, "Processing player %d action %d", (int)plyr_idx, (int)pckt->action);
+    struct Dungeon* dungeon;
+    struct Thing* thing;
+    int i;
+
+    switch (pckt->action) {
+    case PckA_QuitToMainMenu: {
+        if (is_my_player(player)) {
+            turn_off_all_menus();
+            frontend_save_continue_game(true);
+            free_swipe_graphic();
         }
-        else
-        {
-          player->display_flags |= PlaF6_PlyrHasQuit;
-          process_player_leave_game_packet(player);
+        player->display_flags |= PlaF6_PlyrHasQuit;
+        process_player_leave_game_packet(player);
+        return 1;
+    }
+
+    case PckA_ForceApplicationClose: {
+        if (is_my_player(player)) {
+            turn_off_all_menus();
+            frontend_save_continue_game(true);
+            free_swipe_graphic();
+            exit_keeper = 1;
+        } else {
+            player->display_flags |= PlaF6_PlyrHasQuit;
+            process_player_leave_game_packet(player);
         }
         return 1;
-      }
-  case PckA_NoOperation:
-      return 1;
-  case PckA_FinishGame:
-      {
-      TbBool my_player = is_my_player(player);
-      int32_t victory_state = pckt->actn_par1;
-      if (my_player) {
-        turn_off_all_menus();
-        free_swipe_graphic();
-      }
-      if (network_is_active()) {
-        if (victory_state == VicS_WonLevel) {
-          player->victory_state = VicS_WonLevel;
-          if (game.conf.rules[player->id_number].game.winner_tortures_loser) {
-              get_my_player()->additional_flags |= PlaAF_UnlockedLordTorture;
-          } else {
-              get_my_player()->additional_flags &= ~PlaAF_UnlockedLordTorture;
-          }
-          quit_game = 1;
-          return 0;
+    }
+
+    case PckA_NoOperation: {
+        return 1;
+    }
+
+    case PckA_FinishGame: {
+        TbBool my_player = is_my_player(player);
+        int32_t victory_state = pckt->actn_par1;
+        if (my_player) {
+            turn_off_all_menus();
+            free_swipe_graphic();
         }
-        TbBool host_packet = player->packet_num == get_host_player_id();
-        if (!my_player) {
-          if (host_packet && (player->victory_state != VicS_LostLevel)) {
-            get_my_player()->additional_flags &= ~PlaAF_UnlockedLordTorture;
-            quit_game = 1;
-          }
-          return 0;
-        } else if (host_packet && (victory_state == VicS_LostLevel) && network_human_contenders_remain()) {
-          return 0;
+        if (network_is_active()) {
+            if (victory_state == VicS_WonLevel) {
+                player->victory_state = VicS_WonLevel;
+                if (game.conf.rules[player->id_number].gameplay.winner_tortures_loser) {
+                    get_my_player()->additional_flags |= PlaAF_UnlockedLordTorture;
+                } else {
+                    get_my_player()->additional_flags &= ~PlaAF_UnlockedLordTorture;
+                }
+                quit_game = 1;
+                return 0;
+            }
+            TbBool host_packet = player->packet_num == get_host_player_id();
+            if (!my_player) {
+                if (host_packet && (player->victory_state != VicS_LostLevel)) {
+                    get_my_player()->additional_flags &= ~PlaAF_UnlockedLordTorture;
+                    quit_game = 1;
+                }
+                return 0;
+            } else if (host_packet && (victory_state == VicS_LostLevel) && network_human_contenders_remain()) {
+                return 0;
+            }
         }
-      }
-      switch (victory_state)
-      {
-      case VicS_WonLevel:
-          complete_level(player);
-          break;
-      case VicS_LostLevel:
-          lose_level(player);
-          break;
-      default:
-          resign_level(player);
-          break;
-      }
-      player->allocflags &= ~PlaF_Allocated;
-      if (my_player) {
-        frontend_save_continue_game(false);
-      }
-      return 0;
-      }
-  case PckA_PlyrMsgEnd:
-      process_gameplay_chat_message(player->id_number, player->mp_pending_message);
-      player->mp_pending_message[0] = '\0';
-      return 0;
-  case PckA_PlyrMsgClear:
-      player->allocflags &= ~PlaF_NewMPMessage;
-      memset(player->mp_message_text, 0, PLAYER_MP_MESSAGE_LEN);
-      return 0;
-  case PckA_ToggleLights:
-      if (is_my_player(player))
-      {
-          light_set_lights_on(game.lish.light_enabled == 0);
-      }
-      return 1;
-  case PckA_SwitchScrnRes:
-      if (is_my_player(player))
-      {
-          switch_to_next_video_mode_wrapper();
-      }
-      return 1;
-  case PckA_TogglePause:
-      process_pause_packet(pckt->actn_par1, 0);
-      return 1;
-  case PckA_SetCluedo:
-      player->video_cluedo_mode = pckt->actn_par1;
-      if (is_my_player(player))
-      {
-        settings.video_cluedo_mode = player->video_cluedo_mode;
-        save_settings();
-      }
-      return 0;
-  case PckA_ChangeWindowSize:
-      if (is_my_player(player))
-      {
-        change_engine_window_relative_size(pckt->actn_par1, pckt->actn_par2);
-        centre_engine_window();
-      }
-      return 0;
-  case PckA_BookmarkLoad:
-      set_player_cameras_position(player, pckt->actn_par1, pckt->actn_par2);
-      return 0;
-  case PckA_SetGammaLevel:
-      if (is_my_player(player))
-      {
-        set_gamma(pckt->actn_par1, 1);
-        save_settings();
-      }
-      return 0;
-  case PckA_SetMinimapConf:
-      // Retired: minimap_zoom is a local display preference and must not be
-      // network-synced.  Callers now write directly via GUIBridge_SetMinimapZoom().
-      // This branch is kept only for savegame / old-packet compatibility.
-      player->minimap_zoom = pckt->actn_par1;
-      if (is_my_player(player))
-      {
-        settings.minimap_zoom = player->minimap_zoom;
-        save_settings();
-      }
-      return 0;
-  case PckA_SetMapRotation:
-      // Retired: camera rotation is a local view preference and must not be
-      // network-synced.  Callers now write directly via GUIBridge_SetMapRotation().
-      // This branch is kept only for savegame / old-packet compatibility.
-      camera_get_slot(player->id_number, CamIV_Parchment)->rotation_angle_x = pckt->actn_par1;
-      camera_get_slot(player->id_number, CamIV_FrontView)->rotation_angle_x = pckt->actn_par1;
-      camera_get_slot(player->id_number, CamIV_Isometric)->rotation_angle_x = pckt->actn_par1;
-      set_local_camera_destination(player);
-      return 0;
-  case PckA_SetPlyrState:
-      set_player_state(player, pckt->actn_par1, pckt->actn_par2);
-      return 0;
-  case PckA_SwitchView:
-      set_engine_view(player, pckt->actn_par1);
-      return 0;
-  case PckA_ToggleTendency:
-      toggle_creature_tendencies(player, pckt->actn_par1);
-      if (is_my_player(player)) {
-          dungeon = get_players_dungeon(player);
-          game.creatures_tend_imprison = ((dungeon->creature_tendencies & CrTend_Imprison) != 0);
-          game.creatures_tend_flee = ((dungeon->creature_tendencies & CrTend_Flee) != 0);
-      }
-      return 0;
-  case PckA_CheatUnusedPlaceholder065:
-      //TODO: remake from beta
-      return 0;
-  case PckA_CheatUnusedPlaceholder068:
-      //TODO: remake from beta
-      return 0;
-  case PckA_CheatUnusedPlaceholder069:
-      //TODO: remake from beta
-      return 0;
-  case PckA_SetViewType:
-      set_player_mode(player, pckt->actn_par1);
-      return 0;
-  case PckA_ZoomFromMap:
-      set_player_cameras_position(player, subtile_coord_center(pckt->actn_par1), subtile_coord_center(pckt->actn_par2));
-      if (network_is_active()
-          || (!MapFadePass_SupportsNativeResolution() && lbDisplay.PhysicalScreenWidth > 320))
-      {
-        if (is_my_player_number(plyr_idx))
-          toggle_status_menu((game.operation_flags & GOF_ShowPanel) != 0);
-        set_player_mode(player, PVT_DungeonTop);
-      } else
-      {
-        set_player_mode(player, PVT_MapFadeOut);
-      }
-      return 0;
-  case PckA_UpdatePause:
-      process_pause_packet(pckt->actn_par1, pckt->actn_par2);
-      return 1;
-  case PckA_ZoomToEvent:
-      if (player->work_state == PSt_CreatrInfo)
+        switch (victory_state) {
+        case VicS_WonLevel: {
+            complete_level(player);
+            break;
+        }
+        case VicS_LostLevel: {
+            lose_level(player);
+            break;
+        }
+
+        default: {
+            resign_level(player);
+            break;
+        }
+        }
+        player->allocflags &= ~PlaF_Allocated;
+        if (my_player) {
+            frontend_save_continue_game(false);
+        }
+        return 0;
+    }
+    case PckA_PlyrMsgEnd:
+        process_gameplay_chat_message(player->id_number, player->mp_pending_message);
+        player->mp_pending_message[0] = '\0';
+        return 0;
+    case PckA_PlyrMsgClear:
+        player->allocflags &= ~PlaF_NewMPMessage;
+        memset(player->mp_message_text, 0, PLAYER_MP_MESSAGE_LEN);
+        return 0;
+    case PckA_ToggleLights:
+        if (is_my_player(player)) {
+            light_set_lights_on(game.lish.light_enabled == 0);
+        }
+        return 1;
+    case PckA_SwitchScrnRes:
+        if (is_my_player(player)) {
+            switch_to_next_video_mode_wrapper();
+        }
+        return 1;
+    case PckA_TogglePause:
+        process_pause_packet(pckt->actn_par1, 0);
+        return 1;
+    case PckA_SetCluedo:
+        player->video_cluedo_mode = pckt->actn_par1;
+        if (is_my_player(player)) {
+            settings.video_cluedo_mode = player->video_cluedo_mode;
+            save_settings();
+        }
+        return 0;
+    case PckA_ChangeWindowSize:
+        if (is_my_player(player)) {
+            change_engine_window_relative_size(pckt->actn_par1, pckt->actn_par2);
+            centre_engine_window();
+        }
+        return 0;
+    case PckA_BookmarkLoad:
+        set_player_cameras_position(player, pckt->actn_par1, pckt->actn_par2);
+        return 0;
+    case PckA_SetGammaLevel:
+        if (is_my_player(player)) {
+            set_gamma(pckt->actn_par1, 1);
+            save_settings();
+        }
+        return 0;
+    case PckA_SetMinimapConf:
+        // Retired: minimap_zoom is a local display preference and must not be
+        // network-synced.  Callers now write directly via GUIBridge_SetMinimapZoom().
+        // This branch is kept only for savegame / old-packet compatibility.
+        player->minimap_zoom = pckt->actn_par1;
+        if (is_my_player(player)) {
+            settings.minimap_zoom = player->minimap_zoom;
+            save_settings();
+        }
+        return 0;
+    case PckA_SetMapRotation:
+        // Retired: camera rotation is a local view preference and must not be
+        // network-synced.  Callers now write directly via GUIBridge_SetMapRotation().
+        // This branch is kept only for savegame / old-packet compatibility.
+        camera_get_slot(player->id_number, CamIV_Parchment)->rotation_angle_x = pckt->actn_par1;
+        camera_get_slot(player->id_number, CamIV_FrontView)->rotation_angle_x = pckt->actn_par1;
+        camera_get_slot(player->id_number, CamIV_Isometric)->rotation_angle_x = pckt->actn_par1;
+        set_local_camera_destination(player);
+        return 0;
+    case PckA_SetPlyrState:
+        set_player_state(player, pckt->actn_par1, pckt->actn_par2);
+        return 0;
+    case PckA_SwitchView:
+        set_engine_view(player, pckt->actn_par1);
+        return 0;
+    case PckA_ToggleTendency:
+        toggle_creature_tendencies(player, pckt->actn_par1);
+        if (is_my_player(player)) {
+            dungeon = get_players_dungeon(player);
+            game.creatures_tend_imprison = ((dungeon->creature_tendencies & CrTend_Imprison) != 0);
+            game.creatures_tend_flee = ((dungeon->creature_tendencies & CrTend_Flee) != 0);
+        }
+        return 0;
+    case PckA_CheatUnusedPlaceholder065:
+        // TODO: remake from beta
+        return 0;
+    case PckA_CheatUnusedPlaceholder068:
+        // TODO: remake from beta
+        return 0;
+    case PckA_CheatUnusedPlaceholder069:
+        // TODO: remake from beta
+        return 0;
+    case PckA_SetViewType:
+        set_player_mode(player, pckt->actn_par1);
+        return 0;
+    case PckA_ZoomFromMap:
+        set_player_cameras_position(player, subtile_coord_center(pckt->actn_par1),
+                                    subtile_coord_center(pckt->actn_par2));
+        if (network_is_active() || (!MapFadePass_SupportsNativeResolution() && lbDisplay.PhysicalScreenWidth > 320)) {
+            if (is_my_player_number(plyr_idx))
+                toggle_status_menu((game.operation_flags & GOF_ShowPanel) != 0);
+            set_player_mode(player, PVT_DungeonTop);
+        } else {
+            set_player_mode(player, PVT_MapFadeOut);
+        }
+        return 0;
+    case PckA_UpdatePause:
+        process_pause_packet(pckt->actn_par1, pckt->actn_par2);
+        return 1;
+    case PckA_ZoomToEvent:
+        if (player->work_state == PSt_CreatrInfo)
+            turn_off_query(plyr_idx);
+        event_move_player_towards_event(player, pckt->actn_par1);
+        return 0;
+    case PckA_ZoomToRoom: {
+        if (player->instance_num == PI_ZoomToPos) {
+            return 0;
+        }
+        if (player->work_state == PSt_CreatrInfo)
+            turn_off_query(plyr_idx);
+        struct Room* room = room_get(pckt->actn_par1);
+        player->zoom_to_pos_x = subtile_coord_center(room->central_stl_x);
+        player->zoom_to_pos_y = subtile_coord_center(room->central_stl_y);
+        set_player_instance(player, PI_ZoomToPos, 0);
+        if (player->work_state == PSt_BuildRoom) {
+            set_player_state(player, PSt_BuildRoom, room->kind);
+        }
+        return 0;
+    }
+    case PckA_ZoomToTrap:
+        if (player->instance_num == PI_ZoomToPos) {
+            return 0;
+        }
+        if (player->work_state == PSt_CreatrInfo)
+            turn_off_query(plyr_idx);
+        thing = thing_get(pckt->actn_par1);
+        player->zoom_to_pos_x = thing->mappos.x.val;
+        player->zoom_to_pos_y = thing->mappos.y.val;
+        set_player_instance(player, PI_ZoomToPos, 0);
+        if ((player->work_state == PSt_PlaceTrap) || (player->work_state == PSt_PlaceDoor)) {
+            set_player_state(player, PSt_PlaceTrap, thing->model);
+        }
+        return 0;
+    case PckA_ZoomToDoor:
+        if (player->instance_num == PI_ZoomToPos) {
+            return 0;
+        }
+        if (player->work_state == PSt_CreatrInfo)
+            turn_off_query(plyr_idx);
+        thing = thing_get(pckt->actn_par1);
+        player->zoom_to_pos_x = thing->mappos.x.val;
+        player->zoom_to_pos_y = thing->mappos.y.val;
+        set_player_instance(player, PI_ZoomToPos, 0);
+        if ((player->work_state == PSt_PlaceTrap) || (player->work_state == PSt_PlaceDoor)) {
+            set_player_state(player, PSt_PlaceDoor, thing->model);
+        }
+        return 0;
+    case PckA_ZoomToPosition:
+        if (player->instance_num == PI_ZoomToPos) {
+            return 0;
+        }
+        if (player->work_state == PSt_CreatrInfo)
+            turn_off_query(plyr_idx);
+        player->zoom_to_pos_x = pckt->actn_par1;
+        player->zoom_to_pos_y = pckt->actn_par2;
+        set_player_instance(player, PI_ZoomToPos, 0);
+        return 0;
+    case PckA_ToggleComputerProcessing:
+        game.view_mode_flags ^=
+            (game.view_mode_flags ^
+             (GNFldD_ComputerPlayerProcessing * ((game.view_mode_flags & GNFldD_ComputerPlayerProcessing) == 0))) &
+            GNFldD_ComputerPlayerProcessing;
+        return 0;
+    case PckA_PwrCTADis:
+        turn_off_power_call_to_arms(plyr_idx);
+        return 0;
+    case PckA_UsePwrHandPick:
+        thing = thing_get(pckt->actn_par1);
+        magic_use_available_power_on_thing(plyr_idx, PwrK_HAND, 0, thing->mappos.x.stl.num, thing->mappos.y.stl.num,
+                                           thing, PwMod_Default);
+        return 0;
+    case PckA_UsePwrHandDrop:
+        dump_first_held_thing_on_map(plyr_idx, pckt->actn_par1, pckt->actn_par2, 1);
+        return 0;
+    case PckA_EventBoxTurnOff:
+        if (game.event[pckt->actn_par1].kind == 3) {
+            turn_off_event_box_if_necessary(plyr_idx, pckt->actn_par1);
+        } else {
+            event_delete_event(plyr_idx, pckt->actn_par1);
+        }
+        return 0;
+    case PckA_GenericLevelPower:
+        magic_use_available_power_on_level(plyr_idx, pckt->actn_par2, 0, PwMod_Default);
+        return 0;
+    case PckA_UsePwrObey:
+        magic_use_available_power_on_level(plyr_idx, PwrK_OBEY, 0, PwMod_Default);
+        return 0;
+    case PckA_UsePwrArmageddon:
+        magic_use_available_power_on_level(plyr_idx, PwrK_ARMAGEDDON, 0, PwMod_Default);
+        return 0;
+    case PckA_TurnOffQuery:
         turn_off_query(plyr_idx);
-      event_move_player_towards_event(player, pckt->actn_par1);
-      return 0;
-  case PckA_ZoomToRoom:
-  {
-      if (player->instance_num == PI_ZoomToPos) {
-          return 0;
-      }
-      if (player->work_state == PSt_CreatrInfo)
-          turn_off_query(plyr_idx);
-      struct Room* room = room_get(pckt->actn_par1);
-      player->zoom_to_pos_x = subtile_coord_center(room->central_stl_x);
-      player->zoom_to_pos_y = subtile_coord_center(room->central_stl_y);
-      set_player_instance(player, PI_ZoomToPos, 0);
-      if (player->work_state == PSt_BuildRoom) {
-          set_player_state(player, PSt_BuildRoom, room->kind);
-      }
-      return 0;
-  }
-  case PckA_ZoomToTrap:
-      if (player->instance_num == PI_ZoomToPos) {
-          return 0;
-      }
-      if (player->work_state == PSt_CreatrInfo)
-        turn_off_query(plyr_idx);
-      thing = thing_get(pckt->actn_par1);
-      player->zoom_to_pos_x = thing->mappos.x.val;
-      player->zoom_to_pos_y = thing->mappos.y.val;
-      set_player_instance(player, PI_ZoomToPos, 0);
-      if ((player->work_state == PSt_PlaceTrap) || (player->work_state == PSt_PlaceDoor)) {
-          set_player_state(player, PSt_PlaceTrap, thing->model);
-      }
-      return 0;
-  case PckA_ZoomToDoor:
-      if (player->instance_num == PI_ZoomToPos) {
-          return 0;
-      }
-      if (player->work_state == PSt_CreatrInfo)
-        turn_off_query(plyr_idx);
-      thing = thing_get(pckt->actn_par1);
-      player->zoom_to_pos_x = thing->mappos.x.val;
-      player->zoom_to_pos_y = thing->mappos.y.val;
-      set_player_instance(player, PI_ZoomToPos, 0);
-      if ((player->work_state == PSt_PlaceTrap) || (player->work_state == PSt_PlaceDoor)) {
-          set_player_state(player, PSt_PlaceDoor, thing->model);
-      }
-      return 0;
-  case PckA_ZoomToPosition:
-      if (player->instance_num == PI_ZoomToPos) {
-          return 0;
-      }
-      if (player->work_state == PSt_CreatrInfo)
-        turn_off_query(plyr_idx);
-      player->zoom_to_pos_x = pckt->actn_par1;
-      player->zoom_to_pos_y = pckt->actn_par2;
-      set_player_instance(player, PI_ZoomToPos, 0);
-      return 0;
-  case PckA_ToggleComputerProcessing:
-      game.view_mode_flags ^= (game.view_mode_flags ^ (GNFldD_ComputerPlayerProcessing * ((game.view_mode_flags & GNFldD_ComputerPlayerProcessing) == 0))) & GNFldD_ComputerPlayerProcessing;
-      return 0;
-  case PckA_PwrCTADis:
-      turn_off_power_call_to_arms(plyr_idx);
-      return 0;
-  case PckA_UsePwrHandPick:
-      thing = thing_get(pckt->actn_par1);
-      magic_use_available_power_on_thing(plyr_idx, PwrK_HAND, 0,thing->mappos.x.stl.num, thing->mappos.y.stl.num, thing, PwMod_Default);
-      return 0;
-  case PckA_UsePwrHandDrop:
-      dump_first_held_thing_on_map(plyr_idx, pckt->actn_par1, pckt->actn_par2, 1);
-      return 0;
-  case PckA_EventBoxTurnOff:
-      if (game.event[pckt->actn_par1].kind == 3)
-      {
-        turn_off_event_box_if_necessary(plyr_idx, pckt->actn_par1);
-      } else
-      {
-        event_delete_event(plyr_idx, pckt->actn_par1);
-      }
-      return 0;
-  case PckA_GenericLevelPower:
-      magic_use_available_power_on_level(plyr_idx, pckt->actn_par2, 0, PwMod_Default);
-      return 0;
-  case PckA_UsePwrObey:
-      magic_use_available_power_on_level(plyr_idx, PwrK_OBEY, 0, PwMod_Default);
-      return 0;
-  case PckA_UsePwrArmageddon:
-      magic_use_available_power_on_level(plyr_idx, PwrK_ARMAGEDDON, 0, PwMod_Default);
-      return 0;
-  case PckA_TurnOffQuery:
-      turn_off_query(plyr_idx);
-      return 0;
-  case PckA_ZoomToBattle:
-      if (player->work_state == PSt_CreatrInfo)
-        turn_off_query(plyr_idx);
-      battle_move_player_towards_battle(player, pckt->actn_par1);
-      return 0;
-  case PckA_ZoomToSpell:
-      if (player->work_state == PSt_CreatrInfo)
-        turn_off_query(plyr_idx);
-      {
-          struct Coord3d locpos;
-          if (find_power_cast_place(plyr_idx, pckt->actn_par1, &locpos))
-          {
-              player->zoom_to_pos_x = locpos.x.val;
-              player->zoom_to_pos_y = locpos.y.val;
-              set_player_instance(player, PI_ZoomToPos, 0);
-          }
-      }
-      if (!power_is_instinctive(pckt->actn_par1))
-      {
-          const struct PowerConfigStats *powerst;
-          powerst = get_power_model_stats(pckt->actn_par1);
-          i = get_power_index_for_work_state(player->work_state);
-          if (i > 0)
-            set_player_state(player, powerst->work_state, pckt->actn_par1);
-      }
-      return 0;
-  case PckA_PlyrFastMsg:
-      //show_onscreen_msg(game.num_fps, "Message from player %d", plyr_idx);
-      output_message(SMsg_EnemyHarassments+pckt->actn_par1, 0);
-      return 0;
-  case PckA_SetComputerKind:
-      set_autopilot_type(plyr_idx, pckt->actn_par1);
-      return 0;
-  case PckA_GoSpectator:
-      level_lost_go_first_person(plyr_idx);
-      return 0;
-  case PckA_DumpHeldThingToOldPos:
-      dungeon = get_players_num_dungeon(plyr_idx);
-      if (!power_hand_is_empty(player))
-      {
-          thing = get_first_thing_in_power_hand(player);
-          dump_first_held_thing_on_map(plyr_idx, thing->mappos.x.stl.num, thing->mappos.y.stl.num, 1);
-      }
-      return false;
-  case PckA_PwrSOEDis:
-      turn_off_power_sight_of_evil(plyr_idx);
-      return false;
-  case PckA_EventBoxActivate:
-      go_on_then_activate_the_event_box(plyr_idx, pckt->actn_par1);
-      return false;
-  case PckA_EventBoxClose:
-      dungeon = get_players_num_dungeon(plyr_idx);
-      turn_off_event_box_if_necessary(plyr_idx, dungeon->visible_event_idx);
-      dungeon->visible_event_idx = 0;
-      return false;
-  case PckA_UsePwrOnThing:
-      i = get_power_overcharge_level(player);
-      directly_cast_spell_on_thing(plyr_idx, pckt->actn_par1, pckt->actn_par2, i);
-      return 0;
-  case PckA_PlyrToggleAlly:
-      if (!is_player_ally_locked(plyr_idx, pckt->actn_par1))
-      {
-         toggle_ally_with_player(plyr_idx, pckt->actn_par1);
-         if (game.conf.rules[plyr_idx].gameplay.allies_share_vision)
-         {
-            panel_map_update(0, 0, game.map_subtiles_x+1, game.map_subtiles_y+1);
-         }
-        update_navigation_around_all_doors();
-      }
-      return false;
-  case PckA_SaveViewType:
-      if (camera_is_active(player->id_number))
-        player->view_mode_restore = camera_get_active(player->id_number)->view_mode;
-      set_player_mode(player, pckt->actn_par1);
-      return false;
-  case PckA_LoadViewType:
-      set_player_mode(player, pckt->actn_par1);
-      set_engine_view(player, player->view_mode_restore);
-      return false;
+        return 0;
+    case PckA_ZoomToBattle:
+        if (player->work_state == PSt_CreatrInfo)
+            turn_off_query(plyr_idx);
+        battle_move_player_towards_battle(player, pckt->actn_par1);
+        return 0;
+    case PckA_ZoomToSpell:
+        if (player->work_state == PSt_CreatrInfo)
+            turn_off_query(plyr_idx);
+        {
+            struct Coord3d locpos;
+            if (find_power_cast_place(plyr_idx, pckt->actn_par1, &locpos)) {
+                player->zoom_to_pos_x = locpos.x.val;
+                player->zoom_to_pos_y = locpos.y.val;
+                set_player_instance(player, PI_ZoomToPos, 0);
+            }
+        }
+        if (!power_is_instinctive(pckt->actn_par1)) {
+            const struct PowerConfigStats* powerst;
+            powerst = get_power_model_stats(pckt->actn_par1);
+            i = get_power_index_for_work_state(player->work_state);
+            if (i > 0)
+                set_player_state(player, powerst->work_state, pckt->actn_par1);
+        }
+        return 0;
+    case PckA_PlyrFastMsg:
+        // show_onscreen_msg(game.num_fps, "Message from player %d", plyr_idx);
+        output_message(SMsg_EnemyHarassments + pckt->actn_par1, 0);
+        return 0;
+    case PckA_SetComputerKind:
+        set_autopilot_type(plyr_idx, pckt->actn_par1);
+        return 0;
+    case PckA_GoSpectator:
+        level_lost_go_first_person(plyr_idx);
+        return 0;
+    case PckA_DumpHeldThingToOldPos:
+        dungeon = get_players_num_dungeon(plyr_idx);
+        if (!power_hand_is_empty(player)) {
+            thing = get_first_thing_in_power_hand(player);
+            dump_first_held_thing_on_map(plyr_idx, thing->mappos.x.stl.num, thing->mappos.y.stl.num, 1);
+        }
+        return false;
+    case PckA_PwrSOEDis:
+        turn_off_power_sight_of_evil(plyr_idx);
+        return false;
+    case PckA_EventBoxActivate:
+        go_on_then_activate_the_event_box(plyr_idx, pckt->actn_par1);
+        return false;
+    case PckA_EventBoxClose:
+        dungeon = get_players_num_dungeon(plyr_idx);
+        turn_off_event_box_if_necessary(plyr_idx, dungeon->visible_event_idx);
+        dungeon->visible_event_idx = 0;
+        return false;
+    case PckA_UsePwrOnThing:
+        i = get_power_overcharge_level(player);
+        directly_cast_spell_on_thing(plyr_idx, pckt->actn_par1, pckt->actn_par2, i);
+        return 0;
+    case PckA_PlyrToggleAlly:
+        if (!is_player_ally_locked(plyr_idx, pckt->actn_par1)) {
+            toggle_ally_with_player(plyr_idx, pckt->actn_par1);
+            if (game.conf.rules[plyr_idx].gameplay.allies_share_vision) {
+                panel_map_update(0, 0, game.map_subtiles_x + 1, game.map_subtiles_y + 1);
+            }
+            update_navigation_around_all_doors();
+        }
+        return false;
+    case PckA_SaveViewType:
+        if (camera_is_active(player->id_number))
+            player->view_mode_restore = camera_get_active(player->id_number)->view_mode;
+        set_player_mode(player, pckt->actn_par1);
+        return false;
+    case PckA_LoadViewType:
+        set_player_mode(player, pckt->actn_par1);
+        set_engine_view(player, player->view_mode_restore);
+        return false;
     case PckA_SetRoomspaceAuto:
     case PckA_SetRoomspaceMan:
     case PckA_SetRoomspaceDragPaint:
     case PckA_SetRoomspaceDrag:
     case PckA_SetRoomspaceDefault:
     case PckA_SetRoomspaceWholeRoom:
-    case PckA_SetRoomspaceSubtile:
-    {
+    case PckA_SetRoomspaceSubtile: {
         apply_roomspace_packet_action(player, pckt);
         return false;
     }
-    case PckA_RoomspaceHighlightToggle:
-    {
-        if (is_my_player(player))
-        {
+    case PckA_RoomspaceHighlightToggle: {
+        if (is_my_player(player)) {
             settings.highlight_mode = pckt->actn_par1;
-            if (default_tag_mode == 3)
-            {
+            if (default_tag_mode == 3) {
                 save_settings();
             }
         }
     }
     // fall through
-    case PckA_SetRoomspaceHighlight:
-    {
+    case PckA_SetRoomspaceHighlight: {
         player->roomspace_mode = pckt->actn_par1;
-        if ( (pckt->actn_par2 == 1) || (pckt->actn_par1 == roomspace_detection_mode) )
-        {
+        if ((pckt->actn_par2 == 1) || (pckt->actn_par1 == roomspace_detection_mode)) {
             // exit out of click and drag mode
-            if (player->render_roomspace.drag_mode)
-            {
+            if (player->render_roomspace.drag_mode) {
                 player->cursor_button_down = 0;
                 player->one_click_lock_cursor = false;
-                if ((pckt->control_flags & PCtr_LBtnHeld) == PCtr_LBtnHeld)
-                {
+                if ((pckt->control_flags & PCtr_LBtnHeld) == PCtr_LBtnHeld) {
                     player->ignore_next_PCtr_LBtnRelease = true;
                 }
             }
             player->render_roomspace.drag_mode = false;
         }
         player->roomspace_highlight_mode = pckt->actn_par1;
-        switch (pckt->actn_par1)
+        switch (pckt->actn_par1) {
+        case box_placement_mode: {
+            reset_dungeon_build_room_ui_variables(plyr_idx);
+            player->roomspace_width = player->roomspace_height = pckt->actn_par2;
+            break;
+        }
+        case drag_placement_mode: // drag
         {
-            case box_placement_mode:
-            {
-                reset_dungeon_build_room_ui_variables(plyr_idx);
-                player->roomspace_width = player->roomspace_height = pckt->actn_par2;
-                break;
+            if (pckt->actn_par2 == 1) {
+                player->roomspace_width = 1;
+                player->roomspace_height = 1;
             }
-            case drag_placement_mode: // drag
-            {
-                if (pckt->actn_par2 == 1)
-                {
-                    player->roomspace_width = 1;
-                    player->roomspace_height = 1;
-                }
-                break;
-            }
+            break;
+        }
         }
         player->roomspace_no_default = true;
         return false;
     }
-    case PckA_PlyrQueryCreature:
-    {
+    case PckA_PlyrQueryCreature: {
         query_creature(player, pckt->actn_par1, pckt->actn_par2, pckt->actn_par3);
         return false;
     }
-    default:
-      return process_players_global_cheats_packet_action(plyr_idx, pckt);
-  }
+    default: {
+        return process_players_global_cheats_packet_action(plyr_idx, pckt);
+    }
+    }
 }
 
 void process_players_map_packet_control(long plyr_idx)

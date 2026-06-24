@@ -2520,16 +2520,15 @@ static void get_dungeon_control_nonaction_inputs(void)
       {
           set_players_packet_position(pckt, pos.x.val, pos.y.val, context);
     }
-  } else
-  if (screen_to_map(get_local_active_camera(player->id_number), my_mouse_x, my_mouse_y, &pos))
-  {
-        set_players_packet_position(pckt, pos.x.val, pos.y.val, 0);
-        pckt->additional_packet_values &= ~PCAdV_ContextMask; // reset cursor states to 0 (CSt_DefaultArrow)
-        struct Thing* thing = get_thing_under_hand(player, pos.x.val, pos.y.val);
-        if (!thing_is_invalid(thing)) {
-            local_thing_under_hand = thing->index;
-        }
-    }
+  } else {
+      if (screen_to_map(get_local_active_camera(player->id_number), my_mouse_x, my_mouse_y, &pos)) {
+          set_players_packet_position(pckt, pos.x.val, pos.y.val, 0);
+          pckt->additional_packet_values &= ~PCAdV_ContextMask; // reset cursor states to 0 (CSt_DefaultArrow)
+          struct Thing* thing = get_thing_under_hand(player, pos.x.val, pos.y.val);
+          if (!thing_is_invalid(thing)) {
+              local_thing_under_hand = thing->index;
+          }
+      }
   }
   if (is_game_key_pressed(Gkey_ExitGame, true, false))
   {
