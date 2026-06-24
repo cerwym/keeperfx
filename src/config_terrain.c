@@ -27,6 +27,7 @@
 
 #include "config.h"
 #include "config_creature.h"
+#include "config_sounds.h"
 #include "custom_sprites.h"
 #include "config_strings.h"
 #include "frontmenu_ingame_tabs.h"
@@ -73,6 +74,8 @@ static const struct NamedCommand terrain_room_properties_commands[] = {
     {"BUILD_TILL_BROKE",  RoCFlg_BuildTillBroke},
     {"CANNOT_BE_SOLD",    RoCFlg_CannotBeSold},
     {"CANNOT_BE_CLAIMED", RoCFlg_CannotBeClaimed},
+    {"HAS_NO_FLAMES",     RoCFlg_NoFlames},
+    {"NOT_COUNTED",       RoCFlg_NotCounted},
     {NULL,                0},
 };
 
@@ -103,8 +106,6 @@ const struct NamedCommand terrain_room_total_capacity_func_type[] = {
     {NULL,                   0},
   };
 
-#pragma push_macro("game")
-#undef game
 static const struct NamedField terrain_slab_named_fields[] = {
     //name                //field                                                        //default      //min     //max    //NamedCommand
     {"NAME",              0, field_t(struct SlabConfigStats, code_name),                     0, INT32_MIN,UINT32_MAX, slab_desc,     value_name,       assign_null},
@@ -126,7 +127,6 @@ static const struct NamedField terrain_slab_named_fields[] = {
     {"GOLDHELD",          0, field_t(struct SlabConfigStats, gold_held),                     0, INT32_MIN,UINT32_MAX, NULL,          value_default,    assign_default},
     {NULL},
 };
-#pragma pop_macro("game")
 
 static int32_t* get_slab_count(void) { return &game.conf.slab_conf.slab_types_count; }
 static void* get_slab_base(void) { return game.conf.slab_conf.slab_cfgstats; }
@@ -152,9 +152,9 @@ static const struct NamedField terrain_room_named_fields[] = {
     {"PROPERTIES",       -1, field_t(struct RoomConfigStats, flags),                         0, INT32_MIN,RoCFlg_ListEnd, terrain_room_properties_commands,     value_flagsfield,assign_default},
     {"SLABASSIGN",        0, field_t(struct RoomConfigStats, assigned_slab),                 0, INT32_MIN,UINT32_MAX,      slab_desc,                            value_default,   assign_default},
     {"CREATURECREATION",  0, field_t(struct RoomConfigStats, creature_creation_model),       0, INT32_MIN,UINT32_MAX,      creature_desc,                        value_default,   assign_default},
-    {"MESSAGES",          0, field_t(struct RoomConfigStats, msg_needed),                    0, INT32_MIN,UINT32_MAX,      NULL,                                 value_default,   assign_default},
-    {"MESSAGES",          1, field_t(struct RoomConfigStats, msg_too_small),                 0, INT32_MIN,UINT32_MAX,      NULL,                                 value_default,   assign_default},
-    {"MESSAGES",          2, field_t(struct RoomConfigStats, msg_no_route),                  0, INT32_MIN,UINT32_MAX,      NULL,                                 value_default,   assign_default},
+    {"MESSAGES",          0, field_t(struct RoomConfigStats, msg_needed),                    0, INT32_MIN,UINT32_MAX,      NULL,                                 value_speech_ref,  assign_speech_ref},
+    {"MESSAGES",          1, field_t(struct RoomConfigStats, msg_too_small),                 0, INT32_MIN,UINT32_MAX,      NULL,                                 value_speech_ref,   assign_speech_ref},
+    {"MESSAGES",          2, field_t(struct RoomConfigStats, msg_no_route),                  0, INT32_MIN,UINT32_MAX,      NULL,                                 value_speech_ref,   assign_speech_ref},
     {"NAMETEXTID",        0, field_t(struct RoomConfigStats, name_stridx),        GUIStr_Empty, INT32_MIN,UINT32_MAX,      NULL,                                 value_default,   assign_default},
     {"TOOLTIPTEXTID",     0, field_t(struct RoomConfigStats, tooltip_stridx),     GUIStr_Empty, INT32_MIN,UINT32_MAX,      NULL,                                 value_default,   assign_update_room_tab},
     {"SYMBOLSPRITES",     0, field_t(struct RoomConfigStats, bigsym_sprite_idx),             0, INT32_MIN,UINT32_MAX,      NULL,                                 value_icon,      assign_icon},
@@ -165,9 +165,11 @@ static const struct NamedField terrain_room_named_fields[] = {
     {"USEDCAPACITY",      0, field_t(struct RoomConfigStats, update_storage_in_room_idx),    0, INT32_MIN,UINT32_MAX,      terrain_room_used_capacity_func_type, value_default,   assign_default},
     {"USEDCAPACITY",      1, field_t(struct RoomConfigStats, update_workers_in_room_idx),    0, INT32_MIN,UINT32_MAX,      terrain_room_used_capacity_func_type, value_default,   assign_reinitialise_rooms},
     {"SLABSYNERGY",       0, field_t(struct RoomConfigStats, synergy_slab),                  0, INT32_MIN,UINT32_MAX,      slab_desc,                            value_synergy,   assign_recalculate_effeciency},
-    {"AMBIENTSNDSAMPLE",  0, field_t(struct RoomConfigStats, ambient_snd_smp_id),            0, INT32_MIN,UINT32_MAX,      NULL,                                 value_default,   assign_default},
+    {"AMBIENTSNDSAMPLE",  0, field_t(struct RoomConfigStats, ambient_snd_smp_id),            0, INT32_MIN,UINT32_MAX,      NULL,                                 value_sound_id,   assign_default},
     {"ROLES",            -1, field_t(struct RoomConfigStats, roles),                         0, INT32_MIN,UINT32_MAX,      room_roles_desc,                      value_flagsfield,assign_default},
     {"STORAGEHEIGHT",     0, field_t(struct RoomConfigStats, storage_height),                0, INT32_MIN,UINT32_MAX,      NULL,                                 value_default,   assign_default},
+
+
     {NULL},
 };
 #pragma pop_macro("game")
@@ -805,8 +807,8 @@ TbBool room_role_matches(RoomKind rkind, RoomRole rrole)
 
 TbBool room_has_surrounding_flames(RoomKind rkind)
 {
-    //TODO CONFIG Place this in room config data
-    return (rkind != RoK_DUNGHEART);
+    struct RoomConfigStats* roomst = get_room_kind_stats(rkind);
+    return !flag_is_set(roomst->flags, RoCFlg_NoFlames);
 }
 
 /**
@@ -821,14 +823,13 @@ TbBool room_cannot_vandalise(RoomKind rkind)
 }
 
 /**
- * Returns if given room kind is by definition not buildable.
+ * Returns if given room kind is not counted as a room.
  * @param rkind The room kind to be checked.
- * @return True if given room kind is unconditionally not buildable, false otherwise.
  */
-TbBool room_never_buildable(RoomKind rkind)
+TbBool room_is_counted(RoomKind rkind)
 {
-    //TODO CONFIG Place this in room config data
-    return (rkind == RoK_DUNGHEART) || (rkind == RoK_ENTRANCE);
+    struct RoomConfigStats* roomst = get_room_kind_stats(rkind);
+    return !flag_is_set(roomst->flags, RoCFlg_NotCounted);
 }
 
 /**
@@ -839,7 +840,7 @@ TbBool room_never_buildable(RoomKind rkind)
 TbBool room_can_have_ensign(RoomKind rkind)
 {
     struct RoomConfigStats* roomst = get_room_kind_stats(rkind);
-    return ((roomst->flags & RoCFlg_NoEnsign) == 0);
+    return !flag_is_set(roomst->flags, RoCFlg_NoEnsign);
 }
 
 /**

@@ -35,6 +35,11 @@ GameTurn get_gameturn()
     // Guard against calls before gpGame is allocated (e.g. early-startup error paths).
     return gpGame ? game.play_gameturn : 0;
 }
+
+TbBool network_is_active(void)
+{
+    return flag_is_set(game.system_flags, GSF_NetworkActive);
+}
 /******************************************************************************/
 #ifdef __cplusplus
 }

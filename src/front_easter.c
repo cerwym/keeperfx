@@ -29,6 +29,7 @@
 #include "bflib_datetm.h"
 #include "bflib_sound.h"
 #include "kjm_input.h"
+#include "config_sounds.h"
 #include "gui_frontbtns.h"
 #include "gui_soundmsgs.h"
 #include "config_strings.h"
@@ -150,7 +151,7 @@ void input_eastegg(void)
     short allow = (lbKeyOn[KC_LSHIFT] != 0);
     unsigned short state = input_eastegg_keycodes(&game.eastegg01_cntr, allow, &eastegg_feckoff_codes);
     if ((state == 2) || (state == 3)) {
-      play_non_3d_sample(60);
+      play_non_3d_sample(snd_tab_click);
     }
     // Maintain the JLW cheat
     if (game.easter_eggs_enabled == true)
@@ -158,7 +159,7 @@ void input_eastegg(void)
       allow = (lbKeyOn[KC_LSHIFT]) && (lbKeyOn[KC_RSHIFT]);
       state = input_eastegg_keycodes(&game.eastegg02_cntr,allow,&eastegg_jlw_codes);
       if ((state == 1) || (state == 2) || (state == 3)) {
-        play_non_3d_sample(159);
+        play_non_3d_sample(snd_cheat_activated);
       }
     }
     // Maintain the BBKING cheat
@@ -168,7 +169,7 @@ void input_eastegg(void)
       static unsigned char length = 0;
       state = input_eastegg_keycodes(&length, allow, &eastegg_bbking_codes);
       if (length == eastegg_bbking_codes.length) {
-        play_non_3d_sample(159);
+        play_non_3d_sample(snd_cheat_activated);
         toggle_bbking_mode();
         length = 0; // prevent re-trigger
       }
@@ -264,7 +265,7 @@ void draw_eastegg(void)
     {
       LbTextDrawResized(scale_fixed_DK_value(px[i]/pixel_size), scale_fixed_DK_value(py[i]/pixel_size), ee_units_per_px, text);
     }
-    play_non_3d_sample_no_overlap(90);
+    play_non_3d_sample_no_overlap(snd_alarm);
   }
   if (game.easter_eggs_enabled == false)
     return;
@@ -304,7 +305,7 @@ void draw_eastegg(void)
     {
         LbTextDrawResized(scale_fixed_DK_value(px[i]/pixel_size), scale_fixed_DK_value(py[i]/pixel_size), ee_units_per_px, text);
     }
-    play_non_3d_sample_no_overlap(90);
+    play_non_3d_sample_no_overlap(snd_alarm);
   }
 }
 

@@ -93,8 +93,8 @@ const struct NamedFieldSet compp_common_named_fields_set = {
   "common",
   compp_common_named_fields,
   NULL,
-  0,
-  0,
+  1,
+  sizeof(comp_player_conf),
   get_compp_common_base,
 };
 

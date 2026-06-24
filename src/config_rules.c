@@ -45,6 +45,7 @@ static int64_t value_x10(const struct NamedField* named_field, const char* value
 
 static void assign_MapCreatureLimit_script(const struct NamedField* named_field, int64_t value, const struct NamedFieldSet* named_fields_set, int idx, const char* src_str, unsigned char flags);
 static void assign_AlliesShareVision_script(const struct NamedField* named_field, int64_t value, const struct NamedFieldSet* named_fields_set, int idx, const char* src_str, unsigned char flags);
+static void assign_PayDayProgress_script(const struct NamedField* named_field, int64_t value, const struct NamedFieldSet* named_fields_set, int idx, const char* src_str, unsigned char flags);
 
 /******************************************************************************/
 static TbBool load_rules_config_file(const char *fname, unsigned short flags);
@@ -76,8 +77,6 @@ const struct NamedCommand rules_game_classicbugs_commands[] = {
   {NULL,                             0},
 };
 
-#pragma push_macro("game")
-#undef game
 static const struct NamedField rules_game_named_fields[] = {
     //name                    //param  //field                                             //default  //min               //max   //namedCommand                    //valueFunc
   {"POTOFGOLDHOLDS",            0, field_t(struct RulesConfig, gameplay.pot_of_gold_holds),        1000, INT32_MIN,           INT32_MAX,NULL,                           value_default, assign_default},
@@ -206,10 +205,11 @@ static const struct NamedField rules_health_named_fields[] = {
   {NULL},
 };
 
+// Fields here are not inside game.conf.rules, so assign_default cannot be used.
 static const struct NamedField rules_script_only_named_fields[] = {
   //name            //field                   //min //max
 {"PayDayProgress",0,(void*)(ptrdiff_t)(offsetof(struct Game, pay_day_progress) - offsetof(struct Game, conf.rules)),
-   var_type(((struct Game*)0)->pay_day_progress[0]),0,0,INT32_MAX,NULL,value_default,assign_default},
+   var_type(((struct Game*)0)->pay_day_progress[0]),0,0,INT32_MAX,NULL,value_default,assign_PayDayProgress_script},
 {NULL},
 };
 #pragma pop_macro("game")
@@ -299,6 +299,11 @@ static void assign_AlliesShareVision_script(const struct NamedField* named_field
     }
 }
 
+static void assign_PayDayProgress_script(const struct NamedField* named_field, int64_t value, const struct NamedFieldSet* named_fields_set, int idx, const char* src_str, unsigned char flags)
+{
+    game.pay_day_progress[idx] = value;
+}
+
 static int64_t value_x10(const struct NamedField* named_field, const char* value_text, const struct NamedFieldSet* named_fields_set, int idx, const char* src_str, unsigned char flags)
 {
 
@@ -352,9 +357,12 @@ static void set_rules_defaults()
     for (size_t i = 0; i < sizeof(ruleblocks) / sizeof(ruleblocks[0]); i++) {
         const struct NamedField* field = ruleblocks[i];
         while (field->name != NULL) {
-            for (PlayerNumber plyr_idx = 0; plyr_idx < PLAYERS_COUNT; plyr_idx++)
-            {
-                assign_default(field, field->default_value, &rules_named_fields_set, plyr_idx, "rules", ccf_SplitExecution | ccf_DuringLevel);
+            for (PlayerNumber plyr_idx = 0; plyr_idx < PLAYERS_COUNT; plyr_idx++) {
+                if (ruleblocks[i] == rules_script_only_named_fields) {
+                    assign_named_field_value(field, field->default_value, &rules_named_fields_set, plyr_idx, "rules", ccf_SplitExecution | ccf_DuringLevel);
+                } else {
+                    assign_default(field, field->default_value, &rules_named_fields_set, plyr_idx, "rules", ccf_SplitExecution | ccf_DuringLevel);
+                }
             }
             field++;
         }

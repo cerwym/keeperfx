@@ -43,6 +43,13 @@ struct TbSprite;
 struct TbSetupSprite;
 struct TbSpriteSheet;
 
+enum dbc_id {
+    DbcId_Japanese = 1,
+    DbcId_ChineseInt = 2,
+    DbcId_ChineseTra = 3,
+    DbcId_Korean = 4,
+};
+
 enum DkcodepageLetter {
    DKChr_Null,
    DKChr_Modifier_Transparent4,
@@ -410,6 +417,8 @@ int  dbc_draw_font_sprite_text(const struct AsianFontWindow *awind,
 TbBool change_dbcfont(int nfont);
 int  dbc_fonts_count(void);
 struct AsianFont *dbc_fonts_list(void);
+TbBool is_dbc_language(short language);
+uint8_t get_dbc_id(short language);
 
 /******************************************************************************/
 #ifdef __cplusplus

@@ -23,7 +23,7 @@ static struct ModsConfig stored_mods_conf = {0};
 const struct ModsConfig *get_loaded_mods_conf(void)
 {
     static const struct ModsConfig empty_mods_conf = {0};
-    if (game.system_flags & GSF_NetworkActive)
+    if (network_is_active())
         return &empty_mods_conf;
     return &stored_mods_conf;
 }
@@ -162,6 +162,19 @@ static void recheck_block_mod_list_exist(struct ModConfigItem *mod_items, long m
                 strcat(config_dirs, fname+main_len+1);
             else
                 strcat(config_dirs, "FGrp_CmpgCrtrs");
+        }
+
+        fname = prepare_file_path_mod(mod_dir, FGrp_LrgSound, NULL);
+        if (fname[0] != 0 && LbFileExists(fname))
+        {
+            mod_state->sound = 1;
+
+            strcat(config_dirs, str_sep);
+            str_sep = ", ";
+            if (memcmp(main_dir, fname, main_len) == 0)
+                strcat(config_dirs, fname+main_len+1);
+            else
+                strcat(config_dirs, "FGrp_LrgSound");
         }
 
         if (config_dirs[0] == 0)

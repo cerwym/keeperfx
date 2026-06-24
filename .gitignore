@@ -1,3 +1,4 @@
+/.local
 /bin
 /obj
 /sdl
@@ -47,6 +48,7 @@ keeperfx.log
 crash_log.txt
 .local/
 .deploy/
+.vscode/compile_and_copy_files.ps1
 
 # Python cache
 __pycache__/

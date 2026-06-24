@@ -49,6 +49,7 @@ struct PlayerInfo bad_player;
 
 /** The current player's number. */
 unsigned char my_player_number;
+short local_thing_under_hand;
 /******************************************************************************/
 struct PlayerInfo *get_player_f(PlayerNumber plyr_idx,const char *func_name)
 {
