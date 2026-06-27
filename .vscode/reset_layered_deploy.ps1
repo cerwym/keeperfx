@@ -30,59 +30,27 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# Set default workspace folder if not provided
 if (-not $WorkspaceFolder) {
     $WorkspaceFolder = Split-Path -Parent $PSScriptRoot
-}
-
-$script:Colors = @{
-    Reset = "`e[0m"
-    Green = "`e[32m"
-    Yellow = "`e[33m"
-    Red = "`e[31m"
-}
-
-function Write-ColorOutput {
-    param([string]$Message, [string]$ColorCode = 'Reset')
-    Write-Host "$($script:Colors[$ColorCode])$Message$($script:Colors.Reset)"
 }
 
 $deployPath = Join-Path $WorkspaceFolder ".deploy"
 
 if (-not (Test-Path $deployPath)) {
-    Write-ColorOutput "No deployment found at: $deployPath" 'Yellow'
+    Write-Host "No deployment found at: $deployPath" -ForegroundColor Yellow
     exit 0
 }
 
 if (-not $Force) {
-    Write-ColorOutput "This will remove: $deployPath" 'Yellow'
-    Write-ColorOutput "Clean master files will NOT be affected (junctions/hardlinks only)." 'Green'
+    Write-Host "This will remove: $deployPath" -ForegroundColor Yellow
     $response = Read-Host "Continue? (y/N)"
     if ($response -ne 'y') {
-        Write-ColorOutput "Aborted." 'Yellow'
+        Write-Host "Aborted." -ForegroundColor Yellow
         exit 0
     }
 }
 
-Write-ColorOutput "Removing layered deployment..." 'Yellow'
-
-# Remove junctions first (safest)
-$junctionDirs = @('ldata', 'levels', 'fxdata', 'lang', 'campgns')
-foreach ($dir in $junctionDirs) {
-    $junctionPath = Join-Path $deployPath $dir
-    if (Test-Path $junctionPath) {
-        $item = Get-Item $junctionPath -Force
-        if ($item.LinkType -eq 'Junction') {
-            Write-Host "  Removing junction: $dir -> " -NoNewline
-            Remove-Item $junctionPath -Force -Recurse
-            Write-ColorOutput "OK" 'Green'
-        }
-    }
-}
-
-# Remove entire deployment directory
+Write-Host "Removing deployment..." -ForegroundColor Yellow
 Remove-Item $deployPath -Recurse -Force -ErrorAction SilentlyContinue
-
-Write-ColorOutput "Deployment removed successfully." 'Green'
-Write-ColorOutput "Clean master files are intact." 'Blue'
+Write-Host "Deployment removed successfully." -ForegroundColor Green
 

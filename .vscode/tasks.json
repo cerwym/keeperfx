@@ -23,10 +23,11 @@
 "Remove-Item $bat;",
 "Copy-Item '${workspaceFolder}\\out\\build\\x86-windows-static-debug\\keeperfx.exe' '${workspaceFolder}\\.deploy\\keeperfx.exe' -Force;",
 "Write-Host 'keeperfx.exe deployed to .deploy/' -ForegroundColor Green;",
+"powershell -ExecutionPolicy Bypass -File '${workspaceFolder}\\.vscode\\deploy_assets.ps1' -DeployConfig -GameDirectory '${workspaceFolder}\\.deploy';",
 "powershell -ExecutionPolicy Bypass -File '${workspaceFolder}\\.vscode\\validate_runtime_assets.ps1' -WorkspaceFolder '${workspaceFolder}' -DeploySubdir '.deploy'"
 ]
 },
-"command": "cmake --build --preset x86-windows-static-debug && cp out/build/x86-windows-static-debug/keeperfx.exe .deploy/keeperfx.exe && bash '${workspaceFolder}/.vscode/validate_runtime_assets.sh' '${workspaceFolder}' '.deploy'",
+"command": "cmake --build --preset x86-windows-static-debug && cp out/build/x86-windows-static-debug/keeperfx.exe .deploy/keeperfx.exe && pwsh -File '${workspaceFolder}/.vscode/deploy_assets.ps1' -DeployConfig -GameDirectory '${workspaceFolder}/.deploy' && bash '${workspaceFolder}/.vscode/validate_runtime_assets.sh' '${workspaceFolder}' '.deploy'",
 "problemMatcher": "$msCompile",
 "group": "build",
 "presentation": { "clear": true, "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
@@ -42,6 +43,7 @@
 "if ($LASTEXITCODE -ne 0) { exit 1 };",
 "Copy-Item '${workspaceFolder}\\out\\build\\windows-x86-debug\\keeperfx.exe' '${workspaceFolder}\\.deploy\\keeperfx.exe' -Force;",
 "Write-Host 'keeperfx.exe deployed to .deploy/' -ForegroundColor Green;",
+"powershell -ExecutionPolicy Bypass -File '${workspaceFolder}\\.vscode\\deploy_assets.ps1' -DeployConfig -GameDirectory '${workspaceFolder}\\.deploy';",
 "powershell -ExecutionPolicy Bypass -File '${workspaceFolder}\\.vscode\\validate_runtime_assets.ps1' -WorkspaceFolder '${workspaceFolder}' -DeploySubdir '.deploy'"
 ]
 },
@@ -169,14 +171,14 @@
 // ── Local deployment ─────────────────────────────────────────────────
 
 {
-// One-time setup: builds game data layers and populates .deploy/.
-// Requires the DK original game files to be present on this machine.
+// One-time setup: refreshes only the DK originals Docker layer.
+// Provide a DK path to update the cached path, or leave blank to use ~/.keeperfx-dev/.
 "label": "Init DK Originals Layer",
 "type": "shell",
 "windows": {
-"command": "powershell -ExecutionPolicy Bypass -File '${workspaceFolder}\\.vscode\\init_dk_layer.ps1' -WorkspaceFolder '${workspaceFolder}' -DkInstallPath '${input:dkInstallPath}'"
+"command": "powershell -ExecutionPolicy Bypass -File '${workspaceFolder}\\tools\\init-deploy.ps1' -WorkspaceFolder '${workspaceFolder}' -DungeonKeeperPath '${input:dkInstallPath}' -RefreshDkLayer -SkipPkgBuild -SkipKfxOverlay"
 },
-"command": "bash '${workspaceFolder}/.vscode/init_dk_layer.sh' '${workspaceFolder}' '${input:dkInstallPath}'",
+"command": "bash '${workspaceFolder}/tools/init-deploy.sh' --workspace '${workspaceFolder}' --dk-path '${input:dkInstallPath}' --refresh-dk-layer --skip-pkg-build --skip-kfx-overlay",
 "problemMatcher": [],
 "group": "build",
 "presentation": { "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
@@ -184,19 +186,39 @@
 
 {
 // One-time setup: builds game data layers and populates .deploy/.
-// Requires the DK original game files to be present on this machine.
+// DK path resolved from ~/.keeperfx-dev/ cache or prompted if not yet set.
 "label": "Init .deploy/",
 "type": "shell",
 "windows": {
-"command": "powershell -ExecutionPolicy Bypass -File '${workspaceFolder}\\.vscode\\init_layered_deploy.ps1' -WorkspaceFolder '${workspaceFolder}' -DkInstallPath '${input:dkInstallPath}'"
+"command": "powershell -ExecutionPolicy Bypass -File '${workspaceFolder}\\tools\\init-deploy.ps1' -WorkspaceFolder '${workspaceFolder}' -DungeonKeeperPath '${input:dkInstallPath}'"
 },
 "osx": {
-"command": "bash '${workspaceFolder}/.vscode/init_layered_deploy.sh' '${workspaceFolder}' '${input:dkInstallPath}'"
+"command": "bash '${workspaceFolder}/tools/init-deploy.sh' --workspace '${workspaceFolder}' --dk-path '${input:dkInstallPath}'"
 },
 "linux": {
-"command": "bash '${workspaceFolder}/.vscode/init_layered_deploy.sh' '${workspaceFolder}' '${input:dkInstallPath}'"
+"command": "bash '${workspaceFolder}/tools/init-deploy.sh' --workspace '${workspaceFolder}' --dk-path '${input:dkInstallPath}'"
 },
-"command": "bash '${workspaceFolder}/.vscode/init_layered_deploy.sh' '${workspaceFolder}' '${input:dkInstallPath}'",
+"command": "bash '${workspaceFolder}/tools/init-deploy.sh' --workspace '${workspaceFolder}' --dk-path '${input:dkInstallPath}'",
+"problemMatcher": [],
+"group": "build",
+"presentation": { "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
+},
+
+{
+// Like "Init .deploy/" but overlays the latest alpha patch on top of the stable release.
+// Use this when working on a dev branch that targets the current alpha build.
+"label": "Init .deploy/ (Alpha)",
+"type": "shell",
+"windows": {
+"command": "powershell -ExecutionPolicy Bypass -File '${workspaceFolder}\\tools\\init-deploy.ps1' -WorkspaceFolder '${workspaceFolder}' -DungeonKeeperPath '${input:dkInstallPath}' -UseAlpha"
+},
+"osx": {
+"command": "bash '${workspaceFolder}/tools/init-deploy.sh' --workspace '${workspaceFolder}' --dk-path '${input:dkInstallPath}' --use-alpha"
+},
+"linux": {
+"command": "bash '${workspaceFolder}/tools/init-deploy.sh' --workspace '${workspaceFolder}' --dk-path '${input:dkInstallPath}' --use-alpha"
+},
+"command": "bash '${workspaceFolder}/tools/init-deploy.sh' --workspace '${workspaceFolder}' --dk-path '${input:dkInstallPath}' --use-alpha",
 "problemMatcher": [],
 "group": "build",
 "presentation": { "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }

@@ -123,30 +123,57 @@ docker compose -f docker/compose.yml run linux bash -c "make pkg-lang"
 
 ---
 
-## CLion integration (layered deploy)
+## Local dev setup: initializing `.deploy/`
 
-Initialize `.deploy/` once per machine/worktree:
+Initialize `.deploy/` once per machine/worktree. The DK install path is cached in
+`~/.keeperfx-dev/` and reused across all git worktrees automatically.
+
+**Standard setup (stable release base):**
 
 ```pwsh
 powershell -ExecutionPolicy Bypass -File tools/init-deploy.ps1 -DungeonKeeperPath "C:\Path\To\Dungeon Keeper"
 ```
 
-What this does:
-- Builds (or reuses) `keeperfx-dk-originals:local` from your legal DK install.
-- Builds `keeperfx-runtime-assets:local` after generating `pkg-gfx`, `pkg-sfx`, and `pkg-languages` in Docker.
-- Recreates `.deploy/` by layering runtime assets + original DK files.
+**Working on a dev branch? Use the latest alpha patch as your base:**
 
-Refresh behaviors:
+```pwsh
+powershell -ExecutionPolicy Bypass -File tools/init-deploy.ps1 -UseAlpha
+```
+
+This downloads the latest stable release + overlays the latest alpha patch (cumulative) from GitHub.
+Binary archives are cached in `~/.keeperfx-dev/cache/` so repeated runs are fast.
+
+**Pin a specific release version:**
+
+```pwsh
+powershell -ExecutionPolicy Bypass -File tools/init-deploy.ps1 -KeeperFxVersion 1.3.2
+```
+
+**Skip the KFX release overlay entirely (Docker layers only):**
+
+```pwsh
+powershell -ExecutionPolicy Bypass -File tools/init-deploy.ps1 -SkipKfxOverlay
+```
+
+**Provide a locally extracted release instead of downloading:**
+
+```pwsh
+powershell -ExecutionPolicy Bypass -File tools/init-deploy.ps1 -KeeperFxReleasePath "C:\Downloads\KeeperFX-1.3.2"
+```
+
+**Refresh behaviors:**
 
 ```pwsh
 # Force rebuild only DK originals layer
-powershell -ExecutionPolicy Bypass -File tools/init-deploy.ps1 -DungeonKeeperPath "C:\Path\To\Dungeon Keeper" -RefreshDkLayer
+powershell -ExecutionPolicy Bypass -File tools/init-deploy.ps1 -RefreshDkLayer
 
-# Force rebuild runtime assets layer (no Docker cache)
+# Force rebuild runtime assets layer (re-runs make pkg-* and rebuilds the image)
 powershell -ExecutionPolicy Bypass -File tools/init-deploy.ps1 -RefreshRuntimeLayer
 ```
 
-`tools/clion-build-deploy.ps1` now validates that `.deploy/` is initialized and fails fast with instructions if required runtime files are missing.
+Linux/macOS users can use the bash equivalent: `bash tools/init-deploy.sh [--use-alpha] [--kfx-version X.Y.Z] ...`
+
+`tools/clion-build-deploy.ps1` validates that `.deploy/` is initialized and fails fast with instructions if required runtime files are missing.
 
 ---
 

@@ -69,3 +69,5 @@ VITAGL_SECURITY_AUDIT.md
 /sfx/
 /custom/
 /packaging/assets.local.json
+
+*.obj

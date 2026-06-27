@@ -13,7 +13,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory=$false)]
-    [string]$WorkspaceFolder = $PSScriptRoot | Split-Path -Parent
+    [string]$WorkspaceFolder = (Split-Path $PSScriptRoot -Parent)
 )
 
 Set-StrictMode -Version Latest
@@ -24,13 +24,13 @@ $exePath = Join-Path $deployPath "keeperfx.exe"
 
 if (-not (Test-Path $deployPath)) {
     Write-Host "ERROR: Deployment not found at: $deployPath" -ForegroundColor Red
-    Write-Host "Run init_layered_deploy.ps1 first" -ForegroundColor Yellow
+    Write-Host "Run tools\init-deploy.ps1 first" -ForegroundColor Yellow
     exit 1
 }
 
 if (-not (Test-Path $exePath)) {
     Write-Host "ERROR: keeperfx.exe not found at: $exePath" -ForegroundColor Red
-    Write-Host "Build and deploy first with: Ctrl+Shift+B to build, then .\.vscode\deploy_assets.ps1 -All" -ForegroundColor Yellow
+    Write-Host "Build first, then run .\.vscode\deploy_assets.ps1 -DeployExecutable" -ForegroundColor Yellow
     exit 1
 }
 
