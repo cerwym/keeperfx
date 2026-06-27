@@ -777,6 +777,8 @@ void GLTextRenderer::FlushSegment(const char* sbuf, const char* ebuf,
     int vertex_count = 0;
 
     float current_x = screen_x;
+    // Line height in scaled pixels — used for underline geometry.
+    const float line_h = (float)LineHeight() * scale_factor;
 
     for (const char* c = sbuf; c < ebuf && vertex_count <= 594; ++c)
     {
@@ -786,13 +788,30 @@ void GLTextRenderer::FlushSegment(const char* sbuf, const char* ebuf,
         // Non-breaking space (UTF-8: 0xC2 0xA0) — advance like a normal space
         if (ch == 0xC2 && (c + 1) < ebuf && (unsigned char)c[1] == 0xA0)
         {
+            float prev_x = current_x;
             current_x += space_len;
+            if (m_text_draw_flags & Lb_TEXT_UNDERLINE)
+                AppendUnderlineRects(prev_x, current_x, screen_y, line_h);
             ++c;
             continue;
         }
 
-        if (ch == ' ')  { current_x += space_len; continue; }
-        if (ch == '\t') { current_x += space_len * (float)LbTextGetSpacesPerTab(); continue; }
+        if (ch == ' ')
+        {
+            float prev_x = current_x;
+            current_x += space_len;
+            if (m_text_draw_flags & Lb_TEXT_UNDERLINE)
+                AppendUnderlineRects(prev_x, current_x, screen_y, line_h);
+            continue;
+        }
+        if (ch == '\t')
+        {
+            float prev_x = current_x;
+            current_x += space_len * (float)LbTextGetSpacesPerTab();
+            if (m_text_draw_flags & Lb_TEXT_UNDERLINE)
+                AppendUnderlineRects(prev_x, current_x, screen_y, line_h);
+            continue;
+        }
 
         // Control codes 1–14: update m_text_draw_flags/colour (mirrors put_down_simpletext_sprites)
         if (ch < 15)
@@ -842,7 +861,10 @@ void GLTextRenderer::FlushSegment(const char* sbuf, const char* ebuf,
         if (glyph_width > 0)
         {
             vertex_count += 6;
+            float prev_x = current_x;
             current_x += (float)glyph_width * scale_factor;
+            if (m_text_draw_flags & Lb_TEXT_UNDERLINE)
+                AppendUnderlineRects(prev_x, current_x, screen_y, line_h);
         }
     }
 
@@ -891,6 +913,51 @@ int GLTextRenderer::GenerateCharQuad(unsigned long chr, float x, float y, float 
     verts[5] = { ndc_x0, ndc_y1, glyph->u0, glyph->v1, forced_palette_idx };  // BL
 
     return glyph->width;
+}
+
+void GLTextRenderer::AppendUnderlineRect(float x0, float x1, float y0, float y1, float palette_idx)
+{
+    // UV.x = -1 triggers the solid-colour sentinel in the fragment shader.
+    const float su = -1.0f, sv = 0.0f;
+    float nx0, ny0, nx1, ny1;
+    ScreenToNDC(x0, y0, &nx0, &ny0);
+    ScreenToNDC(x1, y1, &nx1, &ny1);
+    TextVertex verts[6] = {
+        { nx0, ny0, su, sv, palette_idx },  // TL
+        { nx1, ny0, su, sv, palette_idx },  // TR
+        { nx1, ny1, su, sv, palette_idx },  // BR
+        { nx0, ny0, su, sv, palette_idx },  // TL
+        { nx1, ny1, su, sv, palette_idx },  // BR
+        { nx0, ny1, su, sv, palette_idx },  // BL
+    };
+    m_vertex_batch.insert(m_vertex_batch.end(), verts, verts + 6);
+}
+
+void GLTextRenderer::AppendUnderlineRects(float x0, float x1, float screen_y, float line_h)
+{
+    // Mirror LbDrawCharUnderline() (bflib_sprfnt.c:106).
+    // Lines are drawn bottom-up: shadow first (if active), then main.
+    // Double underline when line_h > DOUBLE_UNDERLINE_BOUND (16).
+    const float DUB = 16.0f;
+    float h = line_h;
+
+    if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLNSHADOW) != 0)
+    {
+        float sx = (line_h > 2.0f * DUB) ? 2.0f : 1.0f;
+        float pi  = (float)(unsigned char)lbDisplayEx.ShadowColour;
+        AppendUnderlineRect(x0 + sx, x1 + sx, screen_y + h, screen_y + h + 1.0f, pi);
+        h -= 1.0f;
+        if (line_h > DUB) {
+            AppendUnderlineRect(x0 + sx, x1 + sx, screen_y + h, screen_y + h + 1.0f, pi);
+            h -= 1.0f;
+        }
+    }
+    float pi = (float)(unsigned char)lbDisplay.DrawColour;
+    AppendUnderlineRect(x0, x1, screen_y + h, screen_y + h + 1.0f, pi);
+    h -= 1.0f;
+    if (line_h > DUB) {
+        AppendUnderlineRect(x0, x1, screen_y + h, screen_y + h + 1.0f, pi);
+    }
 }
 
 void GLTextRenderer::ScreenToNDC(float screen_x, float screen_y, float* ndc_x, float* ndc_y) const
