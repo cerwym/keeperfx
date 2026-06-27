@@ -119,6 +119,12 @@ extern const struct NamedCommand scrshot_type[];
 extern const struct NamedCommand renderer_type_names[];
 extern const struct NamedCommand renderer_palette_mode_names[];
 extern const struct NamedCommand renderer_zoom_box_mode_names[];
+extern const struct NamedCommand atmos_volume[];
+extern const struct NamedCommand atmos_freq[];
+extern const struct NamedCommand conf_commands[];
+extern const struct NamedCommand vidscale_type[];
+extern const struct NamedCommand startup_parameters[];
+extern const struct NamedCommand tag_modes[];
 extern int cfg_renderer_type;
 /** If non-zero, the game is paused when the renderer settings menu is open. Default: 1. */
 extern TbBool cfg_renderer_menu_pause;
@@ -133,6 +139,8 @@ void load_configuration_for_mod_all(void);
 short load_configuration(void);
 void process_cmdline_overrides(void);
 int parse_draw_fps_config_val(const char *arg, int32_t *fps_draw_main, int32_t *fps_draw_secondary);
+TbBool write_keeperfx_cfg(void);
+TbBool write_keeperfx_cfg_all(void);
 /******************************************************************************/
 TbBool is_feature_on(unsigned long feature);
 void set_skip_heart_zoom_feature(TbBool enable);

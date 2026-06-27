@@ -27,6 +27,7 @@
 #include "globals.h"
 #include "bflib_mouse.h"
 #include "input/input_interface.h"
+#include "input/InputManager.hpp"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -47,6 +48,7 @@ extern void init_inputcontrol(void);
 /******************************************************************************/
 short LbIKeyboardClose(void)
 {
+  InputManager_Shutdown();
   return 1;
 }
 
@@ -54,7 +56,8 @@ short LbIKeyboardOpen(void)
 {
   init_inputcontrol();
   input_sdl_initialize();  // Initialize input interface
-    return 1;
+  InputManager_Initialize();
+  return 1;
 }
 
 void keyboardControl(unsigned int action, TbKeyCode code, TbKeyMods modifiers, int ScanCode)

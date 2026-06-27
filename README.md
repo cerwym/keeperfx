@@ -148,6 +148,9 @@ For a CLion workflow using Docker cross-builds and local Windows GDB, see `docs/
 - Host debugger preflight (`Verify Windows Host GDB`) checks `.vscode/gdb.exe` and fails fast with instructions if missing.
 - First-time requirement: initialize `.deploy/` once so layered runtime assets are available for assembly:
   `powershell -ExecutionPolicy Bypass -File tools/init-deploy.ps1 -DungeonKeeperPath "C:\\Path\\To\\Dungeon Keeper"`.
+  When working on a dev branch, use `-UseAlpha` to also overlay the latest alpha patch:
+  `powershell -ExecutionPolicy Bypass -File tools/init-deploy.ps1 -UseAlpha`.
+  DK path is cached in `~/.keeperfx-dev/` and reused across git worktrees automatically.
 
 
 ## Components

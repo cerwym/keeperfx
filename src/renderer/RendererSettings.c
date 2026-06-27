@@ -10,6 +10,7 @@
 #include "renderer/RendererManager.h"
 #include "platform/PlatformManager.h"
 #include "thing_list.h"   // TCls_* enum values for outline class mask default
+#include <SDL2/SDL.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -150,6 +151,11 @@ void RendererSettings_Load(void)
     if (!f)
         return; // first run — silently use defaults
 
+    // Window state — loaded from file, applied after the main settings block.
+    int win_mode = -1; // -1 means not present in file
+    int win_w    = 0;
+    int win_h    = 0;
+
     char line[256];
     while (fgets(line, sizeof(line), f))
     {
@@ -162,7 +168,8 @@ void RendererSettings_Load(void)
             continue;
         int ival = (int)fval;
 
-        if      (strcmp(key, "darkness_mode")              == 0) g_renderer_settings.darkness_mode              = ival;
+        if      (strcmp(key, "palette_mode")               == 0) g_renderer_settings.palette_mode               = ival;
+        else if (strcmp(key, "darkness_mode")              == 0) g_renderer_settings.darkness_mode              = ival;
         else if (strcmp(key, "fog_speed")                  == 0) g_renderer_settings.fog_speed                  = fval;
         else if (strcmp(key, "fog_density")                == 0) g_renderer_settings.fog_density                = fval;
         else if (strcmp(key, "tile_filter")                == 0) g_renderer_settings.tile_filter                = ival;
@@ -188,17 +195,36 @@ void RendererSettings_Load(void)
         else if (strcmp(key, "creature_outline_enable")    == 0) g_renderer_settings.creature_outline_enable    = ival;
         else if (strcmp(key, "creature_outline_alpha")     == 0) g_renderer_settings.creature_outline_alpha     = fval;
         else if (strcmp(key, "lighting_mode")              == 0) g_renderer_settings.lighting_mode              = ival;
+        else if (strcmp(key, "tint_mode")                  == 0) g_renderer_settings.tint_mode                  = ival;
         else if (strcmp(key, "tint_strength")              == 0) g_renderer_settings.tint_strength              = fval;
-        // palette_mode is startup-only — intentionally excluded from user prefs.
         // Debug knobs are included so developers can persist them across sessions.
         else if (strcmp(key, "wireframe")                  == 0) g_renderer_settings.wireframe                  = ival;
         else if (strcmp(key, "show_depth")                 == 0) g_renderer_settings.show_depth                 = ival;
         else if (strcmp(key, "debug_gui_hitboxes")         == 0) g_renderer_settings.debug_gui_hitboxes         = ival;
+        // Window state (applied after all keys are read, once window exists).
+        else if (strcmp(key, "window_mode") == 0) win_mode = ival;
+        else if (strcmp(key, "window_w")    == 0) win_w    = ival;
+        else if (strcmp(key, "window_h")    == 0) win_h    = ival;
     }
 
     fclose(f);
     RendererSettings_Sanitize();
     RendererApplySettings(&g_renderer_settings);
+
+    // Apply saved window geometry if the window exists and values were loaded.
+    if (PlatformManager_HasWindow() && win_mode >= 0)
+    {
+        if (win_mode == 2)
+            PlatformManager_SetWindowFullscreen(SDL_WINDOW_FULLSCREEN_DESKTOP);
+        else if (win_mode == 1)
+            PlatformManager_SetWindowFullscreen(SDL_WINDOW_FULLSCREEN);
+        else
+        {
+            PlatformManager_SetWindowFullscreen(0);
+            if (win_w > 0 && win_h > 0)
+                PlatformManager_SetWindowSize(win_w, win_h);
+        }
+    }
 }
 
 void RendererSettings_Save(void)
@@ -211,8 +237,9 @@ void RendererSettings_Save(void)
         return;
 
     fprintf(f, "# KeeperFX renderer preferences — auto-generated, safe to edit\n");
-    fprintf(f, "# palette_mode is startup-only and lives in keeperfx.cfg\n\n");
+    fprintf(f, "# renderer preferences — applies to the live debug panel as well\n\n");
 
+    fprintf(f, "palette_mode             = %d\n",   g_renderer_settings.palette_mode);
     fprintf(f, "darkness_mode           = %d\n",   g_renderer_settings.darkness_mode);
     fprintf(f, "fog_speed               = %.4f\n", g_renderer_settings.fog_speed);
     fprintf(f, "fog_density             = %.4f\n", g_renderer_settings.fog_density);
@@ -247,12 +274,34 @@ void RendererSettings_Save(void)
     fprintf(f, "creature_outline_alpha  = %.4f\n", g_renderer_settings.creature_outline_alpha);
     fprintf(f, "\n");
     fprintf(f, "lighting_mode           = %d\n",   g_renderer_settings.lighting_mode);
+    fprintf(f, "tint_mode               = %d\n",   g_renderer_settings.tint_mode);
     fprintf(f, "tint_strength           = %.4f\n", g_renderer_settings.tint_strength);
     fprintf(f, "\n");
     fprintf(f, "# debug knobs\n");
     fprintf(f, "wireframe               = %d\n",   g_renderer_settings.wireframe);
     fprintf(f, "show_depth              = %d\n",   g_renderer_settings.show_depth);
     fprintf(f, "debug_gui_hitboxes      = %d\n",   g_renderer_settings.debug_gui_hitboxes);
+
+    // Window geometry — saved so the window restores its mode and size on next launch.
+    if (PlatformManager_HasWindow())
+    {
+        unsigned int wflags = PlatformManager_GetWindowFlags();
+        int wmode;
+        if ((wflags & SDL_WINDOW_FULLSCREEN_DESKTOP) == SDL_WINDOW_FULLSCREEN_DESKTOP)
+            wmode = 2;
+        else if (wflags & SDL_WINDOW_FULLSCREEN)
+            wmode = 1;
+        else
+            wmode = 0;
+
+        int ww = 0, wh = 0;
+        PlatformManager_GetWindowSize(&ww, &wh);
+
+        fprintf(f, "\n# window state\n");
+        fprintf(f, "window_mode             = %d\n", wmode);
+        fprintf(f, "window_w                = %d\n", ww);
+        fprintf(f, "window_h                = %d\n", wh);
+    }
 
     fclose(f);
 }

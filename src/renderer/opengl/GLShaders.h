@@ -44,6 +44,14 @@ out vec4 FragColor;
 
 void main()
 {
+    // v_uv.x < 0: solid-colour underline rect — no atlas lookup needed.
+    if (v_uv.x < 0.0) {
+        float palette_u = (v_forced_idx + 0.5) / 256.0;
+        vec3 palette_color = texture(u_palette, vec2(palette_u, 0.5)).rgb;
+        FragColor = vec4(palette_color * u_text_color.rgb, u_text_color.a);
+        return;
+    }
+
     vec4 atlas_sample = texture(u_font_atlas, v_uv);
     float alpha = atlas_sample.a;
 

@@ -192,6 +192,16 @@ private:
     int GenerateCharQuad(unsigned long chr, float x, float y, float scale_factor,
                          float forced_palette_idx, TextVertex* verts);
 
+    /** Append a solid 1-pixel-tall coloured rect directly to the vertex batch.
+     *  UV.x = -1 triggers the sentinel path in the fragment shader.
+     *  y0 < y1 in screen coords (y increases downward). */
+    void AppendUnderlineRect(float x0, float x1, float y0, float y1, float palette_idx);
+
+    /** Append all underline geometry for one character cell, matching the
+     *  LbDrawCharUnderline() logic: shadow first (optional), then main lines,
+     *  ordered bottom-up; double underline when line_h > DOUBLE_UNDERLINE_BOUND. */
+    void AppendUnderlineRects(float x0, float x1, float screen_y, float line_h);
+
     /** Convert screen pixel coordinates to NDC. */
     void ScreenToNDC(float screen_x, float screen_y, float* ndc_x, float* ndc_y) const;
 

@@ -265,6 +265,11 @@ extern "C" void* platform_get_sdl_window(void)
     return GetSDLWindowSystem()->GetSDLWindow();
 }
 
+extern "C" void* platform_get_gl_context(void)
+{
+    return s_glContext;
+}
+
 extern "C" void platform_gl_release_context(void)
 {
     if (SDL_GL_MakeCurrent(s_glWindow, nullptr) != 0)
