@@ -44,6 +44,10 @@ int PlatformManager_GetDisplayRefreshRate(void);
  *  Returns NULL if no window has been created yet. */
 void* platform_get_sdl_window(void);
 
+/** Return the active SDL_GLContext as an opaque pointer.
+ *  Returns NULL if no GL context has been created yet. */
+void* platform_get_gl_context(void);
+
 /** Returns the address of an OpenGL function by name.
  *  Wraps SDL_GL_GetProcAddress on SDL2 platforms.
  *  Must only be called after a GL context has been created. */

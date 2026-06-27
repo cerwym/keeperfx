@@ -39,6 +39,8 @@
 #include "keeperfx.hpp"
 #include "platform/PlatformManager.h"
 #include "platform/IWindowSystem.h"
+#include "debug/DebugOverlay.hpp"
+#include "input/InputManager.hpp"
 #include "renderer/RendMenuOverlay.h"
 #include <SDL2/SDL.h>
 #include "post_inc.h"
@@ -56,6 +58,9 @@ unsigned char last_used_input_device = 0;
 static TbBool isMouseActive = true;
 static TbBool isMouseActivated = false;
 static TbBool firstTimeMouseInit = true;
+#ifdef KEEPERFX_IMGUI_ENABLED
+static TbBool s_overlay_pre_grab = false; // mouse grab state before overlay opened
+#endif
 
 static char lbTextInputBuffer[256];
 static int lbTextInputLength = 0;
@@ -302,6 +307,23 @@ static void process_event(const SDL_Event *ev)
     {
     case SDL_KEYDOWN:
         x = keyboard_keys_mapping(&ev->key);
+#ifdef KEEPERFX_IMGUI_ENABLED
+        if (x == KC_F3)
+        {
+            DebugOverlay_Toggle();
+            if (DebugOverlay_IsVisible())
+            {
+                s_overlay_pre_grab = lbMouseGrabbed;
+                InputManager_PushContext(3 /* Context::Debug */);
+                LbSetMouseGrab(false);
+            }
+            else
+            {
+                InputManager_PopContext();
+                LbSetMouseGrab(s_overlay_pre_grab);
+            }
+        }
+#endif
         if (x == KC_F9)
         {
             RendMenu_ToggleOpen();
@@ -314,6 +336,9 @@ static void process_event(const SDL_Event *ev)
                 RendMenu_HandleKey(x);
                 break;
             }
+#ifdef KEEPERFX_IMGUI_ENABLED
+            if (!DebugOverlay_IsVisible())
+#endif
             keyboardControl(KActn_KEYDOWN,x,keyboard_mods_mapping(&ev->key), ev->key.keysym.sym);
         }
         last_used_input_device = ID_Keyboard_Mouse;
@@ -329,6 +354,9 @@ static void process_event(const SDL_Event *ev)
         }
         if (x != KC_UNASSIGNED)
         {
+#ifdef KEEPERFX_IMGUI_ENABLED
+            if (!DebugOverlay_IsVisible())
+#endif
             keyboardControl(KActn_KEYUP,x,keyboard_mods_mapping(&ev->key), ev->key.keysym.sym);
         }
         last_used_input_device = ID_Keyboard_Mouse;
@@ -339,6 +367,9 @@ static void process_event(const SDL_Event *ev)
         {
           return;
         }
+#ifdef KEEPERFX_IMGUI_ENABLED
+        if (DebugOverlay_IsVisible()) return;
+#endif
         if (lbMouseGrabbed && lbDisplay.MouseMoveRatio > 0)
         {
             int dx = ev->motion.xrel * lbDisplay.MouseMoveRatio + frac_x;
@@ -370,6 +401,9 @@ static void process_event(const SDL_Event *ev)
     case SDL_MOUSEBUTTONDOWN:
     case SDL_MOUSEBUTTONUP:
         last_used_input_device = ID_Keyboard_Mouse;
+#ifdef KEEPERFX_IMGUI_ENABLED
+        if (DebugOverlay_IsVisible()) return;
+#endif
 
         if(ev->button.button == SDL_BUTTON_LEFT || ev->button.button == SDL_BUTTON_RIGHT || ev->button.button == SDL_BUTTON_MIDDLE)
         {
@@ -520,6 +554,9 @@ TbBool LbPollInputs(void)
     SDL_Event ev;
     //process events until event queue is empty
     while (SDL_PollEvent(&ev)) {
+#ifdef KEEPERFX_IMGUI_ENABLED
+        DebugOverlay_QueueEvent(&ev);
+#endif
         process_event(&ev);
     }
 

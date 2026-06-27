@@ -38,6 +38,9 @@
 #include "engine_redraw.h"   // setup_engine_window / store_engine_window (PiP viewport)
 #include "engine_lenses.h"   // lens_mode
 #include "vidfade.h"         // g_palette_possession_tint
+#ifdef KEEPERFX_IMGUI_ENABLED
+#include "debug/DebugOverlay.hpp"
+#endif
 
 #include <glad/glad.h>
 #include <cstring>
@@ -137,6 +140,8 @@ bool RendererOpenGL::Init()
         platform_destroy_gl_context();
         return false;
     }
+
+    m_imgui_init_pending = true;
 
     if (!compile_shaders())
     {
@@ -587,6 +592,7 @@ void RendererOpenGL::Shutdown()
     if (m_swipe_vao)    { glDeleteVertexArrays(1, &m_swipe_vao); m_swipe_vao = 0; }
     if (m_swipe_vbo)    { glDeleteBuffers(1, &m_swipe_vbo); m_swipe_vbo = 0; }
 
+    DebugOverlay_Shutdown();
     platform_destroy_gl_context();
 }
 
@@ -871,6 +877,14 @@ void RendererOpenGL::FlushRenderWork()
 
 void RendererOpenGL::EndFrame_GL()
 {
+#ifdef KEEPERFX_IMGUI_ENABLED
+    if (m_imgui_init_pending)
+    {
+        m_imgui_init_pending = false;
+        DebugOverlay_Initialize(platform_get_sdl_window(), platform_get_gl_context());
+    }
+#endif
+
     // Deferred tile-atlas GPU init — runs on the render thread that owns the
     // GL context.  BeginFrame() (game thread) cannot call glGenTextures /
     // glTexImage3D directly because the context has already been transferred
@@ -1595,6 +1609,11 @@ void RendererOpenGL::EndFrame_GL()
     SYNCDBG(0, "EndFrame_GL step 5: before cursor draw");
     if (auto* cursor = RendererGetCursorLayer())
         cursor->ExecuteCursorFromIR(m_render_graph.GetUIBuffersRT());
+
+#ifdef KEEPERFX_IMGUI_ENABLED
+    DebugOverlay_NewFrame();
+    DebugOverlay_Render();
+#endif
 
     // Screenshot capture: after all draw calls, before buffer swap so that the
     // default framebuffer holds the fully-composited frame.

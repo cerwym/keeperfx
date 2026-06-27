@@ -41,6 +41,12 @@ if(NOT KEEPERFX_RENDERER_VULKAN)
     list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/renderer/vulkan/.*\\.cpp$")
 endif()
 
+# ImGui overlay exclusion
+if(NOT KEEPERFX_IMGUI)
+    list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/debug/.*\\.cpp$")
+endif()
+list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/debug/vendors/.*\\.cpp$")
+
 # ━━━ Networking Exclusions ━━━
 if(NOT KEEPERFX_NETWORKING)
     list(FILTER KEEPERFX_SOURCES_C EXCLUDE REGEX ".*/api\\.c$")
@@ -248,6 +254,14 @@ endif()
 # Link Tracy profiler (FetchContent target — compiled from source, matches CRT)
 if(KEEPERFX_TRACY AND TARGET TracyClient)
     target_link_libraries(keeperfx PRIVATE TracyClient)
+endif()
+
+# Link ImGui (optional — desktop only, requires OpenGL)
+if(KEEPERFX_IMGUI AND TARGET imgui::imgui)
+    target_link_libraries(keeperfx PRIVATE imgui::imgui)
+    target_sources(keeperfx PRIVATE
+        "${CMAKE_SOURCE_DIR}/src/debug/vendors/imgui_impl_sdl2.cpp"
+    )
 endif()
 
 # ━━━ All main KeeperFX targets — used by Platform*.cmake modules ━━━

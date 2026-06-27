@@ -478,6 +478,7 @@ private:
     // pushes the ID to every sub-renderer that needs it.
     // Written by game thread, read+cleared by render thread — atomic to prevent UB.
     std::atomic<bool>       m_fade_table_pending      {false};
+    bool                    m_imgui_init_pending      = false;
 
     /** GL submission pass — runs on the render thread.
      *  Do NOT call UIRenderer_Clear() or CursorLayer_Clear() from here;

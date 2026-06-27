@@ -35,6 +35,18 @@ if(NOT PLATFORM_VITA AND NOT PLATFORM_3DS AND NOT PLATFORM_SWITCH)
         endif()
     endif()
 
+    # ━━━ ImGui Debug/Settings Overlay (optional, desktop + OpenGL only) ━━━
+    if(KEEPERFX_IMGUI)
+        find_package(imgui CONFIG QUIET)
+        if(imgui_FOUND)
+            kfx_status("DEPS" "ImGui found — debug/settings overlay enabled")
+            add_compile_definitions(KEEPERFX_IMGUI_ENABLED=1)
+        else()
+            kfx_status("DEPS" "ImGui not found — debug/settings overlay disabled (install via vcpkg)")
+            set(KEEPERFX_IMGUI OFF CACHE BOOL "" FORCE)
+        endif()
+    endif()
+
     # ━━━ Vulkan Renderer (optional) ━━━
     if(KEEPERFX_RENDERER_VULKAN)
         find_package(Vulkan QUIET)
