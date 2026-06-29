@@ -2,7 +2,7 @@
 // Dungeon Keeper - Renderer Abstraction Layer
 /******************************************************************************/
 /** @file RendererHelper.cpp
- *     Shared renderer utility functions — SDL2-based implementation.
+ *     Shared renderer utility functions — SDL3-based implementation.
  */
 /******************************************************************************/
 #include "kfx_memory.h"
@@ -11,10 +11,8 @@
 
 #ifndef PLATFORM_3DS
 
-#include <SDL2/SDL.h>
-#ifndef PLATFORM_VITA
-#  include <SDL2/SDL_image.h>
-#endif
+#include <SDL3/SDL.h>
+
 #include <string.h>
 
 #include "bflib_video.h"   // lbPalette
@@ -26,11 +24,10 @@
 bool RendererHelper_SaveIndexedImage(const uint8_t* pixels, int w, int h, int pitch,
                                      const char* path)
 {
-    // Wrap pixel data in a temporary 8bpp surface (no copy).
-    SDL_Surface* surf = SDL_CreateRGBSurfaceFrom(
-        (void*)pixels, w, h, 8, pitch, 0, 0, 0, 0);
+    // SDL3: SDL_CreateSurfaceFrom(w, h, format, pixels, pitch) — note different parameter order
+    SDL_Surface* surf = SDL_CreateSurfaceFrom(w, h, SDL_PIXELFORMAT_INDEX8, (void*)pixels, pitch);
     if (!surf) {
-        ERRORLOG("RendererHelper_SaveIndexedImage: SDL_CreateRGBSurfaceFrom failed: %s", SDL_GetError());
+        ERRORLOG("RendererHelper_SaveIndexedImage: SDL_CreateSurfaceFrom failed: %s", SDL_GetError());
         return false;
     }
 
@@ -42,49 +39,48 @@ bool RendererHelper_SaveIndexedImage(const uint8_t* pixels, int w, int h, int pi
         colors[i].b = (lbPalette[i * 3 + 2] & 0x3F) << 2;
         colors[i].a = 255;
     }
-    SDL_SetPaletteColors(surf->format->palette, colors, 0, 256);
+    // SDL3: palette access via SDL_GetSurfacePalette (surf->format is now an enum, not a struct)
+    SDL_SetPaletteColors(SDL_GetSurfacePalette(surf), colors, 0, 256);
 
     bool ok = false;
 #ifndef PLATFORM_VITA
     const char* ext = strrchr(path, '.');
     if (ext && SDL_strcasecmp(ext, ".png") == 0) {
-        ok = (IMG_SavePNG(surf, path) == 0);
+        ok = SDL_SavePNG(surf, path);
     } else {
-        ok = (SDL_SaveBMP(surf, path) == 0);
+        ok = SDL_SaveBMP(surf, path);
     }
 #else
-    // SDL_image not available on Vita; save as BMP regardless of extension.
-    ok = (SDL_SaveBMP(surf, path) == 0);
+    ok = SDL_SaveBMP(surf, path);
 #endif
     if (!ok) {
         ERRORLOG("RendererHelper_SaveIndexedImage: failed to save '%s': %s", path, SDL_GetError());
     }
 
-    SDL_FreeSurface(surf);
+    SDL_DestroySurface(surf);
     return ok;
 }
 
 bool RendererHelper_SaveRGBAImage(const uint8_t* pixels, int w, int h, int pitch,
                                   int fmt, const char* path)
 {
-    SDL_Surface* surf = SDL_CreateRGBSurfaceWithFormatFrom(
-        (void*)pixels, w, h, 32, pitch, SDL_PIXELFORMAT_RGBA32);
+    // SDL3: SDL_CreateSurfaceFrom(w, h, format, pixels, pitch)
+    SDL_Surface* surf = SDL_CreateSurfaceFrom(w, h, SDL_PIXELFORMAT_RGBA32, (void*)pixels, pitch);
     if (!surf) {
-        ERRORLOG("RendererHelper_SaveRGBAImage: SDL_CreateRGBSurfaceWithFormatFrom failed: %s",
-                 SDL_GetError());
+        ERRORLOG("RendererHelper_SaveRGBAImage: SDL_CreateSurfaceFrom failed: %s", SDL_GetError());
         return false;
     }
     bool ok = false;
 #ifndef PLATFORM_VITA
     ok = (fmt == 2)
-        ? (SDL_SaveBMP(surf, path) == 0)
-        : (IMG_SavePNG(surf, path) == 0);
+        ? SDL_SaveBMP(surf, path)
+        : SDL_SavePNG(surf, path);
 #else
-    ok = (SDL_SaveBMP(surf, path) == 0);
+    ok = SDL_SaveBMP(surf, path);
 #endif
     if (!ok)
         ERRORLOG("RendererHelper_SaveRGBAImage: failed to save '%s': %s", path, SDL_GetError());
-    SDL_FreeSurface(surf);
+    SDL_DestroySurface(surf);
     return ok;
 }
 

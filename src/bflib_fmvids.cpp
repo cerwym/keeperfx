@@ -4,12 +4,11 @@
 #include "bflib_video.h"
 #include "bflib_inputctrl.h"
 #include "bflib_keybrd.h"
-#include "bflib_vidsurface.h"
 #include "bflib_fileio.h"
 #include "kjm_input.h"
 #include "platform/PlatformManager.h"
 #include "renderer/RendererManager.h"
-#include <SDL2/SDL.h>
+#include <SDL3/SDL.h>
 
 // See: https://trac.ffmpeg.org/ticket/3626
 extern "C" {
@@ -29,7 +28,7 @@ extern "C" {
 #include <chrono>
 #include "thread.hpp"
 #include <vector>
-#include <SDL2/SDL.h>
+#include <SDL3/SDL.h>
 #include "post_inc.h"
 
 namespace {
@@ -291,6 +290,7 @@ struct movie_t {
 	time_point m_video_start;
 	AVRational m_time_base;
 	SDL_AudioDeviceID m_audio_device = 0;
+	SDL_AudioStream* m_sdl_audio_stream = nullptr;
 #ifdef PLATFORM_VITA
 	TbFileHandle m_avio_file = nullptr;
 	AVIOContext * m_avio_ctx = nullptr;
@@ -351,9 +351,10 @@ struct movie_t {
 		if (m_resampler) {
 			swr_free(&m_resampler);
 		}
-		if (m_audio_device > 0) {
-			SDL_CloseAudioDevice(m_audio_device);
+		if (m_audio_device != 0) {
+			SDL_CloseAudioDevice(m_audio_device); // also destroys bound streams
 			m_audio_device = 0;
+			m_sdl_audio_stream = nullptr;
 		}
 		IAudioPlatform* audio = PlatformManager_GetAudio();
 		if (audio) {
@@ -387,10 +388,10 @@ struct movie_t {
 
 	AVSampleFormat sdl_to_ffmpeg_format(SDL_AudioFormat format) {
 		switch (format) {
-			case AUDIO_S8: return AV_SAMPLE_FMT_U8;
-			case AUDIO_S16SYS: return AV_SAMPLE_FMT_S16;
-			case AUDIO_S32SYS: return AV_SAMPLE_FMT_S32;
-			case AUDIO_F32SYS: return AV_SAMPLE_FMT_FLT;
+			case SDL_AUDIO_S8:  return AV_SAMPLE_FMT_U8;
+			case SDL_AUDIO_S16: return AV_SAMPLE_FMT_S16;
+			case SDL_AUDIO_S32: return AV_SAMPLE_FMT_S32;
+			case SDL_AUDIO_F32: return AV_SAMPLE_FMT_FLT;
 			default: return AV_SAMPLE_FMT_NONE;
 		}
 	}
@@ -432,26 +433,24 @@ struct movie_t {
 
         // Desktop path: use SDL audio.
         SDL_InitSubSystem(SDL_INIT_AUDIO);
-        SDL_AudioSpec desired, obtained;
-        desired.freq = 44100;
-        desired.format = AUDIO_F32SYS;
+        SDL_AudioSpec desired;
+        desired.freq     = 44100;
+        desired.format   = SDL_AUDIO_F32;
         desired.channels = 2;
-        desired.silence = 0;
-        desired.samples = 0;
-        desired.padding = 0;
-        desired.size = 0;
-        desired.callback = nullptr;
-        desired.userdata = nullptr;
-        m_audio_device = SDL_OpenAudioDevice(nullptr, 0, &desired, &obtained, SDL_AUDIO_ALLOW_ANY_CHANGE);
-        if (m_audio_device <= 0) {
+        m_sdl_audio_stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &desired, nullptr, nullptr);
+        if (!m_sdl_audio_stream) {
             WARNLOG("FMV: Cannot open SDL audio device (%s) — playing silent", SDL_GetError());
             m_flags |= SMK_NoSound;
             return;
         }
-        m_output_audio_channels = obtained.channels;
-        m_output_audio_frequency = obtained.freq;
-        m_output_audio_format = sdl_to_ffmpeg_format(obtained.format);
-        m_output_audio_layout = channels_to_ffmpeg_layout(obtained.channels);
+        m_audio_device = SDL_GetAudioStreamDevice(m_sdl_audio_stream);
+        // SDL3 converts from the stream's input format (desired) to the device
+        // format automatically.  Configure FFmpeg to output in desired format so
+        // the data we push into the stream matches what it expects.
+        m_output_audio_channels = desired.channels;
+        m_output_audio_frequency = desired.freq;
+        m_output_audio_format = sdl_to_ffmpeg_format(desired.format);
+        m_output_audio_layout = channels_to_ffmpeg_layout(desired.channels);
 	}
 
 	void find_stream_info() {
@@ -588,8 +587,8 @@ struct movie_t {
 		if (audio) {
 			audio->FmvAudioQueue(buffer, num_samples * sample_size);
 		} else {
-			SDL_QueueAudio(m_audio_device, buffer, num_samples * sample_size);
-			SDL_PauseAudioDevice(m_audio_device, 0);
+			SDL_PutAudioStreamData(m_sdl_audio_stream, buffer, num_samples * sample_size);
+			SDL_ResumeAudioDevice(m_audio_device);
 		}
 		av_freep(&buffer);
 	}
@@ -597,21 +596,17 @@ struct movie_t {
 	void output_video_frame() {
 		// FFMpeg used to provide m_frame->palette_has_changed but it has been deprecated
 		// Assume the palette has changed every frame as there is no way for us to know anymore
-		SDL_Color palette[PALETTE_COLORS];
+		// Update lbPalette[] (6-bit) so Vita and other backends that read it directly see FMV colours.
+		const uint8_t* bgra = m_frame->data[1];
 		for (size_t i = 0; i < PALETTE_COLORS; ++i) {
-			palette[i].b = m_frame->data[1][(i * 4) + 0]; // blue
-			palette[i].g = m_frame->data[1][(i * 4) + 1]; // green
-			palette[i].r = m_frame->data[1][(i * 4) + 2]; // red
-			// RendererVita (and vitaGL) read lbPalette[] directly (6-bit values).
-			// SDL_SetPaletteColors only updates lbDrawSurface->format->palette which
-			// those renderers never read. Update lbPalette here so the video is visible.
-			lbPalette[i*3+0] = palette[i].r >> 2;
-			lbPalette[i*3+1] = palette[i].g >> 2;
-			lbPalette[i*3+2] = palette[i].b >> 2;
+			lbPalette[i*3+0] = bgra[i*4+2] >> 2; // R
+			lbPalette[i*3+1] = bgra[i*4+1] >> 2; // G
+			lbPalette[i*3+2] = bgra[i*4+0] >> 2; // B
 		}
         RendererWaitVbi(); // this is a no-op today
-		// LbPaletteSet expects values in range 0-63 for reasons, nuking 75% of the color range
-		SDL_SetPaletteColors(lbDrawSurface->format->palette, palette, 0, PALETTE_COLORS);
+		// Route palette update through the renderer — software backend applies it to the
+		// draw surface; GPU backends ignore it (palette comes through SubmitVideoFrame).
+		RendererNotifyFmvPalette(bgra);
 		if (!RendererLockScreen()) {
 			return;
 		}

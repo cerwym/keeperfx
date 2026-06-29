@@ -25,18 +25,18 @@
 #include "bflib_mouse.h"
 #include "bflib_render.h"
 #include "bflib_sprfnt.h"
-#include "bflib_vidsurface.h"
 #include "renderer/RendererManager.h"
 
 #include "keeperfx.hpp"
 
-#include <SDL2/SDL.h>
+#include <SDL3/SDL.h>
 #include <math.h>
 #include "platform/PlatformManager.h"
 #include "platform/kfx_breadcrumb.h"
 #include "post_inc.h"
 
 #define SCREEN_MODES_COUNT 40
+#define M_PI 3.14159265358979323846
 
 #ifdef __cplusplus
 extern "C" {
@@ -114,7 +114,9 @@ TbScreenMode LbScreenActiveMode(void)
 unsigned short LbGraphicsScreenBPP(void)
 {
     if (lbDrawSurface != NULL) {
-        return lbDrawSurface->format->BitsPerPixel;
+        // SDL3: surface->format is SDL_PixelFormat enum; use SDL_GetPixelFormatDetails()
+        const SDL_PixelFormatDetails* fmtd = SDL_GetPixelFormatDetails(lbDrawSurface->format);
+        return fmtd ? fmtd->bits_per_pixel : 0;
     }
     // On error, return 0
     return 0;
@@ -237,7 +239,7 @@ TbResult LbScreenWaitVbi(void)
   return Lb_SUCCESS;
 }
 
-/** Get the display id that the game is currently rendering to, or the default if there is no game window. Uses SDL2. */
+/** Get the display ID the game is currently rendering to, or the primary display if no window exists. */
 unsigned short LbGetCurrentDisplayIndex()
 {
     unsigned short current_display_id = display_id; // default to the already set display_id
@@ -413,7 +415,7 @@ static void LbRegisterStandardVideoModes(void)
 }
 
 /**
- * Registers special video modes that allow us to work in a modern environment (Uses SDL2).
+ * Registers special video modes that allow us to work in a modern environment.
  *
  * These are added to the end of list of VESA standard modes (see LbRegisterStandardVideoModes), as "custom modes".
  */
@@ -428,21 +430,21 @@ static void LbRegisterModernVideoModes(void)
 
 TbResult LbScreenInitialize(void)
 {
-    // Clear global variables
+    // Reset internal state — no window or surface created here.
+    // Window creation happens later in LbScreenSetup via PlatformManager_CreateWindow.
     lbScreenInitialised = false;
     lbDrawSurface = NULL;
     lbHasSecondSurface = false;
     lbDoubleBufferingRequested = false;
-    LbMouseChangeMoveRatio(256, 256);
-    // Register default video modes
+    // Register supported video modes (done once; safe to call early, no display needed).
     if (lbScreenModeInfoNum == 0) {
         LbRegisterStandardVideoModes();
-        LbRegisterModernVideoModes(); // register modern and flexible custom modes
+        LbRegisterModernVideoModes();
     }
     return Lb_SUCCESS;
 }
 
-/** Set up the window, render surface, etc. Called when we want to change the screen setup. Uses SDL2. */
+/** Set up the window, render surface, etc. for the given screen mode. */
 TbResult LbScreenSetup(TbScreenMode mode, TbScreenCoord width, TbScreenCoord height,
     unsigned char *palette, short buffers_count, TbBool wscreen_vid)
 {
@@ -636,8 +638,13 @@ TbResult LbPaletteSet(unsigned char *palette)
         srcColors += 3;
         bufColors += 3;
     }
-    if (lbDrawSurface != NULL && lbDrawSurface->format != NULL && lbDrawSurface->format->palette != NULL)
-        SDL_SetPaletteColors(lbDrawSurface->format->palette, lbPaletteColors, 0, PALETTE_COLORS);
+    // SDL3: access palette via SDL_GetSurfacePalette()
+    if (lbDrawSurface != NULL)
+    {
+        SDL_Palette* pal = SDL_GetSurfacePalette(lbDrawSurface);
+        if (pal != NULL)
+            SDL_SetPaletteColors(pal, lbPaletteColors, 0, PALETTE_COLORS);
+    }
     //KfxFree(destColors);
     lbDisplay.Palette = lbPalette;
     return ret;

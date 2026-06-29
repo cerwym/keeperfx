@@ -35,8 +35,6 @@
 #include "keeperfx.hpp"
 #include "post_inc.h"
 /******************************************************************************/
-struct SSurface;
-/******************************************************************************/
 // Global variables
 int32_t cursor_xsteps_array[2*CURSOR_SCALING_XSTEPS];
 int32_t cursor_ysteps_array[2*CURSOR_SCALING_YSTEPS];

@@ -24,7 +24,7 @@
 #include <string.h>
 #include <stdarg.h>
 #include <stdlib.h>
-#include <SDL2/SDL.h>
+#include <SDL3/SDL.h>
 
 #include "bflib_basics.h"
 #include "globals.h"
@@ -114,8 +114,9 @@ void LbMoveHostCursorToGameCursor(void)
 {
     int game_cursor_x = lbDisplay.MMouseX;
     int game_cursor_y = lbDisplay.MMouseY;
-    int host_cursor_x, host_cursor_y;
-    SDL_GetMouseState(&host_cursor_x, &host_cursor_y);
+    float hcx_f = 0.0f, hcy_f = 0.0f;
+    SDL_GetMouseState(&hcx_f, &hcy_f);
+    int host_cursor_x = (int)hcx_f, host_cursor_y = (int)hcy_f;
     if ((host_cursor_x != game_cursor_x) || (host_cursor_y != game_cursor_y))
     {
         LbMouseSetPosition(game_cursor_x, game_cursor_y);
@@ -126,8 +127,9 @@ TbResult LbMoveGameCursorToHostCursor(void)
 {
     int game_cursor_x = lbDisplay.MMouseX;
     int game_cursor_y = lbDisplay.MMouseY;
-    int host_cursor_x, host_cursor_y;
-    SDL_GetMouseState(&host_cursor_x, &host_cursor_y);
+    float hcx_f = 0.0f, hcy_f = 0.0f;
+    SDL_GetMouseState(&hcx_f, &hcy_f);
+    int host_cursor_x = (int)hcx_f, host_cursor_y = (int)hcy_f;
     if (((host_cursor_x != game_cursor_x) || (host_cursor_y != game_cursor_y)) &&
         PlatformManager::Get()->GetWindowSystem()->IsAppActive())
     {

@@ -1,7 +1,7 @@
 #include "kfx_memory.h"
 #include "pre_inc.h"
 #include "platform/PlatformLinux.h"
-#include <SDL2/SDL.h>
+#include <SDL3/SDL.h>
 #include <string>
 #include <memory>
 #include <sys/types.h>
@@ -65,7 +65,7 @@ void PlatformLinux::ErrorParachuteUpdate()
 
 void PlatformLinux::VideoInit()
 {
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK) < 0)
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK))
         fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
     atexit(SDL_Quit);
 }

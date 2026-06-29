@@ -113,6 +113,15 @@ enum TbVideoModeFlags {
     Lb_VF_FILLALL     = 0x0080,
 };
 
+/* SDL_WINDOW_FULLSCREEN_DESKTOP was removed in SDL3.
+ * This compat shim gives existing code (bflib_video.c, RendererSettings.c,
+ * ImGuiRendererPanel.cpp) a stable constant to compile against.
+ * WindowSystemSDL translates this value to SDL3's desktop-fullscreen API
+ * (SDL_SetWindowFullscreenMode + NULL) before touching SDL3 directly. */
+#ifndef SDL_WINDOW_FULLSCREEN_DESKTOP
+#  define SDL_WINDOW_FULLSCREEN_DESKTOP  0x00001001u
+#endif
+
 struct GraphicsWindow {
     long x;
     long y;
@@ -234,8 +243,18 @@ struct DisplayStructEx {
 };
 typedef struct DisplayStructEx TbDisplayStructEx;
 
-struct SSurface;
-typedef struct SSurface TSurface;
+struct SDL_Surface;
+
+/** The software renderer's off-screen draw surface.
+ *  Defined in renderer/RendererSoftware.cpp; NULL when a GPU backend is active. */
+extern struct SDL_Surface * lbDrawSurface;
+
+/** Create the engine draw surface (lbDrawSurface) at w×h pixels, bpp bits per pixel.
+ *  Called from LbScreenSetup; implemented in renderer/RendererSoftware.cpp. */
+TbResult LbScreenCreateDrawSurface(int w, int h, int bpp);
+
+/** Free lbDrawSurface if it was dynamically allocated, then null the pointer. */
+void LbScreenFreeDrawSurface(void);
 
 /******************************************************************************/
 

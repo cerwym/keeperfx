@@ -26,7 +26,6 @@
 #include "bflib_video.h"
 #include "bflib_sprite.h"
 #include "bflib_sprfnt.h"
-#include "bflib_vidsurface.h"
 #include "globals.h"
 #include "renderer/RendererManager.h"
 

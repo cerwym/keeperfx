@@ -5,7 +5,7 @@
 
 struct SDL_Window;  // forward declaration; full type in WindowSystemSDL.cpp
 
-/** SDL2 desktop window-system implementation.
+/** SDL3 desktop window-system implementation.
  *
  *  Used by PlatformWindows and PlatformLinux.  Wraps SDL focus events,
  *  relative mouse mode, cursor visibility, and window warp — all the
@@ -14,6 +14,10 @@ struct SDL_Window;  // forward declaration; full type in WindowSystemSDL.cpp
  *
  *  The single global instance is shared by both desktop platform classes
  *  (there is only one SDL window at a time anyway).
+ *
+ *  GetWindowFlags() / SetWindowFullscreen() use KFX-internal constants
+ *  that include a SDL2-compat define for SDL_WINDOW_FULLSCREEN_DESKTOP
+ *  (see bflib_video.h).  Translation to SDL3 APIs happens inside this class.
  */
 class WindowSystemSDL : public IWindowSystem {
 public:
@@ -54,6 +58,10 @@ public:
 
 private:
     bool m_appActive = true;
+    // True when in DESKTOP mode implemented as a plain borderless window without
+    // SDL_WINDOW_FULLSCREEN.  This avoids Windows Fullscreen Optimizations (FSO)
+    // which would bypass the DWM HDR compositor and switch the monitor to SDR mode.
+    bool m_desktopFakeFullscreen = false;
 };
 
 /** Shared singleton — both PlatformWindows and PlatformLinux return this. */

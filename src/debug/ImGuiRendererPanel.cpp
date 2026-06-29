@@ -15,7 +15,7 @@
 #include "renderer/RendererManager.h"
 #include "renderer/RendererSettings.h"
 
-#include <SDL2/SDL.h>
+#include <SDL3/SDL.h>
 #include <imgui.h>
 
 #include <cstdio>
@@ -135,9 +135,10 @@ const char* GetRendererTypeLabel(RendererType type)
     }
 }
 
+// SDL3: SDL_GetDisplayName takes SDL_DisplayID (Uint32); implicit int→Uint32 is fine.
 const char* GetDisplayNameSafe(int display_idx)
 {
-    const char* name = (display_idx >= 0) ? SDL_GetDisplayName(display_idx) : nullptr;
+    const char* name = (display_idx >= 0) ? SDL_GetDisplayName((SDL_DisplayID)display_idx) : nullptr;
     return (name != nullptr) ? name : "(unknown)";
 }
 
@@ -157,10 +158,11 @@ void CenterWindowOnDisplay(IWindowSystem* ws, int display_idx)
     ws->SetWindowPosition(dx + (dw - ww) / 2, dy + (dh - wh) / 2);
 }
 
+// SDL3: refresh_rate is float; cast to int for display.
 void FormatDisplayModeLabel(const SDL_DisplayMode& mode, char* buf, size_t bufsz)
 {
-    if (mode.refresh_rate > 0) {
-        std::snprintf(buf, bufsz, "%d x %d @ %d Hz", mode.w, mode.h, mode.refresh_rate);
+    if (mode.refresh_rate > 0.0f) {
+        std::snprintf(buf, bufsz, "%d x %d @ %d Hz", mode.w, mode.h, (int)mode.refresh_rate);
     } else {
         std::snprintf(buf, bufsz, "%d x %d", mode.w, mode.h);
     }
@@ -173,7 +175,7 @@ int FindDisplayModeIndex(const std::vector<SDL_DisplayMode>& modes, const SDL_Di
         const SDL_DisplayMode& mode = modes[i];
         if (mode.w == current_mode.w &&
             mode.h == current_mode.h &&
-            mode.refresh_rate == current_mode.refresh_rate) {
+            (int)mode.refresh_rate == (int)current_mode.refresh_rate) {
             return i;
         }
     }
@@ -254,16 +256,17 @@ void DrawWindowTab()
         const int display_idx = ws->GetWindowDisplayIndex();
         if (display_idx >= 0)
         {
+            const SDL_DisplayID display_id = (SDL_DisplayID)display_idx;
+            int num_modes = 0;
+            SDL_DisplayMode** raw_modes = SDL_GetFullscreenDisplayModes(display_id, &num_modes);
             std::vector<SDL_DisplayMode> modes_for_display;
-            const int num_modes = SDL_GetNumDisplayModes(display_idx);
-            modes_for_display.reserve((num_modes > 0) ? num_modes : 0);
-            for (int i = 0; i < num_modes; ++i)
+            if (raw_modes && num_modes > 0)
             {
-                SDL_DisplayMode mode = {};
-                if (SDL_GetDisplayMode(display_idx, i, &mode) == 0) {
-                    modes_for_display.push_back(mode);
-                }
+                modes_for_display.reserve(num_modes);
+                for (int i = 0; i < num_modes; ++i)
+                    modes_for_display.push_back(*raw_modes[i]);
             }
+            SDL_free(raw_modes);
 
             if (!modes_for_display.empty())
             {
@@ -273,9 +276,10 @@ void DrawWindowTab()
                 if (s_last_display != display_idx)
                 {
                     s_last_display = display_idx;
-                    SDL_DisplayMode current_mode = {};
-                    if (SDL_GetCurrentDisplayMode(display_idx, &current_mode) == 0) {
-                        s_selected_mode = FindDisplayModeIndex(modes_for_display, current_mode);
+                    // SDL3: SDL_GetCurrentDisplayMode returns const SDL_DisplayMode*.
+                    const SDL_DisplayMode* cur_mode = SDL_GetCurrentDisplayMode(display_id);
+                    if (cur_mode) {
+                        s_selected_mode = FindDisplayModeIndex(modes_for_display, *cur_mode);
                     } else {
                         s_selected_mode = 0;
                     }
@@ -318,7 +322,10 @@ void DrawWindowTab()
 
     ImGui::Separator();
     ImGui::TextUnformatted("Display / Monitor");
-    const int num_displays = SDL_GetNumVideoDisplays();
+    // SDL3: SDL_GetNumVideoDisplays() removed; use SDL_GetDisplays().
+    int num_displays = 0;
+    SDL_DisplayID* display_ids = SDL_GetDisplays(&num_displays);
+    SDL_free(display_ids);
     const int current_display = ws->GetWindowDisplayIndex();
     const char* current_display_name = GetDisplayNameSafe(current_display);
     if (num_displays > 0 && ImGui::BeginCombo("Monitor", current_display_name))

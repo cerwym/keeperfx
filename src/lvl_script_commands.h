@@ -23,7 +23,7 @@ extern "C" {
 
 #include "lvl_script_lib.h"
 #ifdef SDL_MIXER_AVAILABLE
-#include <SDL2/SDL_mixer.h>
+#include <SDL3_mixer/SDL_mixer.h>
 #endif
 
 extern const struct CommandDesc command_desc[];

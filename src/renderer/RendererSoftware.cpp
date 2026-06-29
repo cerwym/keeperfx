@@ -19,7 +19,6 @@
 #include "renderer/backends/SoftwareUIRenderer.h"
 
 #include "bflib_video.h"
-#include "bflib_vidsurface.h"
 #include "bflib_render.h"
 #include "bflib_sprite.h"    // TbSpriteSheet, get_sprite
 #include "bflib_vidraw.h"    // LbSpriteDrawResized
@@ -32,8 +31,7 @@
 #include "lens_api.h"
 #include "player_data.h"
 
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_image.h>
+#include <SDL3/SDL.h>
 #include <cstring>
 
 extern "C" void draw_texture(int32_t texture_x, int32_t texture_y, int32_t texture_width, int32_t texture_height,
@@ -45,6 +43,47 @@ extern "C" void draw_texture(int32_t texture_x, int32_t texture_y, int32_t textu
 
 static SDL_Surface* s_screenSurface = nullptr;
 static SDL_Surface* s_scaleSurface  = nullptr;
+
+/******************************************************************************/
+/* Draw surface — owned by the software renderer                              */
+/******************************************************************************/
+
+extern "C" SDL_Surface * lbDrawSurface = nullptr;
+
+extern "C" TbResult LbScreenCreateDrawSurface(int w, int h, int bpp)
+{
+    SDL_PixelFormat fmt = (bpp == 8) ? SDL_PIXELFORMAT_INDEX8 : SDL_PIXELFORMAT_RGBX8888;
+    lbDrawSurface = SDL_CreateSurface(w, h, fmt);
+    if (!lbDrawSurface) {
+        ERRORLOG("Failed to create draw surface (%dx%dx%d): %s", w, h, bpp, SDL_GetError());
+        return Lb_FAIL;
+    }
+    return Lb_SUCCESS;
+}
+
+extern "C" void LbScreenFreeDrawSurface(void)
+{
+    extern volatile TbBool lbHasSecondSurface;
+    if (lbHasSecondSurface && lbDrawSurface) {
+        SDL_DestroySurface(lbDrawSurface);
+    }
+    lbDrawSurface = nullptr;
+}
+
+void RendererSoftware::NotifyFmvPalette(const uint8_t* bgra_1024)
+{
+    if (!lbDrawSurface) return;
+    SDL_Palette* pal = SDL_GetSurfacePalette(lbDrawSurface);
+    if (!pal) return;
+    SDL_Color colors[256];
+    for (int i = 0; i < 256; ++i) {
+        colors[i].b = bgra_1024[i * 4 + 0];
+        colors[i].g = bgra_1024[i * 4 + 1];
+        colors[i].r = bgra_1024[i * 4 + 2];
+        colors[i].a = 255;
+    }
+    SDL_SetPaletteColors(pal, colors, 0, 256);
+}
 
 bool RendererSoftware::Init()
 {
@@ -62,12 +101,14 @@ bool RendererSoftware::Init()
     }
 
     // Create an intermediate surface when draw BPP differs from window BPP.
-    if (lbDrawSurface->format->BitsPerPixel != s_screenSurface->format->BitsPerPixel) {
-        s_scaleSurface = SDL_CreateRGBSurfaceWithFormat(0,
-            lbDrawSurface->w, lbDrawSurface->h,
-            s_screenSurface->format->BitsPerPixel, s_screenSurface->format->format);
+    {
+        const SDL_PixelFormatDetails* draw_fmt   = SDL_GetPixelFormatDetails(lbDrawSurface->format);
+        const SDL_PixelFormatDetails* screen_fmt = SDL_GetPixelFormatDetails(s_screenSurface->format);
+        if (draw_fmt && screen_fmt && draw_fmt->bits_per_pixel != screen_fmt->bits_per_pixel) {
+        s_scaleSurface = SDL_CreateSurface(lbDrawSurface->w, lbDrawSurface->h, s_screenSurface->format);
         if (!s_scaleSurface) {
             WARNLOG("RendererSoftware::Init: can't create scale surface: %s — direct blit will be attempted", SDL_GetError());
+        }
         }
     }
 
@@ -128,7 +169,7 @@ void RendererSoftware::Shutdown()
     }
 
     if (s_scaleSurface) {
-        SDL_FreeSurface(s_scaleSurface);
+        SDL_DestroySurface(s_scaleSurface);
         s_scaleSurface = nullptr;
     }
     s_screenSurface = nullptr; // owned by SDL window, do not free
@@ -167,27 +208,27 @@ void RendererSoftware::EndFrame()
 
     if (s_scaleSurface != nullptr) {
         // Two-step: convert format then scale.
-        if (SDL_BlitSurface(lbDrawSurface, NULL, s_scaleSurface, NULL) < 0) {
+        if (!SDL_BlitSurface(lbDrawSurface, NULL, s_scaleSurface, NULL)) {
             ERRORLOG("RendererSoftware::EndFrame: format-convert blit failed: %s", SDL_GetError());
             return;
         }
-        if (SDL_BlitScaled(s_scaleSurface, NULL, s_screenSurface, &dst) < 0) {
+        if (!SDL_BlitSurfaceScaled(s_scaleSurface, NULL, s_screenSurface, &dst, SDL_SCALEMODE_NEAREST)) {
             ERRORLOG("RendererSoftware::EndFrame: scale blit failed: %s", SDL_GetError());
             return;
         }
     } else if (lbDrawSurface->w != s_screenSurface->w || lbDrawSurface->h != s_screenSurface->h) {
-        if (SDL_BlitScaled(lbDrawSurface, NULL, s_screenSurface, &dst) < 0) {
+        if (!SDL_BlitSurfaceScaled(lbDrawSurface, NULL, s_screenSurface, &dst, SDL_SCALEMODE_NEAREST)) {
             ERRORLOG("RendererSoftware::EndFrame: scaled blit failed: %s", SDL_GetError());
             return;
         }
     } else {
-        if (SDL_BlitSurface(lbDrawSurface, NULL, s_screenSurface, NULL) < 0) {
+        if (!SDL_BlitSurface(lbDrawSurface, NULL, s_screenSurface, NULL)) {
             ERRORLOG("RendererSoftware::EndFrame: blit failed: %s", SDL_GetError());
             return;
         }
     }
 
-    if (SDL_UpdateWindowSurface(win) < 0) {
+    if (!SDL_UpdateWindowSurface(win)) {
         ERRORDBG(11, "RendererSoftware::EndFrame: flip failed: %s", SDL_GetError());
     }
 }
@@ -195,14 +236,14 @@ void RendererSoftware::EndFrame()
 void RendererSoftware::ClearScreen(uint8_t colour_index)
 {
     if (lbDrawSurface)
-        SDL_FillRect(lbDrawSurface, NULL, colour_index);
+        SDL_FillSurfaceRect(lbDrawSurface, NULL, colour_index);
 }
 
 uint8_t* RendererSoftware::LockFramebuffer(int* out_pitch)
 {
     if (!lbDrawSurface)
         return nullptr;
-    if (SDL_LockSurface(lbDrawSurface) < 0)
+    if (!SDL_LockSurface(lbDrawSurface))
         return nullptr;
     if (out_pitch)
         *out_pitch = lbDrawSurface->pitch;
@@ -463,8 +504,8 @@ bool RendererSoftware::ScheduleScreenshot(const char* path, int fmt)
     bool ok;
     switch (fmt)
     {
-        case 1:  ok = (IMG_SavePNG(lbDrawSurface, path) == 0); break;
-        case 2:  ok = (SDL_SaveBMP(lbDrawSurface, path) == 0); break;
+        case 1:  ok = SDL_SavePNG(lbDrawSurface, path); break;
+        case 2:  ok = SDL_SaveBMP(lbDrawSurface, path); break;
         default: ok = false; break;
     }
     if (!ok)

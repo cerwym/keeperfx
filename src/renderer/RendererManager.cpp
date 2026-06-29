@@ -1249,6 +1249,12 @@ TbBool RendererSubmitVideoFrame(const unsigned char* px, int src_w, int src_h, i
                                   dst_x, dst_y, dst_w, dst_h) ? true : false;
 }
 
+void RendererNotifyFmvPalette(const unsigned char* bgra_1024)
+{
+    IRenderer* rend = RendererGetActive();
+    if (rend) rend->NotifyFmvPalette(bgra_1024);
+}
+
 TbBool RendererSubmitLandviewZoom(const unsigned char* src_buf, int src_w, int src_h,
                                   float center_map_x, float center_map_y,
                                   float screen_cx,    float screen_cy,
