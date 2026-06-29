@@ -196,6 +196,66 @@ static void hdr_anchor_destroy(void)
         s_hdr_anchor = nullptr;
     }
 }
+
+// ---------------------------------------------------------------------------
+// HDR compositor watcher — polls DXGI color space every 250ms during rendering
+// ---------------------------------------------------------------------------
+// Independent of SDL's HDR event system: catches any DXGI-level color space
+// change even if SDL_EVENT_WINDOW_HDR_STATE_CHANGED doesn't fire.
+static IDXGIFactory1 *s_watcher_factory = nullptr;
+static int            s_watcher_last_cs  = -99;   // -99 = uninitialized
+static ULONGLONG      s_watcher_next_ms  = 0;
+
+static void hdr_watcher_init(void)
+{
+    if (s_watcher_factory) return;
+    if (FAILED(CreateDXGIFactory1(__uuidof(IDXGIFactory1), (void **)&s_watcher_factory)))
+        LbJustLog("[HDR-watcher] CreateDXGIFactory1 failed — watcher disabled\n");
+    else
+        LbJustLog("[HDR-watcher] started: polling DXGI ColorSpace every 250ms\n");
+}
+
+static void hdr_watcher_tick(void)
+{
+    if (!s_watcher_factory) return;
+    ULONGLONG now = GetTickCount64();
+    if (now < s_watcher_next_ms) return;
+    s_watcher_next_ms = now + 250;
+
+    IDXGIAdapter *adapter = nullptr;
+    if (FAILED(s_watcher_factory->EnumAdapters(0, &adapter))) return;
+    IDXGIOutput *output = nullptr;
+    int cs = -1;
+    if (SUCCEEDED(adapter->EnumOutputs(0, &output)))
+    {
+        IDXGIOutput6 *out6 = nullptr;
+        if (SUCCEEDED(output->QueryInterface(__uuidof(IDXGIOutput6), (void **)&out6)))
+        {
+            DXGI_OUTPUT_DESC1 d1 = {};
+            if (SUCCEEDED(out6->GetDesc1(&d1)))
+                cs = (int)d1.ColorSpace;
+            out6->Release();
+        }
+        output->Release();
+    }
+    adapter->Release();
+
+    if (s_watcher_last_cs != -99 && cs != s_watcher_last_cs)
+        LbJustLog("[HDR-watcher] @%llums  ColorSpace  %d (%s)  ->  %d (%s)\n",
+            (unsigned long long)now,
+            s_watcher_last_cs, dxgi_colorspace_name((DXGI_COLOR_SPACE_TYPE)s_watcher_last_cs),
+            cs,               dxgi_colorspace_name((DXGI_COLOR_SPACE_TYPE)cs));
+    s_watcher_last_cs = cs;
+}
+
+static void hdr_watcher_shutdown(void)
+{
+    if (!s_watcher_factory) return;
+    s_watcher_factory->Release();
+    s_watcher_factory = nullptr;
+    s_watcher_last_cs = -99;
+    LbJustLog("[HDR-watcher] stopped\n");
+}
 #endif // _WIN32
 
 static void log_sdl_display_info(SDL_Window *window, const char *label)
@@ -367,6 +427,7 @@ extern "C" int platform_create_gl_context(void *sdl_window)
         }
         hdr_anchor_create();
     }
+    hdr_watcher_init();
 #endif
 
     log_sdl_display_info(window, "after GL context creation");
@@ -381,6 +442,7 @@ extern "C" int platform_create_gl_context(void *sdl_window)
 extern "C" void platform_destroy_gl_context(void)
 {
 #ifdef _WIN32
+    hdr_watcher_shutdown();
     hdr_anchor_destroy();
 #endif
     if (s_glContext)
@@ -393,6 +455,9 @@ extern "C" void platform_destroy_gl_context(void)
 
 extern "C" void platform_swap_gl_buffers(void *sdl_window)
 {
+#ifdef _WIN32
+    hdr_watcher_tick();
+#endif
     SDL_GL_SwapWindow(static_cast<SDL_Window*>(sdl_window));
 }
 
