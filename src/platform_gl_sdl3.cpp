@@ -256,8 +256,22 @@ static void log_sdl_display_info(SDL_Window *window, const char *label)
 
 /******************************************************************************/
 
-static SDL_GLContext s_glContext = nullptr;
-static SDL_Window*   s_glWindow  = nullptr;
+static SDL_GLContext s_glContext     = nullptr;
+static SDL_Window*   s_glWindow      = nullptr;
+static bool          s_scrgb_surface = false;  // true when float backbuffer granted
+
+extern "C" int platform_is_scrgb_surface(void)
+{
+    return s_scrgb_surface ? 1 : 0;
+}
+
+extern "C" void platform_gl_get_drawable_size(int* out_w, int* out_h)
+{
+    if (s_glWindow)
+        SDL_GetWindowSizeInPixels(s_glWindow, out_w, out_h);
+    else
+        *out_w = *out_h = 0;
+}
 
 extern "C" int platform_create_gl_context(void *sdl_window)
 {
@@ -307,6 +321,19 @@ extern "C" int platform_create_gl_context(void *sdl_window)
     }
 
     SDL_GL_SetSwapInterval(0);
+
+    // Check whether the driver granted a linear float backbuffer (scRGB mode).
+    // SDL_GL_GetAttribute after context creation reflects what was actually set.
+    {
+        int floatbuf = 0;
+        SDL_GL_GetAttribute(SDL_GL_FLOATBUFFERS, &floatbuf);
+        s_scrgb_surface = (floatbuf != 0);
+        LbJustLog("[GL-diag] scRGB surface: SDL_GL_FLOATBUFFERS=%d  ->  %s\n",
+            floatbuf,
+            s_scrgb_surface
+                ? "ACTIVE — linear float backbuffer, gamma lift will be applied"
+                : "not active — standard sRGB backbuffer");
+    }
 
     // Window was created hidden so SetPixelFormat doesn't cause a DWM
     // composition pipeline reconfiguration on HDR displays.  Show it now.

@@ -80,6 +80,17 @@ void platform_gl_acquire_context(void);
  *  query pool and crashing in TracyGpuCollect. */
 int platform_is_renderdoc_present(void);
 
+/** Returns non-zero if the GL backbuffer is a linear float surface (scRGB).
+ *  True when SDL_GL_FLOATBUFFERS was granted on an HDR display.  When true,
+ *  the renderer must apply an sRGB→linear gamma lift before presentation so
+ *  that DWM correctly interprets the content as SDR-range linear scRGB. */
+int platform_is_scrgb_surface(void);
+
+/** Returns the physical pixel dimensions of the GL backbuffer.
+ *  Accounts for HiDPI scaling; use this instead of SDL_GetWindowSize()
+ *  when sizing GL resources or viewports. */
+void platform_gl_get_drawable_size(int* out_w, int* out_h);
+
 #ifdef __cplusplus
 }
 #endif
