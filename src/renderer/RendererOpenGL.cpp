@@ -500,6 +500,40 @@ bool RendererOpenGL::Init()
                            512,  256,        /* ui_cmds, text_cmds */
                            0,    0);         /* shadow_cmds, debug_cmds */
 
+    // scRGB fake-HDR: compile sRGB→linear lift shader when backbuffer is float.
+    if (platform_is_scrgb_surface())
+    {
+        auto cs = [](GLenum type, const char* src) -> unsigned int {
+            unsigned int s = glCreateShader(type);
+            glShaderSource(s, 1, &src, nullptr);
+            glCompileShader(s);
+            int ok = 0;
+            glGetShaderiv(s, GL_COMPILE_STATUS, &ok);
+            if (!ok) { glDeleteShader(s); return 0; }
+            return s;
+        };
+        unsigned int vs = cs(GL_VERTEX_SHADER,   PALETTE_BLIT_VERTEX_SHADER);
+        unsigned int fs = cs(GL_FRAGMENT_SHADER, SCRGB_LIFT_FRAGMENT_SHADER);
+        if (vs && fs)
+        {
+            m_scrgb_lift_shader = glCreateProgram();
+            glAttachShader(m_scrgb_lift_shader, vs);
+            glAttachShader(m_scrgb_lift_shader, fs);
+            glLinkProgram(m_scrgb_lift_shader);
+            glUseProgram(m_scrgb_lift_shader);
+            glUniform1i(glGetUniformLocation(m_scrgb_lift_shader, "u_texture"), 0);
+            glUseProgram(0);
+            m_scrgb_active = true;
+            SYNCLOG("RendererOpenGL::Init: scRGB lift shader compiled — gamma lift will be applied each frame");
+        }
+        else
+        {
+            WARNLOG("RendererOpenGL::Init: scRGB lift shader compile failed — HDR mode disabled");
+        }
+        if (vs) glDeleteShader(vs);
+        if (fs) glDeleteShader(fs);
+    }
+
     // ToDo : disable this before i lose my fucking nut.
 #ifdef DEBUG
     glEnable(GL_DEBUG_OUTPUT);
@@ -586,6 +620,12 @@ void RendererOpenGL::Shutdown()
     if (m_passthrough_shader)  { glDeleteProgram(m_passthrough_shader);             m_passthrough_shader = 0; }
     m_lens_fbo_w = 0;
     m_lens_fbo_h = 0;
+
+    if (m_scrgb_lift_shader) { glDeleteProgram(m_scrgb_lift_shader);  m_scrgb_lift_shader = 0; }
+    if (m_scrgb_lift_tex)    { glDeleteTextures(1, &m_scrgb_lift_tex); m_scrgb_lift_tex = 0; }
+    m_scrgb_active = false;
+    m_scrgb_lift_w = 0;
+    m_scrgb_lift_h = 0;
 
     // Swipe overlay shader + VAO/VBO
     if (m_swipe_shader) { glDeleteProgram(m_swipe_shader); m_swipe_shader = 0; }
@@ -1633,6 +1673,70 @@ void RendererOpenGL::EndFrame_GL()
         RendererHelper_SaveRGBAImage(flipped.data(), w, h, static_cast<int>(row_bytes),
                                      m_rt_screenshot_fmt, m_rt_screenshot_path.c_str());
         m_rt_screenshot_path.clear();
+    }
+
+    // scRGB gamma lift pass: re-draw the completed frame through sRGB→linear
+    // conversion before handing the float backbuffer to DWM.  Without this the
+    // sRGB-encoded pixels would be interpreted as linear light by DWM, making
+    // the image ~2× too bright.
+    if (m_scrgb_active && m_scrgb_lift_shader)
+    {
+        // Bind BOTH read and draw to the default (swapchain) framebuffer.
+        // Sub-renderers may have left GL_READ_FRAMEBUFFER pointing at a lens/pass
+        // FBO; glCopyTexSubImage2D reads from GL_READ_FRAMEBUFFER, so this is
+        // critical to capture the actual backbuffer content.
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+        // Use the physical pixel size of the window, not the current viewport —
+        // the cursor or screenshot pass may have changed the viewport to something
+        // smaller and/or offset, which would missize the capture texture.
+        int sw = 0, sh = 0;
+        platform_gl_get_drawable_size(&sw, &sh);
+        if (sw > 0 && sh > 0)
+        {
+            // Set viewport to cover the full backbuffer before the copy + redraw.
+            glViewport(0, 0, sw, sh);
+
+            // Allocate / resize the capture texture when the window dimensions change.
+            if (!m_scrgb_lift_tex || sw != m_scrgb_lift_w || sh != m_scrgb_lift_h)
+            {
+                if (!m_scrgb_lift_tex)
+                    glGenTextures(1, &m_scrgb_lift_tex);
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, m_scrgb_lift_tex);
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, sw, sh, 0,
+                             GL_RGBA, GL_FLOAT, nullptr);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                glBindTexture(GL_TEXTURE_2D, 0);
+                m_scrgb_lift_w = sw;
+                m_scrgb_lift_h = sh;
+            }
+
+            // Snapshot the backbuffer at (0,0) — the backbuffer always starts at
+            // the window origin; we read the full (sw x sh) extent.
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, m_scrgb_lift_tex);
+            glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, sw, sh);
+
+            // Clear and re-draw with the gamma lift shader.
+            glClear(GL_COLOR_BUFFER_BIT);
+            glDisable(GL_DEPTH_TEST);
+            glDisable(GL_SCISSOR_TEST);
+            glDisable(GL_BLEND);
+            glDepthMask(GL_FALSE);
+            glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+            glUseProgram(m_scrgb_lift_shader);
+            glBindVertexArray(m_vao);
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+            glBindVertexArray(0);
+            glBindTexture(GL_TEXTURE_2D, 0);
+            glUseProgram(0);
+            glDepthMask(GL_TRUE);
+            glEnable(GL_DEPTH_TEST);
+        }
     }
 
     platform_swap_gl_buffers(platform_get_sdl_window());

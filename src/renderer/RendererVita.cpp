@@ -23,7 +23,6 @@
 #include <string.h>
 
 #include "bflib_video.h"
-#include "bflib_vidsurface.h"
 #include "globals.h"
 #include "renderer/IPostProcessPass.h"
 #include "kfx/lense/LensManager.h"

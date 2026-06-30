@@ -90,6 +90,11 @@ void pause_music(void);
 void resume_music(void);
 void stop_music(void);
 
+TbBool is_speech_playing(void);
+TbBool play_streamed_sample(const char* fname, SoundVolume volume);
+void stop_streamed_samples(void);
+void set_streamed_sample_volume(SoundVolume volume);
+
 #ifdef __cplusplus
 }
 #endif

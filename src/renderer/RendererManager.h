@@ -228,8 +228,9 @@ TbResult RendererPaletteStopFade(void);
 /* Screen lifecycle helpers                                                   */
 /******************************************************************************/
 
-/** One-time SDL video subsystem init and built-in mode registration.
- *  Replaces LbScreenInitialize(). */
+/** Register built-in video modes and reset screen state.
+ *  SDL is already initialised by PlatformManager::VideoInit() before this runs.
+ *  Window creation happens later in LbScreenSetup via PlatformManager_CreateWindow. */
 TbResult RendererScreenInitialize(void);
 
 /** Enable or disable double-buffering for the draw surface.
@@ -470,6 +471,12 @@ int32_t TextRenderer_StringHeight(int32_t units_per_px, const char* text);
  */
 TbBool RendererBlitRaw8(int dst_width, int dst_height, int dst_x, int dst_y,
                         const unsigned char* src_buf, int src_width, int src_height);
+
+/** Notify the renderer that an FMV frame's palette has changed.
+ *  Software renderer: applies the 8-bit BGRA palette to the draw surface palette.
+ *  GPU renderers: no-op — palette is already embedded in RendererSubmitVideoFrame.
+ *  @param bgra_1024  AVFrame::data[1] — 256 BGRA entries (1024 bytes). */
+void RendererNotifyFmvPalette(const unsigned char* bgra_1024);
 
 /** Submit one FMV video frame through the GPU path.
  *  @param pal8_pixels       8-bit palette-indexed pixel data (AVFrame::data[0]).

@@ -3,7 +3,7 @@
 #include "platform/PlatformWindows.h"
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-#include <SDL2/SDL.h>
+#include <SDL3/SDL.h>
 #include <excpt.h>
 // imagehlp.h omitted: dbghelp.h supersedes it and defines the same types.
 // Including both causes C2011 type redefinition errors on MSVC.
@@ -279,7 +279,7 @@ void PlatformWindows::VideoInit()
     // the app wants exclusive display handling and can disrupt the HDR compositor.
     SDL_SetHint(SDL_HINT_VIDEO_ALLOW_SCREENSAVER, "1");
 
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK) < 0)
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK))
         fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
     atexit(SDL_Quit);
 
@@ -307,7 +307,7 @@ void PlatformWindows::VideoInit()
     };
     for (int i = 0; i < (int)(sizeof(gl_attrs)/sizeof(gl_attrs[0])); ++i)
     {
-        if (SDL_GL_SetAttribute((SDL_GLattr)gl_attrs[i].attr, gl_attrs[i].value) != 0)
+        if (!SDL_GL_SetAttribute((SDL_GLAttr)gl_attrs[i].attr, gl_attrs[i].value))
             fprintf(stderr, "PlatformWindows::VideoInit: %s=%d failed: %s\n",
                     gl_attrs[i].name, gl_attrs[i].value, SDL_GetError());
     }

@@ -39,10 +39,11 @@
 #include "keeperfx.hpp"
 #include "platform/PlatformManager.h"
 #include "platform/IWindowSystem.h"
+#include "platform/WindowSystemSDL.h"
 #include "debug/DebugOverlay.hpp"
 #include "input/InputManager.hpp"
 #include "renderer/RendMenuOverlay.h"
-#include <SDL2/SDL.h>
+#include <SDL3/SDL.h>
 #include "post_inc.h"
 
 using namespace std;
@@ -79,14 +80,14 @@ void JEvent(const SDL_Event *ev);
  */
 static unsigned int mouse_button_actions_mapping(int eventType, const SDL_MouseButtonEvent * button)
 {
-    if (eventType == SDL_MOUSEBUTTONDOWN) {
+    if (eventType == SDL_EVENT_MOUSE_BUTTON_DOWN) {
         switch (button->button)  {
         case SDL_BUTTON_LEFT: return MActn_LBUTTONDOWN;
         case SDL_BUTTON_MIDDLE: return MActn_MBUTTONDOWN;
         case SDL_BUTTON_RIGHT: return MActn_RBUTTONDOWN;
         }
     }
-    else if (eventType == SDL_MOUSEBUTTONUP) {
+    else if (eventType == SDL_EVENT_MOUSE_BUTTON_UP) {
         switch (button->button) {
         case SDL_BUTTON_LEFT: return MActn_LBUTTONUP;
         case SDL_BUTTON_MIDDLE: return MActn_MBUTTONUP;
@@ -99,32 +100,32 @@ static unsigned int mouse_button_actions_mapping(int eventType, const SDL_MouseB
 
 void init_inputcontrol(void)
 {
-    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_a, KC_A));
-    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_b, KC_B));
-    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_c, KC_C));
-    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_d, KC_D));
-    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_e, KC_E));
-    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_f, KC_F));
-    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_g, KC_G));
-    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_h, KC_H));
-    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_i, KC_I));
-    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_j, KC_J));
-    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_k, KC_K));
-    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_l, KC_L));
-    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_m, KC_M));
-    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_n, KC_N));
-    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_o, KC_O));
-    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_p, KC_P));
-    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_q, KC_Q));
-    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_r, KC_R));
-    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_s, KC_S));
-    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_t, KC_T));
-    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_u, KC_U));
-    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_v, KC_V));
-    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_w, KC_W));
-    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_x, KC_X));
-    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_y, KC_Y));
-    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_z, KC_Z));
+    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_A, KC_A));
+    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_B, KC_B));
+    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_C, KC_C));
+    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_D, KC_D));
+    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_E, KC_E));
+    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_F, KC_F));
+    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_G, KC_G));
+    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_H, KC_H));
+    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_I, KC_I));
+    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_J, KC_J));
+    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_K, KC_K));
+    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_L, KC_L));
+    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_M, KC_M));
+    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_N, KC_N));
+    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_O, KC_O));
+    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_P, KC_P));
+    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_Q, KC_Q));
+    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_R, KC_R));
+    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_S, KC_S));
+    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_T, KC_T));
+    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_U, KC_U));
+    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_V, KC_V));
+    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_W, KC_W));
+    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_X, KC_X));
+    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_Y, KC_Y));
+    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_Z, KC_Z));
     keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_F1, KC_F1));
     keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_F2, KC_F2));
     keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_F3, KC_F3));
@@ -148,11 +149,11 @@ void init_inputcontrol(void)
     keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_ESCAPE, KC_ESCAPE));
     keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_SPACE, KC_SPACE));
     keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_EXCLAIM, KC_UNASSIGNED));
-    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_QUOTEDBL, KC_UNASSIGNED));
+    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_DBLAPOSTROPHE, KC_UNASSIGNED));
     keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_HASH, KC_UNASSIGNED));
     keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_DOLLAR, KC_UNASSIGNED));
     keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_AMPERSAND, KC_UNASSIGNED));
-    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_QUOTE, KC_APOSTROPHE));
+    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_APOSTROPHE, KC_APOSTROPHE));
     keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_LEFTPAREN, KC_UNASSIGNED));
     keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_RIGHTPAREN, KC_UNASSIGNED));
     keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_ASTERISK, KC_UNASSIGNED));
@@ -183,8 +184,7 @@ void init_inputcontrol(void)
     keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_RIGHTBRACKET, KC_RBRACKET));
     keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_CARET, KC_UNASSIGNED));
     keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_UNDERSCORE, KC_UNDERLINE));
-    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_BACKQUOTE, KC_GRAVE));
-    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(178, KC_GRAVE));
+    keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_GRAVE, KC_GRAVE));
     keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_DELETE, KC_DELETE));
     keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_KP_0, KC_NUMPAD0));
     keymap_sdl_to_bf.insert(pair<int, TbKeyCode>(SDLK_KP_1, KC_NUMPAD1));
@@ -236,12 +236,8 @@ void init_inputcontrol(void)
 
 static unsigned int keyboard_keys_mapping(const SDL_KeyboardEvent * key)
 {
-    /*
-    key->keysym.scancode;         < hardware specific scancode
-    key->keysym.sym;         < SDL virtual keysym
-    key->keysym.unicode;         < translated character
-    */
-    int keycode = key->keysym.sym;
+    // SDL3: key->keysym.sym → key->key
+    int keycode = key->key;
     std::map<int, TbKeyCode>::iterator iter;
 
     iter = keymap_sdl_to_bf.find(keycode);
@@ -255,11 +251,11 @@ static unsigned int keyboard_keys_mapping(const SDL_KeyboardEvent * key)
 
 static TbKeyMods keyboard_mods_mapping(const SDL_KeyboardEvent * key)
 {
+    // SDL3: key->keysym.sym → key->key; key->keysym.mod → key->mod
     TbKeyMods keymod = KMod_NONE;
-    switch (key->keysym.sym)
+    switch (key->key)
     {
     // Pressing only a modifier will not treat the key as modifier.
-    // If that happens, don't care, so that keyboard control won't try to fix anything.
     case SDLK_RSHIFT:
     case SDLK_LSHIFT:
     case SDLK_RCTRL:
@@ -270,13 +266,12 @@ static TbKeyMods keyboard_mods_mapping(const SDL_KeyboardEvent * key)
     case SDLK_RGUI:
         keymod = KMod_DONTCARE;
         break;
-    // If pressed any other key, mind the modifiers, to allow keyboard control fixes.
     default:
-        if ((key->keysym.mod & KMOD_CTRL) != 0)
+        if ((key->mod & SDL_KMOD_CTRL) != 0)
             keymod |= KMod_CONTROL;
-        if ((key->keysym.mod & KMOD_SHIFT) != 0)
+        if ((key->mod & SDL_KMOD_SHIFT) != 0)
             keymod |= KMod_SHIFT;
-        if ((key->keysym.mod & KMOD_ALT) != 0)
+        if ((key->mod & SDL_KMOD_ALT) != 0)
             keymod |= KMod_ALT;
         break;
     }
@@ -305,7 +300,7 @@ static void process_event(const SDL_Event *ev)
 
     switch (ev->type)
     {
-    case SDL_KEYDOWN:
+    case SDL_EVENT_KEY_DOWN:
         x = keyboard_keys_mapping(&ev->key);
 #ifdef KEEPERFX_IMGUI_ENABLED
         if (x == KC_F3)
@@ -339,12 +334,13 @@ static void process_event(const SDL_Event *ev)
 #ifdef KEEPERFX_IMGUI_ENABLED
             if (!DebugOverlay_IsVisible())
 #endif
-            keyboardControl(KActn_KEYDOWN,x,keyboard_mods_mapping(&ev->key), ev->key.keysym.sym);
+            // SDL3: pass ev->key.key (was ev->key.keysym.sym)
+            keyboardControl(KActn_KEYDOWN,x,keyboard_mods_mapping(&ev->key), ev->key.key);
         }
         last_used_input_device = ID_Keyboard_Mouse;
         break;
 
-    case SDL_KEYUP:
+    case SDL_EVENT_KEY_UP:
         x = keyboard_keys_mapping(&ev->key);
         if (x == KC_F9 || RendMenu_IsOpen())
         {
@@ -357,12 +353,12 @@ static void process_event(const SDL_Event *ev)
 #ifdef KEEPERFX_IMGUI_ENABLED
             if (!DebugOverlay_IsVisible())
 #endif
-            keyboardControl(KActn_KEYUP,x,keyboard_mods_mapping(&ev->key), ev->key.keysym.sym);
+            keyboardControl(KActn_KEYUP,x,keyboard_mods_mapping(&ev->key), ev->key.key);
         }
         last_used_input_device = ID_Keyboard_Mouse;
         break;
 
-    case SDL_MOUSEMOTION:
+    case SDL_EVENT_MOUSE_MOTION:
         if (!isMouseActive)
         {
           return;
@@ -372,8 +368,9 @@ static void process_event(const SDL_Event *ev)
 #endif
         if (lbMouseGrabbed && lbDisplay.MouseMoveRatio > 0)
         {
-            int dx = ev->motion.xrel * lbDisplay.MouseMoveRatio + frac_x;
-            int dy = ev->motion.yrel * lbDisplay.MouseMoveRatio + frac_y;
+            // SDL3: xrel/yrel are float
+            int dx = (int)ev->motion.xrel * lbDisplay.MouseMoveRatio + frac_x;
+            int dy = (int)ev->motion.yrel * lbDisplay.MouseMoveRatio + frac_y;
 
             mouseDelta.x = (dx + 128) >> 8;
             mouseDelta.y = (dy + 128) >> 8;
@@ -383,12 +380,12 @@ static void process_event(const SDL_Event *ev)
         }
         else
         {
-            mouseDelta.x = ev->motion.xrel;
-            mouseDelta.y = ev->motion.yrel;
+            mouseDelta.x = (int)ev->motion.xrel;
+            mouseDelta.y = (int)ev->motion.yrel;
             if (isMouseActivated)
             {
                 isMouseActivated = 0;
-                pointerHandler.SetMousePosition(ev->motion.x + lbDisplay.MouseWindowY, ev->motion.y + lbDisplay.MouseWindowY);
+                pointerHandler.SetMousePosition((int)ev->motion.x + lbDisplay.MouseWindowY, (int)ev->motion.y + lbDisplay.MouseWindowY);
                 mouseDelta.x = 0;
                 mouseDelta.y = 0;
                 frac_x = 0;
@@ -398,8 +395,8 @@ static void process_event(const SDL_Event *ev)
         mouseControl(MActn_MOUSEMOVE, &mouseDelta);
         break;
 
-    case SDL_MOUSEBUTTONDOWN:
-    case SDL_MOUSEBUTTONUP:
+    case SDL_EVENT_MOUSE_BUTTON_DOWN:
+    case SDL_EVENT_MOUSE_BUTTON_UP:
         last_used_input_device = ID_Keyboard_Mouse;
 #ifdef KEEPERFX_IMGUI_ENABLED
         if (DebugOverlay_IsVisible()) return;
@@ -420,7 +417,7 @@ static void process_event(const SDL_Event *ev)
             x = mousebutton_to_keycode(&ev->button.button);
             if (x != KC_UNASSIGNED)
             {
-                if (ev->type == SDL_MOUSEBUTTONDOWN)
+                if (ev->type == SDL_EVENT_MOUSE_BUTTON_DOWN)
                 {
                     lbKeyOn[x] = 1;
                     lbInkey = x;
@@ -431,15 +428,17 @@ static void process_event(const SDL_Event *ev)
         }
         break;
 
-    case SDL_MOUSEWHEEL:
+    case SDL_EVENT_MOUSE_WHEEL:
         last_used_input_device = ID_Keyboard_Mouse;
         mouseDelta.x = 0;
         mouseDelta.y = 0;
-        mouseControl(ev->wheel.y > 0 ? MActn_WHEELMOVEUP : MActn_WHEELMOVEDOWN, &mouseDelta);
+        // SDL3: wheel.y is float
+        mouseControl(ev->wheel.y > 0.0f ? MActn_WHEELMOVEUP : MActn_WHEELMOVEDOWN, &mouseDelta);
         break;
 
-    case SDL_TEXTINPUT:
-        if (SDL_IsTextInputActive())
+    case SDL_EVENT_TEXT_INPUT:
+        // SDL3: text input is window-scoped; guard with SDL_TextInputActive(window)
+        if (SDL_TextInputActive(GetSDLWindowSystem()->GetSDLWindow()))
         {
             int len = strlen(ev->text.text);
             int freeSpace = sizeof(lbTextInputBuffer) - lbTextInputLength - 1;
@@ -454,86 +453,74 @@ static void process_event(const SDL_Event *ev)
         }
         break;
 
-    case SDL_WINDOWEVENT:
-        switch (ev->window.event)
+    // SDL3: window events are flat top-level event types (no nested SDL_WINDOWEVENT).
+    case SDL_EVENT_WINDOW_FOCUS_GAINED:
+    {
+        PlatformManager::Get()->GetWindowSystem()->OnFocusGained();
+        isMouseActive = true;
+        isMouseActivated = true;
+        LbGrabMouseCheck(MG_OnFocusGained);
+        if (freeze_game_on_focus_lost() && !LbIsFrozenOrPaused())
+            resume_music();
+        if (mute_audio_on_focus_lost() && !LbIsFrozenOrPaused())
+            mute_audio(false);
+        redetect_screen_refresh_rate_for_draw();
+        break;
+    }
+    case SDL_EVENT_WINDOW_FOCUS_LOST:
+    {
+        PlatformManager::Get()->GetWindowSystem()->OnFocusLost();
+        isMouseActive = false;
+        isMouseActivated = false;
+        LbGrabMouseCheck(MG_OnFocusLost);
+        if (freeze_game_on_focus_lost())
+            pause_music();
+        if (mute_audio_on_focus_lost())
+            mute_audio(true);
+        break;
+    }
+    case SDL_EVENT_WINDOW_MOUSE_ENTER:
+    {
+        if (PlatformManager::Get()->GetWindowSystem()->IsAppActive())
         {
-            case SDL_WINDOWEVENT_FOCUS_GAINED:
-            {
-                PlatformManager::Get()->GetWindowSystem()->OnFocusGained();
-                isMouseActive = true;
-                isMouseActivated = true;
-                LbGrabMouseCheck(MG_OnFocusGained);
-                if (freeze_game_on_focus_lost() && !LbIsFrozenOrPaused())
-                {
-                    resume_music();
-                }
-                if (mute_audio_on_focus_lost() && !LbIsFrozenOrPaused())
-                {
-                    mute_audio(false);
-                }
-                redetect_screen_refresh_rate_for_draw();
-                break;
-            }
-            case SDL_WINDOWEVENT_FOCUS_LOST:
-            {
-                PlatformManager::Get()->GetWindowSystem()->OnFocusLost();
-                isMouseActive = false;
-                isMouseActivated = false;
-                LbGrabMouseCheck(MG_OnFocusLost);
-                if (freeze_game_on_focus_lost())
-                {
-                    pause_music();
-                }
-                if (mute_audio_on_focus_lost())
-                {
-                    mute_audio(true);
-                }
-                break;
-            }
-            case SDL_WINDOWEVENT_ENTER:
-            {
-                if (PlatformManager::Get()->GetWindowSystem()->IsAppActive())
-                {
-                    isMouseActive = true;
-                    isMouseActivated = true;
-                }
-                break;
-            }
-            case SDL_WINDOWEVENT_LEAVE:
-            {
-                isMouseActive = false;
-                break;
-            }
-            case SDL_WINDOWEVENT_MOVED:
-            {
-                redetect_screen_refresh_rate_for_draw();
-                break;
-            }
-            default: break;
+            isMouseActive = true;
+            isMouseActivated = true;
         }
-        /* else if (ev->window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
-             // todo (allow window to be freely scaled): add window resize function that does what is needed, and call this new function from window init function too
-        } */
         break;
-    case SDL_SYSWMEVENT:
-    case SDL_WINDOWEVENT_RESIZED:
+    }
+    case SDL_EVENT_WINDOW_MOUSE_LEAVE:
+        isMouseActive = false;
         break;
+    case SDL_EVENT_WINDOW_MOVED:
+        redetect_screen_refresh_rate_for_draw();
+        break;
+    case SDL_EVENT_WINDOW_HDR_STATE_CHANGED:
+    {
+        SDL_Window *win = SDL_GetWindowFromEvent(ev);
+        SDL_PropertiesID wp = win ? SDL_GetWindowProperties(win) : 0;
+        int hdr   = wp ? (int)SDL_GetBooleanProperty(wp, SDL_PROP_WINDOW_HDR_ENABLED_BOOLEAN, false) : -1;
+        float sdr = wp ? SDL_GetFloatProperty(wp, SDL_PROP_WINDOW_SDR_WHITE_LEVEL_FLOAT, 0.0f) : 0.0f;
+        LbJustLog("[HDR-event] SDL_EVENT_WINDOW_HDR_STATE_CHANGED: HDR_enabled=%d  SDR_white=%.3f  %s\n",
+            hdr, sdr, hdr ? "[HDR ACTIVE]" : "[switched to SDR]");
+        break;
+    }
 
-    case SDL_CONTROLLERAXISMOTION:
-    case SDL_CONTROLLERBUTTONDOWN:
-    case SDL_CONTROLLERBUTTONUP:
-    case SDL_JOYDEVICEADDED:
-    case SDL_JOYDEVICEREMOVED:    
-    case SDL_JOYAXISMOTION:
-    case SDL_JOYBALLMOTION:
-    case SDL_JOYHATMOTION:
-    case SDL_JOYBUTTONDOWN:
-    case SDL_JOYBUTTONUP:
+    case SDL_EVENT_GAMEPAD_AXIS_MOTION:
+    case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+    case SDL_EVENT_GAMEPAD_BUTTON_UP:
+    case SDL_EVENT_JOYSTICK_ADDED:
+    case SDL_EVENT_JOYSTICK_REMOVED:
+    case SDL_EVENT_JOYSTICK_AXIS_MOTION:
+    case SDL_EVENT_JOYSTICK_HAT_MOTION:
+    case SDL_EVENT_JOYSTICK_BUTTON_DOWN:
+    case SDL_EVENT_JOYSTICK_BUTTON_UP:
+    case SDL_EVENT_GAMEPAD_ADDED:
+    case SDL_EVENT_GAMEPAD_REMOVED:
         last_used_input_device = ID_Controller;
         JEvent(ev);
         break;
 
-    case SDL_QUIT:
+    case SDL_EVENT_QUIT:
         lbUserQuit = 1;
         break;
     }
@@ -663,20 +650,24 @@ int LbGetTextInput(char *dst, int maxChars)
 
 TbBool LbIsTextInputActive(void)
 {
-    return SDL_IsTextInputActive() != SDL_FALSE;
+    // SDL3: text input is window-scoped
+    SDL_Window* win = GetSDLWindowSystem()->GetSDLWindow();
+    return win && SDL_TextInputActive(win);
 }
 
 void LbStartTextInput(void)
 {
     LbClearTextInput();
-    if (!SDL_IsTextInputActive())
-        SDL_StartTextInput();
+    SDL_Window* win = GetSDLWindowSystem()->GetSDLWindow();
+    if (win && !SDL_TextInputActive(win))
+        SDL_StartTextInput(win);
 }
 
 void LbStopTextInput(void)
 {
-    if (SDL_IsTextInputActive())
-        SDL_StopTextInput();
+    SDL_Window* win = GetSDLWindowSystem()->GetSDLWindow();
+    if (win && SDL_TextInputActive(win))
+        SDL_StopTextInput(win);
     LbClearTextInput();
 }
 

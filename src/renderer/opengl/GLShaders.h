@@ -612,6 +612,25 @@ void main()
 }
 )glsl";
 
+// scRGB gamma lift shader — sRGB-encoded game output → linear scRGB.
+// Applied as the final presentation pass when the backbuffer is a linear float
+// surface (SDL_GL_FLOATBUFFERS on HDR displays).  Without this pass DWM would
+// interpret the sRGB-encoded values as linear light, making the image ~2× too
+// bright.  Uses the exact IEC 61966-2-1 transfer function.
+constexpr const char* SCRGB_LIFT_FRAGMENT_SHADER = R"glsl(
+#version 330 core
+in  vec2 v_uv;
+out vec4 fragColor;
+uniform sampler2D u_texture;
+vec3 srgb_to_linear(vec3 c) {
+    bvec3 lo = lessThanEqual(c, vec3(0.04045));
+    return mix(pow((c + 0.055) / 1.055, vec3(2.4)), c / 12.92, vec3(lo));
+}
+void main() {
+    fragColor = vec4(srgb_to_linear(texture(u_texture, v_uv).rgb), 1.0);
+}
+)glsl";
+
 // ── GPU Lens Effect Shaders ──────────────────────────────────────────────────
 
 // Displacement lens: distorts the scene using a sinusoidal displacement map.

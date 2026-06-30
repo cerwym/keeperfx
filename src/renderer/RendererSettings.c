@@ -10,7 +10,7 @@
 #include "renderer/RendererManager.h"
 #include "platform/PlatformManager.h"
 #include "thing_list.h"   // TCls_* enum values for outline class mask default
-#include <SDL2/SDL.h>
+#include <SDL3/SDL.h>
 #include <stdio.h>
 #include <string.h>
 

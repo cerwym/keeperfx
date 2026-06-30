@@ -13,9 +13,9 @@
 #include "debug/ImGuiRendererPanel.hpp"
 #include "debug/ImGuiSettingsPanel.hpp"
 #include "globals.h"
-#include "vendors/imgui_impl_sdl2.h"
+#include "vendors/imgui_impl_sdl3.h"
 
-#include <SDL2/SDL.h>
+#include <SDL3/SDL.h>
 #include <imgui.h>
 #include <imgui_impl_opengl3.h>
 
@@ -46,7 +46,7 @@ void DebugOverlay_Initialize(void* sdl_window, void* sdl_gl_context)
 
     ImGui::StyleColorsDark();
 
-    ImGui_ImplSDL2_InitForOpenGL(static_cast<SDL_Window*>(sdl_window), sdl_gl_context);
+    ImGui_ImplSDL3_InitForOpenGL(static_cast<SDL_Window*>(sdl_window), sdl_gl_context);
     ImGui_ImplOpenGL3_Init("#version 330 core");
 
     s_initialized = true;
@@ -59,7 +59,7 @@ void DebugOverlay_Shutdown(void)
         return;
 
     ImGui_ImplOpenGL3_Shutdown();
-    ImGui_ImplSDL2_Shutdown();
+    ImGui_ImplSDL3_Shutdown();
     ImGui::DestroyContext();
 
     {
@@ -86,11 +86,11 @@ void DebugOverlay_NewFrame(void)
     }
 
     for (const SDL_Event& ev : s_event_queue_rt)
-        ImGui_ImplSDL2_ProcessEvent(&ev);
+        ImGui_ImplSDL3_ProcessEvent(&ev);
     s_event_queue_rt.clear();
 
     ImGui_ImplOpenGL3_NewFrame();
-    ImGui_ImplSDL2_NewFrame();
+    ImGui_ImplSDL3_NewFrame();
     ImGui::NewFrame();
 }
 

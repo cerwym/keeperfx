@@ -135,6 +135,14 @@ public:
         return false;
     }
 
+    /** Called when an FMV frame's palette changes.
+     *  Software renderer: applies the 8-bit BGRA palette to the draw surface so
+     *  indexed blits use the correct colours.
+     *  GPU renderers: no-op — palette comes through SubmitVideoFrame's bgra_palette_1024.
+     *  @param bgra_1024  256 BGRA entries (4 bytes each, 1024 bytes total),
+     *                    as provided by FFmpeg in AVFrame::data[1]. */
+    virtual void NotifyFmvPalette(const uint8_t* bgra_1024) { (void)bgra_1024; }
+
     /** GPU path for a single FMV (Smacker) video frame.
      *  @param pal8_pixels        8-bit palette-indexed pixel data (row-major).
      *  @param src_w/src_h        Frame dimensions in pixels.

@@ -440,6 +440,16 @@ private:
     unsigned int m_passthrough_shader   = 0;
     bool         m_lens_active          = false;  // true when lens FBO is bound this frame
 
+    // scRGB fake-HDR gamma lift pass: applied before every buffer swap when the
+    // backbuffer is a linear float surface.  Reads the completed SDR frame via
+    // glCopyTexSubImage2D and re-draws it through sRGB→linear conversion so DWM
+    // receives correct linear light values and doesn't engage SDR compensation.
+    bool         m_scrgb_active      = false;
+    unsigned int m_scrgb_lift_shader = 0;
+    unsigned int m_scrgb_lift_tex    = 0;
+    int          m_scrgb_lift_w      = 0;
+    int          m_scrgb_lift_h      = 0;
+
     // ── Swipe overlay (possession attack effect) ───────────────────────────
     // Recorded by DrawSwipeOverlay() as atlas-sprite quads, flushed directly
     // by EndFrame() after GPURenderNow() while the lens FBO is still bound.

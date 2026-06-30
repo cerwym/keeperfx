@@ -24,7 +24,7 @@
 #include "globals.h"
 
 #ifdef SDL_MIXER_AVAILABLE
-#include <SDL2/SDL_mixer.h>
+#include <SDL3_mixer/SDL_mixer.h>
 #endif
 
 #ifdef __cplusplus
@@ -33,7 +33,6 @@ extern "C" {
 
 #define FULL_LOUDNESS 256
 #define NORMAL_PITCH 100
-#define MIX_SPEECH_CHANNEL 0
 
 /******************************************************************************/
 #pragma pack(1)
