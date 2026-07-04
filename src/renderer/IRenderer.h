@@ -38,7 +38,6 @@ enum RendererType {
     RENDERER_OPENGL   = 2,  /**< OpenGL backend — framebuffer blit + GPU world geometry */
     RENDERER_VITA     = 3,  /**< PS Vita — vitaGL over GXM */
     RENDERER_3DS      = 4,  /**< Nintendo 3DS — citro3d/PICA200 */
-    RENDERER_VULKAN   = 5,  /**< Vulkan backend — SDL2 window, vk-bootstrap device */
 };
 
 /******************************************************************************/
@@ -106,64 +105,23 @@ public:
     /** Releases the framebuffer lock obtained via LockFramebuffer(). */
     virtual void UnlockFramebuffer() = 0;
 
-    /** Blit a scaled RAW 8-bit paletted image to the GPU framebuffer.
-     *
-     *  GPU backends (OpenGL) queue the blit: the source pixels are uploaded
-     *  as a GL_R8 texture and decoded via the current palette at EndFrame()
-     *  time. The image is drawn as an opaque quad covering exactly the
-     *  destination rectangle — index 0 is NOT transparent here.
-     *
-     *  Software backends return false (the caller then writes to WScreen
-     *  via copy_raw8_image_buffer).
-     *
-     *  In OpenGL mode returning false is a fatal misconfiguration — there
-     *  must be no CPU-staging fallback for GPU frontend rendering paths.
-     *
-     *  @param dst_width   Width of the destination rect in screen pixels.
-     *  @param dst_height  Height of the destination rect in screen pixels.
-     *  @param dst_x       Left edge of the destination rect in screen pixels.
-     *  @param dst_y       Top edge of the destination rect in screen pixels.
-     *  @param src_buf     Source 8-bit indexed image data (row-major).
-     *  @param src_width   Width of the source image in pixels.
-     *  @param src_height  Height of the source image in pixels.
-     *  @return true if the GPU path handled the blit, false otherwise. */
-    virtual bool BlitRaw8GPU(int dst_width, int dst_height, int dst_x, int dst_y,
-                             const unsigned char* src_buf, int src_width, int src_height)
+    /** Queue a full-screen image present (see RendererPresentImageDesc).
+     *  GPU backends append an IRImagePresentCmd to the RenderGraph write buffer
+     *  and return true; the base returns false so the C entry point runs the
+     *  software Indexed8 CPU fallback. */
+    virtual bool PresentImage(const struct RendererPresentImageDesc* desc)
     {
-        (void)dst_width; (void)dst_height; (void)dst_x; (void)dst_y;
-        (void)src_buf; (void)src_width; (void)src_height;
+        (void)desc;
         return false;
     }
 
     /** Called when an FMV frame's palette changes.
-     *  Software renderer: applies the 8-bit BGRA palette to the draw surface so
-     *  indexed blits use the correct colours.
-     *  GPU renderers: no-op — palette comes through SubmitVideoFrame's bgra_palette_1024.
+     *  Software/CPU-draw backends apply the 8-bit BGRA palette to the draw surface
+     *  so the indexed frame draws with the correct colours. GPU backends: no-op —
+     *  the FMV present carries its own embedded palette.
      *  @param bgra_1024  256 BGRA entries (4 bytes each, 1024 bytes total),
      *                    as provided by FFmpeg in AVFrame::data[1]. */
     virtual void NotifyFmvPalette(const uint8_t* bgra_1024) { (void)bgra_1024; }
-
-    /** GPU path for a single FMV (Smacker) video frame.
-     *  @param pal8_pixels        8-bit palette-indexed pixel data (row-major).
-     *  @param src_w/src_h        Frame dimensions in pixels.
-     *  @param src_pitch          Row stride in bytes (may differ from src_w).
-     *  @param bgra_palette_1024  256 BGRA entries (4 bytes each, 1024 bytes total),
-     *                            as provided by FFmpeg in AVFrame::data[1].
-     *  @param dst_x/dst_y        Top-left corner of the draw rect in screen pixels,
-     *                            accounting for letterboxing/pillarboxing.
-     *  @param dst_w/dst_h        Draw rect dimensions in screen pixels.
-     *  @return true  if the GPU path handled the frame (caller skips CPU copy).
-     *          false if unhandled (software renderer — caller runs copy_to_screen). */
-    virtual bool SubmitVideoFrame(
-        const uint8_t* pal8_pixels, int src_w, int src_h, int src_pitch,
-        const uint8_t* bgra_palette_1024,
-        int dst_x, int dst_y, int dst_w, int dst_h)
-    {
-        (void)pal8_pixels; (void)src_w; (void)src_h; (void)src_pitch;
-        (void)bgra_palette_1024;
-        (void)dst_x; (void)dst_y; (void)dst_w; (void)dst_h;
-        return false;
-    }
 
     /** Composite a caller-owned buffer over the GPU frame with index-0 transparency.
      *

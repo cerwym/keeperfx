@@ -16,27 +16,6 @@
         "luajit",
         "zlib",
         "curl",
-        "glad",
-        {
-            "name": "imgui",
-            "features": ["opengl3-binding"],
-            "platform": "!arm & !uwp"
-        },
-        {
-            "name": "vulkan",
-            "platform": "windows"
-        },
-        {
-            "name": "vk-bootstrap",
-            "platform": "windows"
-        },
-        {
-            "name": "vulkan-memory-allocator",
-            "platform": "windows"
-        },
-        {
-            "name": "shaderc",
-            "platform": "windows"
-        }
+        "glad"
     ]
 }

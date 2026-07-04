@@ -208,8 +208,15 @@ TbBool copy_raw8_image_to_screen_center(const unsigned char *buf, const int img_
     if (!RendererLockScreen())
         return false;
 
-    // Copy image buffer to screen buffer
-    RendererBlitRaw8(scaled_width, scaled_height, coord_x, coord_y, buf, img_width, img_height);
+    // Copy image buffer to screen buffer (opaque game-palette Indexed8 present).
+    struct RendererPresentImageDesc d = {0};
+    d.format  = PRESENT_FORMAT_INDEXED8;
+    d.palette = PRESENT_PALETTE_GAME;
+    d.kind    = PRESENT_KIND_OPAQUE;
+    d.dst_w = scaled_width; d.dst_h = scaled_height;
+    d.dst_x = coord_x;      d.dst_y = coord_y;
+    d.src   = buf; d.src_w = img_width; d.src_h = img_height;
+    RendererPresentImage(&d);
 
     // Perform any screen capturing
     perform_any_screen_capturing();

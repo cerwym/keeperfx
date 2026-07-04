@@ -102,10 +102,16 @@ void draw_map_screen(void)
         return;
     }
 
-    RendererBlitRaw8(
-        scale_value_landview(LANDVIEW_MAP_WIDTH), scale_value_landview(LANDVIEW_MAP_HEIGHT),
-        -scale_value_landview(map_info.screen_shift_x), -scale_value_landview(map_info.screen_shift_y),
-        map_screen, LANDVIEW_MAP_WIDTH, LANDVIEW_MAP_HEIGHT);
+    struct RendererPresentImageDesc d = {0};
+    d.format  = PRESENT_FORMAT_INDEXED8;
+    d.palette = PRESENT_PALETTE_GAME;
+    d.kind    = PRESENT_KIND_OPAQUE;
+    d.dst_w = scale_value_landview(LANDVIEW_MAP_WIDTH);
+    d.dst_h = scale_value_landview(LANDVIEW_MAP_HEIGHT);
+    d.dst_x = -scale_value_landview(map_info.screen_shift_x);
+    d.dst_y = -scale_value_landview(map_info.screen_shift_y);
+    d.src   = map_screen; d.src_w = LANDVIEW_MAP_WIDTH; d.src_h = LANDVIEW_MAP_HEIGHT;
+    RendererPresentImage(&d);
 }
 
 const struct TbSprite * get_map_ensign(long idx)

@@ -35,6 +35,11 @@ extern unsigned char grabbed_small_map;
 extern long clicked_on_small_map;
 /******************************************************************************/
 void panel_map_update(long x, long y, long w, long h);
+/** Reset all cached minimap state (colour tables, camera/thing interpolation).
+ *  Call on every level entry (fresh start, restart and savegame load) — the
+ *  tables live in statics that survive level teardown, so without this a
+ *  re-entered level renders with the previous session's cached values. */
+void panel_map_on_level_load(void);
 void panel_map_draw_slabs(long x, long y, long units_per_px, long zoom);
 void panel_map_draw_overlay_things(long units_per_px, long zoom, long basic_zoom);
 /** Submit the current frame's minimap data to the active UI renderer.

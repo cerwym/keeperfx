@@ -5231,7 +5231,7 @@ void fill_status_sprite_indexes(struct Thing *thing, struct CreatureControl *cct
                 {
                     stati = get_creature_state_with_task_completion(thing);
                 }
-                if ((*(short *)&stati->display_thought_bubble == 1) || (thing_pointed_at == thing))
+                if ((stati->display_thought_bubble != 0) || (thing_pointed_at == thing))
                 {
                     (*state_spridx) = stati->sprite_idx;
                 }
@@ -7073,34 +7073,40 @@ void draw_nonspatial_sprites_gpu(void)
                 UIRenderer_EndTopOverlay();
                 break;
             case QK_CreatureStatus:
-                UIRenderer_BeginWorldDepth(ndc_z);
+                // Depth-tested: occlusion by walls is intentional for health/mood icons.
+                UIRenderer_BeginWorldOverlay(ndc_z);
                 draw_status_sprites(
                     item.creatureStatus->x + vp_x,
                     item.creatureStatus->y + vp_y,
                     item.creatureStatus->thing);
-                UIRenderer_EndWorldDepth();
+                UIRenderer_EndWorldOverlay();
                 break;
             case QK_FloatingGoldText:
                 item.floatingGoldText->x += vp_x;
                 item.floatingGoldText->y += vp_y;
-                UIRenderer_BeginWorldDepth(ndc_z);
+                // No depth test needed — must stay visible above world geometry.
+                UIRenderer_BeginWorldOverlayFlat(ndc_z);
                 draw_engine_number(item.floatingGoldText);
-                UIRenderer_EndWorldDepth();
+                UIRenderer_EndWorldOverlayFlat();
                 break;
             case QK_RoomFlagBottomPole:
                 item.roomFlag->x += vp_x;
                 item.roomFlag->y += vp_y;
                 // Room flags are world-positioned but must not be occluded by
-                // flat-poly placement previews drawn in GPUFlushNow.  Render
-                // without depth test (layer 1) so they always appear above
-                // world geometry.  Creature status (health flowers) keeps depth
-                // testing because occlusion-by-wall is intentional there.
+                // flat-poly placement previews drawn in GPUFlushNow, so they use
+                // WorldOverlayFlat (no depth test) rather than WorldOverlay.
+                UIRenderer_BeginWorldOverlayFlat(ndc_z);
                 draw_engine_room_flagpole(item.roomFlag);
+                UIRenderer_EndWorldOverlayFlat();
                 break;
             case QK_RoomFlagStatusBox:
                 item.roomFlag->x += vp_x;
                 item.roomFlag->y += vp_y;
+                // Same as the flagpole above — must stay visible above world
+                // geometry, not just clipped away from the sidebar.
+                UIRenderer_BeginWorldOverlayFlat(ndc_z);
                 draw_engine_room_flag_top(item.roomFlag);
+                UIRenderer_EndWorldOverlayFlat();
                 break;
             default:
                 break;
@@ -8447,10 +8453,13 @@ static void draw_jonty_mapwho(struct BucketKindJontySprite *jspr)
         thing_being_displayed = NULL;
     }
     // Tell the GPU renderer the owner and whether this sprite should receive
-    // a depth-fail outline (creatures and dead creatures only).
+    // a depth-fail outline (creatures and dead creatures only). Suppressed in
+    // possession mode, where the outline highlight makes no sense in first person.
     if (!thing_is_invalid(thing))
     {
         int wants_outline = (g_renderer_settings.creature_outline_class_mask >> thing->class_id) & 1u;
+        if (camera_get_active(player->id_number)->view_mode == PVM_CreatureView)
+            wants_outline = 0;
         WorldViewRenderer_SetCurrentSpriteContext((int)thing->owner, wants_outline);
     }
     else
@@ -9459,6 +9468,11 @@ void draw_frontview_engine(struct Camera *cam)
     store_engine_window(&ewnd,pixel_size);
     RendererSetViewport(ewnd.x, ewnd.y, ewnd.width, ewnd.height);
     WorldViewRenderer_BeginWorldPass(lbDisplay.GraphicsWindowPtr, RendererScreenWidth(), ewnd.width, ewnd.height, ewnd.x, ewnd.y);
+    // World-space overlay sprites (WorldOverlay/WorldOverlayFlat) no longer need
+    // to be clipped out of the sidebar panel's screen area -- GameUI now draws
+    // after them and is opaque where it draws, so it simply paints over
+    // whatever's underneath. This scissor rect still guards against bleeding
+    // into the overhead map / zoom box regions (see DrawWorldSpriteLayerRT()).
     UIRenderer_SetGameViewport(ewnd.x, ewnd.y, ewnd.width, ewnd.height);
     clear_fast_bucket_list();
     store_engine_window(&ewnd,1);

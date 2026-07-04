@@ -104,40 +104,94 @@ const char* PlatformWindows::GetWineHost() const
 
 // ----- Crash / error parachute -----
 
+/** MinGW fallback: resolve one address against a GNU ld "keeperfx.map" file.
+ *  MSVC builds carry a PDB and never reach this path (SymFromAddr succeeds).
+ *  Returns true when a matching map entry was found and logged. */
+static bool
+_map_file_lookup(FILE *mapFile, int64_t keeperFxBaseAddr, int frame_no,
+                 const char *module_name, DWORD64 pc, DWORD64 module_base)
+{
+    if (!mapFile || strncmp(module_name, "keeperfx", strlen("keeperfx")) != 0)
+        return false;
+
+    char mapFileLine[512];
+    int64_t checkAddr = (int64_t)(pc - module_base) + keeperFxBaseAddr;
+    int64_t prevAddr = 0;
+    char prevName[512];
+    prevName[0] = 0;
+
+    fseek(mapFile, 0, SEEK_SET);
+    while (fgets(mapFileLine, sizeof(mapFileLine), mapFile) != NULL)
+    {
+        int64_t addr;
+        char name[512];
+        name[0] = 0;
+        if (sscanf(mapFileLine, "%llx %[^\t\n]", &addr, name) == 2 ||
+            sscanf(mapFileLine, " .text %llx %[^\t\n]", &addr, name) == 2)
+        {
+            if (checkAddr > prevAddr && checkAddr < addr)
+            {
+                int64_t displacement = checkAddr - prevAddr;
+                char *splitPos = strchr(prevName, ' ');
+                if (strncmp(prevName, "0x", 2) == 0 && splitPos != NULL)
+                {
+                    memmove(prevName, splitPos + 1, strlen(splitPos));
+                    char *lastSlash = strrchr(prevName, '/');
+                    if (lastSlash) memmove(prevName, lastSlash + 1, strlen(lastSlash + 1) + 1);
+                    memmove(prevName + 3, prevName, strlen(prevName) + 1);
+                    memcpy(prevName, "-> ", 3);
+                }
+                LbJustLog("[#%-2d] %s!%s+0x%llx [0x%016llx]\t(map lookup)\n",
+                          frame_no, module_name, prevName,
+                          (unsigned long long)displacement, (unsigned long long)pc);
+                return true;
+            }
+            prevAddr = addr;
+            strcpy(prevName, name);
+        }
+    }
+    return false;
+}
+
 static void
 _backtrace(int depth, LPCONTEXT context)
 {
-    int64_t keeperFxBaseAddr = 0x00000000;
-    char mapFileLine[512];
-
+    // MinGW map file (absent on MSVC builds, which resolve via PDB below).
+    int64_t keeperFxBaseAddr = 0;
     FILE *mapFile = fopen("keeperfx.map", "r");
-
     if (mapFile)
     {
+        char mapFileLine[512];
         while (fgets(mapFileLine, sizeof(mapFileLine), mapFile) != NULL)
         {
             if (sscanf(mapFileLine, " %*x __image_base__ = %llx", &keeperFxBaseAddr) == 1)
                 break;
         }
-        memset(mapFileLine, 0, sizeof(mapFileLine));
-        fseek(mapFile, 0, SEEK_SET);
-        if (keeperFxBaseAddr == 0x00000000)
+        if (keeperFxBaseAddr == 0)
+        {
             fclose(mapFile);
+            mapFile = NULL;
+        }
     }
+
+    // StackWalk64 mutates the context it walks; use a copy so the caller's
+    // exception context stays intact (the minidump snapshots the original).
+    CONTEXT walk_ctx;
+    memcpy(&walk_ctx, context, sizeof(CONTEXT));
 
     STACKFRAME64 frame;
     memset(&frame, 0, sizeof(frame));
 
 #if defined(_M_X64)
     const DWORD machine_type = IMAGE_FILE_MACHINE_AMD64;
-    frame.AddrPC.Offset    = context->Rip;
-    frame.AddrStack.Offset = context->Rsp;
-    frame.AddrFrame.Offset = context->Rbp;
+    frame.AddrPC.Offset    = walk_ctx.Rip;
+    frame.AddrStack.Offset = walk_ctx.Rsp;
+    frame.AddrFrame.Offset = walk_ctx.Rbp;
 #elif defined(_M_IX86)
     const DWORD machine_type = IMAGE_FILE_MACHINE_I386;
-    frame.AddrPC.Offset    = context->Eip;
-    frame.AddrStack.Offset = context->Esp;
-    frame.AddrFrame.Offset = context->Ebp;
+    frame.AddrPC.Offset    = walk_ctx.Eip;
+    frame.AddrStack.Offset = walk_ctx.Esp;
+    frame.AddrFrame.Offset = walk_ctx.Ebp;
 #else
     return;
 #endif
@@ -148,11 +202,13 @@ _backtrace(int depth, LPCONTEXT context)
     HANDLE process = GetCurrentProcess();
     HANDLE thread  = GetCurrentThread();
 
-    while (StackWalk64(machine_type, process, thread, &frame, context, nullptr,
-                       SymFunctionTableAccess64, SymGetModuleBase64, nullptr))
+    for (int frame_no = 0; frame_no < depth; frame_no++)
     {
-        --depth;
-        if (depth < 0) break;
+        if (!StackWalk64(machine_type, process, thread, &frame, &walk_ctx, nullptr,
+                         SymFunctionTableAccess64, SymGetModuleBase64, nullptr))
+            break;
+        if (frame.AddrPC.Offset == 0)
+            break;
 
         DWORD64 module_base = SymGetModuleBase64(process, frame.AddrPC.Offset);
         const char *module_name = "[unknown module]";
@@ -164,69 +220,77 @@ _backtrace(int depth, LPCONTEXT context)
             else             module_name = module_name_raw;
         }
 
-        if (strncmp(module_name, "keeperfx", strlen("keeperfx")) == 0 && mapFile)
-        {
-            int64_t checkAddr = frame.AddrPC.Offset - module_base + keeperFxBaseAddr;
-            bool addrFound = false;
-            int64_t prevAddr = 0;
-            char prevName[512];
-            prevName[0] = 0;
-
-            while (fgets(mapFileLine, sizeof(mapFileLine), mapFile) != NULL)
-            {
-                int64_t addr;
-                char name[512];
-                name[0] = 0;
-                if (sscanf(mapFileLine, "%llx %[^\t\n]", &addr, name) == 2 ||
-                    sscanf(mapFileLine, " .text %llx %[^\t\n]", &addr, name) == 2)
-                {
-                    if (checkAddr > prevAddr && checkAddr < addr)
-                    {
-                        int64_t displacement = checkAddr - prevAddr;
-                        char *splitPos = strchr(prevName, ' ');
-                        if (strncmp(prevName, "0x", 2) == 0 && splitPos != NULL)
-                        {
-                            memmove(prevName, splitPos + 1, strlen(splitPos));
-                            char *lastSlash = strrchr(prevName, '/');
-                            if (lastSlash) memmove(prevName, lastSlash + 1, strlen(lastSlash + 1) + 1);
-                            memmove(prevName + 3, prevName, strlen(prevName) + 1);
-                            memcpy(prevName, "-> ", 3);
-                        }
-                        LbJustLog("[#%-2d] %-12s : %-36s [0x%I64x+0x%I64x]\t map lookup for: %04x:%08x, base: %08x\n",
-                                  depth, module_name, prevName, prevAddr, displacement,
-                                  (uint16_t)context->SegCs, (uint32_t)frame.AddrPC.Offset, (uint32_t)module_base);
-                        addrFound = true;
-                        break;
-                    }
-                }
-                prevAddr = addr;
-                strcpy(prevName, name);
-            }
-            fseek(mapFile, 0, SEEK_SET);
-            memset(mapFileLine, 0, sizeof(mapFileLine));
-            if (addrFound) continue;
-        }
-
+        // Primary path: debug symbols (PDB). SYMOPT_LOAD_LINES was set by the
+        // caller, so file:line resolution works for our own modules.
         char symbol_info[sizeof(SYMBOL_INFO) + MAX_SYM_NAME * sizeof(TCHAR)];
         PSYMBOL_INFO pSymbol = (PSYMBOL_INFO)symbol_info;
         pSymbol->SizeOfStruct = sizeof(SYMBOL_INFO);
         pSymbol->MaxNameLen   = MAX_SYM_NAME;
-        uint64_t sfaDisplacement;
-        if (SymFromAddr(process, frame.AddrPC.Offset, &sfaDisplacement, pSymbol))
+        DWORD64 sym_disp = 0;
+        if (SymFromAddr(process, frame.AddrPC.Offset, &sym_disp, pSymbol))
         {
-            LbJustLog("[#%-2d] %-12s : %-36s [%04x:%08x+0x%I64x, base %08x]\t symbol lookup\n",
-                      depth, module_name, pSymbol->Name,
-                      (uint16_t)context->SegCs, (uint32_t)frame.AddrPC.Offset,
-                      sfaDisplacement, (uint32_t)module_base);
+            IMAGEHLP_LINE64 line;
+            line.SizeOfStruct = sizeof(line);
+            DWORD line_disp = 0;
+            if (SymGetLineFromAddr64(process, frame.AddrPC.Offset, &line_disp, &line))
+            {
+                LbJustLog("[#%-2d] %s!%s+0x%llx [%s:%lu]\n",
+                          frame_no, module_name, pSymbol->Name,
+                          (unsigned long long)sym_disp,
+                          line.FileName, (unsigned long)line.LineNumber);
+            }
+            else
+            {
+                LbJustLog("[#%-2d] %s!%s+0x%llx [0x%016llx]\n",
+                          frame_no, module_name, pSymbol->Name,
+                          (unsigned long long)sym_disp,
+                          (unsigned long long)frame.AddrPC.Offset);
+            }
+            continue;
         }
-        else
-        {
-            LbJustLog("[#%-2d] %-12s : at %04x:%08x, base %08x\n",
-                      depth, module_name, (uint16_t)context->SegCs,
-                      (uint32_t)frame.AddrPC.Offset, (uint32_t)module_base);
-        }
+
+        // Fallback: MinGW map-file scan for keeperfx frames without symbols.
+        if (_map_file_lookup(mapFile, keeperFxBaseAddr, frame_no,
+                             module_name, frame.AddrPC.Offset, module_base))
+            continue;
+
+        LbJustLog("[#%-2d] %s : at 0x%016llx (base 0x%016llx)\n",
+                  frame_no, module_name,
+                  (unsigned long long)frame.AddrPC.Offset,
+                  (unsigned long long)module_base);
     }
     if (mapFile) fclose(mapFile);
+}
+
+/** Write a minidump next to the exe so the crash can be opened post-mortem in
+ *  Visual Studio or WinDbg together with keeperfx.pdb. Includes all thread
+ *  stacks and memory referenced by them — much smaller than a full dump but
+ *  enough to inspect locals and heap objects on every frame. */
+static void _write_minidump(LPEXCEPTION_POINTERS info)
+{
+    char path[MAX_PATH];
+    SYSTEMTIME st;
+    GetLocalTime(&st);
+    snprintf(path, sizeof(path), "keeperfx_crash_%04u%02u%02u_%02u%02u%02u.dmp",
+             st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+    HANDLE file = CreateFileA(path, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
+                              FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE)
+    {
+        LbErrorLog("Minidump: cannot create %s (error %lu)\n", path, GetLastError());
+        return;
+    }
+    MINIDUMP_EXCEPTION_INFORMATION mei;
+    mei.ThreadId = GetCurrentThreadId();
+    mei.ExceptionPointers = info;
+    mei.ClientPointers = FALSE;
+    const MINIDUMP_TYPE type = (MINIDUMP_TYPE)(MiniDumpScanMemory
+        | MiniDumpWithIndirectlyReferencedMemory | MiniDumpWithThreadInfo);
+    BOOL ok = MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(),
+                                file, type, &mei, nullptr, nullptr);
+    CloseHandle(file);
+    if (ok) LbErrorLog("Minidump written: %s\n", path);
+    else    LbErrorLog("MiniDumpWriteDump failed (error %lu)\n", GetLastError());
 }
 
 static LONG CALLBACK ctrl_handler_w32(LPEXCEPTION_POINTERS info)
@@ -234,9 +298,12 @@ static LONG CALLBACK ctrl_handler_w32(LPEXCEPTION_POINTERS info)
     switch (info->ExceptionRecord->ExceptionCode) {
     case EXCEPTION_ACCESS_VIOLATION:
         switch (info->ExceptionRecord->ExceptionInformation[0]) {
-        case 0: LbErrorLog("Attempt to read from inaccessible memory address.\n"); break;
-        case 1: LbErrorLog("Attempt to write to inaccessible memory address.\n"); break;
-        case 8: LbErrorLog("User-mode data execution prevention (DEP) violation.\n"); break;
+        case 0: LbErrorLog("Attempt to read from inaccessible memory address %p.\n",
+                           (void*)info->ExceptionRecord->ExceptionInformation[1]); break;
+        case 1: LbErrorLog("Attempt to write to inaccessible memory address %p.\n",
+                           (void*)info->ExceptionRecord->ExceptionInformation[1]); break;
+        case 8: LbErrorLog("User-mode data execution prevention (DEP) violation at %p.\n",
+                           (void*)info->ExceptionRecord->ExceptionInformation[1]); break;
         default: LbErrorLog("Memory access violation, code %d.\n", (int)info->ExceptionRecord->ExceptionInformation[0]); break;
         }
         break;
@@ -247,15 +314,32 @@ static LONG CALLBACK ctrl_handler_w32(LPEXCEPTION_POINTERS info)
         LbErrorLog("Failure code %lx received.\n", info->ExceptionRecord->ExceptionCode);
         break;
     }
-    if (SymInitialize(GetCurrentProcess(), 0, TRUE))
-    {
-        _backtrace(16, info->ContextRecord);
-        SymCleanup(GetCurrentProcess());
-    }
-    else
-    {
-        LbErrorLog("Failed to init symbol context\n");
-    }
+    LbErrorLog("Faulting instruction at %p on thread %lu.\n",
+               info->ExceptionRecord->ExceptionAddress, GetCurrentThreadId());
+
+    // Dump first: it snapshots the pristine exception context and every other
+    // thread's stack, so even if symbolization below fails the crash is still
+    // fully diagnosable offline against keeperfx.pdb.
+    _write_minidump(info);
+
+    // SYMOPT_LOAD_LINES makes SymGetLineFromAddr64 work (file:line frames);
+    // SYMOPT_UNDNAME demangles C++ names; SYMOPT_FAIL_CRITICAL_ERRORS stops
+    // dbghelp from raising interactive error boxes inside a crash handler.
+    SymSetOptions(SymGetOptions() | SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS
+                  | SYMOPT_LOAD_LINES | SYMOPT_FAIL_CRITICAL_ERRORS);
+    // dbghelp allows exactly one symbol session per process handle. In
+    // TRACY_ENABLE builds Tracy has already called SymInitialize(), so our
+    // call fails with ERROR_INVALID_PARAMETER — that is NOT a real failure:
+    // the session exists, we just don't own it. Reuse it (refreshing the
+    // module list to pick up anything loaded since) and skip SymCleanup so we
+    // don't tear down a session another subsystem is still using.
+    HANDLE process = GetCurrentProcess();
+    BOOL we_own_symbols = SymInitialize(process, NULL, TRUE);
+    if (!we_own_symbols)
+        SymRefreshModuleList(process);
+    _backtrace(32, info->ContextRecord);
+    if (we_own_symbols)
+        SymCleanup(process);
     RendererResetScreen(true);
     LbErrorLogClose();
     return EXCEPTION_EXECUTE_HANDLER;

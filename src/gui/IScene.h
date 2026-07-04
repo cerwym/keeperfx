@@ -83,6 +83,17 @@ public:
     /// SceneManager_IsZoomBoxHandled() which uses this to skip its legacy body.
     virtual bool handlesZoomBox() const { return false; }
 
+    /// Returns true if this scene wants the composed in-game UI (GameUI —
+    /// sidebar, compass, dialogs, power-hand, messages, pause menu; see
+    /// src/kfx/ui/GameUI.cpp) drawn on top of it. Default true (the normal
+    /// dungeon view wants it). Scenes that ARE the full-screen UI themselves
+    /// (e.g. ParchmentScene) override this to false, making GameUI's
+    /// visibility a declarative property of the active scene recomputed
+    /// fresh every frame, instead of relying on global, stateful menu
+    /// visibility flags (toggle_status_menu()/GMnu_MAIN.is_turned_on) that
+    /// can desync from the actual view.
+    virtual bool wantsGameUI() const { return true; }
+
     // -------------------------------------------------------------------------
     // Tick-rate cap
     // -------------------------------------------------------------------------

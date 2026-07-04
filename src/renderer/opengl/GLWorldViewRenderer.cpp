@@ -1432,7 +1432,7 @@ void GLWorldViewRenderer::setup_world_sprite_processing(int32_t bucket_num)
     // (avoids z-fighting between coplanar sprites and tiles).
     const float sprite_z = 2.0f * ((float)bucket_num - 0.5f) / (float)(BUCKETS_COUNT - 1) - 1.0f;
     // Stored here so that keeper-sprite (KSprite) render passes and UIRenderer
-    // (JontySprites) both receive the same biased z via UIRenderer_BeginWorldDepth().
+    // (JontySprites) both receive the same biased z via UIRenderer_BeginWorldOverlay().
     m_current_sprite_z = sprite_z;
 }
 

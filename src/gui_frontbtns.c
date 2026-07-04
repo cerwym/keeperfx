@@ -773,47 +773,61 @@ void frontend_draw_button(struct GuiButton *gbtn, unsigned short btntype, const 
     // Detect scaling factor
     int units_per_px;
     units_per_px = simple_frontend_sprite_height_units_per_px(gbtn, GFS_hugebutton_a05l, 100);
+    // Build the button as a composite (background segment strip + label) and
+    // submit it as one unit: segments through the UI node, label through the
+    // text node.  The btntype layout math (which sprites, where) stays here —
+    // the frontend owns the button's visual style; RendererSubmitButton owns
+    // the ordered submission through the renderer nodes.
+    RendererUIButtonDesc desc = {0};
+    int seg = 0;
+    desc.units_per_px = units_per_px;
     x = gbtn->scr_pos_x;
     y = gbtn->scr_pos_y;
     switch (btntype)
     {
      case 1:
          spr = get_frontend_sprite(spridx);
-         UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_px, spr);
+         desc.segments[seg].spr = spr; desc.segments[seg].x = x; desc.segments[seg].y = y; seg++;
          x += spr->SWidth * units_per_px / 16;
          spr = get_frontend_sprite(spridx+1);
-         UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_px, spr);
+         desc.segments[seg].spr = spr; desc.segments[seg].x = x; desc.segments[seg].y = y; seg++;
          x += spr->SWidth * units_per_px / 16;
          break;
     case 2:
         spr = get_frontend_sprite(spridx);
-        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_px, spr);
+        desc.segments[seg].spr = spr; desc.segments[seg].x = x; desc.segments[seg].y = y; seg++;
         x += spr->SWidth * units_per_px / 16;
         spr = get_frontend_sprite(spridx+1);
-        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_px, spr);
+        desc.segments[seg].spr = spr; desc.segments[seg].x = x; desc.segments[seg].y = y; seg++;
         x += spr->SWidth * units_per_px / 16;
-        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_px, spr);
+        desc.segments[seg].spr = spr; desc.segments[seg].x = x; desc.segments[seg].y = y; seg++;
         x += spr->SWidth * units_per_px / 16;
         break;
     default:
         spr = get_frontend_sprite(spridx);
-        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_px, spr);
+        desc.segments[seg].spr = spr; desc.segments[seg].x = x; desc.segments[seg].y = y; seg++;
         x += spr->SWidth * units_per_px / 16;
         break;
     }
     spr = get_frontend_sprite(spridx+2);
-    UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_px, spr);
+    desc.segments[seg].spr = spr; desc.segments[seg].x = x; desc.segments[seg].y = y; seg++;
+    desc.segment_count = seg;
     if (text != NULL)
     {
-        lbDisplay.DrawFlags = drw_flags;
+        // Measure with the label font active; the composite re-sets the font
+        // for the actual draw.  Hand it a pre-computed text window.
         LbTextSetFont(frontend_font[fntidx]);
         spr = get_frontend_sprite(spridx);
         h = LbTextHeight(text) * units_per_px / 16;
-        x = gbtn->scr_pos_x + ((40*units_per_px/16) >> 1);
-        y = gbtn->scr_pos_y + ((spr->SHeight*units_per_px/16 - h) >> 1);
-        LbTextSetWindow(x, y, gbtn->width-40*units_per_px/16, h);
-        LbTextDrawResized(0, 0, units_per_px, text);
+        desc.label_draw_flags = drw_flags;
+        desc.font = frontend_font[fntidx];
+        desc.text = text;
+        desc.text_x = gbtn->scr_pos_x + ((40*units_per_px/16) >> 1);
+        desc.text_y = gbtn->scr_pos_y + ((spr->SHeight*units_per_px/16 - h) >> 1);
+        desc.text_w = gbtn->width - 40*units_per_px/16;
+        desc.text_h = h;
     }
+    RendererSubmitButton(&desc);
 }
 
 void frontend_draw_large_menu_button(struct GuiButton *gbtn)

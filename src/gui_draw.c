@@ -777,11 +777,15 @@ TbBool frontmenu_copy_background_at(const struct TbRect *bkgnd_area, int units_p
     // Only 8bpp supported for now
     if (LbGraphicsScreenBPP() != 8)
         return false;
-    // Do the drawing
-    RendererBlitRaw8(
-        img_width*units_per_px/16, img_height*units_per_px/16,
-        bkgnd_area->left, bkgnd_area->top,
-        srcbuf, img_width, img_height);
+    // Do the drawing (opaque, game-palette Indexed8 present — background layer).
+    struct RendererPresentImageDesc d = {0};
+    d.format  = PRESENT_FORMAT_INDEXED8;
+    d.palette = PRESENT_PALETTE_GAME;
+    d.kind    = PRESENT_KIND_OPAQUE;
+    d.dst_w = img_width*units_per_px/16; d.dst_h = img_height*units_per_px/16;
+    d.dst_x = bkgnd_area->left;          d.dst_y = bkgnd_area->top;
+    d.src   = srcbuf; d.src_w = img_width; d.src_h = img_height;
+    RendererPresentImage(&d);
     // Burning candle flames
     return true;
 }

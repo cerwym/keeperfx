@@ -77,16 +77,11 @@ public:
         return c;
     }
 
-    /** GPU raw-image blit — queues a frontend background image for opaque
-     *  palette-decoded rendering at EndFrame() time.  No WScreen write occurs.
-     *  Returns true unconditionally when the shader is compiled; false only
-     *  when called before Init() completes (programming error). */
-    bool BlitRaw8GPU(int dst_width, int dst_height, int dst_x, int dst_y,
-                     const unsigned char* src_buf, int src_width, int src_height) override;
-
-    bool SubmitVideoFrame(const uint8_t* pal8_pixels, int src_w, int src_h, int src_pitch,
-                          const uint8_t* bgra_palette_1024,
-                          int dst_x, int dst_y, int dst_w, int dst_h) override;
+    /** Unified full-screen image present — appends an IRImagePresentCmd to the
+     *  RenderGraph write buffer (executed at EndFrame_GL by layer_z).
+     *  Folds the former BlitRaw8GPU / SubmitVideoFrame / SubmitTransparentBlit /
+     *  SubmitLandviewZoom GPU paths. */
+    bool PresentImage(const struct RendererPresentImageDesc* desc) override;
 
     bool SubmitLandviewZoom(const uint8_t* src_buf, int src_w, int src_h,
                             float center_map_x, float center_map_y,
@@ -202,12 +197,6 @@ private:
     int          m_uTintClipRadius= -1; // uniform location for u_clip_radius (tint shader)
     int          m_uTintClipScrH  = -1; // uniform location for u_clip_screen_h (tint shader)
 
-    // Whether a transparent overlay was submitted this frame via SubmitTransparentBlit().
-    // Pixel data is stored in m_transparent_blit_buf and uploaded by the render thread
-    // in EndFrame_GL() / FlushSceneToFBO() — never from the game thread.
-    bool                  m_transparent_blit_pending = false;
-    std::vector<uint8_t>  m_transparent_blit_buf;     // GL_R8 pixel data, render-thread upload
-
     // Shared GPU resources (owned here, injected into world renderer)
     unsigned int m_texFade      = 0; // R8 256×256: render_fade_tables lighting LUT
     unsigned int m_tex_null     = 0; // 1×1 R8 zero — bound to sampler units lacking a real texture
@@ -224,23 +213,9 @@ private:
     // update_animating_texture_maps() advances the animation counter.
     const uint8_t* m_last_anim_sentinel = nullptr;
 
-    // ── Raw-image GPU blit (Phase A frontend GPU path) ────────────────────
-    // Queued by BlitRaw8GPU(); executed once at EndFrame() before the staging
-    // blit so the opaque background composites beneath sprite overlays.
-    struct RawBlitCmd {
-        const uint8_t* src_buf = nullptr;
-        int src_w = 0, src_h = 0;
-        int dst_x = 0, dst_y = 0, dst_w = 0, dst_h = 0;
-    };
-    bool              m_rawblit_pending  = false;
-    RawBlitCmd        m_rawblit_cmd      = {};
-    std::vector<uint8_t> m_rawblit_px_buf;  ///< owns m_rawblit_cmd.src_buf data (game-thread side)
-    // Written by BlitRaw8GPU() (game thread); read by EndFrame_GL() (render thread).
-    // Atomic to prevent data-race UB — no memory ordering needed beyond atomicity.
-    std::atomic<bool> m_rawblit_cached   {false};  // last rawblit retained for palette-fade re-renders
-    RawBlitCmd        m_rawblit_cached_cmd = {};
-    bool              m_rt_rawblit_cached  = false;
-    RawBlitCmd        m_rt_rawblit_cached_cmd = {};
+    // ── Shared GPU resources for the unified image-present IR ─────────────
+    // The R8 index texture + fullscreen quad VAO/VBO + rawblit shader are reused
+    // by DrawIndexed8OpaquePresent (backgrounds/parchment/FMV) and DrawZoomPresent.
     unsigned int      m_rawblit_shader        = 0;  // palette_blit_vert + rawimage_blit_frag
     unsigned int      m_overhead_map_shader   = 0;  // palette_blit_vert + overhead_map_frag (RG8 ghost-table)
     int               m_omap_loc_map_rect   = -1;
@@ -295,48 +270,14 @@ private:
     float m_zoom_clip_rect[4] = {0,0,0,0};
     float m_zoom_clip_radius = -1.0f;
 
-    // ── FMV video frame GPU blit (Phase C) ────────────────────────────────
-    // Queued by SubmitVideoFrame(); drawn at EndFrame() using the same shader
-    // as rawblit (palette_blit_vert + rawimage_blit_frag) but with a separate
-    // per-video-frame palette texture instead of the game palette.
-    // Pixel data and palette are copied into owned buffers immediately so the
-    // caller (bflib_fmvids.cpp) may free the AVFrame as soon as Submit returns.
-    struct FmvBlitCmd {
-        const uint8_t* px       = nullptr;  // palette indices — points into owned buffer
-        int src_w = 0, src_h = 0, src_pitch = 0;
-        const uint8_t* bgra_pal = nullptr;  // 256×BGRA — points into owned buffer
-        int dst_x = 0, dst_y = 0, dst_w = 0, dst_h = 0;
-    };
-    bool              m_fmv_pending        = false;
-    FmvBlitCmd        m_fmv_cmd            = {};
-    std::vector<uint8_t> m_fmv_px_buf;     ///< owns m_fmv_cmd.px data (game-thread side)
-    std::vector<uint8_t> m_fmv_pal_buf;    ///< owns m_fmv_cmd.bgra_pal data (game-thread side)
-    unsigned int      m_fmv_vao            = 0;
-    unsigned int      m_fmv_vbo            = 0;
-    unsigned int      m_fmv_index_tex      = 0;  // GL_R8 — per-frame pixel indices
-    int               m_fmv_index_tex_w    = 0;
-    int               m_fmv_index_tex_h    = 0;
+    // FMV per-frame embedded palette texture (256×1 RGBA8). The frame indices
+    // reuse the rawblit index texture via DrawIndexed8OpaquePresent; only the
+    // palette is FMV-specific (bound when a present carries PresentPalette::Embedded).
     unsigned int      m_fmv_palette_tex    = 0;  // GL_RGBA8 256×1 — per-video palette
 
-    // ── Landview zoom GPU blit (Phase D campaign-map zoom transition) ─────
-    // Queued by SubmitLandviewZoom(); executed at EndFrame() using a
-    // fullscreen quad whose fragment shader computes zoomed UVs from
-    // gl_FragCoord rather than vertex UVs, so no geometry rebuild is needed.
-    // Source pixels are copied into an owned buffer so map_screen may be written
-    // freely by the game thread after Submit returns.
-    struct LandviewZoomCmd {
-        const uint8_t* src_buf       = nullptr; // map_screen — points into owned buffer
-        int            src_w         = 0;       // LANDVIEW_MAP_WIDTH  (1280)
-        int            src_h         = 0;       // LANDVIEW_MAP_HEIGHT (960)
-        float          center_map_x  = 0.f;     // zoom centre, map texels
-        float          center_map_y  = 0.f;
-        float          screen_cx     = 0.f;     // zoom centre, screen pixels (y-down)
-        float          screen_cy     = 0.f;
-        float          scale         = 1.f;     // src_delta / 256.0
-    };
-    bool              m_zoom_pending       = false;
-    LandviewZoomCmd   m_zoom_cmd           = {};
-    std::vector<uint8_t> m_zoom_src_buf;   ///< owns m_zoom_cmd.src_buf data (game-thread side)
+    // ── Landview zoom GPU resources (LandviewZoom image present) ─────────
+    // DrawZoomPresent uploads map_screen to m_zoom_tex and draws a fullscreen
+    // quad whose fragment shader computes zoomed UVs from gl_FragCoord.
     unsigned int      m_zoom_shader        = 0;  // palette_blit_vert + landview_zoom_frag
     unsigned int      m_zoom_tex           = 0;  // GL_R8 — map_screen indices (1280×960)
     int               m_zoom_tex_w         = 0;
@@ -375,24 +316,17 @@ private:
     // originals without racing EndFrame_GL().
     std::vector<PiPCmd>         m_rt_pip_queue;
     std::vector<OverheadMapCmd> m_rt_overhead_map_cmds;
-    bool                        m_rt_rawblit_pending  = false;
-    RawBlitCmd                  m_rt_rawblit_cmd      = {};
     uint8_t                     m_rt_clearColourIndex = 0;
+    // Set by FlushSceneToFBO() when it has captured the IR image presents into the
+    // map-fade parchment FBO, so the main EndFrame_GL pass skips re-drawing them
+    // over the fade composite. Reset at the top of each EndFrame_GL(). Render
+    // thread only.
+    bool                        m_rt_presents_captured = false;
 
-    // Render-thread copies for categories previously missing from FlipBuffers().
-    // FMV: owned pixel and palette buffers so the AVFrame may be freed immediately
-    // after SubmitVideoFrame() returns on the game thread.
-    bool                        m_rt_fmv_pending  = false;
-    FmvBlitCmd                  m_rt_fmv_cmd      = {};
-    std::vector<uint8_t>        m_rt_fmv_px_buf;   ///< owns m_rt_fmv_cmd.px data
-    std::vector<uint8_t>        m_rt_fmv_pal_buf;  ///< owns m_rt_fmv_cmd.bgra_pal data
-    // Landview zoom: owned source-image buffer.
-    bool                        m_rt_zoom_pending  = false;
-    LandviewZoomCmd             m_rt_zoom_cmd      = {};
-    std::vector<uint8_t>        m_rt_zoom_src_buf; ///< owns m_rt_zoom_cmd.src_buf data
-    // Transparent blit (SubmitTransparentBlit): owned pixel buffer.
-    bool                        m_rt_transparent_blit_pending = false;
-    std::vector<uint8_t>        m_rt_transparent_blit_buf;
+    // (rawblit / FMV / landview-zoom / transparent-blit render-thread copies are
+    // gone — those presents ride the unified image-present IR, double-buffered by
+    // RenderGraph::Flip like the UI/text command buffers.)
+
     // Zoom-box tile quads and background fill rects.
     std::vector<ZoomTileCmd>    m_rt_zoom_tile_cmds;
     std::vector<ZoomBoxBgCmd>   m_rt_zoom_box_bg_cmds;
@@ -495,6 +429,18 @@ private:
      *  the game thread may be building the next frame concurrently once
      *  EndFrame() signals the render thread. */
     void EndFrame_GL();
+
+    /** Execute all queued image-present commands (render thread), sorted by
+     *  layer_z, dispatching on {format,kind} to the existing GL shaders. */
+    void ExecuteImagePresentsFromIR(const ImagePresentBuffers& cmds);
+    /** Draw one Indexed8 opaque present via the rawblit shader (render thread).
+     *  Handles the game palette and the FMV embedded palette + source pitch. */
+    void DrawIndexed8OpaquePresent(const IRImagePresentCmd& c);
+    /** Draw a full-screen index-0-transparent overlay + possession tint
+     *  (landview window frame). */
+    void DrawTransparentPresent(const IRImagePresentCmd& c);
+    /** Draw the landview zoom transition via the zoom fragment shader. */
+    void DrawZoomPresent(const IRImagePresentCmd& c);
 
 public:
     /** Flush all pending render commands (world geometry, raw blits, overhead

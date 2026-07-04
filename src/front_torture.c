@@ -196,7 +196,13 @@ TbBool fronttorture_draw(void)
   // Starting point coords
   int spx = (RendererPhysicalWidth() - w) >> 1;
   int spy = (RendererPhysicalHeight() - h) >> 1;
-  RendererBlitRaw8(w, h, spx, spy, torture_background, img_width, img_height);
+  struct RendererPresentImageDesc d = {0};
+  d.format  = PRESENT_FORMAT_INDEXED8;
+  d.palette = PRESENT_PALETTE_GAME;
+  d.kind    = PRESENT_KIND_OPAQUE;
+  d.dst_w = w; d.dst_h = h; d.dst_x = spx; d.dst_y = spy;
+  d.src   = torture_background; d.src_w = img_width; d.src_h = img_height;
+  RendererPresentImage(&d);
 
   for (int i = 0; i < torture_doors_available; i++)
   {

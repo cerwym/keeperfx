@@ -154,11 +154,11 @@ void GLMapFadePass::Shutdown()
 
 /******************************************************************************/
 
-bool GLMapFadePass::CaptureAndUploadFrames()
+bool GLMapFadePass::CaptureParchmentFrame()
 {
     if (!m_renderer)
     {
-        WARNLOG("GLMapFadePass::CaptureAndUploadFrames — no renderer bound");
+        WARNLOG("GLMapFadePass::CaptureParchmentFrame — no renderer bound");
         return false;
     }
 
@@ -166,14 +166,17 @@ bool GLMapFadePass::CaptureAndUploadFrames()
     const int h = m_screen_h;
     if (w < 1 || h < 1)
     {
-        WARNLOG("GLMapFadePass::CaptureAndUploadFrames — degenerate screen size %dx%d", w, h);
+        WARNLOG("GLMapFadePass::CaptureParchmentFrame — degenerate screen size %dx%d", w, h);
         return false;
     }
 
     m_tex_w = w;
     m_tex_h = h;
 
-    // Resize both snapshot textures to the window resolution.
+    // Resize both snapshot textures to the window resolution. m_tex[1]
+    // (world view) is resized here too even though it isn't populated until
+    // CaptureWorldFrame() runs later this frame, so it's never sampled at a
+    // stale size in between.
     for (int i = 0; i < 2; ++i)
     {
         glBindTexture(GL_TEXTURE_2D, m_tex[i]);
@@ -181,34 +184,6 @@ bool GLMapFadePass::CaptureAndUploadFrames()
                      GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
     }
     glBindTexture(GL_TEXTURE_2D, 0);
-
-    // ── Capture 3D world view → m_tex[1] via glBlitFramebuffer ──────────
-    // The dungeon geometry was already rendered to the default framebuffer
-    // by ExecuteWorldFromIR() before CaptureAndUploadFrames is called.
-    // We blit the current default FB content into m_tex[1] directly, which
-    // avoids re-running draw_view() on the render thread (unsafe — races with
-    // the game thread building the next frame).
-    {
-        GLuint blit_fbo = 0;
-        glGenFramebuffers(1, &blit_fbo);
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, blit_fbo);
-        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                               GL_TEXTURE_2D, m_tex[1], 0);
-        if (glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-        {
-            WARNLOG("GLMapFadePass: world-capture blit FBO incomplete — world snapshot skipped");
-            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-            glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-            glDeleteFramebuffers(1, &blit_fbo);
-            return false;
-        }
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, 0); // default framebuffer
-        glBlitFramebuffer(0, 0, w, h, 0, 0, w, h,
-                          GL_COLOR_BUFFER_BIT, GL_NEAREST);
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-        glDeleteFramebuffers(1, &blit_fbo);
-    }
 
     // ── Capture parchment overhead view → m_tex[0] ──────────────────────
     // The parchment rawblit + overhead map were submitted to the pending
@@ -258,6 +233,56 @@ bool GLMapFadePass::CaptureAndUploadFrames()
 
     glViewport(0, 0, w, h);
     return true;
+}
+
+bool GLMapFadePass::CaptureWorldFrame()
+{
+    const int w = m_tex_w;
+    const int h = m_tex_h;
+    if (w < 1 || h < 1)
+    {
+        WARNLOG("GLMapFadePass::CaptureWorldFrame — degenerate size %dx%d", w, h);
+        return false;
+    }
+
+    // ── Capture 3D world view + GameUI → m_tex[1] via glBlitFramebuffer ──
+    // Both the dungeon geometry (ExecuteWorldFromIR()) and GameUI
+    // (DrawGameUI()) have already been drawn to the default framebuffer by
+    // the time this runs — called from RendererOpenGL::EndFrame_GL() right
+    // after DrawGameUI(), specifically so the sidebar is part of this
+    // snapshot and crossfades with the rest of the view instead of popping
+    // in/out once the transition completes. We blit the current default FB
+    // content into m_tex[1] directly, which avoids re-running draw_view()
+    // on the render thread (unsafe — races with the game thread building
+    // the next frame).
+    GLuint blit_fbo = 0;
+    glGenFramebuffers(1, &blit_fbo);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, blit_fbo);
+    glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                           GL_TEXTURE_2D, m_tex[1], 0);
+    if (glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+    {
+        WARNLOG("GLMapFadePass: world-capture blit FBO incomplete — world snapshot skipped");
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+        glDeleteFramebuffers(1, &blit_fbo);
+        return false;
+    }
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0); // default framebuffer
+    glBlitFramebuffer(0, 0, w, h, 0, 0, w, h,
+                      GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+    glDeleteFramebuffers(1, &blit_fbo);
+    return true;
+}
+
+void GLMapFadePass::CaptureWorldFrameIfPending()
+{
+    if (!m_world_capture_pending)
+        return;
+    m_world_capture_pending = false;
+    CaptureWorldFrame();
 }
 
 /******************************************************************************/
@@ -398,11 +423,24 @@ void GLMapFadePass::ExecuteFromIR(const IRMapFadeCmd& cmd)
 
     if (cmd.capture_pending)
     {
-        if (!CaptureAndUploadFrames())
+        if (!CaptureParchmentFrame())
         {
-            WARNLOG("GLMapFadePass: capture failed in ExecuteFromIR, skipping");
+            WARNLOG("GLMapFadePass: parchment capture failed in ExecuteFromIR, skipping");
             return;
         }
+        // m_tex[1] (world view) was just resized (contents now undefined) but
+        // not yet populated -- that happens in CaptureWorldFrameIfPending(),
+        // called after DrawGameUI() later this frame, specifically so the
+        // sidebar is part of the snapshot. Skip the blend-draw entirely on
+        // this one frame rather than risk sampling undefined/garbage texture
+        // data (which would be at FULL opacity for the fade-out direction,
+        // where step starts at 32 and the world texture's blend weight is
+        // strongest right at the capture frame). The default framebuffer
+        // already has this frame's normal (undistorted) world+GameUI render
+        // on it from earlier in EndFrame_GL(), so simply not overdrawing it
+        // here is visually correct for this one transitional frame.
+        m_world_capture_pending = true;
+        return;
     }
 
     glDisable(GL_DEPTH_TEST);

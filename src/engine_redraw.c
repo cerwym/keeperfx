@@ -49,6 +49,7 @@
 #include "ui_init.h"
 #include "frontmenu_ingame_tabs.h"
 #include "kfx/engine/cameras.h"
+#include "kfx/ui/GameUI.h"
 #include "frontmenu_ingame_evnt.h"
 #include "frontmenu_ingame_map.h"
 #include "creature_graphics.h"
@@ -525,9 +526,7 @@ void redraw_creature_view(void)
         draw_creature_view(thing);
     remove_explored_flags_for_power_sight(player);
     if ((game.operation_flags & GOF_ShowGui) != 0) {
-        UIRenderer_SetLayer(0);  // sidebar background must land before the staging blit
         draw_whole_status_panel();
-        UIRenderer_SetLayer(1);  // restore front layer for all other GUI draws
     }
     TbBool menu_open = RendMenu_IsOpen();
     if (!menu_open) {
@@ -584,43 +583,29 @@ void redraw_frontview(void)
 }
 
 // Draws 2D elements on top of 3D view, like spell cursor. Called from redraw_isometric_view() and redraw_frontview()
-// after 3D rendering is done.  
+// after 3D rendering is done.
+// Delegates to GameUI (src/kfx/ui/GameUI.cpp), which owns the composed
+// in-game UI as a single IR layer drawn after all world content -- see
+// that file for why this is no longer split across Back/Front layers.
 void draw_2d_elements(struct PlayerInfo* player) {
-    TbBool menu_open = RendMenu_IsOpen();
-    if (flag_is_set(game.operation_flags, GOF_ShowGui)) {
-        UIRenderer_SetLayer(0);  // sidebar background must land before the staging blit
-        draw_whole_status_panel();
-        UIRenderer_SetLayer(1);  // restore front layer for all other GUI draws
-    }
-    /* Active-menu buttons, event briefings and compass labels are all text-IR
-       draws that float above our solid-box backgrounds.  Suppress everything
-       except the sidebar sprites when the full-screen overlay is up. */
-    if (!menu_open) {
-        draw_gui();
-        if (flag_is_set(game.operation_flags, GOF_ShowGui)) {
-            draw_overlay_compass(player->minimap_pos_x, player->minimap_pos_y);
-        }
-        message_draw();
-        draw_tooltip();
-    }
-    draw_power_hand();
-    if (should_render_ui()) {
-        gui_draw_all_boxes();
-    }
-    RendMenu_Draw();
+    GameUI_DrawFrame(player);
 }
 
 /**
- * Draws a cursor for given spell.
+ * Sets the mouse pointer to the cursor for the given power/spell.
  *
- * @return Gives true if cursor spell was drawn, false if the spell wasn't available and either no cursor or block cursor was drawn.
+ * @param pwkind The power to show a cursor for; <= 0 hides the cursor.
+ * @param stl_x,stl_y  Target subtile (for the availability check at this spot).
+ * @return true if a spell cursor was set; false if the spell wasn't castable
+ *         here and an invisible/deny cursor was set instead.
+ *
+ * Thing-specific cast conditions are skipped here (CastChk_SkipThing); callers
+ * that care about the target thing validate it before calling.
  */
-TbBool draw_spell_cursor(ThingIndex tng_idx, MapSubtlCoord stl_x, MapSubtlCoord stl_y)
+TbBool draw_spell_cursor(PowerKind pwkind, MapSubtlCoord stl_x, MapSubtlCoord stl_y)
 {
     long i;
-    long pwkind = -1;
     struct PlayerInfo* player = get_my_player();
-    pwkind = player->chosen_power_kind;
     SYNCDBG(5,"Starting for power %d",(int)pwkind);
     if (pwkind <= 0)
     {
@@ -628,10 +613,8 @@ TbBool draw_spell_cursor(ThingIndex tng_idx, MapSubtlCoord stl_x, MapSubtlCoord 
         return false;
     }
 
-    struct Thing* thing = thing_get(tng_idx);
-    TbBool allow_cast = false;
     const struct PowerConfigStats* powerst = get_power_model_stats(pwkind);
-    allow_cast = can_cast_spell(player->id_number, pwkind, stl_x, stl_y, thing, CastChk_SkipThing);
+    TbBool allow_cast = can_cast_spell(player->id_number, pwkind, stl_x, stl_y, INVALID_THING, CastChk_SkipThing);
     if (!allow_cast)
     {
         set_pointer_graphic(MousePG_DenyMark);
@@ -656,6 +639,72 @@ TbBool draw_spell_cursor(ThingIndex tng_idx, MapSubtlCoord stl_x, MapSubtlCoord 
     i = get_player_colored_pointer_icon_idx(powerst->pointer_sprite_idx,my_player_number);
     set_pointer_graphic_spell(i, get_gameturn());
     return true;
+}
+
+/** Pick the cursor when the CtrlDungeon power-hand tool is active: possession
+ *  hover, creature query, or the plain power-hand/pickaxe/invisible fallback.
+ *  Extracted from process_dungeon_top_pointer_graphic() for readability.
+ *  Note: intentionally still mutates player->thing_under_hand and sets
+ *  PlaF6_DisplayNeedsUpdate (consumed in power_hand.c) — behaviour preserved. */
+static void set_ctrldungeon_powerhand_pointer(struct PlayerInfo *player, struct Dungeon *dungeon)
+{
+    short thing_under_hand = player->thing_under_hand;
+    if (local_thing_under_hand > 0) {
+        thing_under_hand = local_thing_under_hand;
+    }
+    struct Thing *thing = thing_get(thing_under_hand);
+    TRACE_THING(thing);
+    TbBool can_cast = false;
+    // Possession-mode hover: input_crtr_control is set while the player is in
+    // "control creature" input mode (possession key/button held). If the thing
+    // under the hand is not the one already held, show the possession spell
+    // cursor instead of the plain power hand.
+    if ((player->input_crtr_control) && (thing_exists(thing)) && (dungeon->things_in_hand[0] != thing_under_hand))
+    {
+        PowerKind pwkind = PwrK_POSSESS;
+        if (can_cast_spell(player->id_number, pwkind, thing->mappos.x.stl.num, thing->mappos.y.stl.num, thing, CastChk_Default))
+        {
+            // The condition above makes can_cast_spell() within draw_spell_cursor() to never fail; this is intentional
+            can_cast = true;
+        }
+        else
+        {
+            thing = get_creature_near_for_controlling(player->id_number, thing->mappos.x.val, thing->mappos.y.val);
+            if (!thing_is_invalid(thing))
+            {
+                if (can_cast_spell(player->id_number, pwkind, thing->mappos.x.stl.num, thing->mappos.y.stl.num, thing, CastChk_Default))
+                {
+                    can_cast = true;
+                }
+            }
+        }
+        // Show the possession pointer for the hovered creature. draw_spell_cursor
+        // only sets the mouse graphic (no cast, no world geometry); pwkind is
+        // passed explicitly so player->chosen_power_kind stays untouched (it is
+        // PwrK_None here — work_state is still CtrlDungeon).
+        if (can_cast)
+        {
+            draw_spell_cursor(pwkind, thing->mappos.x.stl.num, thing->mappos.y.stl.num);
+            player->thing_under_hand = thing->index;
+        } else {
+            set_pointer_graphic(MousePG_Arrow);
+        }
+
+        player->display_flags |= PlaF6_DisplayNeedsUpdate;
+    } else
+    if (((player->input_crtr_query) && !thing_is_invalid(thing)) && (dungeon->things_in_hand[0] != thing_under_hand)
+        && can_thing_be_queried(thing, player->id_number))
+    {
+        set_pointer_graphic(MousePG_Query);
+        player->display_flags |= PlaF6_DisplayNeedsUpdate;
+    } else
+    {
+        if ((player->additional_flags & PlaAF_ChosenSubTileIsHigh) != 0) {
+          set_pointer_graphic((player->roomspace_highlight_mode == drag_placement_mode) ? MousePG_Pickaxe2 : MousePG_Pickaxe);
+        } else {
+          set_pointer_graphic(MousePG_Invisible);
+        }
+    }
 }
 
 void process_dungeon_top_pointer_graphic(struct PlayerInfo *player)
@@ -692,7 +741,7 @@ void process_dungeon_top_pointer_graphic(struct PlayerInfo *player)
         TRACE_THING(thing);
         if (can_cast_spell(player->id_number, pwkind, thing->mappos.x.stl.num, thing->mappos.y.stl.num, thing, CastChk_Default))
         {
-            draw_spell_cursor(battle_creature_over, thing->mappos.x.stl.num, thing->mappos.y.stl.num);
+            draw_spell_cursor(pwkind, thing->mappos.x.stl.num, thing->mappos.y.stl.num);
         } else
         {
             set_pointer_graphic(MousePG_Arrow);
@@ -706,7 +755,6 @@ void process_dungeon_top_pointer_graphic(struct PlayerInfo *player)
         return;
     }
     long i;
-    short thing_under_hand;
     switch (plrst_cfg_stat->pointer_group)
     {
     case PsPg_CtrlDungeon:
@@ -732,57 +780,7 @@ void process_dungeon_top_pointer_graphic(struct PlayerInfo *player)
             set_pointer_graphic(MousePG_LockMark);
             break;
         case CSt_PowerHand:
-            thing_under_hand = player->thing_under_hand;
-            if (local_thing_under_hand > 0) {
-                thing_under_hand = local_thing_under_hand;
-            }
-            thing = thing_get(thing_under_hand);
-            TRACE_THING(thing);
-            TbBool can_cast = false;
-            if ((player->input_crtr_control) && (thing_exists(thing)) && (dungeon->things_in_hand[0] != thing_under_hand))
-            {
-                PowerKind pwkind = PwrK_POSSESS;
-                if (can_cast_spell(player->id_number, pwkind, thing->mappos.x.stl.num, thing->mappos.y.stl.num, thing, CastChk_Default))
-                {
-                    // The condition above makes can_cast_spell() within draw_spell_cursor() to never fail; this is intentional
-                    can_cast = true;
-                }
-                else
-                {
-                    thing = get_creature_near_for_controlling(player->id_number, thing->mappos.x.val, thing->mappos.y.val);
-                    if (!thing_is_invalid(thing))
-                    {
-                        if (can_cast_spell(player->id_number, pwkind, thing->mappos.x.stl.num, thing->mappos.y.stl.num, thing, CastChk_Default))
-                        {
-                            can_cast = true;
-                        }
-                    }
-                }
-                if (can_cast)
-                {
-                    player->chosen_power_kind = pwkind;
-                    draw_spell_cursor(0, thing->mappos.x.stl.num, thing->mappos.y.stl.num);
-                    player->chosen_power_kind = 0;
-                    player->thing_under_hand = thing->index;
-                } else {
-                    set_pointer_graphic(MousePG_Arrow);
-                }
-
-                player->display_flags |= PlaF6_DisplayNeedsUpdate;
-            } else
-            if (((player->input_crtr_query) && !thing_is_invalid(thing)) && (dungeon->things_in_hand[0] != thing_under_hand)
-                && can_thing_be_queried(thing, player->id_number))
-            {
-                set_pointer_graphic(MousePG_Query);
-                player->display_flags |= PlaF6_DisplayNeedsUpdate;
-            } else
-            {
-                if ((player->additional_flags & PlaAF_ChosenSubTileIsHigh) != 0) {
-                  set_pointer_graphic((player->roomspace_highlight_mode == drag_placement_mode) ? MousePG_Pickaxe2 : MousePG_Pickaxe);
-                } else {
-                  set_pointer_graphic(MousePG_Invisible);
-                }
-            }
+            set_ctrldungeon_powerhand_pointer(player, dungeon);
             break;
         default:
             if (player->hand_busy_until_turn <= get_gameturn())
@@ -800,7 +798,7 @@ void process_dungeon_top_pointer_graphic(struct PlayerInfo *player)
         set_pointer_graphic(MousePG_Invisible);
         break;
     case PsPg_Spell:
-        draw_spell_cursor(0, game.mouse_light_pos.x.stl.num, game.mouse_light_pos.y.stl.num);
+        draw_spell_cursor(player->chosen_power_kind, game.mouse_light_pos.x.stl.num, game.mouse_light_pos.y.stl.num);
         break;
     case PsPg_Query:
         set_pointer_graphic(MousePG_Query);

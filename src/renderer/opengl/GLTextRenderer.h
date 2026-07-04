@@ -13,6 +13,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <mutex>
 
 #ifdef RENDERER_OPENGL_ENABLED
 
@@ -110,7 +111,17 @@ private:
         TbBool dbc_enabled;                 // Whether DBC is active
     };
 
-    std::vector<DeferredDraw>  m_pending;         // Queued draws, flushed in Flush()
+    std::vector<DeferredDraw>  m_pending;         // Render-thread-only: built by ExecuteTextFromIR, flushed by Draw()
+
+    // Fallback queue for text drawn on the GAME thread while the IR write window
+    // is closed (blocking loops: level load, palette fades, loading screens).
+    // Guarded by m_fallback_mutex because the render thread splices it into
+    // m_pending in ExecuteTextFromIR while the game thread may still be pushing.
+    // Previously the game thread pushed straight into m_pending, racing the
+    // render thread's Draw() and corrupting DeferredDraw::text (std::string) —
+    // observed as a multi-megabyte memcpy AV during level entry.
+    std::vector<DeferredDraw>  m_pending_fallback;
+    std::mutex                 m_fallback_mutex;
 
     // IR write target — set by SetTextCommandBuffers(); null when not in IR mode.
     TextCommandBuffers* m_text_write_cmds = nullptr;

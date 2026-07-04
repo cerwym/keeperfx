@@ -627,9 +627,19 @@ struct movie_t {
 				dst_x = (scr_w - dst_w) / 2;
 				dst_y = (scr_h - dst_h) / 2;
 			}
-			if (RendererSubmitVideoFrame(
-					m_frame->data[0], m_frame->width, m_frame->height, m_frame->linesize[0],
-					m_frame->data[1], dst_x, dst_y, dst_w, dst_h))
+			// Unified present path: Indexed8 opaque with the frame's own
+			// (embedded) BGRA palette. GPU backends queue an IR present; the
+			// software backend returns false so the copy_to_screen path below runs.
+			struct RendererPresentImageDesc vdesc = {};
+			vdesc.format  = PRESENT_FORMAT_INDEXED8;
+			vdesc.palette = PRESENT_PALETTE_EMBEDDED;
+			vdesc.kind    = PRESENT_KIND_OPAQUE;
+			vdesc.dst_x = dst_x; vdesc.dst_y = dst_y; vdesc.dst_w = dst_w; vdesc.dst_h = dst_h;
+			vdesc.src = m_frame->data[0];
+			vdesc.src_w = m_frame->width; vdesc.src_h = m_frame->height;
+			vdesc.src_pitch = m_frame->linesize[0];
+			vdesc.embedded_palette = m_frame->data[1];
+			if (RendererPresentImage(&vdesc))
 			{
 				RendererUnlockScreen();
 				RendererPresentFrame();

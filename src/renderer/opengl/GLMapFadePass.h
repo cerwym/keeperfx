@@ -80,20 +80,35 @@ public:
     void FlushToRenderGraph(RenderGraph& graph) override;
 
     /** Execute the map-fade wipe composite on the render thread.
-     *  Captures frames if cmd.capture_pending, then draws the wipe quad.
+     *  Captures the parchment view if cmd.capture_pending (and flags the
+     *  world-view capture as pending — see CaptureWorldFrameIfPending()),
+     *  then draws the wipe quad using the previously-captured world view.
      *  Called by RendererOpenGL::EndFrame_GL() after the staging palette blit. */
     void ExecuteFromIR(const IRMapFadeCmd& cmd) override;
 
+    /** Blits the default framebuffer (world geometry + GameUI, both already
+     *  drawn this frame) into the world-view snapshot texture, if
+     *  ExecuteFromIR() flagged a capture as pending this frame. Called by
+     *  RendererOpenGL::EndFrame_GL() after DrawGameUI(). */
+    void CaptureWorldFrameIfPending() override;
+
     bool SupportsNativeResolution() const override { return m_initialized; }
 
-    /** Notify of current OS-window dimensions so CaptureAndUploadFrames()
-     *  does not need to read RendererGetScreenWidth()/Height directly.
+    /** Notify of current OS-window dimensions so CaptureParchmentFrame()/
+     *  CaptureWorldFrame() do not need to read RendererGetScreenWidth()/Height directly.
      *  Called by RendererOpenGL::BeginFrame(). */
     void SetScreenSize(int w, int h) override { m_screen_w = w; m_screen_h = h; }
 
 private:
     void Shutdown();
-    bool CaptureAndUploadFrames();
+    /** Resizes both snapshot textures and captures the parchment overhead
+     *  view into m_tex[0] (FlushSceneToFBO). Does NOT touch m_tex[1] — see
+     *  CaptureWorldFrameIfPending(). */
+    bool CaptureParchmentFrame();
+    /** Blits the current default framebuffer into m_tex[1] (the world-view
+     *  snapshot). Split out from the parchment capture so it can run after
+     *  DrawGameUI() has drawn for the frame — see CaptureWorldFrameIfPending(). */
+    bool CaptureWorldFrame();
 
     // GL resources
     GLuint m_tex[2]      = {};  // [0]=parchment, [1]=3D world — GL_RGBA8 native res
@@ -114,6 +129,10 @@ private:
     float m_step            = 0.f;   ///< current interpolated step value
     int   m_tex_w           = 0;
     int   m_tex_h           = 0;
+
+    // Render-thread-only state — set by ExecuteFromIR(), consumed and
+    // cleared by CaptureWorldFrameIfPending() later the same frame.
+    bool  m_world_capture_pending = false;
 
     // Full OS-window dimensions — set by SetScreenSize(), eliminates RendererGetScreenWidth()/Height reads.
     int  m_screen_w    = 0;

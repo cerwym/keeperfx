@@ -52,16 +52,6 @@ extern "C" {
 #endif
 /******************************************************************************/
 
-#if (BFDEBUG_LEVEL > 0)
-// Declarations for font testing screen (debug version only)
-
-struct TbLoadFiles testfont_load_files[] = {
-  {"data/frontend.pal",  (unsigned char **)&testfont_palette[0],NULL,                                           0, 0, 0},
-  {"data/palette.dat",   (unsigned char **)&testfont_palette[1],NULL,                                           0, 0, 0},
-  {"",                    NULL,                                 NULL,                                           0, 0, 0},
-};
-#endif
-
 struct TbLoadFiles gui_load_files_320[] = {
   {"data/slab0-0.dat",   (unsigned char **)&gui_slab,           NULL,                                           0, 0, 0},
   {"",                    NULL,                                 NULL,                                           0, 0, 0},

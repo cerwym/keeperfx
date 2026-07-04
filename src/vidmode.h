@@ -168,8 +168,6 @@ TbScreenMode setup_screen_mode_zero(TbScreenMode nmode);
 short LoadMcgaData(void);
 TbBool update_screen_mode_data(long width, long height);
 void load_pointer_file(short hi_res);
-TbBool load_testfont_fonts(void);
-void free_testfont_fonts(void);
 
 TbBool init_fades_table(void);
 TbBool init_alpha_table(void);

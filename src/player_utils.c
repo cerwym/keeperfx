@@ -1092,6 +1092,9 @@ void post_init_player(struct PlayerInfo *player)
 void post_init_players(void)
 {
     SYNCDBG(8, "Starting");
+    // Level entry: drop minimap state cached from any previously played level
+    // before post_init_player() rebuilds the panel map below.
+    panel_map_on_level_load();
     for (PlayerNumber plyr_idx = 0; plyr_idx < PLAYERS_COUNT; plyr_idx++)
     {
         struct PlayerInfo* player = get_player(plyr_idx);

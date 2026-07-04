@@ -26,14 +26,23 @@ struct TbSprite;
 
 /******************************************************************************/
 
-/** UI render layer (draw order: lower values first). */
+/** UI render layer (draw order: lower values first).
+ *
+ *  WorldOverlay/WorldOverlayFlat are world-positioned content clipped to the
+ *  game viewport; the only difference is whether they depth-test against
+ *  world geometry. GameUI is the single composed pass for all in-game 2D
+ *  chrome (sidebar, compass, dialogs, power-hand, messages, pause menu —
+ *  owned by GameUI, src/kfx/ui/GameUI.cpp) — it draws AFTER both world-overlay
+ *  layers and is opaque where it draws, so it simply paints over whatever's
+ *  underneath. Nothing world-positioned needs to scissor itself away from
+ *  GameUI's footprint; GameUI just wins by drawing last. */
 enum class IRUILayer : uint8_t
 {
-    Back       = 0,  /**< Sidebar background panels, solid fill boxes.    */
-    Front      = 1,  /**< Panel sprites, scaled sprites, sprite overlays. */
-    WorldDepth = 2,  /**< Creature status, gold text — depth-tested in game viewport. */
-    Overlay    = 3,  /**< Tooltip boxes, top-layer sprite overlays.        */
-    Cursor     = 4,  /**< Mouse cursor and keeper hand sprites.            */
+    WorldOverlay     = 0,  /**< World-space sprites that SHOULD depth-test (creature status — occlusion by walls is intentional). */
+    WorldOverlayFlat = 1,  /**< World-space sprites that should NOT depth-test (room flags, floating gold/damage text). */
+    GameUI           = 2,  /**< All in-game 2D chrome, composed as one unit, drawn last over world content. */
+    Overlay          = 3,  /**< Tooltip boxes, top-layer sprite overlays — drawn after GameUI.               */
+    Cursor           = 4,  /**< Mouse cursor and keeper hand sprites.                                        */
 };
 
 /******************************************************************************/
@@ -43,21 +52,21 @@ enum class IRUILayer : uint8_t
 /** Filled solid-colour rectangle. */
 struct IRUISolidBoxCmd
 {
-    IRUILayer layer      = IRUILayer::Back;
+    IRUILayer layer      = IRUILayer::GameUI;
     int32_t   x          = 0;
     int32_t   y          = 0;
     int32_t   w          = 0;
     int32_t   h          = 0;
     uint8_t   colour_idx = 0;   /**< Palette index. */
     float     alpha      = 1.0f; /**< 1.0 = opaque. */
-    float     ndc_z      = 0.5f; /**< NDC depth for WorldDepth layer; ignored for other layers. */
+    float     ndc_z      = 0.5f; /**< NDC depth for WorldOverlay/WorldOverlayFlat layers; ignored for other layers. */
     uint32_t  seq        = 0;   /**< Global submission order across all IR command types. */
 };
 
 /** Slab background tile fill. */
 struct IRUISlabBackgroundCmd
 {
-    IRUILayer layer = IRUILayer::Back;
+    IRUILayer layer = IRUILayer::GameUI;
     int32_t   x     = 0;
     int32_t   y     = 0;
     int32_t   w     = 0;
@@ -76,7 +85,7 @@ static constexpr uint32_t kIRSpriteScaled    = (1u << 1);
 /** Draw a panel sprite at screen position. */
 struct IRUISpriteCmd
 {
-    IRUILayer    layer         = IRUILayer::Front;
+    IRUILayer    layer         = IRUILayer::GameUI;
     int32_t      x             = 0;
     int32_t      y             = 0;
     int32_t      w             = 0;   /**< 0 = use units_per_px size. */
@@ -84,36 +93,36 @@ struct IRUISpriteCmd
     int32_t      units_per_px  = 16;  /**< 16 = 100% scale. */
     SpriteHandle sprite        = kInvalidSpriteHandle;
     uint32_t     flags         = 0;   /**< kIRSpriteFlipHoriz | kIRSpriteScaled */
-    float        alpha         = 1.0f; /**< 1.0 = opaque; 0.333 = ghost transparent. */
-    float        ndc_z         = 0.5f; /**< NDC depth for WorldDepth layer; ignored for other layers. */
+    unsigned int draw_flags    = 0;   /**< Authoritative Bullfrog draw flags (Lb_SPRITE_TRANSPAR*, etc.); backends derive alpha/transparency from this. */
+    float        ndc_z         = 0.5f; /**< NDC depth for WorldOverlay/WorldOverlayFlat layers; ignored for other layers. */
     uint32_t     seq           = 0;   /**< Global submission order across all IR command types. */
 };
 
 /** Draw a palette-remap sprite (player colour recolour). */
 struct IRUISpriteRemapCmd
 {
-    IRUILayer    layer        = IRUILayer::Front;
+    IRUILayer    layer        = IRUILayer::GameUI;
     int32_t      x            = 0;
     int32_t      y            = 0;
     int32_t      units_per_px = 16;
     SpriteHandle sprite       = kInvalidSpriteHandle;
     int32_t      remap_row    = 0;   /**< Row into fade_tables[]. */
-    float        alpha        = 1.0f;
-    float        ndc_z        = 0.5f; /**< NDC depth for WorldDepth layer; ignored for other layers. */
+    unsigned int draw_flags   = 0;   /**< Authoritative Bullfrog draw flags; backends derive alpha/transparency from this. */
+    float        ndc_z        = 0.5f; /**< NDC depth for WorldOverlay/WorldOverlayFlat layers; ignored for other layers. */
     uint32_t     seq          = 0;   /**< Global submission order across all IR command types. */
 };
 
 /** Draw a single-colour tinted sprite. */
 struct IRUISpriteColoredCmd
 {
-    IRUILayer    layer        = IRUILayer::Front;
+    IRUILayer    layer        = IRUILayer::GameUI;
     int32_t      x            = 0;
     int32_t      y            = 0;
     int32_t      units_per_px = 16;
     SpriteHandle sprite       = kInvalidSpriteHandle;
     uint8_t      colour_idx   = 0;   /**< Palette index for flat output. */
-    float        alpha        = 1.0f;
-    float        ndc_z        = 0.5f; /**< NDC depth for WorldDepth layer; ignored for other layers. */
+    unsigned int draw_flags   = 0;   /**< Authoritative Bullfrog draw flags; backends derive alpha/transparency from this. */
+    float        ndc_z        = 0.5f; /**< NDC depth for WorldOverlay/WorldOverlayFlat layers; ignored for other layers. */
     uint32_t     seq          = 0;   /**< Global submission order across all IR command types. */
 };
 
@@ -124,7 +133,7 @@ struct IRUISpriteColoredCmd
 /** Slab selector highlight overlay. */
 struct IRUISlabSelectorCmd
 {
-    IRUILayer layer     = IRUILayer::Front;
+    IRUILayer layer     = IRUILayer::GameUI;
     int32_t   x1        = 0;
     int32_t   y1        = 0;
     int32_t   x2        = 0;

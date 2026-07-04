@@ -81,9 +81,14 @@ void trim_spritesheet(struct TbSpriteSheet *sheet, long count);
 /**
  * Decode a TbSprite RLE stream into a flat palette-index buffer.
  *
- * Each output byte is a raw palette index; index 0 is transparent.
- * Transparent spans write nothing (the caller should zero the buffer first,
- * or pass in a pre-zeroed destination).
+ * Each output byte is a raw palette index; index 0 means "transparent" to
+ * every GPU consumer of this buffer (sprite/font atlas shaders discard texel
+ * value 0). Transparent (skipped) spans write nothing, leaving the
+ * pre-zeroed destination as 0. But a *copied* (opaque) run can legitimately
+ * contain literal index 0 (e.g. black) in the source art — those bytes are
+ * remapped to 1 so they stay indistinguishable from "real" transparency.
+ * This mirrors the equivalent 0->1 substitution already applied to the slab
+ * tile texture in gui_draw.c (draw_slab64k).
  *
  * The format: a stream of signed bytes where
  *   0       = end of row (advance to next row),
@@ -115,7 +120,7 @@ static inline void LbSpriteDecode(unsigned char *dst, int dst_stride,
                 int count = (int)cmd;
                 int i;
                 for (i = 0; i < count; ++i) {
-                    if (x < w) row[x] = *data;
+                    if (x < w) row[x] = *data ? *data : 1;
                     ++data;
                     ++x;
                 }

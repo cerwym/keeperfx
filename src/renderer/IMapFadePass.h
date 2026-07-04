@@ -79,9 +79,21 @@ public:
     /** Called by RendererOpenGL::EndFrame_GL() (render thread) when the
      *  RenderGraph has a map-fade command for this frame.
      *
-     *  GPU implementations capture both views (if cmd.capture_pending) and
-     *  draw the wipe quad.  Software implementations leave this as a no-op. */
+     *  GPU implementations capture the parchment view (if cmd.capture_pending)
+     *  and draw the wipe quad using the previously-captured world view.
+     *  Software implementations leave this as a no-op. */
     virtual void ExecuteFromIR(const IRMapFadeCmd& /*cmd*/) {}
+
+    /** Called by RendererOpenGL::EndFrame_GL() (render thread) AFTER GameUI
+     *  has drawn for this frame, on a frame where ExecuteFromIR() flagged a
+     *  pending world-view capture. GPU implementations blit the now-complete
+     *  default framebuffer (world geometry + GameUI) into the world-view
+     *  snapshot texture, so the sidebar crossfades with the rest of the view
+     *  during the transition instead of popping in/out abruptly once it
+     *  completes. No-op if no capture is pending (the common case — capture
+     *  only happens once per transition). Software implementations leave
+     *  this as a no-op. */
+    virtual void CaptureWorldFrameIfPending() {}
 
     /** Returns true when this pass can run the transition at any resolution,
      *  not just the original 320×200.  Software returns false; GPU returns true. */

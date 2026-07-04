@@ -23,6 +23,7 @@ void RenderGraph::FrameBuffers::Reset()
     shadow.Reset();
     debug.Reset();
     post_process.Reset();
+    image_present.Reset();
 }
 
 void RenderGraph::FrameBuffers::Reserve(
@@ -35,6 +36,9 @@ void RenderGraph::FrameBuffers::Reserve(
     text.Reserve(text_cmds);
     shadow.Reserve(shadow_cmds);
     debug.Reserve(debug_cmds);
+    // Full-screen presents are few per frame (usually 1); a small fixed reserve
+    // avoids the first-frame realloc without over-allocating owned pixel buffers.
+    image_present.Reserve(8);
 }
 
 void RenderGraph::FrameBuffers::Swap(FrameBuffers& other)
@@ -45,6 +49,7 @@ void RenderGraph::FrameBuffers::Swap(FrameBuffers& other)
     shadow.Swap(other.shadow);
     debug.Swap(other.debug);
     post_process.Swap(other.post_process);
+    image_present.Swap(other.image_present);
 }
 /******************************************************************************/
 // RenderGraph

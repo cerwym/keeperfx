@@ -1279,6 +1279,22 @@ void auto_gen_tables(long units_per_px)
     }
 }
 
+void panel_map_on_level_load(void)
+{
+    // Force auto_gen_tables() to rebuild the background shape and full
+    // PanelColours table on the next minimap draw. The tables are derived
+    // from palette/ghost-table/player-colour state that may have changed
+    // since they were last generated for the previous level.
+    PrevPixelSize = 0;
+    PrevRoomHighlight = -1;
+    PrevDoorHighlight = -1;
+    // Discard camera and thing-dot interpolation state from the previous
+    // level; interpolating from the old positions samples wrong subtiles
+    // for the first frames (seen as garbage/purple pixels). Cleared by
+    // draw_whole_status_panel() once the first panel frame has drawn.
+    reset_all_minimap_interpolation = true;
+}
+
 void panel_map_draw_slabs(long x, long y, long units_per_px, long zoom)
 {
     PanelMapX = scale_value_for_resolution_with_upp(x,units_per_px);

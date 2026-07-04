@@ -87,8 +87,6 @@ enum FrontendMenuStates {
   FeSt_CAMPAIGN_INTRO,
   FeSt_MAPPACK_SELECT,
   FeSt_MP_MAPPACK_SELECT,
-  // Special testing states
-  FeSt_FONT_TEST          = 255,
 };
 
 enum IngameButtonDesignationIDs {
@@ -314,11 +312,6 @@ extern struct GuiMenu *menu_list[MENU_LIST_ITEMS_COUNT];
 extern int status_panel_width;
 extern const unsigned long alliance_grid[4][4];
 
-#if (BFDEBUG_LEVEL > 0)
-#define TESTFONTS_COUNT 12
-extern struct TbSpriteSheet *testfont[TESTFONTS_COUNT];
-extern unsigned char *testfont_palette[3];
-#endif
 /******************************************************************************/
 const char * mdlf_default(const char *);
 /******************************************************************************/

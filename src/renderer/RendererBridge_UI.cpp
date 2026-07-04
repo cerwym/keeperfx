@@ -30,16 +30,28 @@ void UIRenderer_SubmitSlabSelector(int x1, int y1, int x2, int y2, unsigned char
     if (ui) ui->SubmitSlabSelector(x1, y1, x2, y2, color, z_depth);
 }
 
-void UIRenderer_BeginWorldDepth(float ndc_z)
+void UIRenderer_BeginWorldOverlay(float ndc_z)
 {
     IUIRenderer* ui = RendererGetUIRenderer();
-    if (ui) ui->SetWorldDepth(ndc_z);
+    if (ui) ui->SetWorldOverlay(ndc_z);
 }
 
-void UIRenderer_EndWorldDepth(void)
+void UIRenderer_EndWorldOverlay(void)
 {
     IUIRenderer* ui = RendererGetUIRenderer();
-    if (ui) ui->ClearWorldDepth();
+    if (ui) ui->ClearWorldOverlay();
+}
+
+void UIRenderer_BeginWorldOverlayFlat(float ndc_z)
+{
+    IUIRenderer* ui = RendererGetUIRenderer();
+    if (ui) ui->SetWorldOverlayFlat(ndc_z);
+}
+
+void UIRenderer_EndWorldOverlayFlat(void)
+{
+    IUIRenderer* ui = RendererGetUIRenderer();
+    if (ui) ui->ClearWorldOverlayFlat();
 }
 
 void UIRenderer_BeginTopOverlay(void)
@@ -81,6 +93,29 @@ void UIRenderer_SubmitPanelSpriteRaw(int32_t x, int32_t y, int units_per_px, con
     if (!ui) return;
     SpriteHandle h = RendererResolveSprite(spr);
     ui->SubmitPanelSprite(x, y, units_per_px, h, false, (unsigned int)lbDisplay.DrawFlags);
+}
+
+void RendererSubmitButton(const RendererUIButtonDesc* desc)
+{
+    if (!desc) return;
+    // Background segment strip -> UI node.  Each raw submit reads the ambient
+    // lbDisplay.DrawFlags, matching the old inline path where the segments were
+    // drawn before the label's flags were set.
+    for (int i = 0; i < desc->segment_count && i < RENDERER_BUTTON_MAX_SEGMENTS; ++i) {
+        const struct TbSprite* spr = desc->segments[i].spr;
+        if (spr)
+            UIRenderer_SubmitPanelSpriteRaw(desc->segments[i].x, desc->segments[i].y,
+                                            desc->units_per_px, spr);
+    }
+    // Label -> text node (not the LbText* globals).  The text path reads
+    // lbDisplay.DrawFlags, so set it here exactly as the old code did before
+    // LbTextDrawResized.
+    if (desc->text && desc->font) {
+        lbDisplay.DrawFlags = desc->label_draw_flags;
+        TextRenderer_SetFont(desc->font);
+        TextRenderer_SetWindow(desc->text_x, desc->text_y, desc->text_w, desc->text_h);
+        TextRenderer_DrawTextResized(0, 0, desc->units_per_px, desc->text);
+    }
 }
 
 void UIRenderer_SubmitPanelSpriteWithBg(int32_t x, int32_t y, int units_per_px,
@@ -280,28 +315,28 @@ void UIRenderer_SubmitTiledSprite(int32_t x, int32_t y, int units_per_px, const 
     }
 }
 
-void UIRenderer_SetLayer(int layer)
-{
-    IUIRenderer* ui = RendererGetUIRenderer();
-    if (ui) ui->SetLayer(layer);
-}
-
 void UIRenderer_SetGameViewport(int x, int y, int w, int h)
 {
     IUIRenderer* ui = RendererGetUIRenderer();
     if (ui) ui->SetGameViewport(x, y, w, h);
 }
 
-void UIRenderer_DrawBack(void)
+void UIRenderer_DrawGameUI(void)
 {
     IUIRenderer* ui = RendererGetUIRenderer();
-    if (ui) ui->DrawBack();
+    if (ui) ui->DrawGameUI();
 }
 
 void UIRenderer_DrawWorldSpriteLayerRT(void)
 {
     IUIRenderer* ui = RendererGetUIRenderer();
     if (ui) ui->DrawWorldSpriteLayerRT();
+}
+
+void UIRenderer_DrawWorldOverlayFlatLayerRT(void)
+{
+    IUIRenderer* ui = RendererGetUIRenderer();
+    if (ui) ui->DrawWorldOverlayFlatLayerRT();
 }
 
 void UIRenderer_DrawFront(void)
