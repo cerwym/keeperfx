@@ -147,17 +147,17 @@ public:
     /** Submit a raw TbSprite draw with explicit Bullfrog draw flags.
      *  CPU default: original LbSpriteDraw path. */
     virtual TbResult SubmitRawSprite(long x, long y, const struct TbSprite* spr,
-                                    unsigned int draw_flags);
+                                    KfxDrawState state);
  
     /** Submit a one-colour raw sprite draw with explicit Bullfrog draw flags.
      *  CPU default: original LbSpriteDrawOneColour path. */
     virtual TbResult SubmitRawSpriteOneColour(long x, long y, const struct TbSprite* spr,
-                                             unsigned char colour, unsigned int draw_flags);
+                                             unsigned char colour, KfxDrawState state);
  
     /** Submit a remapped raw sprite draw with explicit Bullfrog draw flags.
      *  CPU default: original LbSpriteDrawScaledRemap path at native sprite size. */
     virtual TbResult SubmitRawSpriteRemap(long x, long y, const struct TbSprite* spr,
-                                         const unsigned char* cmap, unsigned int draw_flags);
+                                         const unsigned char* cmap, KfxDrawState state);
 
     /**
      * Upload the 64×64 palette-indexed gui_slab tile to the GPU.

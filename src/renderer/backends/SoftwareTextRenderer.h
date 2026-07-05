@@ -98,6 +98,16 @@ private:
     TbBool                      m_dbc_enabled;
 
     /**************************************************************************/
+    /* Working draw-state during layout — owned here, seeded at draw entry,    */
+    /* mutated by inline text escape codes.  Mirrors GLTextRenderer's           */
+    /* m_text_draw_flags/colour; replaces the former ambient lbDisplay reads.   */
+    /* (Synced to lbDisplay.DrawFlags before each glyph LbSpriteDraw until the   */
+    /*  should be removed when state is passed.)                         */
+    /**************************************************************************/
+    unsigned int                m_text_draw_flags  = 0;
+    unsigned char               m_text_draw_colour = 0;
+
+    /**************************************************************************/
     /* Text windows                                                           */
     /**************************************************************************/
     TextWindow                  m_justify_window;

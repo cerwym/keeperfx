@@ -309,7 +309,7 @@ TextLayoutContext SoftwareTextRenderer::BuildLayoutContext() const
     ctx.font           = m_font;
     ctx.dbc_font       = m_dbc_font;
     ctx.dbc_enabled    = m_dbc_enabled;
-    ctx.draw_flags     = lbDisplay.DrawFlags;
+    ctx.draw_flags     = m_text_draw_flags;
     ctx.justify_window = m_justify_window;
     ctx.clip_window    = m_clip_window;
     ctx.spaces_per_tab = LbTextGetSpacesPerTab();
@@ -331,6 +331,11 @@ TbBool SoftwareTextRenderer::DrawTextResized(int32_t posx, int32_t posy,
         return true;
 
     if (m_write_cmds) { AppendTextCmd(posx, posy, units_per_px, /*absolute=*/false, text); return true; }
+
+    // Seed the working draw-state TODO: read from state param, not from the global;
+    // Mirrors GLTextRenderer::ExecuteTextFromIR.
+    m_text_draw_flags  = lbDisplay.DrawFlags;
+    m_text_draw_colour = lbDisplay.DrawColour;
 
     TbGraphicsWindow grwnd;
     RendererStoreViewport(&grwnd);
@@ -359,6 +364,9 @@ TbBool SoftwareTextRenderer::DrawTextAt(int32_t screen_x, int32_t screen_y,
         return true;
 
     if (m_write_cmds) { AppendTextCmd(screen_x, screen_y, units_per_px, /*absolute=*/true, text); return true; }
+
+    m_text_draw_flags  = lbDisplay.DrawFlags;
+    m_text_draw_colour = lbDisplay.DrawColour;
 
     TbGraphicsWindow grwnd;
     RendererStoreViewport(&grwnd);
@@ -465,10 +473,10 @@ void SoftwareTextRenderer::PutDownSimpleSprites(const char* sbuf, const char* eb
         if (c[0] == '\xc2' && c + 1 < ebuf && c[1] == '\xa0')
         {
             int32_t w = len;
-            if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLINE) != 0)
+            if ((m_text_draw_flags & Lb_TEXT_UNDERLINE) != 0)
             {
                 int32_t h = LineHeight();
-                LbDrawCharUnderline(x, y, w, h, lbDisplay.DrawColour, lbDisplayEx.ShadowColour);
+                LbDrawCharUnderline(x, y, w, h, m_text_draw_colour, lbDisplayEx.ShadowColour);
             }
             x += w;
             c++;
@@ -476,10 +484,10 @@ void SoftwareTextRenderer::PutDownSimpleSprites(const char* sbuf, const char* eb
         else if (chr == ' ')
         {
             int32_t w = len;
-            if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLINE) != 0)
+            if ((m_text_draw_flags & Lb_TEXT_UNDERLINE) != 0)
             {
                 int32_t h = LineHeight();
-                LbDrawCharUnderline(x, y, w, h, lbDisplay.DrawColour, lbDisplayEx.ShadowColour);
+                LbDrawCharUnderline(x, y, w, h, m_text_draw_colour, lbDisplayEx.ShadowColour);
             }
             x += w;
         }
@@ -488,15 +496,16 @@ void SoftwareTextRenderer::PutDownSimpleSprites(const char* sbuf, const char* eb
             const struct TbSprite* spr = LbFontCharSprite(m_font, chr);
             if (spr != nullptr)
             {
-                if ((lbDisplay.DrawFlags & Lb_TEXT_ONE_COLOR) != 0)
-                    LbSpriteDrawOneColour(x, y, spr, lbDisplay.DrawColour);
+                lbDisplay.DrawFlags = m_text_draw_flags;   // sync working flags to the rasteriser
+                if ((m_text_draw_flags & Lb_TEXT_ONE_COLOR) != 0)
+                    LbSpriteDrawOneColour(x, y, spr, m_text_draw_colour);
                 else
                     LbSpriteDraw(x, y, spr);
                 int32_t w = spr->SWidth;
-                if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLINE) != 0)
+                if ((m_text_draw_flags & Lb_TEXT_UNDERLINE) != 0)
                 {
                     int32_t h = LineHeight();
-                    LbDrawCharUnderline(x, y, w, h, lbDisplay.DrawColour, lbDisplayEx.ShadowColour);
+                    LbDrawCharUnderline(x, y, w, h, m_text_draw_colour, lbDisplayEx.ShadowColour);
                 }
                 x += w;
             }
@@ -504,10 +513,10 @@ void SoftwareTextRenderer::PutDownSimpleSprites(const char* sbuf, const char* eb
         else if (chr == '\t')
         {
             int32_t w = len * (int32_t)LbTextGetSpacesPerTab();
-            if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLINE) != 0)
+            if ((m_text_draw_flags & Lb_TEXT_UNDERLINE) != 0)
             {
                 int32_t h = LineHeight();
-                LbDrawCharUnderline(x, y, w, h, lbDisplay.DrawColour, lbDisplayEx.ShadowColour);
+                LbDrawCharUnderline(x, y, w, h, m_text_draw_colour, lbDisplayEx.ShadowColour);
             }
             x += w;
         }
@@ -515,14 +524,14 @@ void SoftwareTextRenderer::PutDownSimpleSprites(const char* sbuf, const char* eb
         {
             switch (chr)
             {
-            case 1:  lbDisplay.DrawFlags ^= Lb_SPRITE_TRANSPAR4;  break;
-            case 2:  lbDisplay.DrawFlags ^= Lb_SPRITE_TRANSPAR8;  break;
-            case 3:  lbDisplay.DrawFlags ^= Lb_SPRITE_OUTLINE;    break;
-            case 4:  lbDisplay.DrawFlags ^= Lb_SPRITE_FLIP_HORIZ; break;
-            case 5:  lbDisplay.DrawFlags ^= Lb_SPRITE_FLIP_VERTIC; break;
-            case 11: lbDisplay.DrawFlags ^= Lb_TEXT_UNDERLINE;     break;
-            case 12: lbDisplay.DrawFlags ^= Lb_TEXT_ONE_COLOR;     break;
-            case 14: c++; lbDisplay.DrawColour = (unsigned char)(*c); break;
+            case 1:  m_text_draw_flags ^= Lb_SPRITE_TRANSPAR4;  break;
+            case 2:  m_text_draw_flags ^= Lb_SPRITE_TRANSPAR8;  break;
+            case 3:  m_text_draw_flags ^= Lb_SPRITE_OUTLINE;    break;
+            case 4:  m_text_draw_flags ^= Lb_SPRITE_FLIP_HORIZ; break;
+            case 5:  m_text_draw_flags ^= Lb_SPRITE_FLIP_VERTIC; break;
+            case 11: m_text_draw_flags ^= Lb_TEXT_UNDERLINE;     break;
+            case 12: m_text_draw_flags ^= Lb_TEXT_ONE_COLOR;     break;
+            case 14: c++; m_text_draw_colour = (unsigned char)(*c); break;
             default: break;
             }
         }
@@ -539,10 +548,10 @@ void SoftwareTextRenderer::PutDownSimpleSpritesResized(const char* sbuf, const c
         if (c[0] == '\xc2' && c + 1 < ebuf && c[1] == '\xa0')
         {
             int32_t w = space_len;
-            if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLINE) != 0)
+            if ((m_text_draw_flags & Lb_TEXT_UNDERLINE) != 0)
             {
                 int32_t h = LineHeight() * units_per_px / 16;
-                LbDrawCharUnderline(x, y, w, h, lbDisplay.DrawColour, lbDisplayEx.ShadowColour);
+                LbDrawCharUnderline(x, y, w, h, m_text_draw_colour, lbDisplayEx.ShadowColour);
             }
             x += w;
             c++;
@@ -550,10 +559,10 @@ void SoftwareTextRenderer::PutDownSimpleSpritesResized(const char* sbuf, const c
         else if (chr == ' ')
         {
             int32_t w = space_len;
-            if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLINE) != 0)
+            if ((m_text_draw_flags & Lb_TEXT_UNDERLINE) != 0)
             {
                 int32_t h = LineHeight() * units_per_px / 16;
-                LbDrawCharUnderline(x, y, w, h, lbDisplay.DrawColour, lbDisplayEx.ShadowColour);
+                LbDrawCharUnderline(x, y, w, h, m_text_draw_colour, lbDisplayEx.ShadowColour);
             }
             x += w;
         }
@@ -562,15 +571,16 @@ void SoftwareTextRenderer::PutDownSimpleSpritesResized(const char* sbuf, const c
             const struct TbSprite* spr = LbFontCharSprite(m_font, chr);
             if (spr != nullptr)
             {
-                if ((lbDisplay.DrawFlags & Lb_TEXT_ONE_COLOR) != 0)
-                    LbSpriteDrawResizedOneColour(x, y, units_per_px, spr, lbDisplay.DrawColour);
+                lbDisplay.DrawFlags = m_text_draw_flags;   // sync working flags to the rasteriser
+                if ((m_text_draw_flags & Lb_TEXT_ONE_COLOR) != 0)
+                    LbSpriteDrawResizedOneColour(x, y, units_per_px, spr, m_text_draw_colour);
                 else
                     LbSpriteDrawResized(x, y, units_per_px, spr);
                 int32_t w = spr->SWidth * units_per_px / 16;
-                if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLINE) != 0)
+                if ((m_text_draw_flags & Lb_TEXT_UNDERLINE) != 0)
                 {
                     int32_t h = LineHeight() * units_per_px / 16;
-                    LbDrawCharUnderline(x, y, w, h, lbDisplay.DrawColour, lbDisplayEx.ShadowColour);
+                    LbDrawCharUnderline(x, y, w, h, m_text_draw_colour, lbDisplayEx.ShadowColour);
                 }
                 x += w;
             }
@@ -578,10 +588,10 @@ void SoftwareTextRenderer::PutDownSimpleSpritesResized(const char* sbuf, const c
         else if (chr == '\t')
         {
             int32_t w = space_len * (int32_t)LbTextGetSpacesPerTab();
-            if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLINE) != 0)
+            if ((m_text_draw_flags & Lb_TEXT_UNDERLINE) != 0)
             {
                 int32_t h = LineHeight() * units_per_px / 16;
-                LbDrawCharUnderline(x, y, w, h, lbDisplay.DrawColour, lbDisplayEx.ShadowColour);
+                LbDrawCharUnderline(x, y, w, h, m_text_draw_colour, lbDisplayEx.ShadowColour);
             }
             x += w;
         }
@@ -589,14 +599,14 @@ void SoftwareTextRenderer::PutDownSimpleSpritesResized(const char* sbuf, const c
         {
             switch (chr)
             {
-            case 1:  lbDisplay.DrawFlags ^= Lb_SPRITE_TRANSPAR4;  break;
-            case 2:  lbDisplay.DrawFlags ^= Lb_SPRITE_TRANSPAR8;  break;
-            case 3:  lbDisplay.DrawFlags ^= Lb_SPRITE_OUTLINE;    break;
-            case 4:  lbDisplay.DrawFlags ^= Lb_SPRITE_FLIP_HORIZ; break;
-            case 5:  lbDisplay.DrawFlags ^= Lb_SPRITE_FLIP_VERTIC; break;
-            case 11: lbDisplay.DrawFlags ^= Lb_TEXT_UNDERLINE;     break;
-            case 12: lbDisplay.DrawFlags ^= Lb_TEXT_ONE_COLOR;     break;
-            case 14: c++; lbDisplay.DrawColour = (unsigned char)(*c); break;
+            case 1:  m_text_draw_flags ^= Lb_SPRITE_TRANSPAR4;  break;
+            case 2:  m_text_draw_flags ^= Lb_SPRITE_TRANSPAR8;  break;
+            case 3:  m_text_draw_flags ^= Lb_SPRITE_OUTLINE;    break;
+            case 4:  m_text_draw_flags ^= Lb_SPRITE_FLIP_HORIZ; break;
+            case 5:  m_text_draw_flags ^= Lb_SPRITE_FLIP_VERTIC; break;
+            case 11: m_text_draw_flags ^= Lb_TEXT_UNDERLINE;     break;
+            case 12: m_text_draw_flags ^= Lb_TEXT_ONE_COLOR;     break;
+            case 14: c++; m_text_draw_colour = (unsigned char)(*c); break;
             default: break;
             }
         }
@@ -630,20 +640,20 @@ void SoftwareTextRenderer::PutDownDbcSprites(const char* sbuf, const char* ebuf,
         else if (chr == ' ')
         {
             int32_t w = len;
-            if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLINE) != 0)
+            if ((m_text_draw_flags & Lb_TEXT_UNDERLINE) != 0)
             {
                 int32_t h = static_cast<int32_t>(dbc_char_height(' '));
-                LbDrawCharUnderline(x, y, w, h, lbDisplay.DrawColour, lbDisplayEx.ShadowColour);
+                LbDrawCharUnderline(x, y, w, h, m_text_draw_colour, lbDisplayEx.ShadowColour);
             }
             x += w;
         }
         else if (chr == '\t')
         {
             int32_t w = len * (int32_t)LbTextGetSpacesPerTab();
-            if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLINE) != 0)
+            if ((m_text_draw_flags & Lb_TEXT_UNDERLINE) != 0)
             {
                 int32_t h = static_cast<int32_t>(dbc_char_height(' '));
-                LbDrawCharUnderline(x, y, w, h, lbDisplay.DrawColour, lbDisplayEx.ShadowColour);
+                LbDrawCharUnderline(x, y, w, h, m_text_draw_colour, lbDisplayEx.ShadowColour);
             }
             x += w;
         }
@@ -651,14 +661,14 @@ void SoftwareTextRenderer::PutDownDbcSprites(const char* sbuf, const char* ebuf,
         {
             switch (chr)
             {
-            case 1:  lbDisplay.DrawFlags ^= Lb_SPRITE_TRANSPAR4;  break;
-            case 2:  lbDisplay.DrawFlags ^= Lb_SPRITE_TRANSPAR8;  break;
-            case 3:  lbDisplay.DrawFlags ^= Lb_SPRITE_OUTLINE;    break;
-            case 4:  lbDisplay.DrawFlags ^= Lb_SPRITE_FLIP_HORIZ; break;
-            case 5:  lbDisplay.DrawFlags ^= Lb_SPRITE_FLIP_VERTIC; break;
-            case 11: lbDisplay.DrawFlags ^= Lb_TEXT_UNDERLINE;     break;
-            case 12: lbDisplay.DrawFlags ^= Lb_TEXT_ONE_COLOR;     break;
-            case 14: c++; lbDisplay.DrawColour = (unsigned char)(*c); break;
+            case 1:  m_text_draw_flags ^= Lb_SPRITE_TRANSPAR4;  break;
+            case 2:  m_text_draw_flags ^= Lb_SPRITE_TRANSPAR8;  break;
+            case 3:  m_text_draw_flags ^= Lb_SPRITE_OUTLINE;    break;
+            case 4:  m_text_draw_flags ^= Lb_SPRITE_FLIP_HORIZ; break;
+            case 5:  m_text_draw_flags ^= Lb_SPRITE_FLIP_VERTIC; break;
+            case 11: m_text_draw_flags ^= Lb_TEXT_UNDERLINE;     break;
+            case 12: m_text_draw_flags ^= Lb_TEXT_ONE_COLOR;     break;
+            case 14: c++; m_text_draw_colour = (unsigned char)(*c); break;
             default: break;
             }
         }
@@ -669,13 +679,13 @@ void SoftwareTextRenderer::PutDownDbcSprites(const char* sbuf, const char* ebuf,
             if (dbc_get_sprite_for_char(&adraw, chr) == 0)
             {
                 unsigned long colour;
-                if ((lbDisplay.DrawFlags & Lb_TEXT_ONE_COLOR) == 0)
+                if ((m_text_draw_flags & Lb_TEXT_ONE_COLOR) == 0)
                     colour = m_dbc_colour0;
                 else
-                    colour = lbDisplay.DrawColour;
+                    colour = m_text_draw_colour;
                 dbc_draw_font_sprite_text(&awind, &adraw, x, y, colour, -1, m_dbc_colour1);
                 int32_t w = adraw.character_spacing + adraw.bits_width;
-                if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLINE) != 0)
+                if ((m_text_draw_flags & Lb_TEXT_UNDERLINE) != 0)
                 {
                     int32_t h = adraw.bits_height;
                     LbDrawCharUnderline(x, y, w, h, colour, lbDisplayEx.ShadowColour);
@@ -717,20 +727,20 @@ void SoftwareTextRenderer::PutDownDbcSpritesResized(const char* sbuf, const char
         else if (chr == ' ')
         {
             int32_t w = space_len;
-            if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLINE) != 0)
+            if ((m_text_draw_flags & Lb_TEXT_UNDERLINE) != 0)
             {
                 int32_t h = static_cast<int32_t>(dbc_char_height(' ')) * units_per_px / 16;
-                LbDrawCharUnderline(x, y, w, h, lbDisplay.DrawColour, lbDisplayEx.ShadowColour);
+                LbDrawCharUnderline(x, y, w, h, m_text_draw_colour, lbDisplayEx.ShadowColour);
             }
             x += w;
         }
         else if (chr == '\t')
         {
             int32_t w = space_len * (int32_t)LbTextGetSpacesPerTab();
-            if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLINE) != 0)
+            if ((m_text_draw_flags & Lb_TEXT_UNDERLINE) != 0)
             {
                 int32_t h = static_cast<int32_t>(dbc_char_height(' ')) * units_per_px / 16;
-                LbDrawCharUnderline(x, y, w, h, lbDisplay.DrawColour, lbDisplayEx.ShadowColour);
+                LbDrawCharUnderline(x, y, w, h, m_text_draw_colour, lbDisplayEx.ShadowColour);
             }
             x += w;
         }
@@ -738,14 +748,14 @@ void SoftwareTextRenderer::PutDownDbcSpritesResized(const char* sbuf, const char
         {
             switch (chr)
             {
-            case 1:  lbDisplay.DrawFlags ^= Lb_SPRITE_TRANSPAR4;  break;
-            case 2:  lbDisplay.DrawFlags ^= Lb_SPRITE_TRANSPAR8;  break;
-            case 3:  lbDisplay.DrawFlags ^= Lb_SPRITE_OUTLINE;    break;
-            case 4:  lbDisplay.DrawFlags ^= Lb_SPRITE_FLIP_HORIZ; break;
-            case 5:  lbDisplay.DrawFlags ^= Lb_SPRITE_FLIP_VERTIC; break;
-            case 11: lbDisplay.DrawFlags ^= Lb_TEXT_UNDERLINE;     break;
-            case 12: lbDisplay.DrawFlags ^= Lb_TEXT_ONE_COLOR;     break;
-            case 14: c++; lbDisplay.DrawColour = (unsigned char)(*c); break;
+            case 1:  m_text_draw_flags ^= Lb_SPRITE_TRANSPAR4;  break;
+            case 2:  m_text_draw_flags ^= Lb_SPRITE_TRANSPAR8;  break;
+            case 3:  m_text_draw_flags ^= Lb_SPRITE_OUTLINE;    break;
+            case 4:  m_text_draw_flags ^= Lb_SPRITE_FLIP_HORIZ; break;
+            case 5:  m_text_draw_flags ^= Lb_SPRITE_FLIP_VERTIC; break;
+            case 11: m_text_draw_flags ^= Lb_TEXT_UNDERLINE;     break;
+            case 12: m_text_draw_flags ^= Lb_TEXT_ONE_COLOR;     break;
+            case 14: c++; m_text_draw_colour = (unsigned char)(*c); break;
             default: break;
             }
         }
@@ -756,10 +766,10 @@ void SoftwareTextRenderer::PutDownDbcSpritesResized(const char* sbuf, const char
             if (dbc_get_sprite_for_char(&adraw, chr) == 0)
             {
                 unsigned long colour;
-                if ((lbDisplay.DrawFlags & Lb_TEXT_ONE_COLOR) == 0)
+                if ((m_text_draw_flags & Lb_TEXT_ONE_COLOR) == 0)
                     colour = m_dbc_colour0;
                 else
-                    colour = lbDisplay.DrawColour;
+                    colour = m_text_draw_colour;
 
                 unsigned char dest_pixel[1024] = { 0 };
                 int32_t iDstSizeH = (units_per_px / 8) * 8;
@@ -791,7 +801,7 @@ void SoftwareTextRenderer::PutDownDbcSpritesResized(const char* sbuf, const char
                 else
                     w = (adraw.character_spacing + adraw.bits_width);
 
-                if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLINE) != 0)
+                if ((m_text_draw_flags & Lb_TEXT_UNDERLINE) != 0)
                 {
                     int32_t h = adraw.bits_height * units_per_px / 16;
                     LbDrawCharUnderline(x, y, w, h, colour, lbDisplayEx.ShadowColour);

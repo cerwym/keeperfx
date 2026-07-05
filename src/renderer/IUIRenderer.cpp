@@ -278,11 +278,11 @@ void IUIRenderer::SubmitCircle(int32_t x, int32_t y, int32_t radius, uint8_t col
 }
 
 TbResult IUIRenderer::SubmitRawSprite(long x, long y, const struct TbSprite* spr,
-                                      unsigned int draw_flags)
+                                      KfxDrawState state)
 {
     if (!spr) return Lb_FAIL;
     unsigned int saved_flags = lbDisplay.DrawFlags;
-    lbDisplay.DrawFlags = draw_flags;
+    lbDisplay.DrawFlags = state.flags;
     ScopedSpriteSubmitGuard guard;
     TbResult ret = LbSpriteDraw(x, y, spr);
     lbDisplay.DrawFlags = saved_flags;
@@ -290,11 +290,11 @@ TbResult IUIRenderer::SubmitRawSprite(long x, long y, const struct TbSprite* spr
 }
 
 TbResult IUIRenderer::SubmitRawSpriteOneColour(long x, long y, const struct TbSprite* spr,
-                                               unsigned char colour, unsigned int draw_flags)
+                                               unsigned char colour, KfxDrawState state)
 {
     if (!spr) return Lb_FAIL;
     unsigned int saved_flags = lbDisplay.DrawFlags;
-    lbDisplay.DrawFlags = draw_flags;
+    lbDisplay.DrawFlags = state.flags;
     ScopedSpriteSubmitGuard guard;
     TbResult ret = LbSpriteDrawOneColour(x, y, spr, colour);
     lbDisplay.DrawFlags = saved_flags;
@@ -302,11 +302,11 @@ TbResult IUIRenderer::SubmitRawSpriteOneColour(long x, long y, const struct TbSp
 }
 
 TbResult IUIRenderer::SubmitRawSpriteRemap(long x, long y, const struct TbSprite* spr,
-                                           const unsigned char* cmap, unsigned int draw_flags)
+                                           const unsigned char* cmap, KfxDrawState state)
 {
     if (!spr || !cmap) return Lb_FAIL;
     unsigned int saved_flags = lbDisplay.DrawFlags;
-    lbDisplay.DrawFlags = draw_flags;
+    lbDisplay.DrawFlags = state.flags;
     ScopedSpriteSubmitGuard guard;
     TbResult ret = LbSpriteDrawScaledRemap(x, y, spr, spr->SWidth, spr->SHeight, cmap);
     lbDisplay.DrawFlags = saved_flags;
