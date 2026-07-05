@@ -33,6 +33,7 @@
 #include "bflib_sprite.h"
 #include "bflib_mouse.h"
 #include "bflib_render.h"
+#include "vidmode.h"        // pixmap.ghost / alpha_sprite_table (transparency LUTs)
 #include "renderer/RendererManager.h"
 #include "post_inc.h"
 
@@ -1243,6 +1244,7 @@ TbResult LbSpriteDrawUsingScalingData(long posx, long posy, const struct TbSourc
 {
     assert(!RendererHasGPURenderPath() && "LbSpriteDrawUsingScalingData: CPU pixel write in GL mode");
     SYNCDBG(17,"Drawing at (%ld,%ld)",posx,posy);
+    unsigned char* render_ghost = pixmap.ghost; // ghost (50%) transparency LUT, owned by vidmode
     int32_t *xstep;
     int32_t *ystep;
     int scanline;
@@ -1413,6 +1415,7 @@ TbResult DrawAlphaSpriteUsingScalingData(long posx, long posy, const struct TbSo
 {
     assert(!RendererHasGPURenderPath() && "DrawAlphaSpriteUsingScalingData: CPU pixel write in GL mode");
     SYNCDBG(17,"Drawing at (%ld,%ld)",posx,posy);
+    unsigned char* render_alpha = (unsigned char*)&alpha_sprite_table; // alpha LUT, owned by vidmode
 
     // Check if alpha transparency table is available
     if (render_alpha == NULL) {

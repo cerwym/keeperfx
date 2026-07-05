@@ -38,13 +38,25 @@ using GLUIVertex = UIVertex;
 // UIQuad and UILine are defined in renderer/UIBatch.h (included above).
 
 /** Picture-in-picture FBO composite quad.  Uses the FBO colour texture directly
- *  (no palette lookup).  Rendered before layer-1 atlas sprites so the zoom-box
+ *  (no palette lookup).  Rendered before GameUI atlas sprites so the zoom-box
  *  frame corners appear on top of the isometric PiP content. */
 struct FBOQuad {
     float            x0, y0, x1, y1;   // Screen rectangle (pixels)
     GpuTextureHandle tex_id;            // RGBA8 FBO colour texture
     float            clip_radius;       // Rounded-rect corner radius; < 0 = no clip
 };
+
+/** Array-index constants for m_quads[]/m_rt_quads[]/m_lines[]/m_rt_lines[].
+ *  Mirror IRUILayer (src/renderer/ir/UICommands.h) 1:1, so the index<->layer
+ *  mapping has exactly one source of truth -- never hardcode a layer index
+ *  for these arrays, use these names instead. IRUILayer::Cursor has no slot
+ *  of its own (it's handled separately via m_cursor_quads); IRUILayerToIndex()
+ *  in GLUIRenderer.cpp falls it back to kLayerGameUI. */
+static constexpr int kLayerWorldOverlay     = static_cast<int>(IRUILayer::WorldOverlay);
+static constexpr int kLayerWorldOverlayFlat = static_cast<int>(IRUILayer::WorldOverlayFlat);
+static constexpr int kLayerGameUI           = static_cast<int>(IRUILayer::GameUI);
+static constexpr int kLayerOverlay          = static_cast<int>(IRUILayer::Overlay);
+static constexpr int kLayerCount            = kLayerOverlay + 1;
 
 /**
  * OpenGL implementation of IUIRenderer.
@@ -53,8 +65,8 @@ struct FBOQuad {
 class GLUIRenderer : public IUIRenderer, public IGLShaderCompilable {
 public:
     struct PiPSpriteCapture {
-        std::vector<UIQuad> quads[4];
-        std::vector<UILine> lines[4];
+        std::vector<UIQuad> quads[kLayerCount];
+        std::vector<UILine> lines[kLayerCount];
     };
 
     GLUIRenderer();
@@ -64,16 +76,16 @@ public:
     virtual void SubmitSlabSelector(int x1, int y1, int x2, int y2, unsigned char color, float z_depth) override;
     virtual void SubmitPanelSprite(int32_t x, int32_t y, int units_per_px,
                                    SpriteHandle spr, bool flip_horiz,
-                                   unsigned int draw_flags) override;
+                                   KfxDrawState state) override;
     virtual void SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px,
                                        SpriteHandle spr, int remap_row,
-                                       unsigned int draw_flags) override;
+                                       KfxDrawState state) override;
     virtual void SubmitPanelSpriteColored(int32_t x, int32_t y, int units_per_px,
                                           SpriteHandle spr, uint8_t color_idx,
-                                          unsigned int draw_flags) override;
+                                          KfxDrawState state) override;
     virtual void SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h,
-                                    SpriteHandle spr, unsigned int draw_flags) override;
-    virtual void SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx) override;
+                                    SpriteHandle spr, KfxDrawState state) override;
+    virtual void SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx, KfxDrawState state) override;
     virtual void SubmitSolidBoxAlpha(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx, float alpha) override;
     virtual void UpdateSlabTexture(const uint8_t* data, int dim) override;
     virtual void FlushPendingInit() override;
@@ -93,9 +105,10 @@ public:
     void DrawPiPSprites(int pip_w, int pip_h) override;
     /** Render-thread: draw a pre-extracted PiP UI snapshot into the bound FBO. */
     void DrawPiPSpriteCapture(const PiPSpriteCapture& cap, int pip_w, int pip_h);
-    virtual void SetLayer(int layer) override;
-    virtual void SetWorldDepth(float ndc_z) override;
-    virtual void ClearWorldDepth() override;
+    virtual void SetWorldOverlay(float ndc_z) override;
+    virtual void ClearWorldOverlay() override;
+    virtual void SetWorldOverlayFlat(float ndc_z) override;
+    virtual void ClearWorldOverlayFlat() override;
     void SetGameViewport(int x, int y, int w, int h);
     virtual void SetTopOverlay() override;
     virtual void ClearTopOverlay() override;
@@ -103,19 +116,28 @@ public:
     void EndZoomBoxOverlay(int x, int y, int w, int h) override;
     void SetupMinimapBackground(int diaglen, int panel_x, int panel_y) override;
     bool GetMinimapOpaqueBlackIndex(uint8_t* idx) const override;
-    virtual void DrawBack() override;
+    /** IUIRenderer override: legacy combined "draw everything" entry point —
+     *  delegates to DrawWorldSpriteLayerRT()/DrawWorldOverlayFlatLayerRT()/
+     *  DrawGameUI()/DrawFrontOverlay(). Not used by the live GL frame path,
+     *  which calls those separately so intermediate passes can be composited
+     *  between them. */
     virtual void DrawFront() override;
-    /** IUIRenderer override: layer-1 portion of DrawFront: FBOQuads + layer-1 sprites
-     *  + minimap + layer-1 lines.  Does NOT flush layer-2/3 or restore GL state.
-     *  Must be followed by DrawFrontOverlay(). */
-    void DrawFrontBase() override;
-    /** IUIRenderer override: layer-3 top-overlay (tooltip, corner frames).
-     *  Call after DrawFrontBase() and DrawWorldSpriteLayerRT().
-     *  Layer-2 (world sprites) is now handled by DrawWorldSpriteLayerRT(). */
+    /** IUIRenderer override: the single composed in-game UI pass (sidebar
+     *  background + buttons + minimap, compass, dialogs, power-hand, messages,
+     *  pause menu — see src/kfx/ui/GameUI.cpp). Drawn after both world-overlay
+     *  layers; opaque where it draws, so nothing world-positioned needs to
+     *  scissor itself away from it. Must be followed by DrawFrontOverlay(). */
+    void DrawGameUI() override;
+    /** IUIRenderer override: top-overlay (tooltip, corner frames), drawn dead
+     *  last among sprite layers. Call after DrawGameUI(). */
     void DrawFrontOverlay() override;
-    /** IUIRenderer override: flush RT layer-2 (world-depth sprites) before the
-     *  sidebar.  Must be called after DrawBack() and before DrawFrontBase(). */
+    /** IUIRenderer override: flush WorldOverlay sprites (depth-tested against
+     *  world geometry) before GameUI. Must be called before DrawGameUI(). */
     void DrawWorldSpriteLayerRT() override;
+    /** IUIRenderer override: flush WorldOverlayFlat sprites (NOT depth-tested
+     *  — must stay visible above world geometry) before GameUI. Must be
+     *  called before DrawGameUI(). */
+    void DrawWorldOverlayFlatLayerRT() override;
     /** IUIRenderer override: flip game-thread command lists to render-thread copies. */
     void FlipBuffers() override;
     virtual void Draw() override;
@@ -184,7 +206,7 @@ public:
      *  IUIRenderer override: tex is GLuint (uint32_t) — GL context must be current. */
     void SetFadeTexture(GpuTextureHandle tex) override;
 
-        /** Called once per frame by EndFrame(), before DrawBack().
+        /** Called once per frame by EndFrame(), before the world-overlay/GameUI draws.
      *  When replay=true and the queues are empty, restores the last real frame's
      *  full UI snapshot (all layers) so the sidebar stays visible during
      *  palette-fade loops.  When replay=false and queues are non-empty, saves
@@ -243,22 +265,24 @@ private:
     GLuint m_uniform_mvp;
     GLuint m_uniform_texture;
 
-    // Rendering data — per-pass quad/line queues.
-    // Index maps directly to render layer: 0=back, 1=front, 2=world-depth, 3=top-overlay.
-    std::vector<UIQuad>     m_quads[4];     // game-thread write buffer
-    std::vector<UILine>     m_lines[4];     // game-thread write buffer
+    // Rendering data — per-pass quad/line queues. Index via kLayerWorldOverlay/
+    // kLayerWorldOverlayFlat/kLayerGameUI/kLayerOverlay (declared above), never
+    // a raw integer.
+    std::vector<UIQuad>     m_quads[kLayerCount];     // game-thread write buffer
+    std::vector<UILine>     m_lines[kLayerCount];     // game-thread write buffer
     std::vector<FBOQuad>    m_fbo_quads;    // render-thread-only (PiP composite)
     std::vector<GLUIVertex> m_vertices;
 
     // ── Double-buffer render copies ───────────────────────────────────────────
     // FlipBuffers() moves game-thread quads/lines here before signalling the
-    // render thread.  DrawBack/DrawFrontBase/DrawFrontOverlay read exclusively
-    // from m_rt_*.  m_fbo_quads is NOT doubled: it is pushed AND read on the
+    // render thread.  DrawWorldSpriteLayerRT/DrawWorldOverlayFlatLayerRT/
+    // DrawGameUI/DrawFrontOverlay read exclusively from m_rt_*.  m_fbo_quads
+    // is NOT doubled: it is pushed AND read on the
     // render thread only (SubmitFBOQuad called during the PiP loop inside EndFrame_GL).
     // m_quads/m_lines remain in use as transient storage for PiP and cursor sprites
     // submitted by the render thread within a single EndFrame_GL call.
-    std::vector<UIQuad>  m_rt_quads[4];
-    std::vector<UILine>  m_rt_lines[4];
+    std::vector<UIQuad>  m_rt_quads[kLayerCount];
+    std::vector<UILine>  m_rt_lines[kLayerCount];
 
     // Render-thread-only cursor sprite buffer.  GLCursorLayer::Draw() pushes here
     // via SubmitCursorPanelSprite(); DrawCursorSprites() flushes it.  Never touched
@@ -293,8 +317,8 @@ private:
     // draw_view (corner-frame sprites) and must survive into FlushFront() untouched.
     // Quads from [watermark[L]..end) were submitted during draw_view(pip_cam) and are
     // extracted by ExtractPiPSprites() and rendered later on the render thread.
-    int  m_pip_quad_wm[4]      = {};
-    int  m_pip_line_wm[4]      = {};
+    int  m_pip_quad_wm[kLayerCount] = {};
+    int  m_pip_line_wm[kLayerCount] = {};
     bool m_pip_capture_active  = false;
 
     // Minimap: renderer-owned CPU scratch buffer + deferred GL texture upload
@@ -324,17 +348,17 @@ private:
     bool     m_rt_minimap_pending  = false;
     bool     m_rt_minimap_submitted = false;
     
-    // Current render layer: 0=back (before staging blit), 1=front (after staging blit),
-    // 2=world-depth (after GPUFlushNow, depth test ON against tile depth buffer).
-    // Set by SetLayer()/SetWorldDepth(); reset to 1 each Clear().
-    int   m_current_layer       = 1;
-    float m_world_z             = 0.0f;  // NDC z for active world-depth batch
-    bool  m_world_depth_active  = false; // when true, SubmitQuad/SubmitLine use layer=2, z=m_world_z
-    bool  m_top_overlay_active  = false; // when true, SubmitQuad/SubmitLine use layer=3 (drawn last, depth-test OFF)
+    // World-overlay batch state. Set by SetWorldOverlay()/SetWorldOverlayFlat();
+    // both reset to false each Clear(). Default (neither active, top-overlay
+    // inactive) routes SubmitQuad/SubmitLine to index 2 (GameUI).
+    float m_world_z                  = 0.0f;  // NDC z for the active world-overlay batch (shared; the two modes are mutually exclusive at any call site)
+    bool  m_world_overlay_active     = false; // when true, SubmitQuad/SubmitLine use index 0 (depth-tested), z=m_world_z
+    bool  m_world_overlay_flat_active= false; // when true, SubmitQuad/SubmitLine use index 1 (no depth test), z=m_world_z
+    bool  m_top_overlay_active       = false; // when true, SubmitQuad/SubmitLine use index 3 (drawn last, depth-test OFF)
 
     // Game viewport rect (screen pixels) — set each frame by SetGameViewport().
-    // Used to scissor-clip layer-2 sprites so they don't bleed onto the sidebar,
-    // overhead map, or zoom box.
+    // Used to scissor-clip WorldOverlay/WorldOverlayFlat sprites so they don't
+    // bleed into the overhead map or zoom box regions.
     int  m_game_vp_x = 0;
     int  m_game_vp_y = 0;
     int  m_game_vp_w = 0;
@@ -346,8 +370,8 @@ private:
     int  m_rt_game_vp_h = 0;
     bool m_rt_game_vp_set = false;
 
-    // IR write target — set by SetUICommandBuffers(); null in stale-replay/PiP frames.
-    UICommandBuffers* m_ui_write_cmds = nullptr;
+    // IR write target (m_ui_write_cmds) is inherited from IUIRenderer — set by
+    // SetUICommandBuffers(); null in stale-replay/PiP frames.
 
     // Internal methods
     void CreateVertexArrays();

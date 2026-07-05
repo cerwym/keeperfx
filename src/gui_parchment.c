@@ -184,11 +184,15 @@ TbBool parchment_copy_background_at(const struct TbRect *bkgnd_area, int units_p
     // Only 8bpp supported for now
     if (LbGraphicsScreenBPP() != 8)
         return false;
-    // Do the drawing
-    RendererBlitRaw8(
-        img_width*units_per_px/16, img_height*units_per_px/16,
-        bkgnd_area->left, bkgnd_area->top,
-        srcbuf, img_width, img_height);
+    // Do the drawing (opaque, game-palette Indexed8 present — parchment background).
+    struct RendererPresentImageDesc d = {0};
+    d.format  = PRESENT_FORMAT_INDEXED8;
+    d.palette = PRESENT_PALETTE_GAME;
+    d.kind    = PRESENT_KIND_OPAQUE;
+    d.dst_w = img_width*units_per_px/16; d.dst_h = img_height*units_per_px/16;
+    d.dst_x = bkgnd_area->left;          d.dst_y = bkgnd_area->top;
+    d.src   = srcbuf; d.src_w = img_width; d.src_h = img_height;
+    RendererPresentImage(&d);
     // Burning candle flames — submitted via UIRenderer so they composite on top
     // of the GPU parchment blit quad without writing into the CPU staging buffer.
     const struct TbSprite* spr = get_button_sprite(GBS_parchment_map_screen_flame_1 + (get_gameturn() & 3));
@@ -758,11 +762,9 @@ void draw_overhead_things(const struct TbRect *map_area, long block_size, Player
 void draw_2d_map(void)
 {
     SYNCDBG(8, "Starting");
-    if (!render_fade_tables || !render_ghost || !render_alpha)
+    if (!render_fade_tables)
     {
         render_fade_tables = pixmap.fade_tables;
-        render_ghost = pixmap.ghost;
-        render_alpha = (unsigned char*)&alpha_sprite_table;
     }
     struct PlayerInfo* player = get_my_player();
     // Size of the parchment map on which we're drawing
@@ -991,12 +993,16 @@ void zoom_to_parchment_map(void)
       clear_flag(game.operation_flags, GOF_ShowPanel);
     else
       set_flag(game.operation_flags, GOF_ShowPanel);
+    // Note: turn_off_all_window_menus() already deactivates GMnu_MAIN.
+    // toggle_status_menu(0) must NOT be called here -- it would see GMnu_MAIN
+    // as already-off (turn_off already ran) and would incorrectly clear
+    // GOF_ShowPanel, breaking the restore path in set_player_mode(PVT_DungeonTop).
+    // The draw_gui()/sidebar content that used to need this suppression no
+    // longer runs in parchment view (removed from ParchmentScene::draw()).
     struct PlayerInfo* player = get_my_player();
     if (network_is_active()
         || (!MapFadePass_SupportsNativeResolution() && RendererPhysicalWidth() > 320))
     {
-      if (!toggle_status_menu(0))
-        clear_flag(game.operation_flags, GOF_ShowPanel);
       set_players_packet_action(player, PckA_SaveViewType, PVT_MapScreen, 0, 0, 0);
       turn_off_roaming_menus();
     } else
@@ -1009,11 +1015,13 @@ void zoom_to_parchment_map(void)
 void zoom_from_parchment_map(void)
 {
     struct PlayerInfo* player = get_my_player();
+    // Restoration of GMnu_MAIN is handled by set_player_mode(PVT_DungeonTop),
+    // which calls toggle_status_menu((GOF_ShowPanel) != 0). Calling it here
+    // prematurely restores the sidebar mid-fade (visual artefact) and is
+    // unnecessary since ParchmentScene no longer calls draw_gui() at all.
     if (network_is_active()
         || (!MapFadePass_SupportsNativeResolution() && RendererPhysicalWidth() > 320))
     {
-        if ((game.operation_flags & GOF_ShowPanel) != 0)
-          toggle_status_menu(1);
         set_players_packet_action(player, PckA_LoadViewType, PVT_DungeonTop, 0,0,0);
     } else
     {

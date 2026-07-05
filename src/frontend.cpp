@@ -384,9 +384,6 @@ const unsigned long alliance_grid[4][4] = {
 
 #if (BFDEBUG_LEVEL > 0)
 // Declarations for font testing screen (debug version only)
-struct TbSpriteSheet *testfont[TESTFONTS_COUNT];
-unsigned char *testfont_palette[3];
-long num_chars_in_font = 128;
 #endif
 
 int status_panel_width = 140;
@@ -1007,73 +1004,6 @@ void gui_area_slider(struct GuiButton *gbtn)
     }
     LbSpriteDrawResized(gbtn->scr_pos_x + shift_x + 24*units_per_px/16, gbtn->scr_pos_y + 6*units_per_px/16, bs_units_per_px, spr);
 }
-
-#if (BFDEBUG_LEVEL > 0)
-// Code for font testing screen (debug version only)
-TbBool fronttestfont_draw(void)
-{
-  const struct TbSprite *spr;
-  unsigned long i;
-  unsigned long k;
-  long w;
-  long h;
-  long x;
-  long y;
-  SYNCDBG(9,"Starting");
-  if (RendererHasGPURenderPath()) return false;
-  for (y=0; y < RendererScreenHeight(); y++)
-    for (x=0; x < RendererScreenWidth(); x++)
-    {
-        RendererGetWScreen()[y*RendererScreenWidth()+x] = 0;
-    }
-  LbTextSetWindow(0, 0, RendererScreenHeight(), RendererScreenWidth());
-  // Drawing
-  w = 32;
-  h = 48;
-  for (i=31; i < num_chars_in_font+31; i++)
-  {
-    k = (i-31);
-    SYNCDBG(9,"Drawing char %lu",i);
-    x = (k%32)*w + 2;
-    y = (k/32)*h + 2;
-    if (TextRenderer_GetFont() != NULL)
-      spr = LbFontCharSprite(TextRenderer_GetFont(),i);
-    else
-      spr = NULL;
-    if (spr != NULL)
-    {
-      LbDrawBox(x, y, spr->SWidth+2, spr->SHeight+2, 255);
-      LbSpriteDraw(x+1, y+1, spr);
-    }
-//TODO SPRITES enhance font support
-  }
-  // Displaying the new frame
-  return true;
-}
-
-TbBool fronttestfont_input(void)
-{
-  const unsigned int keys[] = {KC_Z,KC_1,KC_2,KC_3,KC_4,KC_5,KC_6,KC_7,KC_8,KC_9,KC_0};
-  int i;
-  for (i=0; i < sizeof(keys)/sizeof(keys[0]); i++)
-  {
-    if (lbKeyOn[keys[i]])
-    {
-      lbKeyOn[keys[i]] = 0;
-      num_chars_in_font = num_sprites(testfont[i]);
-      SYNCDBG(9,"Characters in font %d: %ld",i,num_chars_in_font);
-      if (i < 4)
-        RendererPaletteSet(frontend_palette);//testfont_palette[0]
-      else
-        RendererPaletteSet(testfont_palette[1]);
-      LbTextSetFont(testfont[i]);
-      return true;
-    }
-  }
-  return false;
-}
-#endif
-
 
 void frontend_draw_icon(struct GuiButton *gbtn)
 {
@@ -2751,11 +2681,6 @@ void frontend_shutdown_state(FrontendMenuState pstate)
     case FeSt_OUTRO:
     case FeSt_PACKET_DEMO:
         break;
-#if (BFDEBUG_LEVEL > 0)
-    case FeSt_FONT_TEST:
-        free_testfont_fonts();
-        break;
-#endif
     default:
         ERRORLOG("Unhandled FRONTEND state %d shutdown",(int)pstate);
         break;
@@ -2905,13 +2830,6 @@ FrontendMenuState frontend_setup_state(FrontendMenuState nstate)
         frontend_mp_mappack_list_load();
         set_pointer_graphic_menu();
         break;
-  #if (BFDEBUG_LEVEL > 0)
-    case FeSt_FONT_TEST:
-        fade_palette_in = 0;
-        load_testfont_fonts();
-        set_pointer_graphic_menu();
-        break;
-  #endif
       default:
         ERRORLOG("Unhandled FRONTEND new state");
         break;
@@ -2958,7 +2876,6 @@ static const char * menu_state_str(FrontendMenuState state)
         case FeSt_CAMPAIGN_INTRO: return "FeSt_CAMPAIGN_INTRO";
         case FeSt_MAPPACK_SELECT: return "FeSt_MAPPACK_SELECT";
         case FeSt_MP_MAPPACK_SELECT: return "FeSt_MP_MAPPACK_SELECT";
-        case FeSt_FONT_TEST: return "FeSt_FONT_TEST";
     }
     return "unknown";
 }
@@ -3007,17 +2924,6 @@ TbBool frontmainmnu_input(void)
             return true;
         }
     }
-#if (BFDEBUG_LEVEL > 0)
-    if (lbKeyOn[KC_F] && lbKeyOn[KC_LSHIFT])
-    {
-        if (game.easter_eggs_enabled == true)
-        {
-            lbKeyOn[KC_F] = 0;
-            frontend_set_state(FeSt_FONT_TEST);
-            return true;
-        }
-    }
-#endif
     return false;
 }
 
@@ -3146,16 +3052,6 @@ void frontend_input(void)
             input_consumed = true;
         }
         break;
-#if (BFDEBUG_LEVEL > 0)
-    case FeSt_FONT_TEST:
-        get_gui_inputs(0);
-        input_consumed = frontscreen_end_input(false);
-        if (input_consumed) {
-            break;
-        }
-        fronttestfont_input();
-        break;
-#endif
     default:
         get_gui_inputs(0);
         input_consumed = frontscreen_end_input(false);
@@ -3560,11 +3456,6 @@ short frontend_draw(void)
     case FeSt_STORY_BIRTHDAY:
         frontbirthday_draw();
         break;
-#if (BFDEBUG_LEVEL > 0)
-    case FeSt_FONT_TEST:
-        fronttestfont_draw();
-        break;
-#endif
     default:
         break;
     }

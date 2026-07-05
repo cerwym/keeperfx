@@ -95,38 +95,4 @@ void platform_gl_get_drawable_size(int* out_w, int* out_h);
 }
 #endif
 
-/******************************************************************************/
-/* Vulkan surface helpers (implemented per-platform for the Vulkan backend)   */
-/* Only available when RENDERER_VULKAN_ENABLED is defined.                    */
-/******************************************************************************/
-#ifdef RENDERER_VULKAN_ENABLED
-
-#include <vulkan/vulkan.h>
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-/** Populate the array of Vulkan instance extensions required by the
- *  windowing system (e.g. VK_KHR_surface + platform surface extension).
- *  Call first with names=NULL to query the count, then again with a
- *  pre-allocated array to fill.
- *  @return Non-zero on success, 0 on failure. */
-int platform_vk_get_instance_extensions(unsigned int* count, const char** names);
-
-/** Create a Vulkan surface for the current SDL window.
- *  Must be called after the VkInstance has been created and before
- *  VKDevice::Init().
- *  @return Non-zero on success, 0 on failure. */
-int platform_vk_create_surface(VkInstance instance, VkSurfaceKHR* out_surface);
-
-/** Return the drawable pixel dimensions of the current SDL window. */
-void platform_vk_get_drawable_size(int* out_w, int* out_h);
-
-#ifdef __cplusplus
-}
-#endif
-
-#endif  /* RENDERER_VULKAN_ENABLED */
-
 #endif // PLATFORM_H

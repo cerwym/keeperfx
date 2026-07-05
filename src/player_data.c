@@ -437,6 +437,17 @@ void set_player_mode(struct PlayerInfo *player, unsigned short nview)
   if (player->view_type == nview)
     return;
   player->view_type = nview;
+  if (is_my_player(player))
+  {
+    // GameUI's IsActiveForCurrentView() (src/kfx/ui/GameUI.cpp) decides
+    // fresh each frame whether to submit sidebar content based on this
+    // view_type, but a transition that also kicks off a palette fade (e.g.
+    // entering/leaving the parchment map) can have its now-correct UI
+    // submission get stuck behind RendererIsFadeCachePreserved()'s "don't
+    // flip, replay the last frame" loop. Force one real flip so the change
+    // actually lands on the read-side buffer before any such loop starts.
+    RendererForceUIFlipNextFrame();
+  }
   player->allocflags &= ~PlaF_CreaturePassengerMode;
   if (is_my_player(player))
   {
@@ -475,11 +486,6 @@ void set_player_mode(struct PlayerInfo *player, unsigned short nview)
       if (is_my_player(player))
         game.view_mode_flags &= ~GNFldD_CreatureViewMode;
       // Possession clips the 3D view to the area beside the sidebar panel,
-      // even for GPU renderers.  Re-apply the sidebar-aware engine window.
-      if (is_my_player(player))
-        set_gui_visible((game.operation_flags & GOF_ShowGui) != 0);
-      else
-        // Possession clips the 3D view to the area beside the sidebar panel,
       // even for GPU renderers.  Re-apply the sidebar-aware engine window.
       if (is_my_player(player))
         set_gui_visible((game.operation_flags & GOF_ShowGui) != 0);

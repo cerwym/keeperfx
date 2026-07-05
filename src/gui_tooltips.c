@@ -554,7 +554,7 @@ void draw_tooltip_slab64k(char *tttext, long pos_x, long pos_y, long ttwidth, lo
             LbTextDrawResized(tx, ty, tx_units_per_px, tttext);
         }
     }
-    LbTextSetWindow(0, 0, RendererScreenHeight(), RendererScreenWidth());
+    LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
     lbDisplay.DrawFlags = flg_mem;
 }
 
@@ -625,7 +625,18 @@ void draw_tooltip_at(long ttpos_x,long ttpos_y,char *tttext)
   long pos_y = ttpos_y;
   if (player->view_type == PVT_MapScreen)
   {
-      pos_y = GetMouseY() + scale_ui_value(24);
+      long mouse_y = GetMouseY();
+      if (mouse_y < scale_ui_value(ttheight + 8))
+      {
+          // Not enough room above the cursor to anchor the tooltip there —
+          // render it below the cursor instead of letting it snap to the
+          // top of the screen, detached from the mouse position.
+          pos_y = mouse_y + scale_ui_value(ttheight + 52);
+      }
+      else
+      {
+          pos_y = mouse_y + scale_ui_value(24);
+      }
       if (pos_y > RendererGetScreenHeight() - scale_ui_value(104))
           pos_y = RendererGetScreenHeight() - scale_ui_value(104);
       if (pos_y < 0)

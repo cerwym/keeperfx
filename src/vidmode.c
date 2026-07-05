@@ -103,10 +103,6 @@ unsigned char white_pal[256];
 unsigned char red_pal[256];
 /******************************************************************************/
 
-#if (BFDEBUG_LEVEL > 0)
-// Declarations for font testing screen (debug version only)
-extern struct TbLoadFiles testfont_load_files[];
-#endif
 
 extern struct TbLoadFiles gui_load_files_320[];
 extern struct TbLoadFiles gui_load_files_640[];
@@ -308,7 +304,9 @@ TbBool set_pointer_graphic_spell(long spridx, long frame)
   {
     y = 32;
     x = 32;
-    i = spridx + (frame%8);
+    // frame is the game turn; the 64px spell pointers are stored as runs of
+    // 8 consecutive animation frames, so this advances one frame per turn.
+    i = spridx + (frame % 8);
   } else
   {
     y = 78;
@@ -325,10 +323,10 @@ TbBool set_pointer_graphic_spell(long spridx, long frame)
   }
   else
   {
-      SYNCDBG(8,"Activating pointer %ld", 40+i);
       if (i >= 0 && i < num_sprites(pointer_sprites))
       {
           spr = get_sprite(pointer_sprites, i);
+          SYNCDBG(8,"Activating pointer %ld", i);
           LbMouseChangeSpriteAndHotspot(spr, x/2, y/2);
       } else
       {
@@ -1071,43 +1069,6 @@ void switch_to_next_video_mode_wrapper(void)
   LbMouseSetPosition(((lbDisplay.MouseWindowX + lbDisplay.MouseWindowWidth) / 100) * percent_x, ((lbDisplay.MouseWindowY + lbDisplay.MouseWindowHeight) / 100) * percent_y);
   return;
 }
-
-#if (BFDEBUG_LEVEL > 0)
-TbBool load_testfont_fonts(void)
-{
-    testfont[0] = load_font("ldata/frontft1.dat", "ldata/frontft1.tab");
-    testfont[1] = load_font("ldata/frontft2.dat", "ldata/frontft2.tab");
-    testfont[2] = load_font("ldata/frontft3.dat", "ldata/frontft3.tab");
-    testfont[3] = load_font("ldata/frontft4.dat", "ldata/frontft4.tab");
-    testfont[4] = load_font("data/font0-0.dat", "data/font-0-0.tab");
-    testfont[5] = load_font("data/font0-1.dat", "data/font-0-1.tab");
-    testfont[6] = load_font("data/font2-32.dat", "data/font2-32.tab");
-    testfont[7] = load_font("data/font2-64.dat", "data/font2-64.tab");
-    testfont[8] = load_font("data/font1-64.dat", "data/font1-64.tab");
-    testfont[9] = load_font("data/font1-32.dat", "data/font1-32.tab");
-    testfont[10] = load_font("ldata/netfont.dat", "ldata/netfont.tab");
-    for (int i = 0; i < TESTFONTS_COUNT; ++i) {
-        if (!testfont[i]) {
-            ERRORLOG("Unable to load test font %d", i);
-            return false;
-        }
-    }
-    if (!LbDataLoadAll(testfont_load_files) )
-    {
-      ERRORLOG("Unable to load testfont_load_files files");
-      return false;
-    }
-    return true;
-}
-
-void free_testfont_fonts(void)
-{
-    for (int i = 0; i < TESTFONTS_COUNT; ++i) {
-        free_font(&testfont[i]);
-    }
-    LbDataFreeAll(testfont_load_files);
-}
-#endif
 
 /******************************************************************************/
 #ifdef __cplusplus

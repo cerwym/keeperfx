@@ -33,6 +33,7 @@
 #include "bflib_sprite.h"
 #include "bflib_mouse.h"
 #include "bflib_render.h"
+#include "vidmode.h"        // pixmap.ghost (transparency LUT)
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -1248,6 +1249,7 @@ TbResult LbSpriteDrawRemapUsingScalingDownDataSolidLR(uchar *outbuf, int scanlin
 TbResult LbSpriteDrawRemapUsingScalingData(long posx, long posy, const struct TbSourceBuffer * src_buf, const TbPixel *cmap)
 {
     SYNCDBG(17,"Drawing at (%ld,%ld)",posx,posy);
+    unsigned char* render_ghost = pixmap.ghost; // ghost transparency LUT, owned by vidmode
     int32_t *xstep;
     int32_t *ystep;
     int scanline;

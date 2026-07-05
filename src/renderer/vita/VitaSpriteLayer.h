@@ -15,6 +15,20 @@
  *
  *     Coordinates are supplied in virtual game space (640×480).  The layer
  *     transforms them to Vita native (960×544) internally.
+ *
+ * @par TODO (Vita UI layering):
+ *     The OpenGL backend's IUIRenderer now composites through a 5-layer model
+ *     (see src/renderer/ir/UICommands.h IRUILayer: WorldOverlay/WorldOverlayFlat
+ *     depth-tested-vs-not world content, GameUI as one opaque pass for all
+ *     in-game 2D chrome drawn last, Overlay, Cursor — see src/kfx/ui/GameUI.cpp
+ *     for the rationale). This sprite layer currently has no equivalent
+ *     distinction — everything is one flat pass after the 3D scene. That's
+ *     fine today (Vita has no creature-status-occluded-by-walls or
+ *     room-flag-must-stay-visible requirements yet), but if Vita ever needs
+ *     either of those, it should adopt the same WorldOverlay/WorldOverlayFlat/
+ *     GameUI split rather than re-deriving the bug class the GL backend just
+ *     fixed (world-space UI bleeding onto / being incorrectly occluded near
+ *     the sidebar).
  */
 /******************************************************************************/
 #pragma once

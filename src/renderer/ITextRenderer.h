@@ -27,9 +27,10 @@
 
 struct TbSpriteSheet;
 struct AsianFont;
-// Forward-declare IR type so SetTextCommandBuffers can appear on this interface
-// without pulling TextCommands.h into every translation unit.
+// Forward-declare IR types so SetTextCommandBuffers / ReplayTextCommand can
+// appear on this interface without pulling TextCommands.h into every TU.
 struct TextCommandBuffers;
+struct IRTextDrawCmd;
 
 #ifdef __cplusplus
 /******************************************************************************/
@@ -146,6 +147,12 @@ public:
      *  GPU backends translate IR text commands and flush draws.
      *  Default: calls Draw() so software/stub backends still render. */
     virtual void ExecuteTextFromIR(const TextCommandBuffers& /*cmds*/) { Draw(); }
+
+    /** Replay a single text IR command through the immediate CPU draw path.
+     *  Used by the software IR executor (IUIRenderer::ReplayMergedFromIR) to
+     *  draw text interleaved with UI sprites in shared-seq order.
+     *  Default: no-op — GPU backends render text via ExecuteTextFromIR. */
+    virtual void ReplayTextCommand(const struct IRTextDrawCmd& /*cmd*/) {}
 
 protected:
     /** Shared paragraph layout engine.

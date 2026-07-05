@@ -37,6 +37,7 @@
 #include "renderer/ir/ShadowCommands.h"
 #include "renderer/ir/DebugCommands.h"
 #include "renderer/ir/PostProcessCommands.h"
+#include "renderer/ir/ImagePresentCommands.h"
 
 /******************************************************************************/
 
@@ -77,6 +78,7 @@ public:
     ShadowCommandBuffers&      GetShadowBuffers()      { return m_write.shadow;       }
     DebugCommandBuffers&       GetDebugBuffers()       { return m_write.debug;        }
     PostProcessCommandBuffers& GetPostProcessBuffers() { return m_write.post_process; }
+    ImagePresentBuffers&       GetImagePresentBuffers(){ return m_write.image_present; }
 
     /** Read-only access to the write-side UI buffer (game thread, before Flip).
      *  Used by EndFrame() to detect empty frames and skip Flip(). */
@@ -125,6 +127,7 @@ public:
     const ShadowCommandBuffers&      GetShadowBuffersRT()      const { return m_read.shadow;       }
     const DebugCommandBuffers&       GetDebugBuffersRT()       const { return m_read.debug;        }
     const PostProcessCommandBuffers& GetPostProcessBuffersRT() const { return m_read.post_process; }
+    const ImagePresentBuffers&       GetImagePresentBuffersRT()const { return m_read.image_present; }
     const FrameState&                GetFrameStateRT()         const { return m_read_fs;           }
 
     // =========================================================================
@@ -166,6 +169,7 @@ private:
         ShadowCommandBuffers      shadow;
         DebugCommandBuffers       debug;
         PostProcessCommandBuffers post_process;
+        ImagePresentBuffers       image_present;
 
         void Reset();
         void Reserve(size_t world_tiles, size_t world_sprites, size_t world_shadows,

@@ -20,6 +20,7 @@
 
 #include "renderer/SpriteHandle.h"
 #include "renderer/GpuTypes.h"
+#include "renderer/DrawState.h"
 #include "bflib_basics.h"
 #include <unordered_map>
 #include <cstdint>
@@ -29,7 +30,9 @@ struct TbSprite;
 // Forward-declare IR types so PopulateFromIR can appear on this interface
 // without pulling UICommands.h / FrameState.h into every consumer.
 struct UICommandBuffers;
+struct TextCommandBuffers;
 struct FrameState;
+class  ITextRenderer;
 
 #ifdef __cplusplus
 
@@ -90,7 +93,7 @@ public:
      */
     virtual void SubmitPanelSprite(int32_t x, int32_t y, int units_per_px,
                                    SpriteHandle spr, bool flip_horiz,
-                                   unsigned int draw_flags);
+                                   KfxDrawState state);
 
     /**
      * Submit a panel/button sprite with palette remap (player colour tinting).
@@ -102,7 +105,7 @@ public:
      */
     virtual void SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px,
                                         SpriteHandle spr, int remap_row,
-                                        unsigned int draw_flags);
+                                        KfxDrawState state);
 
     /**
      * Submit a panel/button sprite drawn entirely in a single flat colour (sprite used as a mask).
@@ -113,7 +116,7 @@ public:
      */
     virtual void SubmitPanelSpriteColored(int32_t x, int32_t y, int units_per_px,
                                           SpriteHandle spr, uint8_t color_idx,
-                                          unsigned int draw_flags);
+                                          KfxDrawState state);
 
     /**
      * Submit a sprite with explicit pixel dimensions.
@@ -121,13 +124,15 @@ public:
      * @param draw_flags  Bullfrog draw flags captured at submission time.
      */
     virtual void SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h,
-                                    SpriteHandle spr, unsigned int draw_flags);
+                                    SpriteHandle spr, KfxDrawState state);
  
     /**
      * Submit a solid-color rectangle.
      * CPU default: direct LbDrawBox software rasterisation.
+     * @param state  Per-call draw descriptor (only Lb_SPRITE_OUTLINE is consulted
+     *               here); replaces the former ambient lbDisplay.DrawFlags read.
      */
-    virtual void SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx);
+    virtual void SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx, KfxDrawState state);
  
     /**
      * Submit a solid-color rectangle with explicit alpha (e.g. 0.5 for TRANSPAR4 darkening).
@@ -142,17 +147,17 @@ public:
     /** Submit a raw TbSprite draw with explicit Bullfrog draw flags.
      *  CPU default: original LbSpriteDraw path. */
     virtual TbResult SubmitRawSprite(long x, long y, const struct TbSprite* spr,
-                                    unsigned int draw_flags);
+                                    KfxDrawState state);
  
     /** Submit a one-colour raw sprite draw with explicit Bullfrog draw flags.
      *  CPU default: original LbSpriteDrawOneColour path. */
     virtual TbResult SubmitRawSpriteOneColour(long x, long y, const struct TbSprite* spr,
-                                             unsigned char colour, unsigned int draw_flags);
+                                             unsigned char colour, KfxDrawState state);
  
     /** Submit a remapped raw sprite draw with explicit Bullfrog draw flags.
      *  CPU default: original LbSpriteDrawScaledRemap path at native sprite size. */
     virtual TbResult SubmitRawSpriteRemap(long x, long y, const struct TbSprite* spr,
-                                         const unsigned char* cmap, unsigned int draw_flags);
+                                         const unsigned char* cmap, KfxDrawState state);
 
     /**
      * Upload the 64×64 palette-indexed gui_slab tile to the GPU.
@@ -195,20 +200,30 @@ public:
     // Layer / draw control (GPU-only concept; CPU default = no-op or passthrough)
     // -------------------------------------------------------------------------
 
-    /** Set the active render layer (0=back, 1=front).  CPU default: no-op. */
-    virtual void SetLayer(int /*layer*/) { }
+    /** Begin a world-overlay batch that depth-tests against world geometry:
+     *  subsequent submissions are tagged with ndc_z (in [-1,1]) and rendered
+     *  with GL depth-test ON, so they are occluded by world geometry drawn
+     *  earlier this frame (e.g. creature status — occlusion by walls is
+     *  intentional).  CPU default: no-op. */
+    virtual void SetWorldOverlay(float /*ndc_z*/) { }
 
-    /** Begin a world-depth-tested batch: subsequent submissions are tagged with
-     *  ndc_z (in [-1,1]) and rendered with GL depth-test ON so they are occluded
-     *  by world geometry drawn earlier this frame.  CPU default: no-op. */
-    virtual void SetWorldDepth(float /*ndc_z*/) { }
+    /** End a world-overlay (depth-tested) batch. */
+    virtual void ClearWorldOverlay() { }
 
-    /** End a world-depth-tested batch, returning to normal (depth-test OFF) rendering. */
-    virtual void ClearWorldDepth() { }
+    /** Begin a world-overlay batch that does NOT depth-test: subsequent
+     *  submissions are tagged with ndc_z but rendered with depth-test OFF, so
+     *  they stay visible above world geometry regardless of nearby walls or
+     *  placement-preview overlays (e.g. room flags, floating gold/damage
+     *  text).  Still scissor-clipped to the game viewport like SetWorldOverlay().
+     *  CPU default: no-op. */
+    virtual void SetWorldOverlayFlat(float /*ndc_z*/) { }
 
-    /** Set the game viewport rect (screen pixels) for scissor-clipping layer-2
-     *  sprites.  Prevents world-depth sprites from bleeding onto the sidebar,
-     *  overhead map, or zoom box.  CPU default: no-op. */
+    /** End a world-overlay-flat (non-depth-tested) batch. */
+    virtual void ClearWorldOverlayFlat() { }
+
+    /** Set the game viewport rect (screen pixels) for scissor-clipping
+     *  WorldOverlay/WorldOverlayFlat sprites so they don't bleed into the
+     *  overhead map or zoom box.  CPU default: no-op. */
     virtual void SetGameViewport(int /*x*/, int /*y*/, int /*w*/, int /*h*/) { }
 
     /** Begin a top-overlay batch: subsequent submissions are drawn dead-last in the
@@ -236,31 +251,36 @@ public:
      *  shader uses (to avoid transparent-sentinel 0). SW returns false. */
     virtual bool GetMinimapOpaqueBlackIndex(uint8_t* idx) const;
  
-    /** Draw layer-0 (back) elements before the CPU staging-buffer blit.
-     *  CPU default: no-op. */
-    virtual void DrawBack() { }
-
-    /** Draw layer-1 (front) elements after the CPU staging-buffer blit.
+    /** Draw the composed in-game UI (sidebar background + buttons + minimap,
+     *  compass, dialogs, power-hand, messages, pause menu — see
+     *  src/kfx/ui/GameUI.cpp).  Drawn after both world-overlay layers and
+     *  opaque where it draws, so nothing world-positioned needs to scissor
+     *  itself away from it.  Must be followed by DrawFrontOverlay().
      *  CPU default: calls Draw(). */
-    virtual void DrawFront() { Draw(); }
+    virtual void DrawGameUI() { Draw(); }
 
-    /** Draw layer-1 front elements excluding the top-overlay (layer-2/3).
-     *  GPU backends split DrawFront() into two calls so that zoom-box tiles
-     *  and other intermediate passes can be composited between them.
-     *  EndFrame_GL() calls DrawFrontBase() first, then DrawFrontOverlay().
-     *  CPU default: calls DrawFront() (combines both phases). */
-    virtual void DrawFrontBase() { DrawFront(); }
+    /** Legacy combined "draw everything" entry point.  GPU backends call
+     *  DrawWorldSpriteLayerRT()/DrawWorldOverlayFlatLayerRT()/DrawGameUI()/
+     *  DrawFrontOverlay() separately in the live frame path so intermediate
+     *  passes (overhead map, zoom box, PiP) can be composited between them.
+     *  CPU default: calls DrawGameUI(). */
+    virtual void DrawFront() { DrawGameUI(); }
 
-    /** Draw layer-2/3 top-overlay elements (tooltip, zoom-box corner frames).
-     *  Must be called after DrawFrontBase().  GPU default: no-op. */
+    /** Draw top-overlay elements (tooltip, zoom-box corner frames).
+     *  Must be called after DrawGameUI().  GPU default: no-op. */
     virtual void DrawFrontOverlay() {}
 
-    /** Draw world-depth sprites (layer 2, RT copy) between the world geometry
-     *  pass and the sidebar.  Creature status icons, room flags, floating gold
-     *  text etc. must appear in front of world geometry but BEHIND the sidebar.
-     *  Must be called after DrawBack() and before DrawFrontBase().
-     *  GPU default: no-op. */
+    /** Draw WorldOverlay sprites (depth-tested, RT copy) between the world
+     *  geometry pass and GameUI.  Creature status icons etc. must appear in
+     *  front of world geometry but occluded by walls.  Must be called before
+     *  DrawGameUI().  GPU default: no-op. */
     virtual void DrawWorldSpriteLayerRT() {}
+
+    /** Draw WorldOverlayFlat sprites (NOT depth-tested, RT copy) between the
+     *  world geometry pass and GameUI.  Room flags, floating gold/damage text
+     *  etc. must stay visible above world geometry regardless of nearby walls.
+     *  Must be called before DrawGameUI().  GPU default: no-op. */
+    virtual void DrawWorldOverlayFlatLayerRT() {}
 
     /** Flip game-thread command lists to render-thread read copies.
      *  Called from EndFrame() on the game thread before signalling the
@@ -338,15 +358,29 @@ public:
      *  Called from RendererOpenGL::BeginFrame_GL() once per non-fade-cache frame.
      *  GPU backends store the pointer and append IR commands to it during Submit*().
      *  Pass nullptr to close the window (e.g. in stale-replay / PiP frames).
-     *  Default: no-op (software renderer never uses IR). */
-    virtual void SetUICommandBuffers(UICommandBuffers* /*cmds*/) {}
+     *  Base impl stores the pointer in m_ui_write_cmds and sets ir_active, so
+     *  the CPU Submit* paths append instead of drawing (software IR executor).
+     *  GPU backends override to store in their own way. */
+    virtual void SetUICommandBuffers(UICommandBuffers* cmds);
+
+    /** Replay a UI + text command stream, merged by their shared submission
+     *  `seq`, through the immediate CPU draw path — the software IR executor.
+     *  Called by RendererSoftware::EndFrame after RenderGraph::Flip.  Walks both
+     *  read-side buffers in seq order; UI commands are drawn by re-invoking this
+     *  renderer's immediate Submit* bodies, text commands via
+     *  ITextRenderer::ReplayTextCommand.  No-op on GPU backends (they use their
+     *  own PopulateFromIR/Draw). */
+    virtual void ReplayMergedFromIR(const UICommandBuffers& ui,
+                                    const TextCommandBuffers& text,
+                                    ITextRenderer* text_renderer);
 
     // ── IR (Intermediate Representation) dispatch ──────────────────────────────
 
     /** Populate the render-thread quad/line buffers from the read-side IR command
      *  buffer captured by RenderGraph::Flip().
      *
-     *  Called by RenderGraph::Execute() on the render thread, before DrawBack().
+     *  Called by RenderGraph::Execute() on the render thread, before the
+     *  world-overlay/GameUI draws.
      *  GPU backends override this to translate IR commands into their internal
      *  geometry queues (e.g. m_rt_quads[]).  The base no-op is correct for the
      *  software renderer — it never uses IR.
@@ -355,15 +389,22 @@ public:
      *  @param fs    FrameState snapshot for palette lookup. */
     virtual void PopulateFromIR(const UICommandBuffers& /*cmds*/, const FrameState& /*fs*/) {}
 
-    /** Flush any world-depth sprites (layer 2) submitted via SetWorldDepth() since
+    /** Flush any WorldOverlay sprites submitted via SetWorldOverlay() since
      *  the last call.  Called from the render thread during the world bucket walk,
      *  once per bucket after draw_3d_sprites_for_bucket().
-     *  GPU: flushes m_quads[2] to the GPU and clears it.  CPU default: no-op. */
+     *  GPU: flushes the WorldOverlay quad queue to the GPU and clears it.
+     *  CPU default: no-op. */
     virtual void DrawWorldSprites() {}
 
 protected:
     /** Sprite handle → raw TbSprite* map, used by CPU default implementations. */
     std::unordered_map<SpriteHandle, const struct TbSprite*> m_handle_to_sprite;
+
+    /** IR write target for this frame.  When non-null (software IR executor),
+     *  the CPU Submit* paths append a command instead of drawing immediately;
+     *  null (default) means draw immediately (legacy path).  Set via
+     *  SetUICommandBuffers(); GPU backends manage their own equivalent. */
+    UICommandBuffers* m_ui_write_cmds = nullptr;
 };
 
 /******************************************************************************/

@@ -14,7 +14,6 @@ list(FILTER KEEPERFX_SOURCES_C EXCLUDE REGEX ".*/bflib_network_stub\\.c$")
 
 # SDL2 platform files are superseded by SDL3 equivalents — exclude unconditionally
 list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/platform_gl_sdl2\\.cpp$")
-list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/platform_vk_sdl2\\.cpp$")
 
 # Homebrew-only exclusions (Vita/3DS/Switch SDK-specific)
 list(FILTER KEEPERFX_SOURCES_C   EXCLUDE REGEX ".*/debugscreen/.*\\.c$")
@@ -36,13 +35,6 @@ if(NOT KEEPERFX_RENDERER_OPENGL)
     list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/platform_gl_sdl3\\.cpp$")
     list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/renderer/opengl/.*\\.cpp$")
     list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/renderer/backends/OpenGLSpriteBackend\\.cpp$")
-endif()
-
-# Vulkan renderer exclusion
-if(NOT KEEPERFX_RENDERER_VULKAN)
-    list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/renderer/RendererVulkan\\.cpp$")
-    list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/platform_vk_sdl3\\.cpp$")
-    list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/renderer/vulkan/.*\\.cpp$")
 endif()
 
 # ImGui overlay exclusion
@@ -242,11 +234,6 @@ kfx_link_sdl3_target(keeperfx)
 # Link glad for OpenGL renderer (MSVC/vcpkg path; MinGW deferred to keeperfx-deps)
 if(KEEPERFX_RENDERER_OPENGL AND TARGET glad::glad)
     target_link_libraries(keeperfx PRIVATE glad::glad)
-endif()
-
-# Link Vulkan renderer libs (collected by Dependencies.cmake into KFX_VK_LINK_LIBS)
-if(KEEPERFX_RENDERER_VULKAN AND KFX_VK_LINK_LIBS)
-    target_link_libraries(keeperfx PRIVATE ${KFX_VK_LINK_LIBS})
 endif()
 
 # Link Tracy profiler (FetchContent target — compiled from source, matches CRT)

@@ -318,15 +318,21 @@ TbBool GLTextRenderer::DrawTextResized(int32_t posx, int32_t posy, int32_t units
         return true;
     }
 
-    m_pending.push_back({ posx, posy, units_per_px,
-                          m_justify_window.x, m_justify_window.y, m_justify_window.width,
-                          m_clip_window.x, m_clip_window.y, m_clip_window.width, m_clip_window.height,
-                          lbDisplay.DrawColour, lbDisplay.DrawFlags,
-                          text,
-                          m_font,
-                          m_dbc_font,
-                          RendererGetTextFontGeneration(),
-                          m_dbc_colour0, m_dbc_colour1, m_dbc_enabled });
+    // Write window closed: this call is on the game thread during a blocking
+    // loop. Push to the mutex-guarded fallback queue, NOT m_pending — the
+    // render thread owns m_pending and may be flushing it right now.
+    {
+        std::lock_guard<std::mutex> guard(m_fallback_mutex);
+        m_pending_fallback.push_back({ posx, posy, units_per_px,
+                              m_justify_window.x, m_justify_window.y, m_justify_window.width,
+                              m_clip_window.x, m_clip_window.y, m_clip_window.width, m_clip_window.height,
+                              lbDisplay.DrawColour, lbDisplay.DrawFlags,
+                              text,
+                              m_font,
+                              m_dbc_font,
+                              RendererGetTextFontGeneration(),
+                              m_dbc_colour0, m_dbc_colour1, m_dbc_enabled });
+    }
     return true;
 }
 
@@ -370,6 +376,18 @@ void GLTextRenderer::ExecuteTextFromIR(const TextCommandBuffers& cmds)
                 c.dbc_colour0, c.dbc_colour1,
                 (TbBool)c.dbc_enabled
             });
+        }
+    }
+    // Splice in any game-thread fallback draws accumulated since the last frame
+    // (loading screens, fades). Brief lock: move the queue out, then release.
+    {
+        std::lock_guard<std::mutex> guard(m_fallback_mutex);
+        if (!m_pending_fallback.empty())
+        {
+            m_pending.insert(m_pending.end(),
+                             std::make_move_iterator(m_pending_fallback.begin()),
+                             std::make_move_iterator(m_pending_fallback.end()));
+            m_pending_fallback.clear();
         }
     }
     Draw();
@@ -557,7 +575,11 @@ void GLTextRenderer::Draw()
     // Main menu uses 3 different fonts (36BC0DC8, 36BC0E18, 36BC1368) and without
     // sorting, the code thrashes between atlases hundreds of times per frame.
     // Group DBC draws together so the DBC atlas is bound once per font.
-    std::sort(m_pending.begin(), m_pending.end(),
+    // stable_sort, not sort: draws that share a font compare equal, and an
+    // unstable sort may reorder them differently every frame. Overlapping
+    // draws (shadow/face passes, highlight overdraw) then swap paint order
+    // frame-to-frame, which shows up as text flicker on the frontend menus.
+    std::stable_sort(m_pending.begin(), m_pending.end(),
               [](const DeferredDraw& a, const DeferredDraw& b) {
                   if (a.dbc_enabled != b.dbc_enabled)
                       return (int)a.dbc_enabled < (int)b.dbc_enabled;

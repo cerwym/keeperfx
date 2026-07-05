@@ -56,11 +56,6 @@ else()
     kfx_status("PLATFORM" "ImGui debug/settings overlay disabled")
 endif()
 
-option(KEEPERFX_RENDERER_VULKAN "Enable the Vulkan renderer backend (desktop only)" OFF)
-if(PLATFORM_VITA OR PLATFORM_3DS OR PLATFORM_SWITCH OR PLATFORM_WII_U)
-    set(KEEPERFX_RENDERER_VULKAN OFF CACHE BOOL "Vulkan not available on homebrew" FORCE)
-endif()
-
 option(KFX_DEBUG_MEMORY "Enable KfxAlloc guard zones and per-site tracking" OFF)
 
 # Vita-specific options

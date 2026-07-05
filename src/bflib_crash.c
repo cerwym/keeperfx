@@ -104,13 +104,23 @@ void ctrl_handler(int sig_id)
 
 void LbErrorParachuteInstall(void)
 {
-    // Register ANSI signals (available on all platforms)
     signal(SIGINT,ctrl_handler);
-    signal(SIGILL,ctrl_handler);
+    signal(SIGTERM,ctrl_handler);
+    // SIGABRT is raised by abort()/assert, not by an SEH exception, so the
+    // Win32 exception filter never sees it — handle it via signal() everywhere.
     signal(SIGABRT,ctrl_handler);
+#if !defined(_WIN32)
+    // Hardware faults. On Windows the CRT implements these signals by
+    // installing its own unhandled-exception filter, which REPLACES the
+    // SetUnhandledExceptionFilter(ctrl_handler_w32) parachute from
+    // PlatformWindows::ErrorParachuteInstall() — the one that logs a
+    // symbolized backtrace. Registering them here would reduce every crash
+    // log to a single "Failure signal" line with no stack, so on Windows
+    // these are left to the SEH filter.
+    signal(SIGILL,ctrl_handler);
     signal(SIGFPE,ctrl_handler);
     signal(SIGSEGV,ctrl_handler);
-    signal(SIGTERM,ctrl_handler);
+#endif
     atexit(exit_handler);
     // Platform-specific additional signals (SIGBREAK on Windows, POSIX set on Linux/Vita)
     PlatformManager_ErrorParachuteInstall();

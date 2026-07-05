@@ -10,6 +10,7 @@
 
 #include "bflib_sprite.h"   /* load_spritesheet, free_spritesheet (= load_font, free_font) */
 #include "bflib_basics.h"   /* ERRORLOG, SYNCLOG */
+#include "renderer/RendererManager.h" /* RendererFlushRenderWork */
 #include "kfx/profiling/KfxProfiling.h"
 
 #include "post_inc.h"
@@ -37,7 +38,14 @@ bool FontManager::Load(TbSpriteSheet** slot,
     KFX_ZONE_COLOR("FontMgr::Load", KFX_COLOR_RENDER_CPU);
 
     if (*slot)
+    {
+        // The render thread may still be executing text commands that read
+        // this font's sprite data (GLFontAtlas builds lazily on that thread).
+        // The generation bump below only rejects commands queued after this
+        // point — it cannot protect a frame already mid-execution.
+        RendererFlushRenderWork();
         free_spritesheet(slot); // free_font is #define free_spritesheet
+    }
 
     *slot = load_spritesheet(dat_path, tab_path); // load_font is #define load_spritesheet
     BumpGeneration(); // always — even on failure, stale commands must be dropped
@@ -55,6 +63,7 @@ void FontManager::Free(TbSpriteSheet** slot)
     KFX_ZONE_COLOR("FontMgr::Free", KFX_COLOR_RENDER_CPU);
 
     if (!*slot) return;
+    RendererFlushRenderWork(); // see Load(): render thread may still read this font
     free_spritesheet(slot);
     BumpGeneration();
     SYNCLOG("FontManager: freed slot %p", (void*)slot);
@@ -64,6 +73,7 @@ void FontManager::FreeAll()
 {
     KFX_ZONE_COLOR("FontMgr::FreeAll", KFX_COLOR_RENDER_CPU);
 
+    RendererFlushRenderWork(); // see Load(): render thread may still read these fonts
     for (const auto& e : m_entries) {
         if (*e.slot) {
             free_spritesheet(e.slot);

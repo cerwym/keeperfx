@@ -36,7 +36,6 @@ typedef int RendererType;
 #  define RENDERER_OPENGL   2
 #  define RENDERER_VITA     3
 #  define RENDERER_3DS      4
-#  define RENDERER_VULKAN   5
 #endif
 
 #ifdef __cplusplus
@@ -256,6 +255,13 @@ TbResult RendererWaitVbi(void);
  *  call at any time; no-op if no GL renderer is active. */
 void RendererNotifyTexturesReloaded(void);
 
+/** Block until the render thread has finished executing the current frame.
+ *  Call before freeing any resource the render thread may still be reading
+ *  (fonts, sprite sheets) — the IR generation guards only reject commands
+ *  queued BEFORE a reload; they cannot protect a frame already mid-execution.
+ *  No-op when no renderer is active or the backend is single-threaded. */
+void RendererFlushRenderWork(void);
+
 /** Call immediately after LoadVRes256Data() / LoadMcgaData() to mark GUI dirty,
  *  bump font generation and re-latch the slab texture.
  *  Atlas rebuild is now driven automatically by SpriteSheetManager Load/Free calls. */
@@ -464,32 +470,49 @@ int32_t TextRenderer_StringHeight(int32_t units_per_px, const char* text);
 /* C-callable raw framebuffer blit                                            */
 /******************************************************************************/
 
-/**
- * Blit a RAW8 source image into the renderer's active framebuffer.
- * The destination buffer, scanline, and screen dimensions are supplied by the renderer.
- * Equivalent to copy_raw8_image_buffer(lbDisplay.WScreen, ...) but renderer-routed.
- */
-TbBool RendererBlitRaw8(int dst_width, int dst_height, int dst_x, int dst_y,
-                        const unsigned char* src_buf, int src_width, int src_height);
+/* --------------------------------------------------------------------------
+ * Unified full-screen image present (folds rawblit / transparent / zoom / FMV).
+ * See docs/fe-drawing-standardisation.md. C-callable POD descriptor + int enums.
+ * ------------------------------------------------------------------------- */
+/* format */
+#define PRESENT_FORMAT_INDEXED8     0   /* 8-bit palette indices (wired)          */
+#define PRESENT_FORMAT_RGBA8        1   /* truecolour — reserved trail, not wired */
+/* palette source (Indexed8 only) */
+#define PRESENT_PALETTE_GAME        0   /* live game palette                      */
+#define PRESENT_PALETTE_EMBEDDED    1   /* per-present palette (FMV, 256×BGRA)     */
+#define PRESENT_PALETTE_NONE        2   /* no palette (RGBA8)                     */
+/* kind (GL execution path) */
+#define PRESENT_KIND_OPAQUE         0   /* fills rect; index 0 = colour           */
+#define PRESENT_KIND_TRANSPARENT    1   /* index-0 keyed overlay + tint           */
+#define PRESENT_KIND_LANDVIEW_ZOOM  2   /* fragment-shader zoom                    */
+
+/** C-callable descriptor for RendererPresentImage.  Zero-init then set what you
+ *  need; unused fields (embedded_palette, zoom_*) may stay 0/NULL. */
+struct RendererPresentImageDesc {
+    int format;        /* PRESENT_FORMAT_*   */
+    int palette;       /* PRESENT_PALETTE_*  */
+    int kind;          /* PRESENT_KIND_*     */
+    int dst_x, dst_y, dst_w, dst_h;
+    const unsigned char* src;          /* index or RGBA pixels */
+    int src_w, src_h, src_pitch;       /* src_pitch 0 ⇒ src_w  */
+    const unsigned char* embedded_palette; /* 256×4 BGRA, or NULL */
+    float zoom_center_map_x, zoom_center_map_y;   /* LANDVIEW_ZOOM only */
+    float zoom_screen_cx, zoom_screen_cy, zoom_scale;
+    float layer_z;     /* draw order; lower = earlier */
+};
+
+/** Present a full-screen, non-atlas image (background, parchment, overlay, zoom,
+ *  FMV) through the unified IR path.  Replaces RendererBlitRaw8 /
+ *  RendererSubmitTransparentBlit / RendererSubmitLandviewZoom / SubmitVideoFrame.
+ *  GPU backends queue an IRImagePresentCmd; the software backend runs the
+ *  Indexed8 CPU path.  @return true when accepted. */
+TbBool RendererPresentImage(const struct RendererPresentImageDesc* desc);
 
 /** Notify the renderer that an FMV frame's palette has changed.
  *  Software renderer: applies the 8-bit BGRA palette to the draw surface palette.
- *  GPU renderers: no-op — palette is already embedded in RendererSubmitVideoFrame.
+ *  GPU renderers: no-op — the FMV present carries its own embedded palette.
  *  @param bgra_1024  AVFrame::data[1] — 256 BGRA entries (1024 bytes). */
 void RendererNotifyFmvPalette(const unsigned char* bgra_1024);
-
-/** Submit one FMV video frame through the GPU path.
- *  @param pal8_pixels       8-bit palette-indexed pixel data (AVFrame::data[0]).
- *  @param src_w/src_h       Frame dimensions.
- *  @param src_pitch         Row stride in bytes (may differ from src_w).
- *  @param bgra_palette_1024 256 BGRA entries (AVFrame::data[1], 1024 bytes).
- *  @param dst_x/dst_y/dst_w/dst_h  Pre-computed letterboxed destination rect.
- *  @return true  when GPU path accepted the frame (caller skips copy_to_screen*).
- *          false when GPU unavailable (software renderer) — caller runs CPU path. */
-TbBool RendererSubmitVideoFrame(const unsigned char* pal8_pixels,
-                                int src_w, int src_h, int src_pitch,
-                                const unsigned char* bgra_palette_1024,
-                                int dst_x, int dst_y, int dst_w, int dst_h);
 
 /** Submit the landview zoom frame through the GPU path.
  *  @param src_buf           map_screen — 8-bit indexed pixels (src_w × src_h).
@@ -606,19 +629,29 @@ struct Thing;
 
 void UIRenderer_SubmitSlabSelector(int x1, int y1, int x2, int y2, unsigned char color, float z_depth);
 
-/** Begin a world-depth-tested submission batch.  All UIRenderer_Submit* calls
- *  issued between this and UIRenderer_EndWorldDepth() are tagged with ndc_z
- *  ([-1,1]) and rendered with GL depth-test ON against the tile depth buffer,
- *  so non-spatial world elements (status flowers, room flags, etc.) are
- *  correctly occluded by walls in front of them.
+/** Begin a WorldOverlay submission batch (depth-tested).  All UIRenderer_Submit*
+ *  calls issued between this and UIRenderer_EndWorldOverlay() are tagged with
+ *  ndc_z ([-1,1]) and rendered with GL depth-test ON against the tile depth
+ *  buffer, so the element is correctly occluded by walls in front of it
+ *  (e.g. creature status flowers).
  *  No-op when no renderer is active. */
-void UIRenderer_BeginWorldDepth(float ndc_z);
+void UIRenderer_BeginWorldOverlay(float ndc_z);
 
-/** End the world-depth-tested batch started by UIRenderer_BeginWorldDepth(). */
-void UIRenderer_EndWorldDepth(void);
+/** End the WorldOverlay batch started by UIRenderer_BeginWorldOverlay(). */
+void UIRenderer_EndWorldOverlay(void);
+
+/** Begin a WorldOverlayFlat submission batch (NOT depth-tested).  Same as
+ *  UIRenderer_BeginWorldOverlay() except depth-test stays off, so the element
+ *  stays visible above world geometry regardless of nearby walls or
+ *  placement-preview overlays (e.g. room flags, floating gold/damage text).
+ *  No-op when no renderer is active. */
+void UIRenderer_BeginWorldOverlayFlat(float ndc_z);
+
+/** End the WorldOverlayFlat batch started by UIRenderer_BeginWorldOverlayFlat(). */
+void UIRenderer_EndWorldOverlayFlat(void);
 
 /** Begin a top-overlay batch: subsequent submissions are drawn dead-last,
- *  on top of all other UI and world-depth elements (depth test OFF).
+ *  on top of all other UI and world-overlay elements (depth test OFF).
  *  Use for cursor-driven affordances (slab selector) that must never be
  *  obscured by room flags, status flowers or any other world element. */
 void UIRenderer_BeginTopOverlay(void);
@@ -703,6 +736,34 @@ void UIRenderer_SubmitButtonSpriteFlipped(int32_t x, int32_t y, int units_per_px
  *  Used for floating gold text, HUD numbers, etc. */
 void UIRenderer_SubmitDigitSprites(int32_t center_x, int32_t y, int32_t w, int32_t h, int64_t value);
 
+/** Max background segment sprites in a composite button (widest style needs 4). */
+#define RENDERER_BUTTON_MAX_SEGMENTS 8
+
+/** Composite descriptor for a UI button: a pre-positioned strip of background
+ *  segment sprites plus an optional centered label.  The caller (which owns the
+ *  button's visual style / sprite ids / layout math) fills this in; the label
+ *  window is a pre-measured TextRenderer_SetWindow rect.
+ *
+ *  RendererSubmitButton submits the whole thing as one unit — segments through
+ *  the UI renderer node, label through the text renderer node — so a button is
+ *  drawn by one call at the call site instead of interleaved
+ *  UIRenderer_Submit* / LbText* calls.  This is the composite-element pattern
+ *  (a button as one submission) that generalises to sliders, scroll boxes, etc. */
+typedef struct RendererUIButtonDesc {
+    struct { const struct TbSprite* spr; int32_t x, y; } segments[RENDERER_BUTTON_MAX_SEGMENTS];
+    int32_t segment_count;
+    int32_t units_per_px;
+    unsigned int label_draw_flags;           /**< lbDisplay.DrawFlags applied to the label draw. */
+    const struct TbSpriteSheet* font;         /**< Label font; NULL (or text NULL) ⇒ no label. */
+    const char* text;                         /**< Label text; NULL ⇒ no label. */
+    int32_t text_x, text_y, text_w, text_h;   /**< Label text window (TextRenderer_SetWindow rect). */
+} RendererUIButtonDesc;
+
+/** Submit a composite button (background segment strip + optional label) as one
+ *  unit.  Segments go through the UI renderer node; the label goes through the
+ *  text renderer node — not the LbText* globals. */
+void RendererSubmitButton(const RendererUIButtonDesc* desc);
+
 /** Submit a sprite with explicit pixel dimensions to the GPU batch.
  *  Called by game-logic hooks (draw_status_sprites, draw_engine_number, etc.)
  *  instead of LbSpriteDrawScaled when the GPU renderer is active. */
@@ -758,10 +819,10 @@ TbBool UIRenderer_GetMinimapOpaqueBlackIndex(unsigned char* idx);
 struct TiledSprite;
 void UIRenderer_SubmitTiledSprite(int32_t x, int32_t y, int units_per_px, const struct TiledSprite* bigspr);
 
-void UIRenderer_SetLayer(int layer);
 void UIRenderer_SetGameViewport(int x, int y, int w, int h);
-void UIRenderer_DrawBack(void);
+void UIRenderer_DrawGameUI(void);
 void UIRenderer_DrawWorldSpriteLayerRT(void);
+void UIRenderer_DrawWorldOverlayFlatLayerRT(void);
 void UIRenderer_DrawFront(void);
 void UIRenderer_Draw(void);
 void UIRenderer_Clear(void);
@@ -831,6 +892,21 @@ void RendererPreserveFadeCache(int active);
 
 /** Returns non-zero when fade cache preservation is active. */
 int  RendererIsFadeCachePreserved(void);
+
+/** Force the next EndFrame() to perform a real Flip() even if
+ *  RendererIsFadeCachePreserved() is currently true. One-shot: cleared as
+ *  soon as it's consumed. Call this whenever player->view_type changes in
+ *  a way that affects what GameUI submits (see set_player_mode() in
+ *  player_data.c) so the new (correct) UI content commits to the read-side
+ *  buffer before any subsequent fade-preserve loop starts replaying it --
+ *  without this, a transition that starts a palette fade in the same window
+ *  as a view-type change can get its UI buffer stuck replaying stale
+ *  content (e.g. the sidebar) from before the transition. */
+void RendererForceUIFlipNextFrame(void);
+
+/** Consumes (and clears) the one-shot flag set by RendererForceUIFlipNextFrame().
+ *  Called from EndFrame()'s fade-preserve check; not meant for general use. */
+int  RendererConsumeForceUIFlip(void);
 
 /******************************************************************************/
 #ifdef __cplusplus

@@ -23,12 +23,6 @@
 #  include "renderer/RendererOpenGL.h"
 #  include "renderer/opengl/GLSpriteAtlas.h"
 #endif
-#ifdef RENDERER_VULKAN_ENABLED
-#  include "renderer/RendererVulkan.h"
-#  include "renderer/vulkan/VKCursorLayer.h"
-#  include "renderer/vulkan/VKMapFadePass.h"
-#  include "renderer/vulkan/VKTextRenderer.h"
-#endif
 #ifdef PLATFORM_VITA
 #  include "renderer/RendererVita.h"
 #endif
@@ -101,6 +95,12 @@ void RendererNotifyTexturesReloaded()
 {
     if (s_activeRenderer)
         s_activeRenderer->NotifyTexturesReloaded();
+}
+
+void RendererFlushRenderWork()
+{
+    if (s_activeRenderer)
+        s_activeRenderer->FlushRenderWork();
 }
 
 void RendererNotifySpritesReloaded()
@@ -296,7 +296,20 @@ static SpriteHandle resolve_sprite_handle(const TbSprite* spr)
     }
 #endif
     auto it = s_sprite_to_handle.find(spr);
-    return (it != s_sprite_to_handle.end()) ? it->second : kInvalidSpriteHandle;
+    if (it != s_sprite_to_handle.end())
+        return it->second;
+    // Software: lazily register any not-yet-seen sprite so EVERY valid sprite
+    // resolves.  Only a few sheets are eagerly registered (gui_panel/button/
+    // map_flag); the menu's frontend_sprite and most others are not, so without
+    // this they resolve to kInvalidSpriteHandle and never draw.  Software is
+    // single-threaded here, so mutating the tables is safe.
+    if (s_softwareUIRenderer && spr->Data && spr->SWidth > 0 && spr->SHeight > 0) {
+        SpriteHandle h = s_software_next_handle++;
+        s_sprite_to_handle[spr] = h;
+        s_softwareUIRenderer->RegisterSpriteHandle(h, spr);
+        return h;
+    }
+    return kInvalidSpriteHandle;
 }
 
 SpriteHandle RendererResolveSprite(const TbSprite* spr)
@@ -335,11 +348,6 @@ static IRenderer* create_renderer(RendererType type)
             return new RendererOpenGL();
 #endif
 
-#ifdef RENDERER_VULKAN_ENABLED
-        case RENDERER_VULKAN:
-            return new RendererVulkan();
-#endif
-
 #ifdef PLATFORM_VITA
         case RENDERER_VITA:
             return new RendererVita();
@@ -367,18 +375,6 @@ static IWorldViewRenderer* create_world_view_renderer(RendererType type)
         WARNLOG("RendererManager: GLWorldViewRenderer requested but no RendererOpenGL active");
     }
 #endif
-#ifdef RENDERER_VULKAN_ENABLED
-    if (type == RENDERER_VULKAN)
-    {
-        RendererVulkan* vkr = static_cast<RendererVulkan*>(s_activeRenderer);
-        if (vkr)
-        {
-            IWorldViewRenderer* wr = vkr->CreateVKWorldViewRenderer();
-            if (wr) return wr;
-        }
-        WARNLOG("RendererManager: VKWorldViewRenderer requested but none available");
-    }
-#endif
     (void)type;
     return new SoftwareWorldViewRenderer();
 }
@@ -392,10 +388,6 @@ static IMapFadePass* create_map_fade_pass(RendererType type)
         RendererOpenGL* ogl = static_cast<RendererOpenGL*>(s_activeRenderer);
         if (ogl) return ogl->CreateGLMapFadePass();
     }
-#endif
-#ifdef RENDERER_VULKAN_ENABLED
-    if (type == RENDERER_VULKAN)
-        return new VKMapFadePass();
 #endif
     (void)type;
     return new SoftwareMapFadePass();
@@ -411,10 +403,6 @@ static ITextRenderer* create_text_renderer(RendererType type)
         RendererOpenGL* ogl = static_cast<RendererOpenGL*>(s_activeRenderer);
         if (ogl) renderer = ogl->CreateGLTextRenderer();
     }
-#endif
-#ifdef RENDERER_VULKAN_ENABLED
-    if (type == RENDERER_VULKAN)
-        renderer = new VKTextRenderer();
 #endif
     (void)type;
     if (!renderer)
@@ -435,10 +423,6 @@ static ICursorLayer* create_cursor_layer(RendererType type)
         if (ogl)
             return ogl->CreateGLCursorLayer();
     }
-#endif
-#ifdef RENDERER_VULKAN_ENABLED
-    if (type == RENDERER_VULKAN)
-        return new VKCursorLayer();
 #endif
     (void)type;
     return new SWCursorLayer();
@@ -466,22 +450,6 @@ static IUIRenderer* create_ui_renderer(RendererType type)
             // CreateGLUIRenderer returned nullptr — fall through to software
         }
         WARNLOG("RendererManager: GLUIRenderer requested but no RendererOpenGL active");
-    }
-#endif
-#ifdef RENDERER_VULKAN_ENABLED
-    if (type == RENDERER_VULKAN)
-    {
-        RendererVulkan* vkr = static_cast<RendererVulkan*>(s_activeRenderer);
-        if (vkr)
-        {
-            IUIRenderer* vkui = vkr->CreateVKUIRenderer();
-            if (vkui)
-            {
-                s_softwareUIRenderer = nullptr;
-                return vkui;
-            }
-        }
-        WARNLOG("RendererManager: VKUIRenderer requested but none available");
     }
 #endif
     (void)type;
@@ -682,6 +650,18 @@ void RendererShutdown()
     RenderPass_Shutdown();
 #endif
     g_render_pass_active = 0;
+
+    // Stop and join the render thread FIRST, before deleting any of the
+    // sub-renderer objects below.  The render thread can still be mid-frame
+    // (EndFrame_GL() touching m_textRenderer/m_uiRenderer/m_world_renderer,
+    // which are the exact same objects as s_textRenderer/s_uiRenderer/
+    // s_worldViewRenderer) right up until Shutdown() joins it — deleting
+    // those objects first is a use-after-free race that crashes on exit.
+    if (s_activeRenderer)
+    {
+        s_activeRenderer->Shutdown();
+    }
+
     if (s_cursorLayer)
     {
         delete s_cursorLayer;
@@ -716,7 +696,6 @@ void RendererShutdown()
     }
     if (s_activeRenderer)
     {
-        s_activeRenderer->Shutdown();
         delete s_activeRenderer;
         s_activeRenderer = nullptr;
     }
@@ -1219,34 +1198,32 @@ extern "C" TbBool copy_raw8_image_buffer(
     const int dst_width, const int dst_height, const int spw, const int sph,
     const unsigned char *src_buf, const int src_width, const int src_height);
 
-TbBool RendererBlitRaw8(int dst_width, int dst_height, int dst_x, int dst_y,
-                        const unsigned char* src_buf, int src_width, int src_height)
+TbBool RendererPresentImage(const struct RendererPresentImageDesc* desc)
 {
-    // Prefer the GPU path: in OpenGL mode BlitRaw8GPU queues an opaque palette-decoded
-    // quad so the source image bypasses the staging buffer entirely.
-    // No CPU fallback is permitted when the GPU path is active — returning false
-    // from BlitRaw8GPU in GL mode is a fatal misconfiguration (ERRORLOG inside).
+    if (!desc || !desc->src) return false;
+
+    // GPU path: append an IRImagePresentCmd to the RenderGraph write buffer.
     IRenderer* rend = RendererGetActive();
-    if (rend && rend->BlitRaw8GPU(dst_width, dst_height, dst_x, dst_y,
-                                   src_buf, src_width, src_height))
+    if (rend && rend->PresentImage(desc))
         return true;
 
-    // Software renderer (or GPU path unavailable): write to the CPU framebuffer.
+    // Software backend (or GPU path unavailable): only the classic opaque
+    // game-palette blit has a drop-in CPU equivalent (the WScreen copy). The
+    // other cases (FMV embedded palette, transparent overlay, landview zoom,
+    // RGBA8) return false so the caller runs its own CPU path — e.g. the FMV
+    // copy_to_screen and the landview WScreen fallbacks. These per-backend CPU
+    // paths are what the RenderGraph-unification chapter later deletes.
+    if (desc->format  != PRESENT_FORMAT_INDEXED8 ||
+        desc->kind    != PRESENT_KIND_OPAQUE     ||
+        desc->palette != PRESENT_PALETTE_GAME)
+    {
+        return false;
+    }
     return copy_raw8_image_buffer(
         lbDisplay.WScreen,
         RendererScreenWidth(), RendererScreenHeight(),
-        dst_width, dst_height, dst_x, dst_y,
-        src_buf, src_width, src_height);
-}
-
-TbBool RendererSubmitVideoFrame(const unsigned char* px, int src_w, int src_h, int src_pitch,
-                                const unsigned char* bgra_pal,
-                                int dst_x, int dst_y, int dst_w, int dst_h)
-{
-    IRenderer* rend = RendererGetActive();
-    if (!rend) return false;
-    return rend->SubmitVideoFrame(px, src_w, src_h, src_pitch, bgra_pal,
-                                  dst_x, dst_y, dst_w, dst_h) ? true : false;
+        desc->dst_w, desc->dst_h, desc->dst_x, desc->dst_y,
+        desc->src, desc->src_w, desc->src_h);
 }
 
 void RendererNotifyFmvPalette(const unsigned char* bgra_1024)
@@ -1309,6 +1286,7 @@ void RendererSetScreenTint(float r, float g, float b, float a)
 }
 
 static int g_fade_cache_preserve = 0;
+static int g_force_ui_flip = 0;
 
 void RendererPreserveFadeCache(int active)
 {
@@ -1318,4 +1296,16 @@ void RendererPreserveFadeCache(int active)
 int RendererIsFadeCachePreserved(void)
 {
     return g_fade_cache_preserve;
+}
+
+void RendererForceUIFlipNextFrame(void)
+{
+    g_force_ui_flip = 1;
+}
+
+int RendererConsumeForceUIFlip(void)
+{
+    int v = g_force_ui_flip;
+    g_force_ui_flip = 0;
+    return v;
 }

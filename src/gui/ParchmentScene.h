@@ -41,6 +41,7 @@ public:
     void draw(const DrawContext& ctx, const ClientViewState& view) override;
 
     bool handlesZoomBox() const override { return true; }
+    bool wantsGameUI() const override { return false; }
 
 private:
     std::unique_ptr<ZoomBoxView> m_zoom_box;

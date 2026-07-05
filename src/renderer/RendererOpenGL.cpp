@@ -30,6 +30,9 @@
 #include "renderer/IPostProcessPass.h"
 #include "renderer/RendererHelper.h"
 
+#include <algorithm>   // std::stable_sort (ExecuteImagePresentsFromIR)
+#include <utility>     // std::move
+
 #include "bflib_video.h"    // lbDisplay, RendererGetScreenWidth()/Height
 #include "bflib_sprite.h"   // TbSpriteSheet, get_sprite
 #include "platform.h"       // platform_create_gl_context / swap / destroy
@@ -126,7 +129,8 @@ bool RendererOpenGL::Init()
 {
     RendererThread_RegisterGameThread();
 
-    // Create GL context (SDL2-based on desktop; see platform_gl_sdl2.cpp)
+    // Create GL context
+    // Todo : Renderer OpenGL _requires_ an SDL window. Would be nice if this was opaque and didnt specifically require SDL, Xbox, PS4/5 etc..
     if (!platform_create_gl_context(platform_get_sdl_window()))
     {
         ERRORLOG("RendererOpenGL::Init: failed to create GL context");
@@ -377,33 +381,11 @@ bool RendererOpenGL::Init()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glBindTexture(GL_TEXTURE_2D, 0);
 
-    // ── FMV video-frame GPU blit — reuses rawblit shader; own VAO/VBO/textures. ──
-    glGenVertexArrays(1, &m_fmv_vao);
-    glGenBuffers(1, &m_fmv_vbo);
-    KFX_GL_LABEL(GL_VERTEX_ARRAY, m_fmv_vao, "FmvBlit/QuadVAO");
-    KFX_GL_LABEL(GL_BUFFER, m_fmv_vbo, "FmvBlit/QuadVBO");
-    glBindVertexArray(m_fmv_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_fmv_vbo);
-    glBufferData(GL_ARRAY_BUFFER, 6 * 4 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-    glBindVertexArray(0);
-
-    // Per-frame pixel index texture (R8, GL_NEAREST — palette indices must not interpolate).
-    glGenTextures(1, &m_fmv_index_tex);
-    KFX_GL_LABEL(GL_TEXTURE, m_fmv_index_tex, "FmvBlit/IndexTex");
-    glBindTexture(GL_TEXTURE_2D, m_fmv_index_tex);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    // Per-video palette texture (256×1 RGBA8; GL_BGRA upload swaps B/R automatically).
+    // ── FMV embedded palette texture (256×1 RGBA8; GL_BGRA upload swaps B/R). ──
+    // The FMV frame indices reuse the rawblit index texture/VAO via
+    // DrawIndexed8OpaquePresent; only the per-frame palette is FMV-specific.
     glGenTextures(1, &m_fmv_palette_tex);
-    KFX_GL_LABEL(GL_TEXTURE, m_fmv_palette_tex, "FmvBlit/PaletteTex");
+    KFX_GL_LABEL(GL_TEXTURE, m_fmv_palette_tex, "PresentBlit/EmbeddedPaletteTex");
     glBindTexture(GL_TEXTURE_2D, m_fmv_palette_tex);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
@@ -566,14 +548,6 @@ void RendererOpenGL::Shutdown()
         platform_gl_acquire_context();
     }
 
-    // Clear cached rawblit data to prevent dangling pointers across screen mode changes.
-    // The cached command may contain a pointer to a frontend image buffer that becomes
-    // invalid when the renderer is shut down/reinitialized during screen mode transitions.
-    m_rawblit_cached = false;
-    m_rawblit_pending = false;
-    m_rawblit_cached_cmd = {};
-    m_rawblit_cmd = {};
-
     delete m_tile_atlas;
     m_tile_atlas = nullptr;
 
@@ -595,9 +569,6 @@ void RendererOpenGL::Shutdown()
     if (m_rawblit_vbo)    { glDeleteBuffers(1, &m_rawblit_vbo);           m_rawblit_vbo = 0; }
     if (m_rawblit_tex)    { glDeleteTextures(1, &m_rawblit_tex);          m_rawblit_tex = 0; }
     if (m_overhead_map_tex) { glDeleteTextures(1, &m_overhead_map_tex);   m_overhead_map_tex = 0; }
-    if (m_fmv_vao)          { glDeleteVertexArrays(1, &m_fmv_vao);        m_fmv_vao = 0; }
-    if (m_fmv_vbo)          { glDeleteBuffers(1, &m_fmv_vbo);             m_fmv_vbo = 0; }
-    if (m_fmv_index_tex)    { glDeleteTextures(1, &m_fmv_index_tex);      m_fmv_index_tex = 0; }
     if (m_fmv_palette_tex)  { glDeleteTextures(1, &m_fmv_palette_tex);    m_fmv_palette_tex = 0; }
     if (m_zoom_shader)      { glDeleteProgram(m_zoom_shader);              m_zoom_shader = 0; }
     if (m_zoom_tex)         { glDeleteTextures(1, &m_zoom_tex);            m_zoom_tex = 0; }
@@ -632,12 +603,12 @@ void RendererOpenGL::Shutdown()
     if (m_swipe_vao)    { glDeleteVertexArrays(1, &m_swipe_vao); m_swipe_vao = 0; }
     if (m_swipe_vbo)    { glDeleteBuffers(1, &m_swipe_vbo); m_swipe_vbo = 0; }
 
+    #ifdef KEEPERFX_IMGUI_ENABLED
     DebugOverlay_Shutdown();
+    #endif
+
     platform_destroy_gl_context();
 }
-
-// (RenderThreadProc has been replaced by lambdas passed to RenderThreadManager::Start()
-//  in EndFrame().  See RendererOpenGL::EndFrame() below.)
 
 void RendererOpenGL::ClearScreen(uint8_t colour_index)
 {
@@ -649,12 +620,6 @@ bool RendererOpenGL::BeginFrame()
     // Idempotent: multiple RendererLockScreen calls per frame must not clear the UI queue again.
     if (m_frame_begun) return true;
 
-    // If a deferred sprite-atlas rebuild is pending, drain it now — before any
-    // sprite handles are issued for this frame — so the generation bump is invisible
-    // to the game code that follows.  WaitForCompletion() ensures the render thread
-    // has finished consuming the previous frame's IR (old-generation handles) before
-    // Rebuild() increments the generation.  This is the only safe window: after the
-    // render thread retires the old atlas, and before new handles are stamped.
     if (RendererHasDeferredAtlasRebuild())
     {
         m_render_thread.WaitForCompletion();
@@ -674,17 +639,6 @@ bool RendererOpenGL::BeginFrame()
         m_screenH = (int)RendererGetScreenHeight();
     }
 
-    // NOTE: sub-renderer SetScreenSize() is NOT called here (game thread).
-    // Pushing dimensions from BeginFrame races the render thread reading them in
-    // EndFrame_GL().  Screen size is snapshotted into m_rt_frame_state.screen_w/h
-    // in FlipBuffers() and pushed to sub-renderers at the start of EndFrame_GL()
-    // where the render thread has exclusive access.
-
-    // Lazy-retry resources that depend on level data loaded after Init().
-    // After the first EndFrame() the GL context lives on the render thread, so
-    // we cannot call init_tile_atlas() here (it issues glGenTextures / glTexImage3D).
-    // Set the pending flag and let EndFrame_GL() handle the GPU work on the
-    // thread that owns the context.
     if (m_tile_atlas && !m_tile_atlas->IsInitialized())
         m_tile_atlas_init_pending = true;
 
@@ -707,15 +661,6 @@ bool RendererOpenGL::BeginFrame()
         }
     }
 
-    // NOTE: RenderPass_BeginFrame() is NOT called here — it resets OpenGLSpriteBackend
-    // state (m_quads, m_remap_cache, etc.) that is exclusively written and read by the
-    // render thread during draw_3d_sprites_for_bucket() / DrawNow().  Calling it here
-    // (game thread) would race with the render thread still processing the previous
-    // frame's sprites.  It is called at the top of EndFrame_GL() instead.
-    //
-    // Don't clear UI/cursor queues during palette fades — RendererPresentFrame()
-    // is called in a tight loop with no draw_gui() in between.  The queues keep
-    // their content so the sidebar stays visible while the palette darkens.
     if (!RendererIsFadeCachePreserved())
     {
         UIRenderer_Clear();
@@ -733,31 +678,17 @@ bool RendererOpenGL::BeginFrame()
         if (m_world_renderer) m_world_renderer->SetWorldCommandBuffers(&m_render_graph.GetWorldBuffers());
     }
 
-    // Text write window is always opened — text commands are freshly submitted
-    // every frame.  During fade-preserve frames the submitted text goes to the
-    // write buffer (safe), and UpdateFrameState() leaves the read-side text IR
-    // unchanged so the render thread re-displays the preserved sidebar text.
-    // Without this, any LbTextDrawResized() call during a fade-preserve frame
-    // would append to m_pending on the game thread while the render thread
-    // concurrently reads m_pending in ExecuteTextFromIR() — a data race.
-    if (m_textRenderer) m_textRenderer->SetTextCommandBuffers(&m_render_graph.GetTextBuffers());
+    if (m_textRenderer) {
+        m_textRenderer->SetTextCommandBuffers(&m_render_graph.GetTextBuffers());
+    }
+
     return true;
 }
 
 void RendererOpenGL::EndFrame()
 {
-    // Phase 3C: wait for the PREVIOUS frame's render to complete before we
-    // flip the command buffers for the new frame.  m_work_done starts true
-    // so the very first call passes through immediately (no prior frame).
     m_render_thread.WaitForCompletion();
 
-    // Drain any deferred sprite-atlas rebuild not already handled by BeginFrame().
-    // BeginFrame() now drains when s_rebuild_deferred is set (the common load-time
-    // case), so this call is a no-op for the normal path.  It remains here as a
-    // fallback for the rare case where RendererNotifySpritesReloaded() is called
-    // mid-frame (after BeginFrame() but before EndFrame()); in that scenario the
-    // rebuild fires here and causes a one-frame sprite drop — acceptable for an
-    // in-flight reload that does not happen during normal gameplay.
     RendererDrainDeferredAtlasRebuild();
 
     // Lazily start the render thread on the first EndFrame() call.
@@ -800,36 +731,13 @@ void RendererOpenGL::EndFrame()
     // eliminate the resulting data races on std::vector and struct fields.
     m_rt_pip_queue           = std::move(m_pip_queue);
     m_rt_overhead_map_cmds   = std::move(m_overhead_map_cmds);
-    m_rt_rawblit_pending     = m_rawblit_pending;
-    m_rt_rawblit_cmd         = m_rawblit_cmd;
-    m_rt_rawblit_cached      = m_rawblit_cached.load(std::memory_order_relaxed);
-    m_rt_rawblit_cached_cmd  = m_rawblit_cached_cmd;
-    m_rawblit_pending        = false;
     m_rt_clearColourIndex    = m_clearColourIndex;
     m_clearColourIndex       = 0;
 
-    // Snapshot the four command categories that were previously missing from
-    // FlipBuffers() and therefore raced between the game thread and EndFrame_GL().
-    // FMV: pixel/pal buffers are already owned (copied in SubmitVideoFrame); move.
-    m_rt_fmv_pending  = m_fmv_pending;
-    m_rt_fmv_px_buf   = std::move(m_fmv_px_buf);
-    m_rt_fmv_pal_buf  = std::move(m_fmv_pal_buf);
-    m_rt_fmv_cmd      = m_fmv_cmd;
-    m_rt_fmv_cmd.px       = m_rt_fmv_px_buf.empty()  ? nullptr : m_rt_fmv_px_buf.data();
-    m_rt_fmv_cmd.bgra_pal = m_rt_fmv_pal_buf.empty() ? nullptr : m_rt_fmv_pal_buf.data();
-    m_fmv_pending     = false;
-    m_fmv_cmd         = {};
-    // Landview zoom: source buffer is owned (copied in SubmitLandviewZoom); move.
-    m_rt_zoom_pending  = m_zoom_pending;
-    m_rt_zoom_src_buf  = std::move(m_zoom_src_buf);
-    m_rt_zoom_cmd      = m_zoom_cmd;
-    m_rt_zoom_cmd.src_buf = m_rt_zoom_src_buf.empty() ? nullptr : m_rt_zoom_src_buf.data();
-    m_zoom_pending     = false;
-    m_zoom_cmd         = {};
-    // Transparent blit: buffer is already owned (copied in SubmitTransparentBlit).
-    m_rt_transparent_blit_pending = m_transparent_blit_pending;
-    m_rt_transparent_blit_buf     = std::move(m_transparent_blit_buf);
-    m_transparent_blit_pending    = false;
+    // (rawblit / FMV / landview-zoom / transparent-blit are carried by the
+    // unified image-present IR now — RenderGraph::Flip handles their double
+    // buffering, so no separate snapshot is needed here.)
+
     // Zoom-box tile quads + background fill rects.
     m_rt_zoom_tile_cmds   = std::move(m_zoom_tile_cmds);
     m_rt_zoom_box_bg_cmds = std::move(m_zoom_box_bg_cmds);
@@ -875,11 +783,13 @@ void RendererOpenGL::EndFrame()
                 wui.cursor_pointers.Size(), wui.cursor_hands.Size());
     }
 
-    if (RendererIsFadeCachePreserved())
+    // RendererForceUIFlipNextFrame() is a one-shot override: even mid palette-fade,
+    // a view-type change that affects what GameUI submits (see set_player_mode())
+    // must commit a real flip once, or the read-side buffer can get stuck replaying
+    // stale UI content (e.g. the sidebar) from before the transition for the rest
+    // of the fade-preserve window.
+    if (RendererIsFadeCachePreserved() && !RendererConsumeForceUIFlip())
     {
-        // Palette-fade loop: preserve the render thread's read-side IR unchanged
-        // so it re-draws the same UI/world geometry as the last real frame.
-        // Only update FrameState so palette darkening / tint changes are visible.
         SYNCDBG(1, "EndFrame: UpdateFrameState (no flip) — preserving previous UI");
         m_render_graph.UpdateFrameState(m_rt_frame_state);
     }
@@ -897,8 +807,6 @@ void RendererOpenGL::EndFrame()
 
         if (ui_close) ui_close->FlipBuffers();
 
-        // Flip IR command buffers: atomically swap write↔read and latch the
-        // FrameState snapshot so the render thread reads from stable copies.
         m_render_graph.Flip(m_rt_frame_state);
     }
 
@@ -917,6 +825,9 @@ void RendererOpenGL::FlushRenderWork()
 
 void RendererOpenGL::EndFrame_GL()
 {
+    // Reset the per-frame "presents captured into the map-fade FBO" flag; set by
+    // FlushSceneToFBO() during a parchment fade so the main present pass skips them.
+    m_rt_presents_captured = false;
 #ifdef KEEPERFX_IMGUI_ENABLED
     if (m_imgui_init_pending)
     {
@@ -940,11 +851,6 @@ void RendererOpenGL::EndFrame_GL()
         m_tile_atlas_init_pending = false; // already initialized or atlas missing
     }
 
-    // Deferred fade-table GPU init.
-    // RendererNotifyGameTablesReady() is always called after the first EndFrame()
-    // (loading-screen frames fire before setup_stuff()), so the GL context is
-    // already on the render thread when it runs.  The actual texture creation
-    // must happen here where the context is current.
     if (m_fade_table_pending)
     {
         m_fade_table_pending = false;
@@ -977,9 +883,6 @@ void RendererOpenGL::EndFrame_GL()
         m_anim_tiles_dirty = false;
     }
 
-    // Upload palette unconditionally — it may have changed this frame via LbPaletteSet.
-    // Palette switches happen rarely (level load, possession), so the overhead of a
-    // 1 KB CPU expand + glTexSubImage2D is negligible compared to other frame work.
     upload_palette_texture();
     SYNCDBG(0, "EndFrame_GL step 2: palette upload done");
 
@@ -1009,7 +912,7 @@ void RendererOpenGL::EndFrame_GL()
     // ── RenderGraph dispatch ──────────────────────────────────────────────────
     // Execute() performs the first real dispatch step:
     //   • UI: calls ui->PopulateFromIR() to fill m_rt_quads[]/m_rt_lines[] from
-    //     the IR snapshot.  No GL draws here; DrawBack/DrawFront below issue them.
+    //     the IR snapshot.  No GL draws here; the Draw*() calls below issue them.
     //   • World + Text: dispatched explicitly below (ordering constraints require
     //     world inside the lens-FBO bracket; text after DrawFrontOverlay).
     m_render_graph.Execute(GetCapabilities(),
@@ -1050,9 +953,6 @@ void RendererOpenGL::EndFrame_GL()
         }
     }
 
-    // Render GPU world geometry + depth-correct sprites.
-    // Runs BEFORE the staging buffer upload so both layers composite correctly.
-    // When m_lens_active, output goes to m_lens_scene_fbo instead of default FB.
     if (m_world_renderer)
     {
         m_world_renderer->ExecuteWorldFromIR(m_render_graph.GetWorldBuffersRT());
@@ -1073,10 +973,11 @@ void RendererOpenGL::EndFrame_GL()
     }
 
     // Map-fade GPU compose pass — active during PVM_ParchFadeIn / ParchFadeOut.
-    // Must run HERE — after ExecuteWorldFromIR() (so the dungeon view is already
-    // on the default framebuffer for glBlitFramebuffer capture) but BEFORE the
-    // rawblit/overhead map draws (so those queues are still available for the
-    // parchment FBO capture inside CaptureAndUploadFrames).
+    // Must run HERE — after ExecuteWorldFromIR() but BEFORE the rawblit/overhead
+    // map draws (so those queues are still available for the parchment FBO
+    // capture inside CaptureParchmentFrame()). The world-view capture (which
+    // needs GameUI drawn too) is deferred separately — see
+    // CaptureWorldFrameIfPending(), called after DrawGameUI() further down.
     // IRMapFadeCmd is written by GLMapFadePass::FlushToRenderGraph() on the
     // game thread and consumed from the render-side post-process buffers here.
     {
@@ -1088,101 +989,17 @@ void RendererOpenGL::EndFrame_GL()
         }
     }
 
-    // m_rt_quads[]/m_rt_lines[] have been populated by Execute() above via
-    // ui->PopulateFromIR().  DrawBack()/DrawFront() below issue the actual draws.
-
-    // Draw layer-0 (back) GPU UI elements — sidebar background panels.
-    UIRenderer_DrawBack();
-
-    // Draw layer-2 world-depth sprites (creature status icons, room flags,
-    // floating gold text) BEFORE the sidebar.  These must be depth-tested
-    // against world geometry but must not appear over the sidebar UI.
     UIRenderer_DrawWorldSpriteLayerRT();
+    UIRenderer_DrawWorldOverlayFlatLayerRT();
 
-    // Raw-image GPU blit — frontend background images (legal, loading, menu bg,
-    // map bg, torture, etc.).  Queued by BlitRaw8GPU() during the frame; drawn
-    // here as an opaque quad so that the staging-blit overlay (which composites
-    // any CPU-drawn menu sprites above index 0) lands on top.
-    // During blocking palette-fade loops (ProperFadePalette / fade_in / fade_out),
-    // the game calls RendererPresentFrame repeatedly without issuing any new draw commands.
-    // Re-issue the last frontend rawblit with the freshly-uploaded (darkened) palette
-    // so the fade is visible in GPU mode.  Only kicks in when nothing new was queued
-    // AND the fade-cache preserve flag is active (set by ProperFadePalette).
-    if (!m_rt_rawblit_pending && m_rt_rawblit_cached && RendererIsFadeCachePreserved())
-        m_rt_rawblit_pending = true, m_rt_rawblit_cmd = m_rt_rawblit_cached_cmd;
-
-    if (m_rt_rawblit_pending)
-    {
-        const RawBlitCmd& cmd = m_rt_rawblit_cmd;
-
-        // Ensure full-screen viewport and no depth interaction.
-        // UIRenderer_DrawBack() returns early (no quads) on pure-frontend frames
-        // without disabling depth test, so we must guard here explicitly.
-        glViewport(0, 0, m_rt_frame_state.screen_w, m_rt_frame_state.screen_h);
-        glDisable(GL_DEPTH_TEST);
-        glDepthMask(GL_FALSE);
-
-        // Upload source image to the raw-blit index texture.
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, m_rawblit_tex);
-        if (cmd.src_w != m_rawblit_tex_w || cmd.src_h != m_rawblit_tex_h)
-        {
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, cmd.src_w, cmd.src_h,
-                         0, GL_RED, GL_UNSIGNED_BYTE, cmd.src_buf);
-            m_rawblit_tex_w = cmd.src_w;
-            m_rawblit_tex_h = cmd.src_h;
-        }
-        else
-        {
-            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, cmd.src_w, cmd.src_h,
-                            GL_RED, GL_UNSIGNED_BYTE, cmd.src_buf);
-        }
-
-        // m_texPalette is always bound to unit 1; rebind explicitly (upload_palette_texture
-        // restores active unit to GL_TEXTURE0 on exit, but the binding on unit 1 persists).
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, m_texPalette);
-
-        // Build a rect quad in NDC covering [dst_x..dst_x+dst_w] x [dst_y..dst_y+dst_h].
-        // Screen-space: y increases downward; NDC: y increases upward.
-        const float sw = (float)m_rt_frame_state.screen_w;
-        const float sh = (float)m_rt_frame_state.screen_h;
-        Vec2f ndc0 = ScreenToNDC((float)cmd.dst_x,              (float)cmd.dst_y,              sw, sh);
-        Vec2f ndc1 = ScreenToNDC((float)(cmd.dst_x + cmd.dst_w), (float)(cmd.dst_y + cmd.dst_h), sw, sh);
-
-        // Two triangles; UV (0,0) = top-left, (1,1) = bottom-right.
-        const float verts[6][4] = {
-            { ndc0.x, ndc1.y,  0.f, 1.f },  // bottom-left
-            { ndc1.x, ndc1.y,  1.f, 1.f },  // bottom-right
-            { ndc1.x, ndc0.y,  1.f, 0.f },  // top-right
-            { ndc0.x, ndc1.y,  0.f, 1.f },  // bottom-left
-            { ndc1.x, ndc0.y,  1.f, 0.f },  // top-right
-            { ndc0.x, ndc0.y,  0.f, 0.f },  // top-left
-        };
-        glBindVertexArray(m_rawblit_vao);
-        glBindBuffer(GL_ARRAY_BUFFER, m_rawblit_vbo);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(verts), nullptr, GL_DYNAMIC_DRAW);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(verts), verts);
-
-        glDisable(GL_BLEND);
-        glUseProgram(m_rawblit_shader);
-        glDrawArrays(GL_TRIANGLES, 0, 6);
-        glBindVertexArray(0);
-
-        // Restore depth mask and reset active texture unit to 0 so the
-        // subsequent staging blit and other passes start from a clean state.
-        glDepthMask(GL_TRUE);
-        glActiveTexture(GL_TEXTURE0);
-
-        m_rt_rawblit_pending = false;
-    }
-    else if (!RendererIsFadeCachePreserved())
-    {
-        // No rawblit submitted this frame and no palette-fade in progress.
-        // Clear the stale cache so old menu backgrounds don't persist after
-        // transitioning from frontend to in-game.
-        m_rawblit_cached = false;
-    }
+    // Unified image-present IR (opaque backgrounds/parchment; transparent+zoom
+    // fold in step 2). Composites here — after world/overlay, before the overhead
+    // map — matching where rawblit drew. Fade preservation comes from the skipped
+    // Flip (read-side persists), so no separate rawblit cache is needed.
+    // Skipped when FlushSceneToFBO() already captured them into the map-fade FBO
+    // (parchment fade) — the fade composite draws instead of the raw present.
+    if (!m_rt_presents_captured)
+        ExecuteImagePresentsFromIR(m_render_graph.GetImagePresentBuffersRT());
 
     // Overhead map tile colour GPU blit — drawn after the parchment background
     // rawblit and before the staging overlay so tile colours sit below CPU sprites
@@ -1311,196 +1128,26 @@ void RendererOpenGL::EndFrame_GL()
 
         m_rt_pip_queue.clear();
     }
-    // Uses the same palette-indexed quad shader as rawblit, but with a per-video-frame
-    // palette texture on unit 1 instead of the game palette.
-    // The glClear() at the top of EndFrame already fills letterbox areas with black.
-    if (m_rt_fmv_pending)
-    {
-        const FmvBlitCmd& cmd = m_rt_fmv_cmd;
+    // (FMV, landview-zoom, and transparent-blit are folded into the unified
+    // image-present IR — executed by ExecuteImagePresentsFromIR above.)
 
-        glViewport(0, 0, m_rt_frame_state.screen_w, m_rt_frame_state.screen_h);
-        glDisable(GL_DEPTH_TEST);
-        glDepthMask(GL_FALSE);
-
-        // Upload palette-index data. Use GL_UNPACK_ROW_LENGTH so FFmpeg frames
-        // with linesize padding are handled correctly.
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, m_fmv_index_tex);
-        glPixelStorei(GL_UNPACK_ROW_LENGTH, cmd.src_pitch);
-        if (cmd.src_w != m_fmv_index_tex_w || cmd.src_h != m_fmv_index_tex_h)
-        {
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, cmd.src_w, cmd.src_h,
-                         0, GL_RED, GL_UNSIGNED_BYTE, cmd.px);
-            m_fmv_index_tex_w = cmd.src_w;
-            m_fmv_index_tex_h = cmd.src_h;
-        }
-        else
-        {
-            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, cmd.src_w, cmd.src_h,
-                            GL_RED, GL_UNSIGNED_BYTE, cmd.px);
-        }
-        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-
-        // Upload per-video palette (BGRA data; GL swaps B/R into RGBA storage).
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, m_fmv_palette_tex);
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 256, 1, GL_BGRA, GL_UNSIGNED_BYTE, cmd.bgra_pal);
-
-        // Build NDC rect for the pre-computed letterboxed/scaled destination.
-        const float sw = (float)m_rt_frame_state.screen_w;
-        const float sh = (float)m_rt_frame_state.screen_h;
-        Vec2f ndc0 = ScreenToNDC((float)cmd.dst_x,              (float)cmd.dst_y,              sw, sh);
-        Vec2f ndc1 = ScreenToNDC((float)(cmd.dst_x + cmd.dst_w), (float)(cmd.dst_y + cmd.dst_h), sw, sh);
-        const float verts[6][4] = {
-            { ndc0.x, ndc1.y,  0.f, 1.f },
-            { ndc1.x, ndc1.y,  1.f, 1.f },
-            { ndc1.x, ndc0.y,  1.f, 0.f },
-            { ndc0.x, ndc1.y,  0.f, 1.f },
-            { ndc1.x, ndc0.y,  1.f, 0.f },
-            { ndc0.x, ndc0.y,  0.f, 0.f },
-        };
-        glBindVertexArray(m_fmv_vao);
-        glBindBuffer(GL_ARRAY_BUFFER, m_fmv_vbo);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(verts), nullptr, GL_DYNAMIC_DRAW);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(verts), verts);
-        glDisable(GL_BLEND);
-        glUseProgram(m_rawblit_shader);
-        glDrawArrays(GL_TRIANGLES, 0, 6);
-        glBindVertexArray(0);
-
-        glDepthMask(GL_TRUE);
-        glActiveTexture(GL_TEXTURE0);
-        m_rt_fmv_pending = false;
-    }
-
-    // Landview zoom GPU blit — campaign-map zoom transition.
-    // Draws map_screen as a fullscreen opaque quad; the fragment shader computes
-    // each pixel's source texel from gl_FragCoord + per-frame zoom uniforms,
-    // exactly matching frontzoom_to_point() arithmetic.
-    // The transparent overlay (m_rt_transparent_blit_pending) composites compressed_window_draw()
-    // output on top with index-0-transparent blending after this pass.
-    if (m_rt_zoom_pending)
-    {
-        const LandviewZoomCmd& cmd = m_rt_zoom_cmd;
-
-        glViewport(0, 0, m_rt_frame_state.screen_w, m_rt_frame_state.screen_h);
-        glDisable(GL_DEPTH_TEST);
-        glDepthMask(GL_FALSE);
-
-        // Upload map_screen.  Use TexSubImage when dimensions are unchanged.
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, m_zoom_tex);
-        if (cmd.src_w != m_zoom_tex_w || cmd.src_h != m_zoom_tex_h)
-        {
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, cmd.src_w, cmd.src_h,
-                         0, GL_RED, GL_UNSIGNED_BYTE, cmd.src_buf);
-            m_zoom_tex_w = cmd.src_w;
-            m_zoom_tex_h = cmd.src_h;
-        }
-        else
-        {
-            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, cmd.src_w, cmd.src_h,
-                            GL_RED, GL_UNSIGNED_BYTE, cmd.src_buf);
-        }
-
-        // Game palette on unit 1.
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, m_texPalette);
-
-        // Draw a fullscreen NDC quad; position/UV matches k_quadVerts convention.
-        // The zoom fragment shader ignores v_uv and uses gl_FragCoord instead.
-        static const float fs_quad[6][4] = {
-            {-1.f, -1.f,  0.f, 1.f},
-            { 1.f, -1.f,  1.f, 1.f},
-            { 1.f,  1.f,  1.f, 0.f},
-            {-1.f, -1.f,  0.f, 1.f},
-            { 1.f,  1.f,  1.f, 0.f},
-            {-1.f,  1.f,  0.f, 0.f},
-        };
-        // Reuse m_rawblit_vao — same VAO layout; zoom and rawblit are mutually
-        // exclusive within a frame (only one land-view draw path fires per frame).
-        glBindVertexArray(m_rawblit_vao);
-        glBindBuffer(GL_ARRAY_BUFFER, m_rawblit_vbo);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(fs_quad), nullptr, GL_DYNAMIC_DRAW);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(fs_quad), fs_quad);
-
-        glUseProgram(m_zoom_shader);
-        glUniform2f(m_zoom_u_center_map, cmd.center_map_x, cmd.center_map_y);
-        glUniform2f(m_zoom_u_screen_ctr, cmd.screen_cx,    cmd.screen_cy);
-        glUniform1f(m_zoom_u_scale,      cmd.scale);
-        glUniform2f(m_zoom_u_inv_map_sz, 1.0f / (float)cmd.src_w,
-                                         1.0f / (float)cmd.src_h);
-        glUniform1f(m_zoom_u_screen_h,   (float)m_rt_frame_state.screen_h);
-
-        glDisable(GL_BLEND);
-        glDrawArrays(GL_TRIANGLES, 0, 6);
-        glBindVertexArray(0);
-
-        glDepthMask(GL_TRUE);
-        glActiveTexture(GL_TEXTURE0);
-        m_rt_zoom_pending = false;
-    }
-
-    // Transparent overlay blit — composites SubmitTransparentBlit() data over the GPU
-    // frame with index-0 transparency.  Used for the landview window frame.
-    // Upload the CPU buffer to m_texIndex here on the render thread.
-    if (m_rt_transparent_blit_pending)
-    {
-        if (!m_rt_transparent_blit_buf.empty())
-        {
-            glBindTexture(GL_TEXTURE_2D, m_texIndex);
-            const int tbw = m_rt_frame_state.screen_w;
-            const int tbh = m_rt_frame_state.screen_h;
-            if (tbw != m_texIndex_w || tbh != m_texIndex_h)
-            {
-                glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, tbw, tbh, 0, GL_RED, GL_UNSIGNED_BYTE,
-                             m_rt_transparent_blit_buf.data());
-                m_texIndex_w = tbw;
-                m_texIndex_h = tbh;
-            }
-            else
-            {
-                glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, tbw, tbh,
-                                GL_RED, GL_UNSIGNED_BYTE, m_rt_transparent_blit_buf.data());
-            }
-            glBindTexture(GL_TEXTURE_2D, 0);
-            m_rt_transparent_blit_buf.clear();
-        }
-
-        glViewport(0, 0, m_rt_frame_state.screen_w, m_rt_frame_state.screen_h);
-        glDisable(GL_DEPTH_TEST);
-        glDepthMask(GL_FALSE);
-
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, m_texIndex);
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, m_texPalette);
-
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        glUseProgram(m_shader);
-        glUniform1f(m_uTintFactor, m_rt_frame_state.possession_tint);
-        glBindVertexArray(m_vao);
-        glDrawArrays(GL_TRIANGLES, 0, 6);
-        glBindVertexArray(0);
-        glDisable(GL_BLEND);
-        glDepthMask(GL_TRUE);
-        glActiveTexture(GL_TEXTURE0);
-        m_rt_transparent_blit_pending = false;
-    }
-
-    // Draw layer-1 (front) GPU UI elements first.
-    // Layer-1 flush: FBO quads (PiP), atlas sprites, minimap — everything except
-    // layer-2/3 (world-depth overlays, top-overlay tooltip/zoom-box corners).
     {
         IUIRenderer* ui = RendererGetUIRenderer();
-        if (ui) ui->DrawFrontBase();
+        if (ui) ui->DrawGameUI();
     }
 
+    // If the map-fade transition flagged a world-view capture as pending
+    // (GLMapFadePass::ExecuteFromIR(), earlier this frame), take it now —
+    // after GameUI so the sidebar is part of the captured snapshot and
+    // crossfades with the rest of the view instead of popping in/out once
+    // the transition completes. No-op on the (common) frames with no
+    // capture pending.
+    if (auto* mfp = RendererGetMapFadePass()) mfp->CaptureWorldFrameIfPending();
+
     // ── Zoom-box tile quads (ZBM_OVERHEAD with actual tile textures) ───────
-    // Drawn AFTER layer-1 sprites so the tile render lands on top of all
+    // Drawn AFTER GameUI so the tile render lands on top of all
     // parchment-map UI sprites (overhead creatures, room icons, call-to-arms).
-    // The layer-3 top-overlay (tooltip, corner frames) will follow in
+    // The top-overlay (tooltip, corner frames) will follow in
     // DrawFrontOverlay() below, so they are unaffected.
     // Step 1: fill each zoom box region with solid black so unrevealed tiles
     //         and skipped rock tiles appear black rather than showing whatever
@@ -1619,8 +1266,8 @@ void RendererOpenGL::EndFrame_GL()
     }
     m_rt_zoom_tile_cmds.clear();
 
-    // Layer-2/3 overlay: world-depth sprites and top-overlay (tooltip, corner frames).
-    // Software UIRenderer: DrawFrontBase() (above) already drew everything, so
+    // Top-overlay (tooltip, corner frames), drawn dead-last among sprite layers.
+    // Software UIRenderer: DrawGameUI() (above) already drew everything, so
     // DrawFrontOverlay() is a no-op on the base interface.
     {
         IUIRenderer* ui = RendererGetUIRenderer();
@@ -1675,16 +1322,8 @@ void RendererOpenGL::EndFrame_GL()
         m_rt_screenshot_path.clear();
     }
 
-    // scRGB gamma lift pass: re-draw the completed frame through sRGB→linear
-    // conversion before handing the float backbuffer to DWM.  Without this the
-    // sRGB-encoded pixels would be interpreted as linear light by DWM, making
-    // the image ~2× too bright.
     if (m_scrgb_active && m_scrgb_lift_shader)
     {
-        // Bind BOTH read and draw to the default (swapchain) framebuffer.
-        // Sub-renderers may have left GL_READ_FRAMEBUFFER pointing at a lens/pass
-        // FBO; glCopyTexSubImage2D reads from GL_READ_FRAMEBUFFER, so this is
-        // critical to capture the actual backbuffer content.
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
         // Use the physical pixel size of the window, not the current viewport —
@@ -1758,44 +1397,239 @@ void RendererOpenGL::UnlockFramebuffer()
     // No-op in GL mode — discard buffer writes are silently ignored.
 }
 
-bool RendererOpenGL::BlitRaw8GPU(int dst_width, int dst_height, int dst_x, int dst_y,
-                                  const unsigned char* src_buf, int src_width, int src_height)
+bool RendererOpenGL::PresentImage(const struct RendererPresentImageDesc* desc)
 {
-    if (!src_buf || src_width <= 0 || src_height <= 0)
-    {
-        ERRORLOG("RendererOpenGL::BlitRaw8GPU: invalid source (buf=%p w=%d h=%d)",
-                 (const void*)src_buf, src_width, src_height);
-        return false;
-    }
-    // Copy pixel data into an owned buffer so the caller may free its buffer as
-    // soon as this function returns — before the render thread reads.
-    m_rawblit_px_buf.assign(src_buf, src_buf + (size_t)src_width * src_height);
-    m_rawblit_cmd            = { m_rawblit_px_buf.data(), src_width, src_height,
-                                 dst_x, dst_y, dst_width, dst_height };
-    m_rawblit_pending        = true;
-    m_rawblit_cached         = true;
-    m_rawblit_cached_cmd     = m_rawblit_cmd;
+    if (!desc || !desc->src) return false;
+    // Outside the frame write-window (no LockScreen/BeginFrame yet) the caller
+    // must fall back to its own path — mirror BlitRaw8GPU's contract.
+    if (!m_frame_begun) return false;
+
+    IRImagePresentCmd cmd;
+    cmd.format  = (PresentFormat)desc->format;
+    cmd.palette = (PresentPalette)desc->palette;
+    cmd.kind    = (PresentKind)desc->kind;
+    cmd.dst_x = desc->dst_x; cmd.dst_y = desc->dst_y;
+    cmd.dst_w = desc->dst_w; cmd.dst_h = desc->dst_h;
+    cmd.src_w = desc->src_w; cmd.src_h = desc->src_h;
+    cmd.src_pitch = (desc->src_pitch > 0) ? desc->src_pitch : desc->src_w;
+    cmd.zoom_center_map_x = desc->zoom_center_map_x;
+    cmd.zoom_center_map_y = desc->zoom_center_map_y;
+    cmd.zoom_screen_cx    = desc->zoom_screen_cx;
+    cmd.zoom_screen_cy    = desc->zoom_screen_cy;
+    cmd.zoom_scale        = desc->zoom_scale;
+    cmd.layer_z = desc->layer_z;
+
+    // Copy pixels into the owned buffer (bytes-per-pixel by format; pitch in pixels).
+    const size_t bpp   = (cmd.format == PresentFormat::RGBA8) ? 4u : 1u;
+    const size_t rows  = (desc->src_h > 0) ? (size_t)desc->src_h : 0u;
+    const size_t nbyte = (size_t)cmd.src_pitch * bpp * rows;
+    cmd.pixels.assign(desc->src, desc->src + nbyte);
+    if (desc->embedded_palette && cmd.palette == PresentPalette::Embedded)
+        cmd.embedded_palette.assign(desc->embedded_palette, desc->embedded_palette + 256 * 4);
+
+    // Append to the write-side buffer; RenderGraph::Flip() moves it to the read
+    // side for the render thread. During palette fades the flip is skipped, so
+    // the previous frame's presents persist automatically (no separate cache).
+    IRImagePresentCmd& slot = m_render_graph.GetImagePresentBuffers().AppendEmpty();
+    slot = std::move(cmd);
     return true;
 }
 
-bool RendererOpenGL::SubmitVideoFrame(
-    const uint8_t* px, int src_w, int src_h, int src_pitch,
-    const uint8_t* bgra_pal, int dst_x, int dst_y, int dst_w, int dst_h)
+void RendererOpenGL::DrawIndexed8OpaquePresent(const IRImagePresentCmd& c)
 {
-    if (!px || !bgra_pal || src_w <= 0 || src_h <= 0 || dst_w <= 0 || dst_h <= 0)
+    // Opaque palette-indexed present: upload indices to the R8 raw-blit texture,
+    // sample through a palette LUT (live game palette, or a per-present embedded
+    // palette for FMV frames), draw a quad over the dst rect. src_pitch handles
+    // FFmpeg linesize padding. Folds the former rawblit + FMV EndFrame blocks.
+    const int src_w = c.src_w, src_h = c.src_h;
+    if (src_w <= 0 || src_h <= 0 || c.pixels.empty()) return;
+    const uint8_t* src = c.pixels.data();
+    const int pitch = (c.src_pitch > 0) ? c.src_pitch : src_w;
+
+    glViewport(0, 0, m_rt_frame_state.screen_w, m_rt_frame_state.screen_h);
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+
+    // Index texture (unit 0). GL_UNPACK_ROW_LENGTH reads src_w columns from each
+    // padded row when the source pitch exceeds the width (FMV linesize).
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_rawblit_tex);
+    if (pitch != src_w) glPixelStorei(GL_UNPACK_ROW_LENGTH, pitch);
+    if (src_w != m_rawblit_tex_w || src_h != m_rawblit_tex_h)
     {
-        ERRORLOG("RendererOpenGL::SubmitVideoFrame: invalid params (px=%p src=%dx%d dst=%dx%d)",
-                 (const void*)px, src_w, src_h, dst_w, dst_h);
-        return false;
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, src_w, src_h, 0, GL_RED, GL_UNSIGNED_BYTE, src);
+        m_rawblit_tex_w = src_w;
+        m_rawblit_tex_h = src_h;
     }
-    // Copy pixel data and palette into owned buffers so the caller (AVFrame) may
-    // be freed as soon as this function returns — before the render thread reads.
-    m_fmv_px_buf.assign(px, px + (size_t)src_h * src_pitch);
-    m_fmv_pal_buf.assign(bgra_pal, bgra_pal + 256 * 4);
-    m_fmv_cmd = { m_fmv_px_buf.data(), src_w, src_h, src_pitch,
-                  m_fmv_pal_buf.data(), dst_x, dst_y, dst_w, dst_h };
-    m_fmv_pending = true;
-    return true;
+    else
+    {
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, src_w, src_h, GL_RED, GL_UNSIGNED_BYTE, src);
+    }
+    if (pitch != src_w) glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+
+    // Palette (unit 1): live game palette, or the per-present embedded palette
+    // (FMV carries its own 256×BGRA palette per frame).
+    glActiveTexture(GL_TEXTURE1);
+    if (c.palette == PresentPalette::Embedded && c.embedded_palette.size() >= 256u * 4u)
+    {
+        glBindTexture(GL_TEXTURE_2D, m_fmv_palette_tex);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 256, 1, GL_BGRA, GL_UNSIGNED_BYTE, c.embedded_palette.data());
+    }
+    else
+    {
+        glBindTexture(GL_TEXTURE_2D, m_texPalette);
+    }
+
+    const float sw = (float)m_rt_frame_state.screen_w;
+    const float sh = (float)m_rt_frame_state.screen_h;
+    Vec2f ndc0 = ScreenToNDC((float)c.dst_x,           (float)c.dst_y,           sw, sh);
+    Vec2f ndc1 = ScreenToNDC((float)(c.dst_x + c.dst_w), (float)(c.dst_y + c.dst_h), sw, sh);
+    const float verts[6][4] = {
+        { ndc0.x, ndc1.y,  0.f, 1.f },
+        { ndc1.x, ndc1.y,  1.f, 1.f },
+        { ndc1.x, ndc0.y,  1.f, 0.f },
+        { ndc0.x, ndc1.y,  0.f, 1.f },
+        { ndc1.x, ndc0.y,  1.f, 0.f },
+        { ndc0.x, ndc0.y,  0.f, 0.f },
+    };
+    glBindVertexArray(m_rawblit_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, m_rawblit_vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(verts), nullptr, GL_DYNAMIC_DRAW);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(verts), verts);
+
+    glDisable(GL_BLEND);
+    glUseProgram(m_rawblit_shader);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glBindVertexArray(0);
+
+    glDepthMask(GL_TRUE);
+    glActiveTexture(GL_TEXTURE0);
+}
+
+void RendererOpenGL::ExecuteImagePresentsFromIR(const ImagePresentBuffers& cmds)
+{
+    if (cmds.presents.empty()) return;
+
+    // Draw in layer_z order (stable so equal layers keep submission order).
+    std::vector<const IRImagePresentCmd*> order;
+    order.reserve(cmds.presents.size());
+    for (const IRImagePresentCmd& c : cmds.presents) order.push_back(&c);
+    std::stable_sort(order.begin(), order.end(),
+        [](const IRImagePresentCmd* a, const IRImagePresentCmd* b) { return a->layer_z < b->layer_z; });
+
+    for (const IRImagePresentCmd* c : order)
+    {
+        if (c->format == PresentFormat::RGBA8)
+        {
+            // TODO(truecolour): RGBA8 atlas present path — reserved trail, not
+            // wired. See docs/fe-drawing-standardisation.md.
+            continue;
+        }
+        switch (c->kind)
+        {
+        case PresentKind::Opaque:
+            DrawIndexed8OpaquePresent(*c);
+            break;
+        case PresentKind::Transparent:
+            DrawTransparentPresent(*c);
+            break;
+        case PresentKind::LandviewZoom:
+            DrawZoomPresent(*c);
+            break;
+        }
+    }
+}
+
+void RendererOpenGL::DrawTransparentPresent(const IRImagePresentCmd& c)
+{
+    // Full-screen index-0-transparent overlay (the landview window frame),
+    // composited with the possession tint via the main index→RGBA shader
+    // (index 0 = transparent). Folds the former m_rt_transparent EndFrame block.
+    if (c.pixels.empty()) return;
+    const int tbw = c.src_w, tbh = c.src_h;
+
+    glBindTexture(GL_TEXTURE_2D, m_texIndex);
+    if (tbw != m_texIndex_w || tbh != m_texIndex_h)
+    {
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, tbw, tbh, 0, GL_RED, GL_UNSIGNED_BYTE, c.pixels.data());
+        m_texIndex_w = tbw;
+        m_texIndex_h = tbh;
+    }
+    else
+    {
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, tbw, tbh, GL_RED, GL_UNSIGNED_BYTE, c.pixels.data());
+    }
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    glViewport(0, 0, m_rt_frame_state.screen_w, m_rt_frame_state.screen_h);
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_texIndex);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, m_texPalette);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glUseProgram(m_shader);
+    glUniform1f(m_uTintFactor, m_rt_frame_state.possession_tint);
+    glBindVertexArray(m_vao);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glBindVertexArray(0);
+    glDisable(GL_BLEND);
+    glDepthMask(GL_TRUE);
+    glActiveTexture(GL_TEXTURE0);
+}
+
+void RendererOpenGL::DrawZoomPresent(const IRImagePresentCmd& c)
+{
+    // Landview zoom transition: upload map_screen and draw a fullscreen quad
+    // whose fragment shader computes zoomed UVs from gl_FragCoord.
+    // Folds the former m_rt_zoom EndFrame block.
+    if (c.pixels.empty() || c.src_w <= 0 || c.src_h <= 0) return;
+    const uint8_t* src = c.pixels.data();
+
+    glViewport(0, 0, m_rt_frame_state.screen_w, m_rt_frame_state.screen_h);
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_zoom_tex);
+    if (c.src_w != m_zoom_tex_w || c.src_h != m_zoom_tex_h)
+    {
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, c.src_w, c.src_h, 0, GL_RED, GL_UNSIGNED_BYTE, src);
+        m_zoom_tex_w = c.src_w;
+        m_zoom_tex_h = c.src_h;
+    }
+    else
+    {
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, c.src_w, c.src_h, GL_RED, GL_UNSIGNED_BYTE, src);
+    }
+
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, m_texPalette);
+
+    static const float fs_quad[6][4] = {
+        {-1.f, -1.f,  0.f, 1.f}, { 1.f, -1.f,  1.f, 1.f}, { 1.f,  1.f,  1.f, 0.f},
+        {-1.f, -1.f,  0.f, 1.f}, { 1.f,  1.f,  1.f, 0.f}, {-1.f,  1.f,  0.f, 0.f},
+    };
+    glBindVertexArray(m_rawblit_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, m_rawblit_vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(fs_quad), nullptr, GL_DYNAMIC_DRAW);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(fs_quad), fs_quad);
+
+    glUseProgram(m_zoom_shader);
+    glUniform2f(m_zoom_u_center_map, c.zoom_center_map_x, c.zoom_center_map_y);
+    glUniform2f(m_zoom_u_screen_ctr, c.zoom_screen_cx,    c.zoom_screen_cy);
+    glUniform1f(m_zoom_u_scale,      c.zoom_scale);
+    glUniform2f(m_zoom_u_inv_map_sz, 1.0f / (float)c.src_w, 1.0f / (float)c.src_h);
+    glUniform1f(m_zoom_u_screen_h,   (float)m_rt_frame_state.screen_h);
+
+    glDisable(GL_BLEND);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glBindVertexArray(0);
+
+    glDepthMask(GL_TRUE);
+    glActiveTexture(GL_TEXTURE0);
 }
 
 bool RendererOpenGL::SubmitLandviewZoom(
@@ -1810,13 +1644,19 @@ bool RendererOpenGL::SubmitLandviewZoom(
                  (const void*)src_buf, src_w, src_h);
         return false;
     }
-    // Copy into an owned buffer so map_screen may be written freely by the game
-    // thread once this call returns, before the render thread reads.
-    m_zoom_src_buf.assign(src_buf, src_buf + (size_t)src_w * src_h);
-    m_zoom_cmd = { m_zoom_src_buf.data(), src_w, src_h,
-                   center_map_x, center_map_y,
-                   screen_cx, screen_cy, scale };
-    m_zoom_pending = true;
+    if (!m_frame_begun) return false;
+    // Append a LandviewZoom present to the unified IR (was m_rt_zoom_*).
+    IRImagePresentCmd& c = m_render_graph.GetImagePresentBuffers().AppendEmpty();
+    c.format  = PresentFormat::Indexed8;
+    c.palette = PresentPalette::Game;
+    c.kind    = PresentKind::LandviewZoom;
+    c.dst_x = 0; c.dst_y = 0; c.dst_w = src_w; c.dst_h = src_h;
+    c.src_w = src_w; c.src_h = src_h; c.src_pitch = src_w;
+    c.pixels.assign(src_buf, src_buf + (size_t)src_w * src_h);
+    c.zoom_center_map_x = center_map_x; c.zoom_center_map_y = center_map_y;
+    c.zoom_screen_cx    = screen_cx;    c.zoom_screen_cy    = screen_cy;
+    c.zoom_scale        = scale;
+    c.layer_z = 0.0f;   // background map layer
     return true;
 }
 
@@ -1824,10 +1664,17 @@ bool RendererOpenGL::SubmitTransparentBlit(const uint8_t* buf, int w, int h)
 {
     if (w != m_screenW || h != m_screenH)
         return false;
-    // Copy into CPU buffer; the render thread uploads to m_texIndex in EndFrame_GL()
-    // / FlushSceneToFBO() so glTexSubImage2D never runs on the game thread.
-    m_transparent_blit_buf.assign(buf, buf + (size_t)w * h);
-    m_transparent_blit_pending = true;
+    if (!m_frame_begun) return false;
+    // Append a Transparent present to the unified IR (was m_rt_transparent_*).
+    // layer_z above the opaque/zoom map so it composites on top.
+    IRImagePresentCmd& c = m_render_graph.GetImagePresentBuffers().AppendEmpty();
+    c.format  = PresentFormat::Indexed8;
+    c.palette = PresentPalette::Game;
+    c.kind    = PresentKind::Transparent;
+    c.dst_x = 0; c.dst_y = 0; c.dst_w = w; c.dst_h = h;
+    c.src_w = w; c.src_h = h; c.src_pitch = w;
+    c.pixels.assign(buf, buf + (size_t)w * h);
+    c.layer_z = 1.0f;
     return true;
 }
 
@@ -1996,7 +1843,8 @@ void RendererOpenGL::FlushSwipeQuads()
 }
 
 /******************************************************************************/
-// Lens Post-Process Infrastructure
+// Lens Post-Process Infrastructure 
+// TODO : Move.
 /******************************************************************************/
 
 static unsigned int create_rgba_texture(int w, int h, const char* label)
@@ -2339,60 +2187,14 @@ void RendererOpenGL::FlushSceneToFBO(int w, int h)
     // ── Palette ──────────────────────────────────────────────────────────
     upload_palette_texture();
 
-    // ── Raw blit (parchment background image) ────────────────────────────
-    if (m_rt_rawblit_pending)
-    {
-        const RawBlitCmd& cmd = m_rt_rawblit_cmd;
-        glDisable(GL_DEPTH_TEST);
-        glDepthMask(GL_FALSE);
-
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, m_rawblit_tex);
-        if (cmd.src_w != m_rawblit_tex_w || cmd.src_h != m_rawblit_tex_h)
-        {
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, cmd.src_w, cmd.src_h,
-                         0, GL_RED, GL_UNSIGNED_BYTE, cmd.src_buf);
-            m_rawblit_tex_w = cmd.src_w;
-            m_rawblit_tex_h = cmd.src_h;
-        }
-        else
-        {
-            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, cmd.src_w, cmd.src_h,
-                            GL_RED, GL_UNSIGNED_BYTE, cmd.src_buf);
-        }
-
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, m_texPalette);
-
-        // Coordinates are in logical screen space.
-        const float sw = (float)m_rt_frame_state.screen_w;
-        const float sh = (float)m_rt_frame_state.screen_h;
-        Vec2f ndc0 = ScreenToNDC((float)cmd.dst_x,               (float)cmd.dst_y,               sw, sh);
-        Vec2f ndc1 = ScreenToNDC((float)(cmd.dst_x + cmd.dst_w), (float)(cmd.dst_y + cmd.dst_h), sw, sh);
-
-        const float verts[6][4] = {
-            { ndc0.x, ndc1.y,  0.f, 1.f },
-            { ndc1.x, ndc1.y,  1.f, 1.f },
-            { ndc1.x, ndc0.y,  1.f, 0.f },
-            { ndc0.x, ndc1.y,  0.f, 1.f },
-            { ndc1.x, ndc0.y,  1.f, 0.f },
-            { ndc0.x, ndc0.y,  0.f, 0.f },
-        };
-        glBindVertexArray(m_rawblit_vao);
-        glBindBuffer(GL_ARRAY_BUFFER, m_rawblit_vbo);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(verts), nullptr, GL_DYNAMIC_DRAW);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(verts), verts);
-
-        glDisable(GL_BLEND);
-        glUseProgram(m_rawblit_shader);
-        glDrawArrays(GL_TRIANGLES, 0, 6);
-        glBindVertexArray(0);
-
-        glDepthMask(GL_TRUE);
-        glActiveTexture(GL_TEXTURE0);
-        glUseProgram(0);
-        m_rt_rawblit_pending = false;
-    }
+    // ── IR image presents (parchment background moved here from rawblit) ──
+    // Draw the opaque presents into the capture FBO BEFORE the overhead map, so
+    // DrawIndexed8OpaquePresent leaves the parchment in m_rawblit_tex — the
+    // overhead-map ghost shader samples it as its unit-3 background below.
+    // Mark captured so the main EndFrame_GL pass does not re-draw these over the
+    // fade composite (the old m_rt_rawblit_pending "consume" equivalent).
+    ExecuteImagePresentsFromIR(m_render_graph.GetImagePresentBuffersRT());
+    m_rt_presents_captured = true;
 
     // ── Overhead map tile blits ──────────────────────────────────────────
     for (const OverheadMapCmd& cmd : m_rt_overhead_map_cmds)
@@ -2473,51 +2275,8 @@ void RendererOpenGL::FlushSceneToFBO(int w, int h)
     }
     m_rt_overhead_map_cmds.clear();
 
-    // ── Transparent blit (CPU-drawn sprites composited over the scene) ───
-    if (m_rt_transparent_blit_pending)
-    {
-        if (!m_rt_transparent_blit_buf.empty())
-        {
-            glBindTexture(GL_TEXTURE_2D, m_texIndex);
-            const int tbw = m_rt_frame_state.screen_w;
-            const int tbh = m_rt_frame_state.screen_h;
-            if (tbw != m_texIndex_w || tbh != m_texIndex_h)
-            {
-                glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, tbw, tbh, 0, GL_RED, GL_UNSIGNED_BYTE,
-                             m_rt_transparent_blit_buf.data());
-                m_texIndex_w = tbw;
-                m_texIndex_h = tbh;
-            }
-            else
-            {
-                glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, tbw, tbh,
-                                GL_RED, GL_UNSIGNED_BYTE, m_rt_transparent_blit_buf.data());
-            }
-            glBindTexture(GL_TEXTURE_2D, 0);
-            m_rt_transparent_blit_buf.clear();
-        }
-
-        glDisable(GL_DEPTH_TEST);
-        glDepthMask(GL_FALSE);
-
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, m_texIndex);
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, m_texPalette);
-
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        glUseProgram(m_shader);
-        glUniform1f(m_uTintFactor, 0.0f);
-        glBindVertexArray(m_vao);
-        glDrawArrays(GL_TRIANGLES, 0, 6);
-        glBindVertexArray(0);
-        glDisable(GL_BLEND);
-        glDepthMask(GL_TRUE);
-        glActiveTexture(GL_TEXTURE0);
-        glUseProgram(0);
-        m_rt_transparent_blit_pending = false;
-    }
+    // (Transparent-blit is folded into the unified image-present IR, drawn by
+    // ExecuteImagePresentsFromIR above; nothing further to composite here.)
 }
 
 const char* RendererOpenGL::GetName() const
@@ -2678,9 +2437,6 @@ ICursorLayer* RendererOpenGL::CreateGLCursorLayer()
 
 bool RendererOpenGL::CompileSubRendererShaders()
 {
-    // All four GL sub-renderers implement IGLShaderCompilable via multiple
-    // inheritance.  Typed pointers avoid dynamic_cast — each pointer is null
-    // only if the sub-renderer fell back to a software implementation.
     IGLShaderCompilable* compilables[] = {
         m_world_renderer,     // GLWorldViewRenderer* — always set in GL path
         m_gl_mapfade,         // GLMapFadePass*       — always set in GL path
@@ -2763,9 +2519,6 @@ void RendererOpenGL::NotifyTexturesReloaded()
 
 void RendererOpenGL::NotifyGameTablesReady()
 {
-    // Schedule the fade-table GL texture for creation on the render thread.
-    // init_fade_table_texture() issues glGenTextures/glTexImage2D; these must
-    // run on the thread that owns the GL context.
     ScheduleFadeTableInit();
 
     // Wire the palette source pointer into sub-renderers that cache it.
