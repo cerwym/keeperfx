@@ -128,7 +128,7 @@ void UIRenderer_SubmitPanelSpriteWithBg(int32_t x, int32_t y, int units_per_px,
     int32_t w = ((int32_t)spr->SWidth  * units_per_px + 8) / 16;
     int32_t h = ((int32_t)spr->SHeight * units_per_px + 8) / 16;
     // Submit opaque background fill, then the sprite on top.
-    ui->SubmitSolidBox(x, y, w, h, bg_color_idx);
+    ui->SubmitSolidBox(x, y, w, h, bg_color_idx, draw_state_default());
     SpriteHandle sh = RendererResolveSprite(spr);
     ui->SubmitPanelSprite(x, y, units_per_px, sh, false, (unsigned int)lbDisplay.DrawFlags);
 }
@@ -222,7 +222,10 @@ void UIRenderer_SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h, c
 void UIRenderer_SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, unsigned char color_idx)
 {
     IUIRenderer* ui = RendererGetUIRenderer();
-    if (ui) ui->SubmitSolidBox(x, y, w, h, color_idx);
+    // Transitional: build the draw descriptor from the still-live global; once
+    // call sites pass their own DrawState (Phase 4) this bridge and the read go away.
+    if (ui) ui->SubmitSolidBox(x, y, w, h, color_idx,
+                               draw_state_make((unsigned int)lbDisplay.DrawFlags, (TbPixel)lbDisplay.DrawColour));
 }
 
 void UIRenderer_SubmitSolidBoxAlpha(int32_t x, int32_t y, int32_t w, int32_t h, unsigned char color_idx, float alpha)
@@ -238,7 +241,7 @@ void UIRenderer_SubmitCircle(int32_t x, int32_t y, int32_t radius, unsigned char
     if (RendererHasGPURenderPath())
     {
         int32_t d = radius * 2 + 1;
-        ui->SubmitSolidBox(x - radius, y - radius, d, d, color_idx);
+        ui->SubmitSolidBox(x - radius, y - radius, d, d, color_idx, draw_state_default());
         return;
     }
     ui->SubmitCircle(x, y, radius, color_idx);

@@ -20,6 +20,7 @@
 
 #include "renderer/SpriteHandle.h"
 #include "renderer/GpuTypes.h"
+#include "renderer/DrawState.h"
 #include "bflib_basics.h"
 #include <unordered_map>
 #include <cstdint>
@@ -128,8 +129,10 @@ public:
     /**
      * Submit a solid-color rectangle.
      * CPU default: direct LbDrawBox software rasterisation.
+     * @param state  Per-call draw descriptor (only Lb_SPRITE_OUTLINE is consulted
+     *               here); replaces the former ambient lbDisplay.DrawFlags read.
      */
-    virtual void SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx);
+    virtual void SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx, KfxDrawState state);
  
     /**
      * Submit a solid-color rectangle with explicit alpha (e.g. 0.5 for TRANSPAR4 darkening).

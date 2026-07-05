@@ -221,19 +221,19 @@ void IUIRenderer::SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h,
     lbDisplay.DrawFlags = saved;
 }
 
-void IUIRenderer::SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx)
+void IUIRenderer::SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx, KfxDrawState state)
 {
     if (w <= 0 || h <= 0) return;
     if (m_ui_write_cmds) {
         IRUISolidBoxCmd cmd;
         cmd.x = x; cmd.y = y; cmd.w = w; cmd.h = h;
         cmd.colour_idx = color_idx; cmd.alpha = 1.0f;
-        cmd.draw_flags = (unsigned int)lbDisplay.DrawFlags;
+        cmd.draw_flags = state.flags;
         cmd.seq = m_ui_write_cmds->NextSeq();
         m_ui_write_cmds->solid_boxes.Append(cmd);
         return;
     }
-    if (lbDisplay.DrawFlags & Lb_SPRITE_OUTLINE)
+    if (state.flags & Lb_SPRITE_OUTLINE)
     {
         if (w < 1 || h < 1) return;
         unsigned short saved_flags = lbDisplay.DrawFlags;
@@ -392,10 +392,8 @@ void IUIRenderer::ReplayMergedFromIR(const UICommandBuffers& ui,
             if (c.alpha < 1.0f) {
                 SubmitSolidBoxAlpha(c.x, c.y, c.w, c.h, c.colour_idx, c.alpha);
             } else {
-                unsigned int saved = (unsigned int)lbDisplay.DrawFlags;
-                lbDisplay.DrawFlags = c.draw_flags;   // honour Lb_SPRITE_OUTLINE
-                SubmitSolidBox(c.x, c.y, c.w, c.h, c.colour_idx);
-                lbDisplay.DrawFlags = saved;
+                SubmitSolidBox(c.x, c.y, c.w, c.h, c.colour_idx,
+                               draw_state_make(c.draw_flags, 0));
             }
             break;
         }

@@ -453,7 +453,7 @@ void GLUIRenderer::SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h
                1.0f, 1.0f, 1.0f, UIAlphaFromFlags(draw_flags), 0.5f, 0.0f);
 }
 
-void GLUIRenderer::SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx)
+void GLUIRenderer::SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx, KfxDrawState state)
 {
     ASSERT_GAME_THREAD();
     if (!m_palette_data) {
@@ -469,6 +469,7 @@ void GLUIRenderer::SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, ui
         cmd.h          = h;
         cmd.colour_idx = color_idx;
         cmd.alpha      = 1.0f;
+        cmd.draw_flags = state.flags;
         cmd.ndc_z      = (m_world_overlay_active || m_world_overlay_flat_active) ? m_world_z : 0.5f;
         cmd.seq        = m_ui_write_cmds->NextSeq();
         m_ui_write_cmds->solid_boxes.Append(cmd);
