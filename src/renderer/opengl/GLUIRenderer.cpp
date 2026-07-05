@@ -278,7 +278,7 @@ static int IRUILayerToIndex(IRUILayer layer)
 
 void GLUIRenderer::SubmitPanelSprite(int32_t x, int32_t y, int units_per_px,
                                      SpriteHandle spr, bool flip_horiz,
-                                     unsigned int draw_flags)
+                                     KfxDrawState state)
 {
     ASSERT_GAME_THREAD();
     if (spr == kInvalidSpriteHandle) {
@@ -297,7 +297,7 @@ void GLUIRenderer::SubmitPanelSprite(int32_t x, int32_t y, int units_per_px,
         cmd.units_per_px = units_per_px;
         cmd.sprite       = spr;
         cmd.flags        = flip_horiz ? kIRSpriteFlipHoriz : 0u;
-        cmd.draw_flags   = draw_flags;
+        cmd.draw_flags   = state.flags;
         cmd.ndc_z        = (m_world_overlay_active || m_world_overlay_flat_active) ? m_world_z : 0.5f;
         cmd.seq          = m_ui_write_cmds->NextSeq();
         m_ui_write_cmds->sprites.Append(cmd);
@@ -312,7 +312,7 @@ void GLUIRenderer::SubmitPanelSprite(int32_t x, int32_t y, int units_per_px,
     float h = (float)((uv.pixel_h * units_per_px + 8) / 16);
     float u0 = flip_horiz ? uv.u1 : uv.u0;
     float u1 = flip_horiz ? uv.u0 : uv.u1;
-    float a = UIAlphaFromFlags(draw_flags);
+    float a = UIAlphaFromFlags(state.flags);
     SubmitQuad((float)x, (float)y, w, h,
                u0, uv.v0, u1, uv.v1,
                1.0f, 1.0f, 1.0f, a, 0.5f, 0.0f);
@@ -320,7 +320,7 @@ void GLUIRenderer::SubmitPanelSprite(int32_t x, int32_t y, int units_per_px,
 
 void GLUIRenderer::SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px,
                                           SpriteHandle spr, int remap_row,
-                                          unsigned int draw_flags)
+                                          KfxDrawState state)
 {
     ASSERT_GAME_THREAD();
     if (spr == kInvalidSpriteHandle) {
@@ -341,7 +341,7 @@ void GLUIRenderer::SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px
         cmd.units_per_px = units_per_px;
         cmd.sprite       = spr;
         cmd.remap_row    = remap_row;
-        cmd.draw_flags   = draw_flags;
+        cmd.draw_flags   = state.flags;
         cmd.ndc_z        = (m_world_overlay_active || m_world_overlay_flat_active) ? m_world_z : 0.5f;
         cmd.seq          = m_ui_write_cmds->NextSeq();
         m_ui_write_cmds->sprites_remap.Append(cmd);
@@ -359,7 +359,7 @@ void GLUIRenderer::SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px
     q.x1 = (float)x + w;  q.y1 = (float)y + h;
     q.u0 = uv.u0;  q.v0 = uv.v0;
     q.u1 = uv.u1;  q.v1 = uv.v1;
-    q.r = 1.0f;  q.g = 1.0f;  q.b = 1.0f;  q.a = UIAlphaFromFlags(draw_flags);
+    q.r = 1.0f;  q.g = 1.0f;  q.b = 1.0f;  q.a = UIAlphaFromFlags(state.flags);
     q.z = 0.5f;
     q.mode = 30.0f;
     q.texture_id = 0;
@@ -373,7 +373,7 @@ void GLUIRenderer::SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px
 
 void GLUIRenderer::SubmitPanelSpriteColored(int32_t x, int32_t y, int units_per_px,
                                             SpriteHandle spr, uint8_t color_idx,
-                                            unsigned int draw_flags)
+                                            KfxDrawState state)
 {
     ASSERT_GAME_THREAD();
     if (spr == kInvalidSpriteHandle) {
@@ -393,7 +393,7 @@ void GLUIRenderer::SubmitPanelSpriteColored(int32_t x, int32_t y, int units_per_
         cmd.units_per_px = units_per_px;
         cmd.sprite       = spr;
         cmd.colour_idx   = color_idx;
-        cmd.draw_flags   = draw_flags;
+        cmd.draw_flags   = state.flags;
         cmd.ndc_z        = (m_world_overlay_active || m_world_overlay_flat_active) ? m_world_z : 0.5f;
         cmd.seq          = m_ui_write_cmds->NextSeq();
         m_ui_write_cmds->sprites_colored.Append(cmd);
@@ -409,14 +409,13 @@ void GLUIRenderer::SubmitPanelSpriteColored(int32_t x, int32_t y, int units_per_
     float r = m_palette_data[color_idx * 3 + 0] / VGA6_MAX;
     float g = m_palette_data[color_idx * 3 + 1] / VGA6_MAX;
     float b = m_palette_data[color_idx * 3 + 2] / VGA6_MAX;
-    // mode=20.0: atlas-as-mask, flat vertex colour (Pass 5 in FlushQuads)
     SubmitQuad((float)x, (float)y, w, h,
                uv.u0, uv.v0, uv.u1, uv.v1,
-               r, g, b, UIAlphaFromFlags(draw_flags), 0.5f, 20.0f);
+               r, g, b, UIAlphaFromFlags(state.flags), 0.5f, 20.0f);
 }
 
 void GLUIRenderer::SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h,
-                                     SpriteHandle spr, unsigned int draw_flags)
+                                     SpriteHandle spr, KfxDrawState state)
 {
     ASSERT_GAME_THREAD();
     if (spr == kInvalidSpriteHandle) {
@@ -437,7 +436,7 @@ void GLUIRenderer::SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h
         cmd.units_per_px = 16;
         cmd.sprite       = spr;
         cmd.flags        = kIRSpriteScaled;
-        cmd.draw_flags   = draw_flags;
+        cmd.draw_flags   = state.flags;
         cmd.ndc_z        = (m_world_overlay_active || m_world_overlay_flat_active) ? m_world_z : 0.5f;
         cmd.seq          = m_ui_write_cmds->NextSeq();
         m_ui_write_cmds->sprites.Append(cmd);
@@ -450,7 +449,7 @@ void GLUIRenderer::SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h
     }
     SubmitQuad((float)x, (float)y, (float)w, (float)h,
                uv.u0, uv.v0, uv.u1, uv.v1,
-               1.0f, 1.0f, 1.0f, UIAlphaFromFlags(draw_flags), 0.5f, 0.0f);
+               1.0f, 1.0f, 1.0f, UIAlphaFromFlags(state.flags), 0.5f, 0.0f);
 }
 
 void GLUIRenderer::SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx, KfxDrawState state)

@@ -76,15 +76,15 @@ public:
     virtual void SubmitSlabSelector(int x1, int y1, int x2, int y2, unsigned char color, float z_depth) override;
     virtual void SubmitPanelSprite(int32_t x, int32_t y, int units_per_px,
                                    SpriteHandle spr, bool flip_horiz,
-                                   unsigned int draw_flags) override;
+                                   KfxDrawState state) override;
     virtual void SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px,
                                        SpriteHandle spr, int remap_row,
-                                       unsigned int draw_flags) override;
+                                       KfxDrawState state) override;
     virtual void SubmitPanelSpriteColored(int32_t x, int32_t y, int units_per_px,
                                           SpriteHandle spr, uint8_t color_idx,
-                                          unsigned int draw_flags) override;
+                                          KfxDrawState state) override;
     virtual void SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h,
-                                    SpriteHandle spr, unsigned int draw_flags) override;
+                                    SpriteHandle spr, KfxDrawState state) override;
     virtual void SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx, KfxDrawState state) override;
     virtual void SubmitSolidBoxAlpha(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx, float alpha) override;
     virtual void UpdateSlabTexture(const uint8_t* data, int dim) override;

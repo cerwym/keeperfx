@@ -132,21 +132,21 @@ bool IUIRenderer::GetMinimapOpaqueBlackIndex(uint8_t* idx) const
 
 void IUIRenderer::SubmitPanelSprite(int32_t x, int32_t y, int units_per_px,
                                     SpriteHandle spr, bool flip_horiz,
-                                    unsigned int draw_flags)
+                                    KfxDrawState state)
 {
     if (m_ui_write_cmds) {
         IRUISpriteCmd cmd;
         cmd.x = x; cmd.y = y; cmd.units_per_px = units_per_px;
         cmd.sprite = spr;
         cmd.flags = flip_horiz ? kIRSpriteFlipHoriz : 0u;
-        cmd.draw_flags = draw_flags;
+        cmd.draw_flags = state.flags;
         cmd.seq = m_ui_write_cmds->NextSeq();
         m_ui_write_cmds->sprites.Append(cmd);
         return;
     }
     auto it = m_handle_to_sprite.find(spr);
     if (it == m_handle_to_sprite.end()) return;
-    unsigned int effective_flags = draw_flags;
+    unsigned int effective_flags = state.flags;
     if (flip_horiz) effective_flags |= Lb_SPRITE_FLIP_HORIZ;
     unsigned int saved = lbDisplay.DrawFlags;
     lbDisplay.DrawFlags = effective_flags;
@@ -157,13 +157,13 @@ void IUIRenderer::SubmitPanelSprite(int32_t x, int32_t y, int units_per_px,
 
 void IUIRenderer::SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px,
                                          SpriteHandle spr, int remap_row,
-                                         unsigned int draw_flags)
+                                         KfxDrawState state)
 {
     if (m_ui_write_cmds) {
         IRUISpriteRemapCmd cmd;
         cmd.x = x; cmd.y = y; cmd.units_per_px = units_per_px;
         cmd.sprite = spr; cmd.remap_row = remap_row;
-        cmd.draw_flags = draw_flags;
+        cmd.draw_flags = state.flags;
         cmd.seq = m_ui_write_cmds->NextSeq();
         m_ui_write_cmds->sprites_remap.Append(cmd);
         return;
@@ -172,7 +172,7 @@ void IUIRenderer::SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px,
     if (it == m_handle_to_sprite.end()) return;
     ScopedSpriteSubmitGuard guard;
     unsigned int saved = lbDisplay.DrawFlags;
-    lbDisplay.DrawFlags = draw_flags;
+    lbDisplay.DrawFlags = state.flags;
     LbSpriteDrawResizedRemap(x, y, units_per_px, it->second,
                              &pixmap.fade_tables[remap_row * 256]);
     lbDisplay.DrawFlags = saved;
@@ -180,13 +180,13 @@ void IUIRenderer::SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px,
 
 void IUIRenderer::SubmitPanelSpriteColored(int32_t x, int32_t y, int units_per_px,
                                            SpriteHandle spr, uint8_t color_idx,
-                                           unsigned int draw_flags)
+                                           KfxDrawState state)
 {
     if (m_ui_write_cmds) {
         IRUISpriteColoredCmd cmd;
         cmd.x = x; cmd.y = y; cmd.units_per_px = units_per_px;
         cmd.sprite = spr; cmd.colour_idx = color_idx;
-        cmd.draw_flags = draw_flags;
+        cmd.draw_flags = state.flags;
         cmd.seq = m_ui_write_cmds->NextSeq();
         m_ui_write_cmds->sprites_colored.Append(cmd);
         return;
@@ -195,19 +195,19 @@ void IUIRenderer::SubmitPanelSpriteColored(int32_t x, int32_t y, int units_per_p
     if (it == m_handle_to_sprite.end()) return;
     ScopedSpriteSubmitGuard guard;
     unsigned int saved = lbDisplay.DrawFlags;
-    lbDisplay.DrawFlags = draw_flags;
+    lbDisplay.DrawFlags = state.flags;
     LbSpriteDrawResizedOneColour(x, y, units_per_px, it->second, color_idx);
     lbDisplay.DrawFlags = saved;
 }
 
 void IUIRenderer::SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h,
-                                     SpriteHandle spr, unsigned int draw_flags)
+                                     SpriteHandle spr, KfxDrawState state)
 {
     if (m_ui_write_cmds) {
         IRUISpriteCmd cmd;
         cmd.x = x; cmd.y = y; cmd.w = w; cmd.h = h; cmd.units_per_px = 16;
         cmd.sprite = spr; cmd.flags = kIRSpriteScaled;
-        cmd.draw_flags = draw_flags;
+        cmd.draw_flags = state.flags;
         cmd.seq = m_ui_write_cmds->NextSeq();
         m_ui_write_cmds->sprites.Append(cmd);
         return;
@@ -216,7 +216,7 @@ void IUIRenderer::SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h,
     if (it == m_handle_to_sprite.end()) return;
     ScopedSpriteSubmitGuard guard;
     unsigned int saved = lbDisplay.DrawFlags;
-    lbDisplay.DrawFlags = draw_flags;
+    lbDisplay.DrawFlags = state.flags;
     LbSpriteDrawScaled(x, y, it->second, w, h);
     lbDisplay.DrawFlags = saved;
 }
@@ -369,22 +369,22 @@ void IUIRenderer::ReplayMergedFromIR(const UICommandBuffers& ui,
         case K_Sprite: {
             const IRUISpriteCmd& c = ui.sprites.Data()[r.idx];
             if (c.flags & kIRSpriteScaled)
-                SubmitScaledSprite(c.x, c.y, c.w, c.h, c.sprite, c.draw_flags);
+                SubmitScaledSprite(c.x, c.y, c.w, c.h, c.sprite, draw_state_make(c.draw_flags, 0));
             else
                 SubmitPanelSprite(c.x, c.y, c.units_per_px, c.sprite,
-                                  (c.flags & kIRSpriteFlipHoriz) != 0, c.draw_flags);
+                                  (c.flags & kIRSpriteFlipHoriz) != 0, draw_state_make(c.draw_flags, 0));
             break;
         }
         case K_Remap: {
             const IRUISpriteRemapCmd& c = ui.sprites_remap.Data()[r.idx];
             SubmitPanelSpriteRemap(c.x, c.y, c.units_per_px, c.sprite,
-                                   c.remap_row, c.draw_flags);
+                                   c.remap_row, draw_state_make(c.draw_flags, 0));
             break;
         }
         case K_Colored: {
             const IRUISpriteColoredCmd& c = ui.sprites_colored.Data()[r.idx];
             SubmitPanelSpriteColored(c.x, c.y, c.units_per_px, c.sprite,
-                                     c.colour_idx, c.draw_flags);
+                                     c.colour_idx, draw_state_make(c.draw_flags, 0));
             break;
         }
         case K_Box: {

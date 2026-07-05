@@ -93,7 +93,7 @@ public:
      */
     virtual void SubmitPanelSprite(int32_t x, int32_t y, int units_per_px,
                                    SpriteHandle spr, bool flip_horiz,
-                                   unsigned int draw_flags);
+                                   KfxDrawState state);
 
     /**
      * Submit a panel/button sprite with palette remap (player colour tinting).
@@ -105,7 +105,7 @@ public:
      */
     virtual void SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px,
                                         SpriteHandle spr, int remap_row,
-                                        unsigned int draw_flags);
+                                        KfxDrawState state);
 
     /**
      * Submit a panel/button sprite drawn entirely in a single flat colour (sprite used as a mask).
@@ -116,7 +116,7 @@ public:
      */
     virtual void SubmitPanelSpriteColored(int32_t x, int32_t y, int units_per_px,
                                           SpriteHandle spr, uint8_t color_idx,
-                                          unsigned int draw_flags);
+                                          KfxDrawState state);
 
     /**
      * Submit a sprite with explicit pixel dimensions.
@@ -124,7 +124,7 @@ public:
      * @param draw_flags  Bullfrog draw flags captured at submission time.
      */
     virtual void SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h,
-                                    SpriteHandle spr, unsigned int draw_flags);
+                                    SpriteHandle spr, KfxDrawState state);
  
     /**
      * Submit a solid-color rectangle.
