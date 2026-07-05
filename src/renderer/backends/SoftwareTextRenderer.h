@@ -38,6 +38,14 @@ public:
     TbBool DrawTextResized(int32_t posx, int32_t posy, int32_t units_per_px, const char* text) override;
     TbBool DrawTextAt(int32_t screen_x, int32_t screen_y, int32_t units_per_px, const char* text) override;
 
+    // ── Software IR executor ──────────────────────────────────────────────────
+    /** Open/close the text IR write window (software deferral). When set, the
+     *  DrawText* calls snapshot into an IRTextDrawCmd instead of drawing. */
+    void SetTextCommandBuffers(struct TextCommandBuffers* cmds) override { m_write_cmds = cmds; }
+    /** Restore the captured text state and draw immediately — called by the
+     *  merged seq-ordered replay in IUIRenderer::ReplayMergedFromIR. */
+    void ReplayTextCommand(const struct IRTextDrawCmd& cmd) override;
+
     // Measurement
     int32_t LineHeight() override;
     int32_t CharWidth(uint32_t chr) override;
@@ -54,6 +62,11 @@ public:
 private:
     /** Build a TextLayoutContext snapshot from current member state. */
     TextLayoutContext BuildLayoutContext() const;
+
+    /** Snapshot current font/window/draw state into an IRTextDrawCmd and append
+     *  it to m_write_cmds (software deferral).  Stamps the shared seq. */
+    void AppendTextCmd(int32_t x, int32_t y, int32_t units_per_px,
+                       bool absolute, const char* text);
 
     /** Segment callback for paragraph layout — dispatches to PutDownSprites. */
     static void SwDrawSegment(const char* sbuf, const char* ebuf,
@@ -89,6 +102,12 @@ private:
     /**************************************************************************/
     TextWindow                  m_justify_window;
     TextWindow                  m_clip_window;
+
+    /**************************************************************************/
+    /* Software IR deferral                                                    */
+    /**************************************************************************/
+    /** When non-null, DrawText* append an IRTextDrawCmd instead of drawing. */
+    struct TextCommandBuffers*  m_write_cmds = nullptr;
 };
 
 /******************************************************************************/

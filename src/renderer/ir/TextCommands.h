@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <cstddef>
 #include <cstring>
+#include <utility>
 #include "renderer/ir/IRCommandBuffer.h"
 
 /******************************************************************************/
@@ -53,6 +54,10 @@ struct IRTextDrawCmd
     long        dbc_colour0 = 0;           /**< DBC face colour (from LbTextGetFontFaceColor). */
     long        dbc_colour1 = 0;           /**< DBC shadow colour (currently unused). */
 
+    uint32_t    seq         = 0;           /**< Global submission order, shared with the UI buffer, so a
+                                            *   software executor replays UI+text in true submission order.
+                                            *   Unused on GL (which draws all-UI-then-all-text). */
+
     /* Inline text storage — avoids heap allocation per command. */
     char text[kIRTextMaxLen] = {};
 
@@ -78,9 +83,19 @@ struct TextCommandBuffers
 {
     IRCommandBuffer<IRTextDrawCmd> draws;
 
-    void Reset()   { draws.Reset(); }
+    /** Per-buffer submission counter (fallback when shared_seq is null — GL). */
+    uint32_t  next_seq   = 0;
+    /** When set (software), points at the shared UI+text frame counter so text
+     *  and UI commands share one monotonic seq. Not reset/swapped — owned by the
+     *  backend and re-pointed each frame. */
+    uint32_t* shared_seq = nullptr;
+
+    /** Next submission sequence number: the shared counter if wired, else per-buffer. */
+    uint32_t NextSeq() { return shared_seq ? (*shared_seq)++ : next_seq++; }
+
+    void Reset()   { draws.Reset(); next_seq = 0; }
     void Reserve(size_t n) { draws.Reserve(n); }
-    void Swap(TextCommandBuffers& other) { draws.Swap(other.draws); }
+    void Swap(TextCommandBuffers& other) { draws.Swap(other.draws); std::swap(next_seq, other.next_seq); }
 };
 
 /******************************************************************************/

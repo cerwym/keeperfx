@@ -9,6 +9,7 @@
 
 #include "IRenderer.h"
 #include "bflib_video.h"
+#include "renderer/RenderGraph.h"
 
 /******************************************************************************/
 
@@ -38,6 +39,14 @@ private:
     unsigned char* m_lens_buffer = nullptr;
     unsigned int m_lens_buffer_w = 0;
     unsigned int m_lens_buffer_h = 0;
+
+    // ── Software IR executor ──────────────────────────────────────────────────
+    // The software backend defers UI + text submissions into this graph during
+    // the frame, then replays them (merged by a shared per-frame seq) into
+    // lbDrawSurface at EndFrame — "immediate mode emulated through the graph".
+    RenderGraph m_render_graph;
+    uint32_t    m_frame_seq = 0;   // shared UI+text submission counter, reset each frame
+    bool        m_frame_open = false; // guards the double BeginFrame per present (lock + present)
 
 public:
     bool     Init() override;

@@ -58,6 +58,13 @@ extern "C" TbResult LbScreenCreateDrawSurface(int w, int h, int bpp)
         ERRORLOG("Failed to create draw surface (%dx%dx%d): %s", w, h, bpp, SDL_GetError());
         return Lb_FAIL;
     }
+    // SDL3: an INDEX8 surface is created WITHOUT a palette (SDL2 attached a
+    // default one).  Without a palette, LbPaletteSet() can't populate colours
+    // and the EndFrame format-convert blit fails ("src does not have a palette
+    // set") — a black screen.  Create and attach one now.
+    if (fmt == SDL_PIXELFORMAT_INDEX8 && !SDL_CreateSurfacePalette(lbDrawSurface)) {
+        ERRORLOG("Failed to create draw-surface palette: %s", SDL_GetError());
+    }
     return Lb_SUCCESS;
 }
 
@@ -189,13 +196,74 @@ bool RendererSoftware::BeginFrame()
 {
     m_screenW = lbDisplay.PhysicalScreenWidth;
     m_screenH = lbDisplay.PhysicalScreenHeight;
+
+    // RendererBeginFrame() is not guarded and runs twice per present (once in
+    // RendererLockScreen, again in RendererPresentFrame).  Open the IR graph
+    // only once per frame — a second BeginFrame() would wipe the UI already
+    // appended this frame.  EndFrame() clears m_frame_open.
+    if (m_frame_open)
+        return true;
+    m_frame_open = true;
+
     CursorLayer_Clear();
+
+    // Open the UI+text IR write window for the software executor.  UI sprite and
+    // text submissions during this frame append to the graph (sharing one seq
+    // counter) instead of drawing immediately; they are replayed at EndFrame.
+    m_render_graph.BeginFrame();
+    m_frame_seq = 0;
+    m_render_graph.GetUIBuffers().shared_seq   = &m_frame_seq;
+    m_render_graph.GetTextBuffers().shared_seq = &m_frame_seq;
+    // Open the write window on the MANAGER's sub-renderers — the ones the game
+    // actually submits to via RendererGetUIRenderer()/RendererGetTextRenderer()
+    // and on which the sprite sheets are registered.  (RendererSoftware's own
+    // m_uiRenderer/m_textRenderer are a separate, unused pair.)
+    if (IUIRenderer* ui = RendererGetUIRenderer())
+        ui->SetUICommandBuffers(&m_render_graph.GetUIBuffers());
+    if (ITextRenderer* text = RendererGetTextRenderer())
+        text->SetTextCommandBuffers(&m_render_graph.GetTextBuffers());
     return true;
 }
 
 void RendererSoftware::EndFrame()
 {
-    CursorLayer_Draw();
+    // Software IR executor: close the write window, flip, and replay the
+    // deferred UI + text (merged by shared seq) into lbDrawSurface — on top of
+    // everything drawn immediately this frame — before the cursor + blit.
+    // Reset the open-guard first so it clears even on the early-return blit
+    // error paths below.
+    m_frame_open = false;
+    IUIRenderer*   ui   = RendererGetUIRenderer();
+    ITextRenderer* text = RendererGetTextRenderer();
+    if (ui)   ui->SetUICommandBuffers(nullptr);
+    if (text) text->SetTextCommandBuffers(nullptr);
+    FrameState fs = {};
+    m_render_graph.Flip(fs);
+
+    // The deferred UI+text replay and the cursor draw into lbDisplay.WScreen,
+    // but RendererUnlockScreen() nulled it before present.  The draw-surface
+    // pixels are always valid (no real SDL lock needed), so point WScreen back
+    // at them with a full-screen graphics window for the replay, then clear it.
+    if (lbDrawSurface)
+    {
+        lbDisplay.WScreen              = static_cast<TbPixel*>(lbDrawSurface->pixels);
+        lbDisplay.GraphicsScreenWidth  = lbDrawSurface->pitch;
+        lbDisplay.GraphicsScreenHeight = lbDrawSurface->h;
+        lbDisplay.GraphicsWindowX      = 0;
+        lbDisplay.GraphicsWindowY      = 0;
+        lbDisplay.GraphicsWindowWidth  = lbDrawSurface->w;
+        lbDisplay.GraphicsWindowHeight = lbDrawSurface->h;
+        lbDisplay.GraphicsWindowPtr    = lbDisplay.WScreen;
+
+        if (ui)
+            ui->ReplayMergedFromIR(m_render_graph.GetUIBuffersRT(),
+                                   m_render_graph.GetTextBuffersRT(),
+                                   text);
+        CursorLayer_Draw();
+
+        lbDisplay.WScreen           = NULL;
+        lbDisplay.GraphicsWindowPtr = NULL;
+    }
 
     SDL_Window* win = static_cast<SDL_Window*>(platform_get_sdl_window());
     // Refresh the window surface pointer each frame (guards against resize/alt-tab).

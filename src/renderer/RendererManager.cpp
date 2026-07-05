@@ -296,7 +296,20 @@ static SpriteHandle resolve_sprite_handle(const TbSprite* spr)
     }
 #endif
     auto it = s_sprite_to_handle.find(spr);
-    return (it != s_sprite_to_handle.end()) ? it->second : kInvalidSpriteHandle;
+    if (it != s_sprite_to_handle.end())
+        return it->second;
+    // Software: lazily register any not-yet-seen sprite so EVERY valid sprite
+    // resolves.  Only a few sheets are eagerly registered (gui_panel/button/
+    // map_flag); the menu's frontend_sprite and most others are not, so without
+    // this they resolve to kInvalidSpriteHandle and never draw.  Software is
+    // single-threaded here, so mutating the tables is safe.
+    if (s_softwareUIRenderer && spr->Data && spr->SWidth > 0 && spr->SHeight > 0) {
+        SpriteHandle h = s_software_next_handle++;
+        s_sprite_to_handle[spr] = h;
+        s_softwareUIRenderer->RegisterSpriteHandle(h, spr);
+        return h;
+    }
+    return kInvalidSpriteHandle;
 }
 
 SpriteHandle RendererResolveSprite(const TbSprite* spr)

@@ -199,6 +199,14 @@ struct UICommandBuffers
      *  Stored in each command's seq field so ExecuteUIFromIR() can restore the
      *  original game-thread submission order after processing commands by type. */
     uint32_t       next_seq  = 0;
+    /** When set (software), points at the shared UI+text frame counter so a
+     *  software executor replays UI and text commands in true submission order.
+     *  Null on GL (which orders text as always-on-top, not by cross-seq). Not
+     *  reset/swapped — owned by the backend and re-pointed each frame. */
+    uint32_t*      shared_seq = nullptr;
+
+    /** Next submission sequence number: the shared counter if wired, else per-buffer. */
+    uint32_t NextSeq() { return shared_seq ? (*shared_seq)++ : next_seq++; }
 
     void Reset()
     {

@@ -29,7 +29,9 @@ struct TbSprite;
 // Forward-declare IR types so PopulateFromIR can appear on this interface
 // without pulling UICommands.h / FrameState.h into every consumer.
 struct UICommandBuffers;
+struct TextCommandBuffers;
 struct FrameState;
+class  ITextRenderer;
 
 #ifdef __cplusplus
 
@@ -353,8 +355,21 @@ public:
      *  Called from RendererOpenGL::BeginFrame_GL() once per non-fade-cache frame.
      *  GPU backends store the pointer and append IR commands to it during Submit*().
      *  Pass nullptr to close the window (e.g. in stale-replay / PiP frames).
-     *  Default: no-op (software renderer never uses IR). */
-    virtual void SetUICommandBuffers(UICommandBuffers* /*cmds*/) {}
+     *  Base impl stores the pointer in m_ui_write_cmds and sets ir_active, so
+     *  the CPU Submit* paths append instead of drawing (software IR executor).
+     *  GPU backends override to store in their own way. */
+    virtual void SetUICommandBuffers(UICommandBuffers* cmds);
+
+    /** Replay a UI + text command stream, merged by their shared submission
+     *  `seq`, through the immediate CPU draw path — the software IR executor.
+     *  Called by RendererSoftware::EndFrame after RenderGraph::Flip.  Walks both
+     *  read-side buffers in seq order; UI commands are drawn by re-invoking this
+     *  renderer's immediate Submit* bodies, text commands via
+     *  ITextRenderer::ReplayTextCommand.  No-op on GPU backends (they use their
+     *  own PopulateFromIR/Draw). */
+    virtual void ReplayMergedFromIR(const UICommandBuffers& ui,
+                                    const TextCommandBuffers& text,
+                                    ITextRenderer* text_renderer);
 
     // ── IR (Intermediate Representation) dispatch ──────────────────────────────
 
@@ -381,6 +396,12 @@ public:
 protected:
     /** Sprite handle → raw TbSprite* map, used by CPU default implementations. */
     std::unordered_map<SpriteHandle, const struct TbSprite*> m_handle_to_sprite;
+
+    /** IR write target for this frame.  When non-null (software IR executor),
+     *  the CPU Submit* paths append a command instead of drawing immediately;
+     *  null (default) means draw immediately (legacy path).  Set via
+     *  SetUICommandBuffers(); GPU backends manage their own equivalent. */
+    UICommandBuffers* m_ui_write_cmds = nullptr;
 };
 
 /******************************************************************************/

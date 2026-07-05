@@ -10,6 +10,7 @@
 #include "pre_inc.h"
 #include "renderer/backends/SoftwareTextRenderer.h"
 #include "renderer/RendererManager.h"
+#include "renderer/ir/TextCommands.h"    // IRTextDrawCmd for software deferral
 
 #include "bflib_sprfnt.h"
 #include "bflib_sprite.h"
@@ -329,6 +330,8 @@ TbBool SoftwareTextRenderer::DrawTextResized(int32_t posx, int32_t posy,
     if (!m_font || !text)
         return true;
 
+    if (m_write_cmds) { AppendTextCmd(posx, posy, units_per_px, /*absolute=*/false, text); return true; }
+
     TbGraphicsWindow grwnd;
     RendererStoreViewport(&grwnd);
 
@@ -355,6 +358,8 @@ TbBool SoftwareTextRenderer::DrawTextAt(int32_t screen_x, int32_t screen_y,
     if (!m_font || !text)
         return true;
 
+    if (m_write_cmds) { AppendTextCmd(screen_x, screen_y, units_per_px, /*absolute=*/true, text); return true; }
+
     TbGraphicsWindow grwnd;
     RendererStoreViewport(&grwnd);
 
@@ -371,6 +376,60 @@ TbBool SoftwareTextRenderer::DrawTextAt(int32_t screen_x, int32_t screen_y,
 
     RendererLoadViewport(&grwnd);
     return true;
+}
+
+/******************************************************************************/
+/* Software IR deferral: snapshot + replay                                    */
+/******************************************************************************/
+
+void SoftwareTextRenderer::AppendTextCmd(int32_t x, int32_t y, int32_t units_per_px,
+                                         bool absolute, const char* text)
+{
+    IRTextDrawCmd cmd;
+    cmd.pos_x        = x;
+    cmd.pos_y        = y;
+    cmd.units_per_px = units_per_px;
+    cmd.absolute     = absolute ? 1 : 0;
+    cmd.draw_colour  = lbDisplay.DrawColour;
+    cmd.draw_flags   = (uint16_t)lbDisplay.DrawFlags;
+    cmd.justify_x    = m_justify_window.x;
+    cmd.justify_y    = m_justify_window.y;
+    cmd.justify_w    = m_justify_window.width;
+    cmd.clip_x       = m_clip_window.x;
+    cmd.clip_y       = m_clip_window.y;
+    cmd.clip_w       = m_clip_window.width;
+    cmd.clip_h       = m_clip_window.height;
+    cmd.font         = m_font;
+    cmd.dbc_font     = m_dbc_font;
+    cmd.dbc_enabled  = m_dbc_enabled ? 1 : 0;
+    cmd.dbc_colour0  = m_dbc_colour0;
+    cmd.dbc_colour1  = m_dbc_colour1;
+    cmd.font_generation = 0;   // same-frame replay; SW replay re-resolves via SetFont
+    cmd.SetText(text);
+    cmd.seq          = m_write_cmds->NextSeq();
+    m_write_cmds->draws.Append(cmd);
+}
+
+void SoftwareTextRenderer::ReplayTextCommand(const IRTextDrawCmd& cmd)
+{
+    // Restore the captured state and draw immediately.  Detach the write buffer
+    // first so DrawText* draw instead of re-appending.  SetFont re-derives the
+    // DBC font/colours from the font identity (same within a frame).
+    TextCommandBuffers* saved = m_write_cmds;
+    m_write_cmds = nullptr;
+
+    SetFont(reinterpret_cast<const struct TbSpriteSheet*>(cmd.font));
+    m_justify_window = { cmd.justify_x, cmd.justify_y, cmd.justify_w, 0 };
+    m_clip_window    = { cmd.clip_x, cmd.clip_y, cmd.clip_w, cmd.clip_h };
+    lbDisplay.DrawColour = cmd.draw_colour;
+    lbDisplay.DrawFlags  = cmd.draw_flags;
+
+    if (cmd.absolute)
+        DrawTextAt(cmd.pos_x, cmd.pos_y, cmd.units_per_px, cmd.text);
+    else
+        DrawTextResized(cmd.pos_x, cmd.pos_y, cmd.units_per_px, cmd.text);
+
+    m_write_cmds = saved;
 }
 
 /******************************************************************************/

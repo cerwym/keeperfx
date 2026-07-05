@@ -370,8 +370,8 @@ private:
     int  m_rt_game_vp_h = 0;
     bool m_rt_game_vp_set = false;
 
-    // IR write target — set by SetUICommandBuffers(); null in stale-replay/PiP frames.
-    UICommandBuffers* m_ui_write_cmds = nullptr;
+    // IR write target (m_ui_write_cmds) is inherited from IUIRenderer — set by
+    // SetUICommandBuffers(); null in stale-replay/PiP frames.
 
     // Internal methods
     void CreateVertexArrays();

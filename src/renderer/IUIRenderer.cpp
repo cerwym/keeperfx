@@ -16,10 +16,15 @@
 #include "renderer/IUIRenderer.h"
 #include "engine_render.h"       // process_keeper_sprite
 #include "renderer/RendererManager.h"
+#include "renderer/ITextRenderer.h"      // ReplayTextCommand for the merged replay
+#include "renderer/ir/UICommands.h"      // IR command types for append/replay
+#include "renderer/ir/TextCommands.h"    // IRTextDrawCmd for the merged replay
 #include "bflib_vidraw.h"        // sprite and primitive CPU fallbacks
 #include "bflib_sprite.h"        // TbSprite
 #include "bflib_video.h"         // lbDisplay, units_per_pixel
 #include "vidmode.h"             // pixmap (TbColorTables) for fade_tables
+#include <algorithm>             // std::sort for the seq-merge replay
+#include <vector>
 
 extern "C" {
 extern unsigned char* MapBackground;
@@ -129,6 +134,16 @@ void IUIRenderer::SubmitPanelSprite(int32_t x, int32_t y, int units_per_px,
                                     SpriteHandle spr, bool flip_horiz,
                                     unsigned int draw_flags)
 {
+    if (m_ui_write_cmds) {
+        IRUISpriteCmd cmd;
+        cmd.x = x; cmd.y = y; cmd.units_per_px = units_per_px;
+        cmd.sprite = spr;
+        cmd.flags = flip_horiz ? kIRSpriteFlipHoriz : 0u;
+        cmd.draw_flags = draw_flags;
+        cmd.seq = m_ui_write_cmds->NextSeq();
+        m_ui_write_cmds->sprites.Append(cmd);
+        return;
+    }
     auto it = m_handle_to_sprite.find(spr);
     if (it == m_handle_to_sprite.end()) return;
     unsigned int effective_flags = draw_flags;
@@ -144,6 +159,15 @@ void IUIRenderer::SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px,
                                          SpriteHandle spr, int remap_row,
                                          unsigned int draw_flags)
 {
+    if (m_ui_write_cmds) {
+        IRUISpriteRemapCmd cmd;
+        cmd.x = x; cmd.y = y; cmd.units_per_px = units_per_px;
+        cmd.sprite = spr; cmd.remap_row = remap_row;
+        cmd.draw_flags = draw_flags;
+        cmd.seq = m_ui_write_cmds->NextSeq();
+        m_ui_write_cmds->sprites_remap.Append(cmd);
+        return;
+    }
     auto it = m_handle_to_sprite.find(spr);
     if (it == m_handle_to_sprite.end()) return;
     ScopedSpriteSubmitGuard guard;
@@ -158,6 +182,15 @@ void IUIRenderer::SubmitPanelSpriteColored(int32_t x, int32_t y, int units_per_p
                                            SpriteHandle spr, uint8_t color_idx,
                                            unsigned int draw_flags)
 {
+    if (m_ui_write_cmds) {
+        IRUISpriteColoredCmd cmd;
+        cmd.x = x; cmd.y = y; cmd.units_per_px = units_per_px;
+        cmd.sprite = spr; cmd.colour_idx = color_idx;
+        cmd.draw_flags = draw_flags;
+        cmd.seq = m_ui_write_cmds->NextSeq();
+        m_ui_write_cmds->sprites_colored.Append(cmd);
+        return;
+    }
     auto it = m_handle_to_sprite.find(spr);
     if (it == m_handle_to_sprite.end()) return;
     ScopedSpriteSubmitGuard guard;
@@ -170,6 +203,15 @@ void IUIRenderer::SubmitPanelSpriteColored(int32_t x, int32_t y, int units_per_p
 void IUIRenderer::SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h,
                                      SpriteHandle spr, unsigned int draw_flags)
 {
+    if (m_ui_write_cmds) {
+        IRUISpriteCmd cmd;
+        cmd.x = x; cmd.y = y; cmd.w = w; cmd.h = h; cmd.units_per_px = 16;
+        cmd.sprite = spr; cmd.flags = kIRSpriteScaled;
+        cmd.draw_flags = draw_flags;
+        cmd.seq = m_ui_write_cmds->NextSeq();
+        m_ui_write_cmds->sprites.Append(cmd);
+        return;
+    }
     auto it = m_handle_to_sprite.find(spr);
     if (it == m_handle_to_sprite.end()) return;
     ScopedSpriteSubmitGuard guard;
@@ -263,6 +305,75 @@ uint8_t* IUIRenderer::AcquireMinimapBuffer(int /*size*/)
 void IUIRenderer::SubmitMinimap(int /*screen_x*/, int /*screen_y*/, int /*size*/)
 {
     // No-op: minimap pixels were written directly to lbDisplay.WScreen.
+}
+
+void IUIRenderer::SetUICommandBuffers(UICommandBuffers* cmds)
+{
+    m_ui_write_cmds = cmds;
+    if (cmds) cmds->ir_active = true;
+}
+
+void IUIRenderer::ReplayMergedFromIR(const UICommandBuffers& ui,
+                                     const TextCommandBuffers& text,
+                                     ITextRenderer* text_renderer)
+{
+    // Merge UI sprite commands and text draws by their shared submission seq,
+    // then replay each through the immediate CPU path in true submission order.
+    // (Boxes/circles/raw sprites are not deferred yet — they stay immediate as
+    // background draws under the deferred foreground; see docs.)
+    struct Ref { uint32_t seq; uint8_t kind; uint32_t idx; };
+    enum { K_Sprite = 0, K_Remap, K_Colored, K_Text };
+    std::vector<Ref> order;
+    order.reserve(ui.sprites.Size() + ui.sprites_remap.Size() +
+                  ui.sprites_colored.Size() + text.draws.Size());
+    for (uint32_t i = 0; i < (uint32_t)ui.sprites.Size(); ++i)
+        order.push_back({ ui.sprites.Data()[i].seq, K_Sprite, i });
+    for (uint32_t i = 0; i < (uint32_t)ui.sprites_remap.Size(); ++i)
+        order.push_back({ ui.sprites_remap.Data()[i].seq, K_Remap, i });
+    for (uint32_t i = 0; i < (uint32_t)ui.sprites_colored.Size(); ++i)
+        order.push_back({ ui.sprites_colored.Data()[i].seq, K_Colored, i });
+    if (text_renderer)
+        for (uint32_t i = 0; i < (uint32_t)text.draws.Size(); ++i)
+            order.push_back({ text.draws.Data()[i].seq, K_Text, i });
+
+    std::sort(order.begin(), order.end(),
+              [](const Ref& a, const Ref& b) { return a.seq < b.seq; });
+
+    // Detach the write buffer so the immediate Submit* bodies draw instead of
+    // re-appending.
+    UICommandBuffers* saved = m_ui_write_cmds;
+    m_ui_write_cmds = nullptr;
+    for (const Ref& r : order)
+    {
+        switch (r.kind)
+        {
+        case K_Sprite: {
+            const IRUISpriteCmd& c = ui.sprites.Data()[r.idx];
+            if (c.flags & kIRSpriteScaled)
+                SubmitScaledSprite(c.x, c.y, c.w, c.h, c.sprite, c.draw_flags);
+            else
+                SubmitPanelSprite(c.x, c.y, c.units_per_px, c.sprite,
+                                  (c.flags & kIRSpriteFlipHoriz) != 0, c.draw_flags);
+            break;
+        }
+        case K_Remap: {
+            const IRUISpriteRemapCmd& c = ui.sprites_remap.Data()[r.idx];
+            SubmitPanelSpriteRemap(c.x, c.y, c.units_per_px, c.sprite,
+                                   c.remap_row, c.draw_flags);
+            break;
+        }
+        case K_Colored: {
+            const IRUISpriteColoredCmd& c = ui.sprites_colored.Data()[r.idx];
+            SubmitPanelSpriteColored(c.x, c.y, c.units_per_px, c.sprite,
+                                     c.colour_idx, c.draw_flags);
+            break;
+        }
+        case K_Text:
+            text_renderer->ReplayTextCommand(text.draws.Data()[r.idx]);
+            break;
+        }
+    }
+    m_ui_write_cmds = saved;
 }
 
 void IUIRenderer::Draw()

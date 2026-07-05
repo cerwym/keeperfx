@@ -299,7 +299,7 @@ void GLUIRenderer::SubmitPanelSprite(int32_t x, int32_t y, int units_per_px,
         cmd.flags        = flip_horiz ? kIRSpriteFlipHoriz : 0u;
         cmd.draw_flags   = draw_flags;
         cmd.ndc_z        = (m_world_overlay_active || m_world_overlay_flat_active) ? m_world_z : 0.5f;
-        cmd.seq          = m_ui_write_cmds->next_seq++;
+        cmd.seq          = m_ui_write_cmds->NextSeq();
         m_ui_write_cmds->sprites.Append(cmd);
         return;
     }
@@ -343,7 +343,7 @@ void GLUIRenderer::SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px
         cmd.remap_row    = remap_row;
         cmd.draw_flags   = draw_flags;
         cmd.ndc_z        = (m_world_overlay_active || m_world_overlay_flat_active) ? m_world_z : 0.5f;
-        cmd.seq          = m_ui_write_cmds->next_seq++;
+        cmd.seq          = m_ui_write_cmds->NextSeq();
         m_ui_write_cmds->sprites_remap.Append(cmd);
         return;
     }
@@ -395,7 +395,7 @@ void GLUIRenderer::SubmitPanelSpriteColored(int32_t x, int32_t y, int units_per_
         cmd.colour_idx   = color_idx;
         cmd.draw_flags   = draw_flags;
         cmd.ndc_z        = (m_world_overlay_active || m_world_overlay_flat_active) ? m_world_z : 0.5f;
-        cmd.seq          = m_ui_write_cmds->next_seq++;
+        cmd.seq          = m_ui_write_cmds->NextSeq();
         m_ui_write_cmds->sprites_colored.Append(cmd);
         return;
     }
@@ -439,7 +439,7 @@ void GLUIRenderer::SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h
         cmd.flags        = kIRSpriteScaled;
         cmd.draw_flags   = draw_flags;
         cmd.ndc_z        = (m_world_overlay_active || m_world_overlay_flat_active) ? m_world_z : 0.5f;
-        cmd.seq          = m_ui_write_cmds->next_seq++;
+        cmd.seq          = m_ui_write_cmds->NextSeq();
         m_ui_write_cmds->sprites.Append(cmd);
         return;
     }
@@ -470,7 +470,7 @@ void GLUIRenderer::SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, ui
         cmd.colour_idx = color_idx;
         cmd.alpha      = 1.0f;
         cmd.ndc_z      = (m_world_overlay_active || m_world_overlay_flat_active) ? m_world_z : 0.5f;
-        cmd.seq        = m_ui_write_cmds->next_seq++;
+        cmd.seq        = m_ui_write_cmds->NextSeq();
         m_ui_write_cmds->solid_boxes.Append(cmd);
         return;
     }
@@ -499,7 +499,7 @@ void GLUIRenderer::SubmitSolidBoxAlpha(int32_t x, int32_t y, int32_t w, int32_t 
         cmd.colour_idx = color_idx;
         cmd.alpha      = alpha;
         cmd.ndc_z      = (m_world_overlay_active || m_world_overlay_flat_active) ? m_world_z : 0.5f;
-        cmd.seq        = m_ui_write_cmds->next_seq++;
+        cmd.seq        = m_ui_write_cmds->NextSeq();
         m_ui_write_cmds->solid_boxes.Append(cmd);
         return;
     }
@@ -585,7 +585,7 @@ bool GLUIRenderer::SubmitSlabBackground(int x, int y, int w, int h)
         cmd.y     = y;
         cmd.w     = w;
         cmd.h     = h;
-        cmd.seq   = m_ui_write_cmds->next_seq++;
+        cmd.seq   = m_ui_write_cmds->NextSeq();
         m_ui_write_cmds->slab_backgrounds.Append(cmd);
         return true;
     }
