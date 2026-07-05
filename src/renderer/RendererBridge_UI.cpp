@@ -10,6 +10,7 @@
 #include "renderer/RendererManager_Internal.h"
 #include "renderer/IUIRenderer.h"
 #include "renderer/SpriteHandle.h"
+#include "renderer/DrawState.h"     // per-call draw descriptor (lbDisplay draw-state elimination)
 
 #include "bflib_basics.h"
 #include "bflib_sprite.h"       // TbSprite

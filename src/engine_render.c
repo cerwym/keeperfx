@@ -6579,8 +6579,6 @@ void display_drawlist(void) // Draws isometric and 1st person view. Not frontvie
     SYNCDBG(9,"Starting");
     // Color rendering array pointers used by draw_keepersprite()
     render_fade_tables = pixmap.fade_tables;
-    render_ghost = pixmap.ghost;
-    render_alpha = (unsigned char *)&alpha_sprite_table;
     render_problems = 0;
     thing_pointed_at = 0;
 
@@ -6781,8 +6779,6 @@ void display_drawlist_sprites_only(void)
     } item;
     long bucket_num;
     render_fade_tables = pixmap.fade_tables;
-    render_ghost = pixmap.ghost;
-    render_alpha = (unsigned char *)&alpha_sprite_table;
     for (bucket_num = BUCKETS_COUNT-1; bucket_num > 0; bucket_num--)
     {
         for (item.b = buckets[bucket_num]; item.b != NULL; item.b = item.b->next)
@@ -6852,8 +6848,6 @@ void draw_3d_sprites_for_bucket(long bucket_num)
     } item;
 
     render_fade_tables = pixmap.fade_tables;
-    render_ghost = pixmap.ghost;
-    render_alpha = (unsigned char *)&alpha_sprite_table;
 
     for (item.b = buckets[bucket_num]; item.b != NULL; item.b = item.b->next)
     {
@@ -6885,8 +6879,6 @@ void draw_frontview_3d_sprites_for_bucket(long bucket_num, struct Camera *cam)
     } item;
 
     render_fade_tables = pixmap.fade_tables;
-    render_ghost = pixmap.ghost;
-    render_alpha = (unsigned char *)&alpha_sprite_table;
 
     for (item.b = buckets[bucket_num]; item.b != NULL; item.b = item.b->next)
     {
@@ -6932,8 +6924,6 @@ void draw_nonspatial_sprites(void)
     long bucket_num;
 
     render_fade_tables = pixmap.fade_tables;
-    render_ghost = pixmap.ghost;
-    render_alpha = (unsigned char *)&alpha_sprite_table;
 
     for (bucket_num = BUCKETS_COUNT-1; bucket_num > 0; bucket_num--)
     {
@@ -6988,8 +6978,6 @@ void draw_nonspatial_sprites_no_shadows(void)
     long bucket_num;
 
     render_fade_tables = pixmap.fade_tables;
-    render_ghost = pixmap.ghost;
-    render_alpha = (unsigned char *)&alpha_sprite_table;
 
     for (bucket_num = BUCKETS_COUNT-1; bucket_num > 0; bucket_num--)
     {
@@ -7375,8 +7363,6 @@ void display_fast_drawlist(struct Camera *cam) // Draws frontview only. Not isom
     } item;
     // Color rendering array pointers used by draw_keepersprite()
     render_fade_tables = pixmap.fade_tables;
-    render_ghost = pixmap.ghost;
-    render_alpha = (unsigned char *)&alpha_sprite_table;
     render_problems = 0;
     thing_pointed_at = 0;
 

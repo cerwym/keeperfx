@@ -59,6 +59,7 @@ struct IRUISolidBoxCmd
     int32_t   h          = 0;
     uint8_t   colour_idx = 0;   /**< Palette index. */
     float     alpha      = 1.0f; /**< 1.0 = opaque. */
+    unsigned int draw_flags = 0; /**< Bullfrog draw flags at submit (software replay honours Lb_SPRITE_OUTLINE); GL ignores. */
     float     ndc_z      = 0.5f; /**< NDC depth for WorldOverlay/WorldOverlayFlat layers; ignored for other layers. */
     uint32_t  seq        = 0;   /**< Global submission order across all IR command types. */
 };

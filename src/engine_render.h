@@ -124,8 +124,6 @@ extern long split_2;
 extern long fade_max;
 /** Fog-of-war lighting lookup table. Set by engine init after table load. */
 extern unsigned char *render_fade_tables;
-extern unsigned char *render_ghost;
-extern unsigned char *render_alpha;
 
 /* Sprite scaling state captured by LbSpriteSetScalingData —
  * read by hardware backends via the keeper-sprite hook. */

@@ -550,8 +550,6 @@ void draw_power_hand(void)
         return;
     // Color rendering array pointers used by draw_keepersprite()
     render_fade_tables = pixmap.fade_tables;
-    render_ghost = pixmap.ghost;
-    render_alpha = (unsigned char *)&alpha_sprite_table;
     // Scale factor
     int ps_units_per_px;
     {

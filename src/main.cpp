@@ -255,11 +255,8 @@ void setup_stuff(void)
 
     // Initialize global transparency mapping tables for sprite rendering
     render_fade_tables = pixmap.fade_tables;
-    render_ghost = pixmap.ghost;
-    render_alpha = (unsigned char*)&alpha_sprite_table;
 
-    SYNCLOG("Initialized transparency tables: render_fade_tables=%p, render_ghost=%p, render_alpha=%p", 
-            render_fade_tables, render_ghost, render_alpha);
+    SYNCLOG("Initialized transparency table: render_fade_tables=%p", render_fade_tables);
 }
 
 TbBool should_use_delta_time_on_menu()

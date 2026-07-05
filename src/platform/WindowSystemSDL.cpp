@@ -362,7 +362,12 @@ bool WindowSystemSDL::RecreateForSoftwareRenderer()
     SDL_GetWindowSize(lbWindow, &w, &h);
     int x = SDL_WINDOWPOS_UNDEFINED, y = SDL_WINDOWPOS_UNDEFINED;
     SDL_GetWindowPosition(lbWindow, &x, &y);
-    const char* title = SDL_GetWindowTitle(lbWindow);
+    // SDL_GetWindowTitle returns memory OWNED by the window; SDL_DestroyWindow
+    // frees it.  Copy it first, or SDL_CreateWindow reads a dangling pointer and
+    // the new window gets a garbage title.
+    // This'll also make it easier to do window title updating like i saw in Ironwail, (discord rich presnce style)
+    char title[256];
+    { const char* cur = SDL_GetWindowTitle(lbWindow); snprintf(title, sizeof(title), "%s", cur ? cur : ""); }
     SDL_WindowFlags new_flags = cur_flags & ~(SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_VULKAN);
 
     SDL_DestroyWindow(lbWindow);
@@ -388,7 +393,10 @@ bool WindowSystemSDL::RecreateForVulkanRenderer()
     SDL_GetWindowSize(lbWindow, &w, &h);
     int x = SDL_WINDOWPOS_UNDEFINED, y = SDL_WINDOWPOS_UNDEFINED;
     SDL_GetWindowPosition(lbWindow, &x, &y);
-    const char* title = SDL_GetWindowTitle(lbWindow);
+    // Copy the title before SDL_DestroyWindow frees the SDL_GetWindowTitle
+    // buffer (see RecreateForSoftwareRenderer) — avoids a dangling-pointer title.
+    char title[256];
+    { const char* cur = SDL_GetWindowTitle(lbWindow); snprintf(title, sizeof(title), "%s", cur ? cur : ""); }
     SDL_WindowFlags new_flags = SDL_GetWindowFlags(lbWindow) & ~(SDL_WindowFlags)SDL_WINDOW_VULKAN;
 
     SDL_DestroyWindow(lbWindow);

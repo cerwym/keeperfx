@@ -224,6 +224,15 @@ void IUIRenderer::SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h,
 void IUIRenderer::SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx)
 {
     if (w <= 0 || h <= 0) return;
+    if (m_ui_write_cmds) {
+        IRUISolidBoxCmd cmd;
+        cmd.x = x; cmd.y = y; cmd.w = w; cmd.h = h;
+        cmd.colour_idx = color_idx; cmd.alpha = 1.0f;
+        cmd.draw_flags = (unsigned int)lbDisplay.DrawFlags;
+        cmd.seq = m_ui_write_cmds->NextSeq();
+        m_ui_write_cmds->solid_boxes.Append(cmd);
+        return;
+    }
     if (lbDisplay.DrawFlags & Lb_SPRITE_OUTLINE)
     {
         if (w < 1 || h < 1) return;
@@ -245,6 +254,14 @@ void IUIRenderer::SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, uin
 void IUIRenderer::SubmitSolidBoxAlpha(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx, float alpha)
 {
     if (w <= 0 || h <= 0) return;
+    if (m_ui_write_cmds) {
+        IRUISolidBoxCmd cmd;
+        cmd.x = x; cmd.y = y; cmd.w = w; cmd.h = h;
+        cmd.colour_idx = color_idx; cmd.alpha = alpha; cmd.draw_flags = 0;
+        cmd.seq = m_ui_write_cmds->NextSeq();
+        m_ui_write_cmds->solid_boxes.Append(cmd);
+        return;
+    }
     unsigned short saved_flags = lbDisplay.DrawFlags;
     lbDisplay.DrawFlags &= ~(Lb_SPRITE_TRANSPAR4 | Lb_SPRITE_TRANSPAR8);
     if (alpha < 0.75f)
@@ -322,16 +339,18 @@ void IUIRenderer::ReplayMergedFromIR(const UICommandBuffers& ui,
     // (Boxes/circles/raw sprites are not deferred yet — they stay immediate as
     // background draws under the deferred foreground; see docs.)
     struct Ref { uint32_t seq; uint8_t kind; uint32_t idx; };
-    enum { K_Sprite = 0, K_Remap, K_Colored, K_Text };
+    enum { K_Sprite = 0, K_Remap, K_Colored, K_Box, K_Text };
     std::vector<Ref> order;
     order.reserve(ui.sprites.Size() + ui.sprites_remap.Size() +
-                  ui.sprites_colored.Size() + text.draws.Size());
+                  ui.sprites_colored.Size() + ui.solid_boxes.Size() + text.draws.Size());
     for (uint32_t i = 0; i < (uint32_t)ui.sprites.Size(); ++i)
         order.push_back({ ui.sprites.Data()[i].seq, K_Sprite, i });
     for (uint32_t i = 0; i < (uint32_t)ui.sprites_remap.Size(); ++i)
         order.push_back({ ui.sprites_remap.Data()[i].seq, K_Remap, i });
     for (uint32_t i = 0; i < (uint32_t)ui.sprites_colored.Size(); ++i)
         order.push_back({ ui.sprites_colored.Data()[i].seq, K_Colored, i });
+    for (uint32_t i = 0; i < (uint32_t)ui.solid_boxes.Size(); ++i)
+        order.push_back({ ui.solid_boxes.Data()[i].seq, K_Box, i });
     if (text_renderer)
         for (uint32_t i = 0; i < (uint32_t)text.draws.Size(); ++i)
             order.push_back({ text.draws.Data()[i].seq, K_Text, i });
@@ -366,6 +385,18 @@ void IUIRenderer::ReplayMergedFromIR(const UICommandBuffers& ui,
             const IRUISpriteColoredCmd& c = ui.sprites_colored.Data()[r.idx];
             SubmitPanelSpriteColored(c.x, c.y, c.units_per_px, c.sprite,
                                      c.colour_idx, c.draw_flags);
+            break;
+        }
+        case K_Box: {
+            const IRUISolidBoxCmd& c = ui.solid_boxes.Data()[r.idx];
+            if (c.alpha < 1.0f) {
+                SubmitSolidBoxAlpha(c.x, c.y, c.w, c.h, c.colour_idx, c.alpha);
+            } else {
+                unsigned int saved = (unsigned int)lbDisplay.DrawFlags;
+                lbDisplay.DrawFlags = c.draw_flags;   // honour Lb_SPRITE_OUTLINE
+                SubmitSolidBox(c.x, c.y, c.w, c.h, c.colour_idx);
+                lbDisplay.DrawFlags = saved;
+            }
             break;
         }
         case K_Text:

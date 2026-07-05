@@ -119,39 +119,6 @@ bool RendererSoftware::Init()
         }
     }
 
-    // Initialize transparency mapping tables for sprite rendering
-    if (render_ghost == nullptr) {
-        render_ghost = static_cast<unsigned char*>(KfxAlloc(65536)); // 256x256 table
-        if (render_ghost == nullptr) {
-            ERRORLOG("RendererSoftware: Failed to allocate render_ghost transparency table");
-            return false;
-        }
-        // Initialize with default transparency mapping (similar to GlassMap)
-        // This creates a 50% transparency effect
-        for (int i = 0; i < 256; i++) {
-            for (int j = 0; j < 256; j++) {
-                render_ghost[i * 256 + j] = (i + j) / 2;
-            }
-        }
-    }
-
-    if (render_alpha == nullptr) {
-        render_alpha = static_cast<unsigned char*>(KfxAlloc(65536)); // 256x256 table
-        if (render_alpha == nullptr) {
-            ERRORLOG("RendererSoftware: Failed to allocate render_alpha transparency table");
-            KfxFree(render_ghost);
-            render_ghost = nullptr;
-            return false;
-        }
-        // Initialize with alpha blending transparency mapping
-        // This creates an additive alpha blending effect
-        for (int i = 0; i < 256; i++) {
-            for (int j = 0; j < 256; j++) {
-                int result = i + (j * 3) / 4; // 75% source, 25% destination
-                render_alpha[i * 256 + j] = (result > 255) ? 255 : result;
-            }
-        }
-    }
 
     // Initialize sub-renderers
     m_worldViewRenderer = new SoftwareWorldViewRenderer();
@@ -164,17 +131,6 @@ bool RendererSoftware::Init()
 
 void RendererSoftware::Shutdown()
 {
-    // Free transparency mapping tables
-    if (render_ghost) {
-        KfxFree(render_ghost);
-        render_ghost = nullptr;
-    }
-
-    if (render_alpha) {
-        KfxFree(render_alpha);
-        render_alpha = nullptr;
-    }
-
     if (s_scaleSurface) {
         SDL_DestroySurface(s_scaleSurface);
         s_scaleSurface = nullptr;
