@@ -819,6 +819,7 @@ void RendererClearScreen(unsigned char colour_index)
 // Tracks whether the screen is currently locked (RendererLockScreen called, not yet unlocked).
 // Decoupled from lbDisplay.WScreen so that GPU mode (where WScreen is always null) works correctly.
 static bool s_screen_locked = false;
+static bool s_frame_had_lock = false;
 
 int RendererLockScreen(void)
 {
@@ -843,6 +844,7 @@ int RendererLockScreen(void)
     s_graphicsWindowPtr = &s_wscreen[s_graphicsWindowX +
         s_graphicsScreenWidth * s_graphicsWindowY];
     s_screen_locked = true;
+    s_frame_had_lock = true;
     return 1;
 }
 
@@ -893,6 +895,13 @@ void RendererPresentFrame(void)
 int RendererIsScreenLocked(void)
 {
     return s_screen_locked ? 1 : 0;
+}
+
+int RendererConsumeFrameHadLock(void)
+{
+    int v = s_frame_had_lock ? 1 : 0;
+    s_frame_had_lock = false;
+    return v;
 }
 
 /******************************************************************************/

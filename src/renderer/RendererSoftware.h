@@ -48,6 +48,13 @@ private:
     uint32_t    m_frame_seq = 0;   // shared UI+text submission counter, reset each frame
     bool        m_frame_open = false; // guards the double BeginFrame per present (lock + present)
 
+    // ── World-raster cache (software flicker fix) ────────────────────────────
+    // Snapshot of lbDrawSurface after the world draw and before UI replay.
+    // Restored each EndFrame so transparent UI compositing is idempotent.
+    uint8_t*    m_world_raster       = nullptr;
+    size_t      m_world_raster_size  = 0;
+    bool        m_world_raster_valid = false;
+
 public:
     bool     Init() override;
     void     Shutdown() override;
