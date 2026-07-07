@@ -138,7 +138,7 @@ void LbDrawHVLine(long xpos1, long ypos1, long xpos2, long ypos2, TbPixel colour
   }
   //And now to drawing
   unsigned char *screen_ptr = lbDisplay.GraphicsWindowPtr + xpos1 +
-          lbDisplay.GraphicsScreenWidth * ypos1;
+          RendererScreenWidth() * ypos1;
   if ( xpos2 == xpos1 )
   {//Vertical line
     long idx = ypos2 - ypos1 + 1;
@@ -149,7 +149,7 @@ void LbDrawHVLine(long xpos1, long ypos1, long xpos2, long ypos2, TbPixel colour
         glass_idx&=0xff00;
         glass_idx |= *screen_ptr;
         *screen_ptr = pixmap.ghost[glass_idx];
-        screen_ptr += lbDisplay.GraphicsScreenWidth;
+        screen_ptr += RendererScreenWidth();
         idx--;
       } while ( idx>0 );
     } else
@@ -162,7 +162,7 @@ void LbDrawHVLine(long xpos1, long ypos1, long xpos2, long ypos2, TbPixel colour
           glass_idx&=0x00ff;
           glass_idx |= ((*screen_ptr)<<8);
           *screen_ptr = pixmap.ghost[glass_idx];
-          screen_ptr += lbDisplay.GraphicsScreenWidth;
+          screen_ptr += RendererScreenWidth();
           idx--;
         }
         while ( idx>0 );
@@ -172,7 +172,7 @@ void LbDrawHVLine(long xpos1, long ypos1, long xpos2, long ypos2, TbPixel colour
         do
         {
           *screen_ptr = col_idx;
-          screen_ptr += lbDisplay.GraphicsScreenWidth;
+          screen_ptr += RendererScreenWidth();
           idx--;
         }
         while ( idx>0 );
@@ -250,7 +250,7 @@ void LbDrawBoxClip(long x, long y, unsigned long width, unsigned long height, Tb
   if ( (long)height <= 0 )
       return;
 
-  ypos = lbDisplay.GraphicsScreenWidth * (RendererGraphicsWindowY() + ypos);
+  ypos = RendererScreenWidth() * (RendererGraphicsWindowY() + ypos);
   long xpos = x;
   if ( x >= RendererGraphicsWindowWidth() )
       return;
@@ -267,7 +267,7 @@ void LbDrawBoxClip(long x, long y, unsigned long width, unsigned long height, Tb
   unsigned char *screen_ptr = &lbDisplay.WScreen[RendererGraphicsWindowX()] + xpos + ypos;
   unsigned long idxh = height;
   //Space between lines in video buffer
-  unsigned long screen_delta = lbDisplay.GraphicsScreenWidth - width;
+  unsigned long screen_delta = RendererScreenWidth() - width;
   if ( lbDisplay.DrawFlags & Lb_SPRITE_TRANSPAR4 )
   {
       unsigned short glass_idx = (unsigned char)colour << 8;
@@ -425,15 +425,15 @@ static inline TbResult LbSpriteDrawPrepare(struct TbSpriteDrawData *spd, long x,
     }
     if ((lbDisplay.DrawFlags & Lb_SPRITE_FLIP_VERTIC) != 0)
     {
-        spd->r = &lbDisplay.WScreen[x + (y+btm-1)*lbDisplay.GraphicsScreenWidth + left];
-        spd->nextRowDelta = -lbDisplay.GraphicsScreenWidth;
+        spd->r = &lbDisplay.WScreen[x + (y+btm-1)*RendererScreenWidth() + left];
+        spd->nextRowDelta = -RendererScreenWidth();
         short tmp_btm = btm;
         btm = sprHt - top;
         top = sprHt - tmp_btm;
     } else
     {
-        spd->r = &lbDisplay.WScreen[x + (y+top)*lbDisplay.GraphicsScreenWidth + left];
-        spd->nextRowDelta = lbDisplay.GraphicsScreenWidth;
+        spd->r = &lbDisplay.WScreen[x + (y+top)*RendererScreenWidth() + left];
+        spd->nextRowDelta = RendererScreenWidth();
     }
     spd->Ht = btm - top;
     spd->Wd = right - left;
@@ -1861,7 +1861,7 @@ int LbTiledSpriteHeight(struct TiledSprite *bigspr)
 void LbDrawPixel(long x, long y, TbPixel colour)
 {
     assert(!RendererHasGPURenderPath() && "LbDrawPixel: CPU pixel write in GL mode");
-    lbDisplay.GraphicsWindowPtr[x + lbDisplay.GraphicsScreenWidth * y] = colour;
+    lbDisplay.GraphicsWindowPtr[x + RendererScreenWidth() * y] = colour;
 }
 
 void LbDrawPixelClip(long x, long y, TbPixel colour)
@@ -1873,7 +1873,7 @@ void LbDrawPixelClip(long x, long y, TbPixel colour)
         return;
     TbPixel *buf;
     int val;
-    buf = lbDisplay.GraphicsWindowPtr + lbDisplay.GraphicsScreenWidth * y + x;
+    buf = lbDisplay.GraphicsWindowPtr + RendererScreenWidth() * y + x;
     val = 0;
     if ((lbDisplay.DrawFlags & Lb_SPRITE_TRANSPAR4) != 0)
     {
@@ -1960,7 +1960,7 @@ static inline void LbDrawPixelClipOpaq1(long x, long y, TbPixel colour)
         return;
     TbPixel *buf;
     int val;
-    buf = lbDisplay.GraphicsWindowPtr + lbDisplay.GraphicsScreenWidth * y + x;
+    buf = lbDisplay.GraphicsWindowPtr + RendererScreenWidth() * y + x;
     val = (colour << 8) + (*buf);
     *buf = pixmap.ghost[val];
 }
@@ -1973,7 +1973,7 @@ static inline void LbDrawPixelClipOpaq2(long x, long y, TbPixel colour)
         return;
     TbPixel *buf;
     int val;
-    buf = lbDisplay.GraphicsWindowPtr + lbDisplay.GraphicsScreenWidth * y + x;
+    buf = lbDisplay.GraphicsWindowPtr + RendererScreenWidth() * y + x;
     val = ((*buf) << 8) + colour;
     *buf = pixmap.ghost[val];
 }
@@ -1985,7 +1985,7 @@ static inline void LbDrawPixelClipSolid(long x, long y, TbPixel colour)
     if ( (y < 0) || (y >= RendererGraphicsWindowHeight()) )
         return;
     TbPixel *buf;
-    buf = lbDisplay.GraphicsWindowPtr + lbDisplay.GraphicsScreenWidth * y + x;
+    buf = lbDisplay.GraphicsWindowPtr + RendererScreenWidth() * y + x;
     *buf = colour;
 }
 
@@ -2132,13 +2132,13 @@ void setup_steps(long posx, long posy, const struct TbSourceBuffer * src_buf, in
     long sposy;
     sposx = posx;
     sposy = posy;
-    (*scanline) = lbDisplay.GraphicsScreenWidth;
+    (*scanline) = RendererScreenWidth();
     if ((lbDisplay.DrawFlags & Lb_SPRITE_FLIP_HORIZ) != 0) {
         sposx = src_buf->width + posx - 1;
     }
     if ((lbDisplay.DrawFlags & Lb_SPRITE_FLIP_VERTIC) != 0) {
         sposy = src_buf->height + posy - 1;
-        (*scanline) = -lbDisplay.GraphicsScreenWidth;
+        (*scanline) = -RendererScreenWidth();
     }
     (*xstep) = &xsteps_array[2 * sposx];
     (*ystep) = &ysteps_array[2 * sposy];
@@ -2154,7 +2154,7 @@ void setup_outbuf(const int32_t *xstep, const int32_t *ystep, uchar **outbuf, in
     gspos_x = xstep[0];
     if ((lbDisplay.DrawFlags & Lb_SPRITE_FLIP_HORIZ) != 0)
         gspos_x += xstep[1] - 1;
-    (*outbuf) = &lbDisplay.GraphicsWindowPtr[gspos_x + lbDisplay.GraphicsScreenWidth * gspos_y];
+    (*outbuf) = &lbDisplay.GraphicsWindowPtr[gspos_x + RendererScreenWidth() * gspos_y];
     (*outheight) = RendererScreenHeight();
 }
 

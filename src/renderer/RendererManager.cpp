@@ -84,6 +84,7 @@ static IUIRenderer*         s_uiRenderer          = nullptr;
 // Renderer-private screen dimensions (formerly lbDisplay.PhysicalScreen*/GraphicsScreenHeight).
 static TbScreenCoord        s_physicalScreenWidth  = 0;
 static TbScreenCoord        s_physicalScreenHeight = 0;
+static TbScreenCoord        s_graphicsScreenWidth  = 0;
 static TbScreenCoord        s_graphicsScreenHeight = 0;
 
 // Renderer-private graphics/clip window rect (formerly lbDisplay.GraphicsWindow*).
@@ -825,7 +826,6 @@ int RendererLockScreen(void)
         // GPU mode: no CPU framebuffer. WScreen stays null for the entire frame.
         lbDisplay.WScreen = NULL;
         lbDisplay.GraphicsWindowPtr = NULL;
-        lbDisplay.GraphicsScreenWidth = RendererScreenWidth();
         s_screen_locked = true;
         return 1;
     }
@@ -837,9 +837,9 @@ int RendererLockScreen(void)
         return 0;
     }
     lbDisplay.WScreen = pixels;
-    lbDisplay.GraphicsScreenWidth = pitch;
+    s_graphicsScreenWidth = pitch;
     lbDisplay.GraphicsWindowPtr = &lbDisplay.WScreen[s_graphicsWindowX +
-        lbDisplay.GraphicsScreenWidth * s_graphicsWindowY];
+        s_graphicsScreenWidth * s_graphicsWindowY];
     s_screen_locked = true;
     return 1;
 }
@@ -929,8 +929,8 @@ void RendererSetViewport(int32_t x, int32_t y, int32_t width, int32_t height)
     if (right_edge < 0) right_edge = 0;
     if (y < 0) y = 0;
     if (bottom_edge < 0) bottom_edge = 0;
-    if (x > lbDisplay.GraphicsScreenWidth) x = lbDisplay.GraphicsScreenWidth;
-    if (right_edge > lbDisplay.GraphicsScreenWidth) right_edge = lbDisplay.GraphicsScreenWidth;
+    if (x > s_graphicsScreenWidth) x = s_graphicsScreenWidth;
+    if (right_edge > s_graphicsScreenWidth) right_edge = s_graphicsScreenWidth;
     if (y > RendererScreenHeight()) y = RendererScreenHeight();
     if (bottom_edge > RendererScreenHeight()) bottom_edge = RendererScreenHeight();
     s_graphicsWindowX = x;
@@ -938,7 +938,7 @@ void RendererSetViewport(int32_t x, int32_t y, int32_t width, int32_t height)
     s_graphicsWindowWidth = right_edge - x;
     s_graphicsWindowHeight = bottom_edge - y;
     if (lbDisplay.WScreen != NULL)
-        lbDisplay.GraphicsWindowPtr = lbDisplay.WScreen + lbDisplay.GraphicsScreenWidth * y + x;
+        lbDisplay.GraphicsWindowPtr = lbDisplay.WScreen + s_graphicsScreenWidth * y + x;
     else
         lbDisplay.GraphicsWindowPtr = NULL;
 }
@@ -960,7 +960,7 @@ void RendererLoadViewport(TbGraphicsWindow *grwnd)
     s_graphicsWindowHeight = grwnd->height;
     if (lbDisplay.WScreen != NULL)
         lbDisplay.GraphicsWindowPtr = lbDisplay.WScreen
-            + lbDisplay.GraphicsScreenWidth * s_graphicsWindowY + s_graphicsWindowX;
+            + s_graphicsScreenWidth * s_graphicsWindowY + s_graphicsWindowX;
     else
         lbDisplay.GraphicsWindowPtr = NULL;
 }
@@ -971,7 +971,7 @@ void RendererLoadViewport(TbGraphicsWindow *grwnd)
 
 TbScreenCoord RendererPhysicalWidth(void)  { return s_physicalScreenWidth;  }
 TbScreenCoord RendererPhysicalHeight(void) { return s_physicalScreenHeight; }
-TbScreenCoord RendererScreenWidth(void)    { return lbDisplay.GraphicsScreenWidth;  }
+TbScreenCoord RendererScreenWidth(void)    { return s_graphicsScreenWidth;  }
 TbScreenCoord RendererScreenHeight(void)   { return s_graphicsScreenHeight; }
 long RendererGraphicsWindowX(void)      { return s_graphicsWindowX;      }
 long RendererGraphicsWindowY(void)      { return s_graphicsWindowY;      }
@@ -988,7 +988,7 @@ void RendererSetWScreen(unsigned char* buf)
 
 void RendererSetScreenDimensions(int width, int height)
 {
-    lbDisplay.GraphicsScreenWidth  = width;
+    s_graphicsScreenWidth  = width;
     s_graphicsScreenHeight         = height;
 }
 

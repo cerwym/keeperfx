@@ -164,9 +164,9 @@ void copy_to_screen(const AVFrame & frame, const int flags)
 	auto srcbuf = frame.data[0];
 	long screen_buffer_center_offset;
 	if (flags & (SMK_PixelDoubleLine | SMK_InterlaceLine)) {
-		screen_buffer_center_offset = lbDisplay.GraphicsScreenWidth * ((LbScreenHeight() - 2 * frame.height) >> 1);
+		screen_buffer_center_offset = RendererScreenWidth() * ((LbScreenHeight() - 2 * frame.height) >> 1);
 	} else {
-		screen_buffer_center_offset = lbDisplay.GraphicsScreenWidth * ((LbScreenHeight() - frame.height) >> 1);
+		screen_buffer_center_offset = RendererScreenWidth() * ((LbScreenHeight() - frame.height) >> 1);
 	}
 	auto w = frame.width;
 	if (flags & SMK_PixelDoubleWidth) {
@@ -176,14 +176,14 @@ void copy_to_screen(const AVFrame & frame, const int flags)
 	if (flags & SMK_PixelDoubleLine) {
 		if (flags & SMK_PixelDoubleWidth) {
 			for (int h = frame.height; h > 0; h--) {
-				copy_to_screen_pxquad(srcbuf, dstbuf, frame.width, lbDisplay.GraphicsScreenWidth);
-				dstbuf += 2 * lbDisplay.GraphicsScreenWidth;
+				copy_to_screen_pxquad(srcbuf, dstbuf, frame.width, RendererScreenWidth());
+				dstbuf += 2 * RendererScreenWidth();
 				srcbuf += src_pitch;
 			}
 		} else {
 			for (int h = frame.height; h > 0; h--) {
-				copy_to_screen_pxdblh(srcbuf, dstbuf, frame.width, lbDisplay.GraphicsScreenWidth);
-				dstbuf += 2 * lbDisplay.GraphicsScreenWidth;
+				copy_to_screen_pxdblh(srcbuf, dstbuf, frame.width, RendererScreenWidth());
+				dstbuf += 2 * RendererScreenWidth();
 				srcbuf += src_pitch;
 			}
 		}
@@ -192,26 +192,26 @@ void copy_to_screen(const AVFrame & frame, const int flags)
 				if (flags & SMK_InterlaceLine) {
 					for (int h = frame.height; h > 0; h--) {
 						copy_to_screen_pxdblw(srcbuf, dstbuf, frame.width);
-						dstbuf += 2 * lbDisplay.GraphicsScreenWidth;
+						dstbuf += 2 * RendererScreenWidth();
 						srcbuf += src_pitch;
 					}
 				} else {
 					for (int h = frame.height; h > 0; h--) {
 						copy_to_screen_pxdblw(srcbuf, dstbuf, frame.width);
-						dstbuf += lbDisplay.GraphicsScreenWidth;
+						dstbuf += RendererScreenWidth();
 						srcbuf += src_pitch;
 					}
 				}
 		} else if (flags & SMK_InterlaceLine) {
 			for (int h = frame.height; h > 0; h--) {
 				memcpy(dstbuf, srcbuf, frame.width);
-				dstbuf += 2 * lbDisplay.GraphicsScreenWidth;
+				dstbuf += 2 * RendererScreenWidth();
 				srcbuf += src_pitch;
 			}
 		} else {
 			for (int h = frame.height; h > 0; h--) {
 				memcpy(dstbuf, srcbuf, frame.width);
-				dstbuf += lbDisplay.GraphicsScreenWidth;
+				dstbuf += RendererScreenWidth();
 				srcbuf += src_pitch;
 			}
 		}
@@ -224,7 +224,7 @@ void copy_to_screen_scaled(const AVFrame & frame, const int flags)
 	const auto src_pitch = frame.linesize[0];
 	const auto src_buf = frame.data[0];
 	const auto dst_buf = &lbDisplay.WScreen[0];
-	const int scanline = lbDisplay.GraphicsScreenWidth;
+	const int scanline = RendererScreenWidth();
 	const int nlines = RendererScreenHeight();
 	int spw = 0, sph = 0, dst_width = 0, dst_height = 0;
 	smk_compute_dst_rect(frame.width, frame.height, scanline, nlines, flags,
@@ -614,7 +614,7 @@ struct movie_t {
 		// Try GPU video frame path first.
 		// Compute the letterboxed destination rect (same logic as copy_to_screen_scaled).
 		{
-			const int scr_w = lbDisplay.GraphicsScreenWidth;
+			const int scr_w = RendererScreenWidth();
 			const int scr_h = RendererScreenHeight();
 			int dst_x, dst_y, dst_w, dst_h;
 			if (m_flags & (SMK_FullscreenFit | SMK_FullscreenStretch | SMK_FullscreenCrop)) {

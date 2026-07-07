@@ -744,7 +744,7 @@ int consolelog_max_line_width = 1250; // Maximum line width
 void draw_consolelog()
 {
     UIRenderer_BeginTopOverlay();
-    draw_round_slab64k(0, 0, units_per_pixel, lbDisplay.GraphicsScreenWidth, (RendererScreenHeight()/2), ROUNDSLAB64K_DARK);
+    draw_round_slab64k(0, 0, units_per_pixel, RendererScreenWidth(), (RendererScreenHeight()/2), ROUNDSLAB64K_DARK);
     LbTextSetFont(winfont);
     lbDisplay.DrawFlags = Lb_TEXT_HALIGN_LEFT;
 

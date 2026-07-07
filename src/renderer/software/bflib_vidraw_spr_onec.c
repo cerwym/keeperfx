@@ -1280,13 +1280,13 @@ TbResult LbSpriteDrawOneColourUsingScalingData(long posx, long posy, const struc
         long sposy;
         sposx = posx;
         sposy = posy;
-        scanline = lbDisplay.GraphicsScreenWidth;
+        scanline = RendererScreenWidth();
         if ((lbDisplay.DrawFlags & Lb_SPRITE_FLIP_HORIZ) != 0) {
             sposx = sprite->SWidth + posx - 1;
         }
         if ((lbDisplay.DrawFlags & Lb_SPRITE_FLIP_VERTIC) != 0) {
             sposy = sprite->SHeight + posy - 1;
-            scanline = -lbDisplay.GraphicsScreenWidth;
+            scanline = -RendererScreenWidth();
         }
         xstep = &xsteps_array[2 * sposx];
         ystep = &ysteps_array[2 * sposy];
@@ -1302,7 +1302,7 @@ TbResult LbSpriteDrawOneColourUsingScalingData(long posx, long posy, const struc
         gspos_x = xstep[0];
         if ((lbDisplay.DrawFlags & Lb_SPRITE_FLIP_HORIZ) != 0)
             gspos_x += xstep[1] - 1;
-        outbuf = &lbDisplay.GraphicsWindowPtr[gspos_x + lbDisplay.GraphicsScreenWidth * gspos_y];
+        outbuf = &lbDisplay.GraphicsWindowPtr[gspos_x + RendererScreenWidth() * gspos_y];
         outheight = RendererScreenHeight();
     }
     if ( scale_up )

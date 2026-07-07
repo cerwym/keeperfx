@@ -23,6 +23,7 @@
 #include "bflib_vidraw.h"      // LbSpriteDrawUsingScalingUpDataSolidLR, LbSpriteSetScaling*
 #include "engine_render.h"     // process_keeper_sprite
 #include "globals.h"
+#include "renderer/RendererManager.h"
 
 #include "post_inc.h"
 
@@ -119,7 +120,7 @@ void SWCursorLayer::Draw()
         draw_pointer_sprite(m_pointer_x, m_pointer_y,
                             m_pointer_spr,
                             lbDisplay.WScreen,
-                            (unsigned long)lbDisplay.GraphicsScreenWidth);
+                            (unsigned long)RendererScreenWidth());
     }
 }
 

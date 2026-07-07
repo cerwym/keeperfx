@@ -96,7 +96,7 @@ void IUIRenderer::SetupMinimapBackground(int diaglen, int panel_x, int panel_y)
 
     int num_colours = 0;
     long bkgnd_pos = 0;
-    TbPixel* out = &lbDisplay.WScreen[panel_x + lbDisplay.GraphicsScreenWidth * panel_y];
+    TbPixel* out = &lbDisplay.WScreen[panel_x + RendererScreenWidth() * panel_y];
     for (int h = 0; h < diaglen; h++)
     {
         for (int w = MapShapeStart[h]; w < MapShapeEnd[h]; w++)
@@ -119,7 +119,7 @@ void IUIRenderer::SetupMinimapBackground(int diaglen, int panel_x, int panel_y)
             MapBackground[bkgnd_pos + w] = (unsigned char)colour;
         }
         bkgnd_pos += diaglen;
-        out += lbDisplay.GraphicsScreenWidth;
+        out += RendererScreenWidth();
     }
     NumBackColours = num_colours;
 }

@@ -107,8 +107,8 @@ void SoftwareTextRenderer::SetClipWindow(int32_t x, int32_t y, int32_t w, int32_
     if (x1 < 0) x1 = 0;
     if (y0 < 0) y0 = 0;
     if (y1 < 0) y1 = 0;
-    if (x0 > lbDisplay.GraphicsScreenWidth)  x0 = lbDisplay.GraphicsScreenWidth;
-    if (x1 > lbDisplay.GraphicsScreenWidth)  x1 = lbDisplay.GraphicsScreenWidth;
+    if (x0 > RendererScreenWidth())  x0 = RendererScreenWidth();
+    if (x1 > RendererScreenWidth())  x1 = RendererScreenWidth();
     if (y0 > RendererScreenHeight()) y0 = RendererScreenHeight();
     if (y1 > RendererScreenHeight()) y1 = RendererScreenHeight();
 
@@ -620,7 +620,7 @@ void SoftwareTextRenderer::PutDownDbcSprites(const char* sbuf, const char* ebuf,
     awind.buf_ptr = lbDisplay.GraphicsWindowPtr;
     awind.width = RendererGraphicsWindowWidth();
     awind.height = RendererGraphicsWindowHeight();
-    awind.scanline = lbDisplay.GraphicsScreenWidth;
+    awind.scanline = RendererScreenWidth();
     TbBool needs_draw = false;
     unsigned long chr = 0;
 
@@ -707,7 +707,7 @@ void SoftwareTextRenderer::PutDownDbcSpritesResized(const char* sbuf, const char
     awind.buf_ptr = lbDisplay.GraphicsWindowPtr;
     awind.width = RendererGraphicsWindowWidth();
     awind.height = RendererGraphicsWindowHeight();
-    awind.scanline = lbDisplay.GraphicsScreenWidth;
+    awind.scanline = RendererScreenWidth();
     TbBool needs_draw = false;
     unsigned long chr = 0;
 

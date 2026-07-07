@@ -158,9 +158,6 @@ struct DisplayStruct {
         uchar *WScreen;
         /** Pointer to graphics window buffer, if locked. */
         uchar *GraphicsWindowPtr;
-        /** Width of the screen buffer (WScreen X pitch).
-         *  Note that only part of this width may be drawn on real screen. */
-        long GraphicsScreenWidth;
         ushort DrawFlags;
         /** Selected drawing colour index. */
         uchar DrawColour;

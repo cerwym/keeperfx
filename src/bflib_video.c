@@ -130,7 +130,7 @@ unsigned short LbGraphicsScreenBPP(void)
 
 TbScreenCoord LbGraphicsScreenWidth(void)
 {
-    return lbDisplay.GraphicsScreenWidth;
+    return RendererScreenWidth();
 }
 
 TbScreenCoord LbGraphicsScreenHeight(void)

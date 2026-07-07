@@ -443,7 +443,7 @@ void RendererSoftware::BeginLensCapture()
         return;
 
     m_saved_wscreen = RendererGetWScreen();
-    m_saved_graphics_w = lbDisplay.GraphicsScreenWidth;
+    m_saved_graphics_w = RendererScreenWidth();
     m_saved_graphics_h = RendererScreenHeight();
     RendererStoreViewport(&m_saved_viewport);
 

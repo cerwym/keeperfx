@@ -149,7 +149,7 @@ void panel_map_draw_pixel(RealScreenCoord x, RealScreenCoord y, TbPixel col)
             if (s_minimap_pixels != NULL) {
                 s_minimap_pixels[y * MapDiagonalLength + x] = col;
             } else {
-                lbDisplay.WScreen[(PanelMapY + y) * lbDisplay.GraphicsScreenWidth + (PanelMapX + x)] = col;
+                lbDisplay.WScreen[(PanelMapY + y) * RendererScreenWidth() + (PanelMapX + x)] = col;
             }
         }
     }
@@ -1352,8 +1352,8 @@ void panel_map_draw_slabs(long x, long y, long units_per_px, long zoom)
         out_line   = s_minimap_pixels;
         out_stride = MapDiagonalLength;
     } else {
-        out_line   = &lbDisplay.WScreen[PanelMapX + lbDisplay.GraphicsScreenWidth * PanelMapY];
-        out_stride = lbDisplay.GraphicsScreenWidth;
+        out_line   = &lbDisplay.WScreen[PanelMapX + RendererScreenWidth() * PanelMapY];
+        out_stride = RendererScreenWidth();
     }
     int h;
     for (h = 0; h < MapDiagonalLength; h++)
