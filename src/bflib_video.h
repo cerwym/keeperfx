@@ -213,8 +213,6 @@ struct DisplayStruct {
         ushort DrawFlags;
         short MouseMoveRatio; // was ushort OldVideoMode; but wasn't needed
         ushort ScreenMode;
-        /** VESA set-up flag, used only with VBE video modes. */
-        uchar VesaIsSetUp;
         uchar LeftButton;
         uchar RightButton;
         uchar MiddleButton;
@@ -224,7 +222,6 @@ struct DisplayStruct {
         uchar RLeftButton;
         uchar RMiddleButton;
         uchar RRightButton;
-        uchar FadeStep;
         /** Selected drawing colour index. */
         uchar DrawColour;
         /** Currently active colour palette.
