@@ -154,8 +154,6 @@ struct ScreenModeInfo {
 typedef struct ScreenModeInfo TbScreenModeInfo;
 
 struct DisplayStruct {
-        /** Pointer to graphics window buffer, if locked. */
-        uchar *GraphicsWindowPtr;
         ushort DrawFlags;
         /** Selected drawing colour index. */
         uchar DrawColour;

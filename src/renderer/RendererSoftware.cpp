@@ -213,7 +213,6 @@ void RendererSoftware::EndFrame()
         CursorLayer_Draw();
 
         RendererSetWScreen(NULL);
-        lbDisplay.GraphicsWindowPtr = NULL;
     }
 
     SDL_Window* win = static_cast<SDL_Window*>(platform_get_sdl_window());

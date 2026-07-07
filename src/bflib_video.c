@@ -554,7 +554,6 @@ TbResult LbScreenSetup(TbScreenMode mode, TbScreenCoord width, TbScreenCoord hei
     // The graphics screen size should be really taken after screen is locked, but it seem just getting in now will work too
     RendererSetScreenDimensions(lbDrawSurface->pitch, mdinfo->Height);
     RendererSetWScreen(NULL);
-    lbDisplay.GraphicsWindowPtr = NULL;
     lbScreenInitialised = true;
     SYNCLOG("Mode %dx%dx%d setup succeeded",(int)mdinfo->Width,(int)mdinfo->Height,(int)mdinfo->BitsPerPixel);
     if (palette != NULL)

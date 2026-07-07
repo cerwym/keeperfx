@@ -1302,7 +1302,7 @@ TbResult LbSpriteDrawOneColourUsingScalingData(long posx, long posy, const struc
         gspos_x = xstep[0];
         if ((lbDisplay.DrawFlags & Lb_SPRITE_FLIP_HORIZ) != 0)
             gspos_x += xstep[1] - 1;
-        outbuf = &lbDisplay.GraphicsWindowPtr[gspos_x + RendererScreenWidth() * gspos_y];
+        outbuf = &RendererGetGraphicsWindowPtr()[gspos_x + RendererScreenWidth() * gspos_y];
         outheight = RendererScreenHeight();
     }
     if ( scale_up )

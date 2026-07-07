@@ -137,7 +137,7 @@ void LbDrawHVLine(long xpos1, long ypos1, long xpos2, long ypos2, TbPixel colour
       ypos2 = RendererGraphicsWindowHeight() - 1;
   }
   //And now to drawing
-  unsigned char *screen_ptr = lbDisplay.GraphicsWindowPtr + xpos1 +
+  unsigned char *screen_ptr = RendererGetGraphicsWindowPtr() + xpos1 +
           RendererScreenWidth() * ypos1;
   if ( xpos2 == xpos1 )
   {//Vertical line
@@ -1861,7 +1861,7 @@ int LbTiledSpriteHeight(struct TiledSprite *bigspr)
 void LbDrawPixel(long x, long y, TbPixel colour)
 {
     assert(!RendererHasGPURenderPath() && "LbDrawPixel: CPU pixel write in GL mode");
-    lbDisplay.GraphicsWindowPtr[x + RendererScreenWidth() * y] = colour;
+    RendererGetGraphicsWindowPtr()[x + RendererScreenWidth() * y] = colour;
 }
 
 void LbDrawPixelClip(long x, long y, TbPixel colour)
@@ -1873,7 +1873,7 @@ void LbDrawPixelClip(long x, long y, TbPixel colour)
         return;
     TbPixel *buf;
     int val;
-    buf = lbDisplay.GraphicsWindowPtr + RendererScreenWidth() * y + x;
+    buf = RendererGetGraphicsWindowPtr() + RendererScreenWidth() * y + x;
     val = 0;
     if ((lbDisplay.DrawFlags & Lb_SPRITE_TRANSPAR4) != 0)
     {
@@ -1960,7 +1960,7 @@ static inline void LbDrawPixelClipOpaq1(long x, long y, TbPixel colour)
         return;
     TbPixel *buf;
     int val;
-    buf = lbDisplay.GraphicsWindowPtr + RendererScreenWidth() * y + x;
+    buf = RendererGetGraphicsWindowPtr() + RendererScreenWidth() * y + x;
     val = (colour << 8) + (*buf);
     *buf = pixmap.ghost[val];
 }
@@ -1973,7 +1973,7 @@ static inline void LbDrawPixelClipOpaq2(long x, long y, TbPixel colour)
         return;
     TbPixel *buf;
     int val;
-    buf = lbDisplay.GraphicsWindowPtr + RendererScreenWidth() * y + x;
+    buf = RendererGetGraphicsWindowPtr() + RendererScreenWidth() * y + x;
     val = ((*buf) << 8) + colour;
     *buf = pixmap.ghost[val];
 }
@@ -1985,7 +1985,7 @@ static inline void LbDrawPixelClipSolid(long x, long y, TbPixel colour)
     if ( (y < 0) || (y >= RendererGraphicsWindowHeight()) )
         return;
     TbPixel *buf;
-    buf = lbDisplay.GraphicsWindowPtr + RendererScreenWidth() * y + x;
+    buf = RendererGetGraphicsWindowPtr() + RendererScreenWidth() * y + x;
     *buf = colour;
 }
 
@@ -2154,7 +2154,7 @@ void setup_outbuf(const int32_t *xstep, const int32_t *ystep, uchar **outbuf, in
     gspos_x = xstep[0];
     if ((lbDisplay.DrawFlags & Lb_SPRITE_FLIP_HORIZ) != 0)
         gspos_x += xstep[1] - 1;
-    (*outbuf) = &lbDisplay.GraphicsWindowPtr[gspos_x + RendererScreenWidth() * gspos_y];
+    (*outbuf) = &RendererGetGraphicsWindowPtr()[gspos_x + RendererScreenWidth() * gspos_y];
     (*outheight) = RendererScreenHeight();
 }
 

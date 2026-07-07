@@ -192,6 +192,10 @@ unsigned short RendererGetScreenHeight(void);
  *  Replaces lbDisplay.WScreen reads. */
 unsigned char* RendererGetWScreen(void);
 
+/** Pointer into the locked CPU framebuffer at the current graphics-window origin.
+ *  Replaces lbDisplay.GraphicsWindowPtr reads. */
+unsigned char* RendererGetGraphicsWindowPtr(void);
+
 /** Redirect the CPU framebuffer pointer to a caller-owned buffer.
  *  Subsequent sprite draws will rasterise into @p buf instead of the
  *  default framebuffer.  Pass NULL to restore normal operation.
