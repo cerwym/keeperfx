@@ -140,10 +140,6 @@ public:
      */
     virtual void SubmitSolidBoxAlpha(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx, float alpha);
  
-    /** Submit a filled circle.
-     *  CPU default: LbDrawCircle.  GPU callers may approximate this however they need. */
-    virtual void SubmitCircle(int32_t x, int32_t y, int32_t radius, uint8_t color_idx);
- 
     /** Submit a raw TbSprite draw with explicit Bullfrog draw flags.
      *  CPU default: original LbSpriteDraw path. */
     virtual TbResult SubmitRawSprite(long x, long y, const struct TbSprite* spr,

@@ -244,13 +244,8 @@ void UIRenderer_SubmitCircle(int32_t x, int32_t y, int32_t radius, unsigned char
 {
     IUIRenderer* ui = RendererGetUIRenderer();
     if (!ui) return;
-    if (RendererHasGPURenderPath())
-    {
-        int32_t d = radius * 2 + 1;
-        ui->SubmitSolidBox(x - radius, y - radius, d, d, color_idx, draw_state_default());
-        return;
-    }
-    ui->SubmitCircle(x, y, radius, color_idx);
+    int32_t d = radius * 2 + 1;
+    ui->SubmitSolidBox(x - radius, y - radius, d, d, color_idx, draw_state_default());
 }
 
 void UIRenderer_SetSlabTexture(void)

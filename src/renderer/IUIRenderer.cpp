@@ -272,11 +272,6 @@ void IUIRenderer::SubmitSolidBoxAlpha(int32_t x, int32_t y, int32_t w, int32_t h
     lbDisplay.DrawFlags = saved_flags;
 }
 
-void IUIRenderer::SubmitCircle(int32_t x, int32_t y, int32_t radius, uint8_t color_idx)
-{
-    LbDrawCircle(x, y, radius, color_idx);
-}
-
 TbResult IUIRenderer::SubmitRawSprite(long x, long y, const struct TbSprite* spr,
                                       KfxDrawState state)
 {
