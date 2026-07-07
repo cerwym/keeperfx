@@ -456,9 +456,9 @@ TbResult LbScreenSetup(TbScreenMode mode, TbScreenCoord width, TbScreenCoord hei
     int32_t hot_y;
     const struct TbSprite* msspr = NULL;
     LbExeReferenceNumber();
-    if (lbDisplay.MouseSprite != NULL)
+    if (lbMouseSprite != NULL)
     {
-        msspr = lbDisplay.MouseSprite;
+        msspr = lbMouseSprite;
         GetPointerHotspot(&hot_x,&hot_y);
     }
     LbMouseChangeSprite(NULL);

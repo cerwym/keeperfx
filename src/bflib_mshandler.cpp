@@ -35,6 +35,7 @@
 // Global variables
 int volatile lbMouseInstalled = false;
 int volatile lbMouseOffline = false;
+const struct TbSprite *lbMouseSprite = NULL; // current mouse cursor sprite (was lbDisplay.MouseSprite)
 class MouseStateHandler pointerHandler;
 
 /******************************************************************************/
@@ -73,7 +74,7 @@ bool MouseStateHandler::Release(void)
 {
     std::lock_guard<std::mutex> guard(lock);
     lbMouseInstalled = false;
-    lbDisplay.MouseSprite = NULL;
+    lbMouseSprite = NULL;
     this->installed = false;
     mssprite = NULL;
     pointer.Release();
@@ -196,7 +197,7 @@ bool MouseStateHandler::SetMousePointerAndOffset(const struct TbSprite *mouseSpr
 {
     struct TbPoint point;
     std::lock_guard<std::mutex> guard(lock);
-    if (mouseSprite == lbDisplay.MouseSprite)
+    if (mouseSprite == lbMouseSprite)
       return true;
     if (mouseSprite != NULL)
     {
@@ -206,7 +207,7 @@ bool MouseStateHandler::SetMousePointerAndOffset(const struct TbSprite *mouseSpr
             return false;
         }
     }
-    lbDisplay.MouseSprite = mouseSprite;
+    lbMouseSprite = mouseSprite;
     point.x = x;
     point.y = y;
     return this->SetPointer(mouseSprite, &point);
@@ -215,7 +216,7 @@ bool MouseStateHandler::SetMousePointerAndOffset(const struct TbSprite *mouseSpr
 bool MouseStateHandler::SetMousePointer(const struct TbSprite *mouseSprite)
 {
     std::lock_guard<std::mutex> guard(lock);
-    if (mouseSprite == lbDisplay.MouseSprite)
+    if (mouseSprite == lbMouseSprite)
       return true;
     if (mouseSprite != NULL)
       if ( (mouseSprite->SWidth > 64) || (mouseSprite->SHeight > 64) )
@@ -223,7 +224,7 @@ bool MouseStateHandler::SetMousePointer(const struct TbSprite *mouseSprite)
         WARNLOG("Mouse pointer too large");
         return false;
       }
-    lbDisplay.MouseSprite = mouseSprite;
+    lbMouseSprite = mouseSprite;
     this->SetPointer(mouseSprite, NULL);
     return true;
 }

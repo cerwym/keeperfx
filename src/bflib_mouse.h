@@ -118,6 +118,7 @@ struct DevInput {
 extern volatile TbBool lbMouseGrab; // set to false if user sets altinput command line option
 extern volatile TbBool lbMouseGrabbed; // whether the mouse is current grabbed by the game window
 extern short lbMouseMoveRatio; // mouse sensitivity ratio (8.8 fixed point)
+extern const struct TbSprite *lbMouseSprite; // current mouse cursor sprite
 /******************************************************************************/
 TbResult LbMouseChangeSpriteAndHotspot(const struct TbSprite *mouseSprite, long hot_x, long hot_y);
 TbResult LbMouseSetup(struct TbSprite *mouseSprite);
