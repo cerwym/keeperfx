@@ -196,13 +196,13 @@ void RendererSoftware::EndFrame()
     FrameState fs = {};
     m_render_graph.Flip(fs);
 
-    // The deferred UI+text replay and the cursor draw into lbDisplay.WScreen,
+    // The deferred UI+text replay and the cursor draw into the WScreen buffer,
     // but RendererUnlockScreen() nulled it before present.  The draw-surface
     // pixels are always valid (no real SDL lock needed), so point WScreen back
     // at them with a full-screen graphics window for the replay, then clear it.
     if (lbDrawSurface)
     {
-        lbDisplay.WScreen              = static_cast<TbPixel*>(lbDrawSurface->pixels);
+        RendererSetWScreen(static_cast<TbPixel*>(lbDrawSurface->pixels));
         RendererSetScreenDimensions(lbDrawSurface->pitch, lbDrawSurface->h);
         RendererSetViewport(0, 0, lbDrawSurface->w, lbDrawSurface->h);
 
@@ -212,7 +212,7 @@ void RendererSoftware::EndFrame()
                                    text);
         CursorLayer_Draw();
 
-        lbDisplay.WScreen           = NULL;
+        RendererSetWScreen(NULL);
         lbDisplay.GraphicsWindowPtr = NULL;
     }
 
@@ -448,7 +448,7 @@ void RendererSoftware::BeginLensCapture()
     RendererStoreViewport(&m_saved_viewport);
 
     memset(m_lens_buffer, 0, (size_t)m_lens_buffer_w * (size_t)m_lens_buffer_h * sizeof(TbPixel));
-    lbDisplay.WScreen = m_lens_buffer;
+    RendererSetWScreen(m_lens_buffer);
     RendererSetScreenDimensions((int)m_lens_buffer_w, (int)m_lens_buffer_h);
     RendererSetViewport(0, 0, RendererScreenWidth(), RendererScreenHeight());
     setup_engine_window(0, 0, RendererGetScreenWidth(), RendererGetScreenHeight());
@@ -466,7 +466,7 @@ void RendererSoftware::EndLensCapture()
     const long view_x = player->engine_window_x / pixel_size;
     const long view_y = player->engine_window_y / pixel_size;
 
-    lbDisplay.WScreen = m_saved_wscreen;
+    RendererSetWScreen(m_saved_wscreen);
     RendererSetScreenDimensions(m_saved_graphics_w, m_saved_graphics_h);
     RendererLoadViewport(&m_saved_viewport);
     setup_engine_window(0, 0, RendererGetScreenWidth(), RendererGetScreenHeight());

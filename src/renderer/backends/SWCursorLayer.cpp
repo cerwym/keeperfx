@@ -4,7 +4,7 @@
 /** @file SWCursorLayer.cpp
  *     Software (CPU) implementation of ICursorLayer.
  *
- *     The pointer sprite is drawn into lbDisplay.WScreen immediately in
+ *     The pointer sprite is drawn into RendererGetWScreen() immediately in
  *     Flush() — no backup/restore is needed because WScreen is fully
  *     rebuilt from scratch on every frame before EndFrame() is called.
  *
@@ -64,7 +64,7 @@ static void set_scaling_h_simple(long y, long sh, long dh)
     LbSpriteSetScalingHeightSimpleArray(s_ysteps, y, sh, dh);
 }
 
-/** Draw cursor sprite directly into outbuf (lbDisplay.WScreen). */
+/** Draw cursor sprite directly into outbuf (RendererGetWScreen()). */
 static void draw_pointer_sprite(int32_t x, int32_t y, const TbSprite* spr,
                                  TbPixel* outbuf, unsigned long scanline)
 {
@@ -115,11 +115,11 @@ void SWCursorLayer::Draw()
 {
     // Draw the pointer sprite into WScreen right before the SDL blit.
     // WScreen is fully rebuilt each frame so no backup/restore is needed.
-    if (m_pointer_spr && lbDisplay.WScreen)
+    if (m_pointer_spr && RendererGetWScreen())
     {
         draw_pointer_sprite(m_pointer_x, m_pointer_y,
                             m_pointer_spr,
-                            lbDisplay.WScreen,
+                            RendererGetWScreen(),
                             (unsigned long)RendererScreenWidth());
     }
 }

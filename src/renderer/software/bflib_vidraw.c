@@ -264,7 +264,7 @@ void LbDrawBoxClip(long x, long y, unsigned long width, unsigned long height, Tb
   if ( (long)width <= 0 )
       return;
   //And now let's start drawing
-  unsigned char *screen_ptr = &lbDisplay.WScreen[RendererGraphicsWindowX()] + xpos + ypos;
+  unsigned char *screen_ptr = &RendererGetWScreen()[RendererGraphicsWindowX()] + xpos + ypos;
   unsigned long idxh = height;
   //Space between lines in video buffer
   unsigned long screen_delta = RendererScreenWidth() - width;
@@ -425,14 +425,14 @@ static inline TbResult LbSpriteDrawPrepare(struct TbSpriteDrawData *spd, long x,
     }
     if ((lbDisplay.DrawFlags & Lb_SPRITE_FLIP_VERTIC) != 0)
     {
-        spd->r = &lbDisplay.WScreen[x + (y+btm-1)*RendererScreenWidth() + left];
+        spd->r = &RendererGetWScreen()[x + (y+btm-1)*RendererScreenWidth() + left];
         spd->nextRowDelta = -RendererScreenWidth();
         short tmp_btm = btm;
         btm = sprHt - top;
         top = sprHt - tmp_btm;
     } else
     {
-        spd->r = &lbDisplay.WScreen[x + (y+top)*RendererScreenWidth() + left];
+        spd->r = &RendererGetWScreen()[x + (y+top)*RendererScreenWidth() + left];
         spd->nextRowDelta = RendererScreenWidth();
     }
     spd->Ht = btm - top;

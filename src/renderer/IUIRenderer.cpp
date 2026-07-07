@@ -88,7 +88,7 @@ void IUIRenderer::EndZoomBoxOverlay(int x, int y, int w, int h)
 
 void IUIRenderer::SetupMinimapBackground(int diaglen, int panel_x, int panel_y)
 {
-    if (!MapBackground || !MapShapeStart || !MapShapeEnd || !lbDisplay.WScreen)
+    if (!MapBackground || !MapShapeStart || !MapShapeEnd || !RendererGetWScreen())
     {
         NumBackColours = 0;
         return;
@@ -96,7 +96,7 @@ void IUIRenderer::SetupMinimapBackground(int diaglen, int panel_x, int panel_y)
 
     int num_colours = 0;
     long bkgnd_pos = 0;
-    TbPixel* out = &lbDisplay.WScreen[panel_x + RendererScreenWidth() * panel_y];
+    TbPixel* out = &RendererGetWScreen()[panel_x + RendererScreenWidth() * panel_y];
     for (int h = 0; h < diaglen; h++)
     {
         for (int w = MapShapeStart[h]; w < MapShapeEnd[h]; w++)
@@ -310,13 +310,13 @@ TbResult IUIRenderer::SubmitRawSpriteRemap(long x, long y, const struct TbSprite
 
 uint8_t* IUIRenderer::AcquireMinimapBuffer(int /*size*/)
 {
-    // CPU mode: caller writes directly to lbDisplay.WScreen.
+    // CPU mode: caller writes directly to RendererGetWScreen().
     return nullptr;
 }
 
 void IUIRenderer::SubmitMinimap(int /*screen_x*/, int /*screen_y*/, int /*size*/)
 {
-    // No-op: minimap pixels were written directly to lbDisplay.WScreen.
+    // No-op: minimap pixels were written directly to RendererGetWScreen().
 }
 
 void IUIRenderer::SetUICommandBuffers(UICommandBuffers* cmds)

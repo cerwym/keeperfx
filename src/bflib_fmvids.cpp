@@ -172,7 +172,7 @@ void copy_to_screen(const AVFrame & frame, const int flags)
 	if (flags & SMK_PixelDoubleWidth) {
 		w = 2 * frame.width;
 	}
-	auto dstbuf = &lbDisplay.WScreen[screen_buffer_center_offset + ((LbScreenWidth() - w) >> 1)];
+	auto dstbuf = &RendererGetWScreen()[screen_buffer_center_offset + ((LbScreenWidth() - w) >> 1)];
 	if (flags & SMK_PixelDoubleLine) {
 		if (flags & SMK_PixelDoubleWidth) {
 			for (int h = frame.height; h > 0; h--) {
@@ -223,7 +223,7 @@ void copy_to_screen_scaled(const AVFrame & frame, const int flags)
 	if (RendererHasGPURenderPath()) return;
 	const auto src_pitch = frame.linesize[0];
 	const auto src_buf = frame.data[0];
-	const auto dst_buf = &lbDisplay.WScreen[0];
+	const auto dst_buf = &RendererGetWScreen()[0];
 	const int scanline = RendererScreenWidth();
 	const int nlines = RendererScreenHeight();
 	int spw = 0, sph = 0, dst_width = 0, dst_height = 0;
