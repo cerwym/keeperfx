@@ -504,7 +504,6 @@ TbBool init_fades_table(void)
         compute_fade_tables(&pixmap,engine_palette,engine_palette);
         LbFileSaveAt(fname, &pixmap, sizeof(struct TbColorTables));
     }
-    lbDisplay.FadeTable = pixmap.fade_tables;
     TbPixel cblack = 144;
     // Update black color
     for (long i = 0; i < 8192; i++)

@@ -158,10 +158,6 @@ struct DisplayStruct {
         uchar *PhysicalScreen;
         /** Pointer to graphics screen buffer, if locked. */
         uchar *WScreen;
-        /** Pointer to glass map, used for 8-bit video transparency. */
-        uchar *GlassMap;
-        /** Pointer to fade table, used for 8-bit video fading. */
-        uchar *FadeTable;
         /** Pointer to graphics window buffer, if locked. */
         uchar *GraphicsWindowPtr;
         /** Sprite used as mouse cursor. */

@@ -31,6 +31,7 @@
 #include "globals.h"
 #include "custom_sprites.h"
 #include "bflib_video.h"
+#include "vidmode.h"        // pixmap.ghost / pixmap.fade_tables (transparency/fade LUTs)
 #include "bflib_sprite.h"
 #include "bflib_mouse.h"
 #include "bflib_render.h"
@@ -147,7 +148,7 @@ void LbDrawHVLine(long xpos1, long ypos1, long xpos2, long ypos2, TbPixel colour
       do {
         glass_idx&=0xff00;
         glass_idx |= *screen_ptr;
-        *screen_ptr = lbDisplay.GlassMap[glass_idx];
+        *screen_ptr = pixmap.ghost[glass_idx];
         screen_ptr += lbDisplay.GraphicsScreenWidth;
         idx--;
       } while ( idx>0 );
@@ -160,7 +161,7 @@ void LbDrawHVLine(long xpos1, long ypos1, long xpos2, long ypos2, TbPixel colour
         {
           glass_idx&=0x00ff;
           glass_idx |= ((*screen_ptr)<<8);
-          *screen_ptr = lbDisplay.GlassMap[glass_idx];
+          *screen_ptr = pixmap.ghost[glass_idx];
           screen_ptr += lbDisplay.GraphicsScreenWidth;
           idx--;
         }
@@ -187,7 +188,7 @@ void LbDrawHVLine(long xpos1, long ypos1, long xpos2, long ypos2, TbPixel colour
       {
         glass_idx&=0xff00;
         glass_idx |= *screen_ptr;
-        *screen_ptr = lbDisplay.GlassMap[glass_idx];
+        *screen_ptr = pixmap.ghost[glass_idx];
         screen_ptr++;
         idx--;
       }
@@ -202,7 +203,7 @@ void LbDrawHVLine(long xpos1, long ypos1, long xpos2, long ypos2, TbPixel colour
         {
           glass_idx&=0x00ff;
           glass_idx |= (((unsigned short)*screen_ptr)<<8);
-          *screen_ptr = lbDisplay.GlassMap[glass_idx];
+          *screen_ptr = pixmap.ghost[glass_idx];
           screen_ptr++;
           idx--;
         }
@@ -276,7 +277,7 @@ void LbDrawBoxClip(long x, long y, unsigned long width, unsigned long height, Tb
                 if (*screen_ptr != 0) {
                     glass_idx&=0xff00;
                     glass_idx |= *screen_ptr;
-                    *screen_ptr = lbDisplay.GlassMap[glass_idx];
+                    *screen_ptr = pixmap.ghost[glass_idx];
                 }
                 screen_ptr++;
                 idxw--;
@@ -294,7 +295,7 @@ void LbDrawBoxClip(long x, long y, unsigned long width, unsigned long height, Tb
               if (*screen_ptr != 0) {
                   glass_idx&=0x00ff;
                   glass_idx |= (((unsigned short)*screen_ptr)<<8);
-                  *screen_ptr = lbDisplay.GlassMap[glass_idx];
+                  *screen_ptr = pixmap.ghost[glass_idx];
               }
               screen_ptr++;
               idxw--;
@@ -575,7 +576,7 @@ static inline void LbDrawBufferTranspr(unsigned char **buf_out,const char *buf_i
         for (i=0; i<buf_len; i++ )
         {
             val = *(const unsigned char *)buf_inp;
-            **buf_out = lbDisplay.GlassMap[(val<<8) + **buf_out];
+            **buf_out = pixmap.ghost[(val<<8) + **buf_out];
             buf_inp++;
             (*buf_out)--;
         }
@@ -584,7 +585,7 @@ static inline void LbDrawBufferTranspr(unsigned char **buf_out,const char *buf_i
         for (i=0; i<buf_len; i++ )
         {
             val = *(const unsigned char *)buf_inp;
-            **buf_out = lbDisplay.GlassMap[((**buf_out)<<8) + val];
+            **buf_out = pixmap.ghost[((**buf_out)<<8) + val];
             buf_inp++;
             (*buf_out)--;
         }
@@ -596,7 +597,7 @@ static inline void LbDrawBufferTranspr(unsigned char **buf_out,const char *buf_i
         for (i=0; i<buf_len; i++ )
         {
             val = *(const unsigned char *)buf_inp;
-            **buf_out = lbDisplay.GlassMap[(val<<8) + **buf_out];
+            **buf_out = pixmap.ghost[(val<<8) + **buf_out];
             buf_inp++;
             (*buf_out)++;
         }
@@ -605,7 +606,7 @@ static inline void LbDrawBufferTranspr(unsigned char **buf_out,const char *buf_i
         for (i=0; i<buf_len; i++ )
         {
             val = *(const unsigned char *)buf_inp;
-            **buf_out = lbDisplay.GlassMap[((**buf_out)<<8) + val];
+            **buf_out = pixmap.ghost[((**buf_out)<<8) + val];
             buf_inp++;
             (*buf_out)++;
         }
@@ -662,14 +663,14 @@ static inline void LbDrawBufferOneColour(unsigned char **buf_out,const TbPixel c
         {
             for (i=0; i<buf_len; i++ )
             {
-                **buf_out = lbDisplay.GlassMap[(colour<<8) + **buf_out];
+                **buf_out = pixmap.ghost[(colour<<8) + **buf_out];
                 (*buf_out)--;
             }
         } else
         {
             for (i=0; i<buf_len; i++ )
             {
-                **buf_out = lbDisplay.GlassMap[((**buf_out)<<8) + colour];
+                **buf_out = pixmap.ghost[((**buf_out)<<8) + colour];
                 (*buf_out)--;
             }
         }
@@ -679,14 +680,14 @@ static inline void LbDrawBufferOneColour(unsigned char **buf_out,const TbPixel c
         {
             for (i=0; i<buf_len; i++ )
             {
-                **buf_out = lbDisplay.GlassMap[(colour<<8) + **buf_out];
+                **buf_out = pixmap.ghost[(colour<<8) + **buf_out];
                 (*buf_out)++;
             }
         } else
         {
             for (i=0; i<buf_len; i++ )
             {
-                **buf_out = lbDisplay.GlassMap[((**buf_out)<<8) + colour];
+                **buf_out = pixmap.ghost[((**buf_out)<<8) + colour];
                 (*buf_out)++;
             }
         }
@@ -1603,7 +1604,7 @@ TbResult LbSpriteDrawScaled(long xpos, long ypos, const struct TbSprite *sprite,
         return Lb_SUCCESS;
     }
     if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLNSHADOW) != 0)
-        lbSpriteReMapPtr = lbDisplay.FadeTable;
+        lbSpriteReMapPtr = pixmap.fade_tables;
     LbSpriteSetScalingData(xpos, ypos, sprite->SWidth, sprite->SHeight, dest_width, dest_height);
     const struct TbSourceBuffer buffer = {
         sprite->Data,
@@ -1620,7 +1621,7 @@ TbResult LbSpriteDrawScaledOneColour(long xpos, long ypos, const struct TbSprite
     if ((dest_width <= 0) || (dest_height <= 0))
       return 1;
     if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLNSHADOW) != 0)
-        lbSpriteReMapPtr = lbDisplay.FadeTable;
+        lbSpriteReMapPtr = pixmap.fade_tables;
     LbSpriteSetScalingData(xpos, ypos, sprite->SWidth, sprite->SHeight, dest_width, dest_height);
     return LbSpriteDrawOneColourUsingScalingData(0, 0, sprite, colour);
 }
@@ -1641,7 +1642,7 @@ int LbSpriteDrawScaledRemap(long xpos, long ypos, const struct TbSprite *sprite,
         if (ret == Lb_OK) return ret;
     }
     if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLNSHADOW) != 0)
-        lbSpriteReMapPtr = lbDisplay.FadeTable;
+        lbSpriteReMapPtr = pixmap.fade_tables;
     LbSpriteSetScalingData(xpos, ypos, sprite->SWidth, sprite->SHeight, dest_width, dest_height);
     const struct TbSourceBuffer buffer = {
         sprite->Data,
@@ -1877,12 +1878,12 @@ void LbDrawPixelClip(long x, long y, TbPixel colour)
     if ((lbDisplay.DrawFlags & Lb_SPRITE_TRANSPAR4) != 0)
     {
         val = (colour << 8) + (*buf);
-        *buf = lbDisplay.GlassMap[val];
+        *buf = pixmap.ghost[val];
     } else
     if ((lbDisplay.DrawFlags & Lb_SPRITE_TRANSPAR8) != 0)
     {
         val = ((*buf) << 8) + colour;
-        *buf = lbDisplay.GlassMap[val];
+        *buf = pixmap.ghost[val];
     } else
     {
         *buf = colour;
@@ -1961,7 +1962,7 @@ static inline void LbDrawPixelClipOpaq1(long x, long y, TbPixel colour)
     int val;
     buf = lbDisplay.GraphicsWindowPtr + lbDisplay.GraphicsScreenWidth * y + x;
     val = (colour << 8) + (*buf);
-    *buf = lbDisplay.GlassMap[val];
+    *buf = pixmap.ghost[val];
 }
 
 static inline void LbDrawPixelClipOpaq2(long x, long y, TbPixel colour)
@@ -1974,7 +1975,7 @@ static inline void LbDrawPixelClipOpaq2(long x, long y, TbPixel colour)
     int val;
     buf = lbDisplay.GraphicsWindowPtr + lbDisplay.GraphicsScreenWidth * y + x;
     val = ((*buf) << 8) + colour;
-    *buf = lbDisplay.GlassMap[val];
+    *buf = pixmap.ghost[val];
 }
 
 static inline void LbDrawPixelClipSolid(long x, long y, TbPixel colour)

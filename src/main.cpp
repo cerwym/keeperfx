@@ -787,7 +787,6 @@ void init_keeper(void)
     init_top_texture_to_cube_table();
     game.neutral_player_num = PLAYER_NEUTRAL;
     poly_pool_end = poly_pool + PlatformManager_GetPolyPoolSize() - 128;
-    lbDisplay.GlassMap = pixmap.ghost;
     lbDisplay.DrawColour = colours[15][15][15];
     game.comp_player_aggressive  = (comp_player_conf.player_assist_default == comp_player_conf.computer_assist_types[0]);
     game.comp_player_defensive   = (comp_player_conf.player_assist_default == comp_player_conf.computer_assist_types[1]);
