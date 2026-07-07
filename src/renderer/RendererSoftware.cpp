@@ -204,11 +204,7 @@ void RendererSoftware::EndFrame()
     {
         lbDisplay.WScreen              = static_cast<TbPixel*>(lbDrawSurface->pixels);
         RendererSetScreenDimensions(lbDrawSurface->pitch, lbDrawSurface->h);
-        lbDisplay.GraphicsWindowX      = 0;
-        lbDisplay.GraphicsWindowY      = 0;
-        lbDisplay.GraphicsWindowWidth  = lbDrawSurface->w;
-        lbDisplay.GraphicsWindowHeight = lbDrawSurface->h;
-        lbDisplay.GraphicsWindowPtr    = lbDisplay.WScreen;
+        RendererSetViewport(0, 0, lbDrawSurface->w, lbDrawSurface->h);
 
         if (ui)
             ui->ReplayMergedFromIR(m_render_graph.GetUIBuffersRT(),

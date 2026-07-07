@@ -92,8 +92,8 @@ long g_sprite_scale_src_h = 0;
 void LbDrawHVLine(long xpos1, long ypos1, long xpos2, long ypos2, TbPixel colour)
 {
   assert(!RendererHasGPURenderPath() && "LbDrawHVLine: CPU pixel write in GL mode");
-  long width_max = lbDisplay.GraphicsWindowWidth - 1;
-  long height_max = lbDisplay.GraphicsWindowHeight - 1;
+  long width_max = RendererGraphicsWindowWidth() - 1;
+  long height_max = RendererGraphicsWindowHeight() - 1;
   if ( xpos1 > xpos2 )
   { //Switching & clipping x coordinates
     if (xpos1 < 0) return;
@@ -103,7 +103,7 @@ void LbDrawHVLine(long xpos1, long ypos1, long xpos2, long ypos2, TbPixel colour
     if ( xpos2 < 0 )
       nxpos1 = 0;
     if ( xpos1 > width_max )
-      nxpos2 = lbDisplay.GraphicsWindowWidth - 1;
+      nxpos2 = RendererGraphicsWindowWidth() - 1;
     xpos1 = nxpos1;
     xpos2 = nxpos2;
   } else
@@ -113,7 +113,7 @@ void LbDrawHVLine(long xpos1, long ypos1, long xpos2, long ypos2, TbPixel colour
     if ( xpos1 < 0 )
       xpos1 = 0;
     if ( xpos2 > width_max )
-      xpos2 = lbDisplay.GraphicsWindowWidth - 1;
+      xpos2 = RendererGraphicsWindowWidth() - 1;
   }
   if ( ypos1 > ypos2 )
   { //Switching & clipping y coordinates
@@ -124,7 +124,7 @@ void LbDrawHVLine(long xpos1, long ypos1, long xpos2, long ypos2, TbPixel colour
     if ( ypos2 < 0 )
       nxpos1 = 0;
     if ( ypos1 > height_max )
-      nxpos2 = lbDisplay.GraphicsWindowHeight - 1;
+      nxpos2 = RendererGraphicsWindowHeight() - 1;
     ypos1 = nxpos1;
     ypos2 = nxpos2;
   } else
@@ -134,7 +134,7 @@ void LbDrawHVLine(long xpos1, long ypos1, long xpos2, long ypos2, TbPixel colour
     if (ypos1 < 0)
       ypos1 = 0;
     if ( ypos2 > height_max )
-      ypos2 = lbDisplay.GraphicsWindowHeight - 1;
+      ypos2 = RendererGraphicsWindowHeight() - 1;
   }
   //And now to drawing
   unsigned char *screen_ptr = lbDisplay.GraphicsWindowPtr + xpos1 +
@@ -238,33 +238,33 @@ void LbDrawBoxClip(long x, long y, unsigned long width, unsigned long height, Tb
   assert(!RendererHasGPURenderPath() && "LbDrawBoxClip: CPU pixel write in GL mode");
   long ypos = y;
   //Checking and clipping coordinates
-  if ( y >= lbDisplay.GraphicsWindowHeight )
+  if ( y >= RendererGraphicsWindowHeight() )
       return;
   if ( y < 0 )
   {
       height += y;
       ypos = 0;
   }
-  if ( (long)(height + ypos) > lbDisplay.GraphicsWindowHeight )
-      height -= height + ypos - lbDisplay.GraphicsWindowHeight;
+  if ( (long)(height + ypos) > RendererGraphicsWindowHeight() )
+      height -= height + ypos - RendererGraphicsWindowHeight();
   if ( (long)height <= 0 )
       return;
 
-  ypos = lbDisplay.GraphicsScreenWidth * (lbDisplay.GraphicsWindowY + ypos);
+  ypos = lbDisplay.GraphicsScreenWidth * (RendererGraphicsWindowY() + ypos);
   long xpos = x;
-  if ( x >= lbDisplay.GraphicsWindowWidth )
+  if ( x >= RendererGraphicsWindowWidth() )
       return;
   if ( x < 0 )
   {
       width += x;
       xpos = 0;
   }
-  if ( (long)(width + xpos) > lbDisplay.GraphicsWindowWidth )
-      width -= width + xpos - lbDisplay.GraphicsWindowWidth;
+  if ( (long)(width + xpos) > RendererGraphicsWindowWidth() )
+      width -= width + xpos - RendererGraphicsWindowWidth();
   if ( (long)width <= 0 )
       return;
   //And now let's start drawing
-  unsigned char *screen_ptr = &lbDisplay.WScreen[lbDisplay.GraphicsWindowX] + xpos + ypos;
+  unsigned char *screen_ptr = &lbDisplay.WScreen[RendererGraphicsWindowX()] + xpos + ypos;
   unsigned long idxh = height;
   //Space between lines in video buffer
   unsigned long screen_delta = lbDisplay.GraphicsScreenWidth - width;
@@ -367,13 +367,13 @@ static inline TbResult LbSpriteDrawPrepare(struct TbSpriteDrawData *spd, long x,
         SYNCDBG(19,"Zero size sprite (%d,%d)",spr->SWidth,spr->SHeight);
         return Lb_OK;
     }
-    if ((lbDisplay.GraphicsWindowWidth == 0) || (lbDisplay.GraphicsWindowHeight == 0))
+    if ((RendererGraphicsWindowWidth() == 0) || (RendererGraphicsWindowHeight() == 0))
     {
         SYNCDBG(19,"Invalid graphics window dimensions");
         return Lb_FAIL;
     }
-    x += lbDisplay.GraphicsWindowX;
-    y += lbDisplay.GraphicsWindowY;
+    x += RendererGraphicsWindowX();
+    y += RendererGraphicsWindowY();
     short left;
     short right;
     short top;
@@ -382,7 +382,7 @@ static inline TbResult LbSpriteDrawPrepare(struct TbSpriteDrawData *spd, long x,
     short sprHt = spr->SHeight;
     //Coordinates range checking - x coords
     int delta;
-    delta = lbDisplay.GraphicsWindowX - x;
+    delta = RendererGraphicsWindowX() - x;
     if (delta <= 0)
     {
         left = 0;
@@ -392,7 +392,7 @@ static inline TbResult LbSpriteDrawPrepare(struct TbSpriteDrawData *spd, long x,
             return Lb_OK;
         left = delta;
     }
-    delta = x + sprWd - (lbDisplay.GraphicsWindowWidth+lbDisplay.GraphicsWindowX);
+    delta = x + sprWd - (RendererGraphicsWindowWidth()+RendererGraphicsWindowX());
     if ( delta <= 0 )
     {
         right = sprWd;
@@ -403,7 +403,7 @@ static inline TbResult LbSpriteDrawPrepare(struct TbSpriteDrawData *spd, long x,
         right = sprWd - delta;
     }
     //Coordinates range checking - y coords
-    delta = lbDisplay.GraphicsWindowY - y;
+    delta = RendererGraphicsWindowY() - y;
     if (delta <= 0)
     {
       top = 0;
@@ -413,8 +413,8 @@ static inline TbResult LbSpriteDrawPrepare(struct TbSpriteDrawData *spd, long x,
         return Lb_OK;
       top = delta;
     }
-    delta = y + sprHt - (lbDisplay.GraphicsWindowHeight + lbDisplay.GraphicsWindowY);
-    if (y + sprHt - (lbDisplay.GraphicsWindowHeight + lbDisplay.GraphicsWindowY) <= 0)
+    delta = y + sprHt - (RendererGraphicsWindowHeight() + RendererGraphicsWindowY());
+    if (y + sprHt - (RendererGraphicsWindowHeight() + RendererGraphicsWindowY()) <= 0)
     {
       btm = sprHt;
     } else
@@ -1566,8 +1566,8 @@ void LbSpriteSetScalingData(long x, long y, long swidth, long sheight, long dwid
     g_sprite_scale_dst_h = dheight;
     g_sprite_scale_src_w = swidth;
     g_sprite_scale_src_h = sheight;
-    long gwidth = lbDisplay.GraphicsWindowWidth;
-    long gheight = lbDisplay.GraphicsWindowHeight;
+    long gwidth = RendererGraphicsWindowWidth();
+    long gheight = RendererGraphicsWindowHeight();
     scale_up = true;
     if ((dwidth <= swidth) && (dheight <= sheight))
         scale_up = false;
@@ -1867,9 +1867,9 @@ void LbDrawPixel(long x, long y, TbPixel colour)
 void LbDrawPixelClip(long x, long y, TbPixel colour)
 {
     assert(!RendererHasGPURenderPath() && "LbDrawPixelClip: CPU pixel write in GL mode");
-    if ( (x < 0) || (x >= lbDisplay.GraphicsWindowWidth) )
+    if ( (x < 0) || (x >= RendererGraphicsWindowWidth()) )
         return;
-    if ( (y < 0) || (y >= lbDisplay.GraphicsWindowHeight) )
+    if ( (y < 0) || (y >= RendererGraphicsWindowHeight()) )
         return;
     TbPixel *buf;
     int val;
@@ -1954,9 +1954,9 @@ void LbDrawCircleFilled(long x, long y, long radius, TbPixel colour)
 
 static inline void LbDrawPixelClipOpaq1(long x, long y, TbPixel colour)
 {
-    if ( (x < 0) || (x >= lbDisplay.GraphicsWindowWidth) )
+    if ( (x < 0) || (x >= RendererGraphicsWindowWidth()) )
         return;
-    if ( (y < 0) || (y >= lbDisplay.GraphicsWindowHeight) )
+    if ( (y < 0) || (y >= RendererGraphicsWindowHeight()) )
         return;
     TbPixel *buf;
     int val;
@@ -1967,9 +1967,9 @@ static inline void LbDrawPixelClipOpaq1(long x, long y, TbPixel colour)
 
 static inline void LbDrawPixelClipOpaq2(long x, long y, TbPixel colour)
 {
-    if ( (x < 0) || (x >= lbDisplay.GraphicsWindowWidth) )
+    if ( (x < 0) || (x >= RendererGraphicsWindowWidth()) )
         return;
-    if ( (y < 0) || (y >= lbDisplay.GraphicsWindowHeight) )
+    if ( (y < 0) || (y >= RendererGraphicsWindowHeight()) )
         return;
     TbPixel *buf;
     int val;
@@ -1980,9 +1980,9 @@ static inline void LbDrawPixelClipOpaq2(long x, long y, TbPixel colour)
 
 static inline void LbDrawPixelClipSolid(long x, long y, TbPixel colour)
 {
-    if ( (x < 0) || (x >= lbDisplay.GraphicsWindowWidth) )
+    if ( (x < 0) || (x >= RendererGraphicsWindowWidth()) )
         return;
-    if ( (y < 0) || (y >= lbDisplay.GraphicsWindowHeight) )
+    if ( (y < 0) || (y >= RendererGraphicsWindowHeight()) )
         return;
     TbPixel *buf;
     buf = lbDisplay.GraphicsWindowPtr + lbDisplay.GraphicsScreenWidth * y + x;

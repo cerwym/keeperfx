@@ -174,6 +174,12 @@ TbScreenCoord RendererScreenWidth(void);
 /** Graphics buffer height in pixels. */
 TbScreenCoord RendererScreenHeight(void);
 
+/** Current graphics/clip window rect (formerly lbDisplay.GraphicsWindow*). */
+long RendererGraphicsWindowX(void);
+long RendererGraphicsWindowY(void);
+long RendererGraphicsWindowWidth(void);
+long RendererGraphicsWindowHeight(void);
+
 /** Active screen width in physical pixels.
  *  Replaces direct screen-width global reads. */
 unsigned short RendererGetScreenWidth(void);

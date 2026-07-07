@@ -618,8 +618,8 @@ void SoftwareTextRenderer::PutDownDbcSprites(const char* sbuf, const char* ebuf,
 {
     struct AsianFontWindow awind;
     awind.buf_ptr = lbDisplay.GraphicsWindowPtr;
-    awind.width = lbDisplay.GraphicsWindowWidth;
-    awind.height = lbDisplay.GraphicsWindowHeight;
+    awind.width = RendererGraphicsWindowWidth();
+    awind.height = RendererGraphicsWindowHeight();
     awind.scanline = lbDisplay.GraphicsScreenWidth;
     TbBool needs_draw = false;
     unsigned long chr = 0;
@@ -705,8 +705,8 @@ void SoftwareTextRenderer::PutDownDbcSpritesResized(const char* sbuf, const char
 {
     struct AsianFontWindow awind;
     awind.buf_ptr = lbDisplay.GraphicsWindowPtr;
-    awind.width = lbDisplay.GraphicsWindowWidth;
-    awind.height = lbDisplay.GraphicsWindowHeight;
+    awind.width = RendererGraphicsWindowWidth();
+    awind.height = RendererGraphicsWindowHeight();
     awind.scanline = lbDisplay.GraphicsScreenWidth;
     TbBool needs_draw = false;
     unsigned long chr = 0;

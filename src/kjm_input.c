@@ -18,6 +18,7 @@
 /******************************************************************************/
 #include "kfx_memory.h"
 #include "pre_inc.h"
+#include "renderer/RendererManager.h"
 #include "kjm_input.h"
 #include <math.h>
 
@@ -265,7 +266,7 @@ static void poll_controller_mouse_movement(float nx, float ny)
 
     float norm_mag = min(mag, 1.0f);
     float curved = norm_mag * norm_mag;
-    float pixels_per_second = lbDisplay.GraphicsWindowWidth / SECONDS_TO_CROSS;
+    float pixels_per_second = RendererGraphicsWindowWidth() / SECONDS_TO_CROSS;
     float pixels_this_frame = pixels_per_second * input_delta_time;
 
     mouse_accum_x += nx * curved * pixels_this_frame;

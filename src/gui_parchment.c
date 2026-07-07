@@ -959,10 +959,10 @@ void draw_zoom_box_things(long scrtop_x, long scrtop_y, int stl_x, int stl_y, Pl
 {
     UIRenderer_BeginZoomBoxOverlay(scrtop_x, scrtop_y,
         draw_tiles_x * subtile_size, draw_tiles_y * subtile_size);
-    int scr_y = scrtop_y - lbDisplay.GraphicsWindowY;
+    int scr_y = scrtop_y - RendererGraphicsWindowY();
     for (int map_dy = 0; map_dy < draw_tiles_y; map_dy++)
     {
-        int scr_x = scrtop_x - lbDisplay.GraphicsWindowX;
+        int scr_x = scrtop_x - RendererGraphicsWindowX();
         for (int map_dx = 0; map_dx < draw_tiles_x; map_dx++)
         {
             struct Map* mapblk = get_map_block_at(stl_x + map_dx, stl_y + map_dy);

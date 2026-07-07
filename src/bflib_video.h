@@ -161,14 +161,6 @@ struct DisplayStruct {
         /** Width of the screen buffer (WScreen X pitch).
          *  Note that only part of this width may be drawn on real screen. */
         long GraphicsScreenWidth;
-        /** Current graphics window beginning X coordinate. */
-        long GraphicsWindowX;
-        /** Current graphics window beginning Y coordinate. */
-        long GraphicsWindowY;
-        /** Current graphics window width (size in X axis). */
-        long GraphicsWindowWidth;
-        /** Current graphics window height (size in Y axis). */
-        long GraphicsWindowHeight;
         ushort DrawFlags;
         /** Selected drawing colour index. */
         uchar DrawColour;
