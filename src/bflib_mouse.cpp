@@ -42,6 +42,8 @@ extern "C" {
 
 volatile TbBool lbMouseGrab = true;
 volatile TbBool lbMouseGrabbed = true;
+/** Mouse sensitivity ratio in 8.8 fixed point (formerly lbDisplay.MouseMoveRatio). */
+short lbMouseMoveRatio;
 volatile TbDisplayStructEx lbDisplayEx;
 /******************************************************************************/
 TbResult LbMouseChangeSpriteAndHotspot(const struct TbSprite *pointerSprite, long hot_x, long hot_y)
@@ -333,7 +335,7 @@ TbResult LbMouseChangeMoveRatio(long ratio_x, long ratio_y)
         return Lb_FAIL;
     SYNCLOG("New ratio %ldx%ld",ratio_x, ratio_y);
     // Currently we don't have two ratio factors, so let's store an average
-    lbDisplay.MouseMoveRatio = (ratio_x + ratio_y)/2;
+    lbMouseMoveRatio = (ratio_x + ratio_y)/2;
     //TODO INPUT Separate mouse ratios in X and Y direction when lbDisplay from DLL will no longer be used.
     //minfo.XMoveRatio = ratio_x;
     //minfo.YMoveRatio = ratio_y;

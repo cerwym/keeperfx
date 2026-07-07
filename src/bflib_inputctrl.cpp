@@ -366,11 +366,11 @@ static void process_event(const SDL_Event *ev)
 #ifdef KEEPERFX_IMGUI_ENABLED
         if (DebugOverlay_IsVisible()) return;
 #endif
-        if (lbMouseGrabbed && lbDisplay.MouseMoveRatio > 0)
+        if (lbMouseGrabbed && lbMouseMoveRatio > 0)
         {
             // SDL3: xrel/yrel are float
-            int dx = (int)ev->motion.xrel * lbDisplay.MouseMoveRatio + frac_x;
-            int dy = (int)ev->motion.yrel * lbDisplay.MouseMoveRatio + frac_y;
+            int dx = (int)ev->motion.xrel * lbMouseMoveRatio + frac_x;
+            int dy = (int)ev->motion.yrel * lbMouseMoveRatio + frac_y;
 
             mouseDelta.x = (dx + 128) >> 8;
             mouseDelta.y = (dy + 128) >> 8;
