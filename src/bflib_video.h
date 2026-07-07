@@ -154,8 +154,6 @@ struct ScreenModeInfo {
 typedef struct ScreenModeInfo TbScreenModeInfo;
 
 struct DisplayStruct {
-        /** Pointer to physical screen buffer, if locked. */
-        uchar *PhysicalScreen;
         /** Pointer to graphics screen buffer, if locked. */
         uchar *WScreen;
         /** Pointer to graphics window buffer, if locked. */
