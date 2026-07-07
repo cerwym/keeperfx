@@ -392,10 +392,8 @@ TbResult UIRenderer_SubmitRawSprite(long x, long y, const struct TbSprite* spr,
 {
     IUIRenderer* ui = RendererGetUIRenderer();
     if (!ui || !spr) return Lb_FAIL;
-    if (!RendererHasGPURenderPath())
-        return ui->SubmitRawSprite(x, y, spr, draw_state_make(draw_flags, 0));
     SpriteHandle h = RendererResolveSprite(spr);
-    if (h == kInvalidSpriteHandle) return Lb_FAIL;  // atlas miss → caller falls through to SW
+    if (h == kInvalidSpriteHandle) return Lb_FAIL;
     ui->SubmitPanelSprite((int32_t)x, (int32_t)y, 16, h, false, draw_state_make(draw_flags, 0));
     return Lb_OK;
 }
@@ -406,8 +404,6 @@ TbResult UIRenderer_SubmitRawSpriteOneColour(long x, long y, const struct TbSpri
 {
     IUIRenderer* ui = RendererGetUIRenderer();
     if (!ui || !spr) return Lb_FAIL;
-    if (!RendererHasGPURenderPath())
-        return ui->SubmitRawSpriteOneColour(x, y, spr, colour, draw_state_make(draw_flags, 0));
     SpriteHandle h = RendererResolveSprite(spr);
     if (h == kInvalidSpriteHandle) return Lb_FAIL;
     ui->SubmitPanelSpriteColored((int32_t)x, (int32_t)y, 16, h, colour, draw_state_make(draw_flags, 0));
@@ -420,8 +416,6 @@ TbResult UIRenderer_SubmitRawSpriteRemap(long x, long y, const struct TbSprite* 
 {
     IUIRenderer* ui = RendererGetUIRenderer();
     if (!ui || !spr || !cmap) return Lb_FAIL;
-    if (!RendererHasGPURenderPath())
-        return ui->SubmitRawSpriteRemap(x, y, spr, cmap, draw_state_make(draw_flags, 0));
     SpriteHandle h = RendererResolveSprite(spr);
     if (h == kInvalidSpriteHandle) return Lb_FAIL;
     // Compute the remap row from the pointer offset into render_fade_tables.
