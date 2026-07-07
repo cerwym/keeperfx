@@ -2155,7 +2155,7 @@ void setup_outbuf(const int32_t *xstep, const int32_t *ystep, uchar **outbuf, in
     if ((lbDisplay.DrawFlags & Lb_SPRITE_FLIP_HORIZ) != 0)
         gspos_x += xstep[1] - 1;
     (*outbuf) = &lbDisplay.GraphicsWindowPtr[gspos_x + lbDisplay.GraphicsScreenWidth * gspos_y];
-    (*outheight) = lbDisplay.GraphicsScreenHeight;
+    (*outheight) = RendererScreenHeight();
 }
 
 /******************************************************************************/

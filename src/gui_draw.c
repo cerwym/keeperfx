@@ -636,8 +636,8 @@ TbBool draw_text_box_top(const char* text, ushort drawflags)
         }
     long box_width = (108 * spritesx + 18) * units_per_pixel / 16;
     long box_height = 92 * units_per_pixel / 16;
-    long startx = (lbDisplay.PhysicalScreenWidth - box_width) / 2;
-    long starty = (lbDisplay.PhysicalScreenHeight - box_height) / 2;
+    long startx = (RendererPhysicalWidth() - box_width) / 2;
+    long starty = (RendererPhysicalHeight() - box_height) / 2;
     draw_message_box_at(startx, starty, box_width, box_height, spritesx, spritesy);
     // Draw the text inside box
     lbDisplay.DrawFlags = drawflags;

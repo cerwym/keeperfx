@@ -150,8 +150,8 @@ void RendererSoftware::Shutdown()
 
 bool RendererSoftware::BeginFrame()
 {
-    m_screenW = lbDisplay.PhysicalScreenWidth;
-    m_screenH = lbDisplay.PhysicalScreenHeight;
+    m_screenW = RendererPhysicalWidth();
+    m_screenH = RendererPhysicalHeight();
 
     // RendererBeginFrame() is not guarded and runs twice per present (once in
     // RendererLockScreen, again in RendererPresentFrame).  Open the IR graph
@@ -203,8 +203,7 @@ void RendererSoftware::EndFrame()
     if (lbDrawSurface)
     {
         lbDisplay.WScreen              = static_cast<TbPixel*>(lbDrawSurface->pixels);
-        lbDisplay.GraphicsScreenWidth  = lbDrawSurface->pitch;
-        lbDisplay.GraphicsScreenHeight = lbDrawSurface->h;
+        RendererSetScreenDimensions(lbDrawSurface->pitch, lbDrawSurface->h);
         lbDisplay.GraphicsWindowX      = 0;
         lbDisplay.GraphicsWindowY      = 0;
         lbDisplay.GraphicsWindowWidth  = lbDrawSurface->w;
@@ -449,13 +448,12 @@ void RendererSoftware::BeginLensCapture()
 
     m_saved_wscreen = RendererGetWScreen();
     m_saved_graphics_w = lbDisplay.GraphicsScreenWidth;
-    m_saved_graphics_h = lbDisplay.GraphicsScreenHeight;
+    m_saved_graphics_h = RendererScreenHeight();
     RendererStoreViewport(&m_saved_viewport);
 
     memset(m_lens_buffer, 0, (size_t)m_lens_buffer_w * (size_t)m_lens_buffer_h * sizeof(TbPixel));
     lbDisplay.WScreen = m_lens_buffer;
-    lbDisplay.GraphicsScreenWidth = (int)m_lens_buffer_w;
-    lbDisplay.GraphicsScreenHeight = (int)m_lens_buffer_h;
+    RendererSetScreenDimensions((int)m_lens_buffer_w, (int)m_lens_buffer_h);
     RendererSetViewport(0, 0, RendererScreenWidth(), RendererScreenHeight());
     setup_engine_window(0, 0, RendererGetScreenWidth(), RendererGetScreenHeight());
     m_lens_capture_active = true;
@@ -473,8 +471,7 @@ void RendererSoftware::EndLensCapture()
     const long view_y = player->engine_window_y / pixel_size;
 
     lbDisplay.WScreen = m_saved_wscreen;
-    lbDisplay.GraphicsScreenWidth = m_saved_graphics_w;
-    lbDisplay.GraphicsScreenHeight = m_saved_graphics_h;
+    RendererSetScreenDimensions(m_saved_graphics_w, m_saved_graphics_h);
     RendererLoadViewport(&m_saved_viewport);
     setup_engine_window(0, 0, RendererGetScreenWidth(), RendererGetScreenHeight());
 

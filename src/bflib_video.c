@@ -135,7 +135,7 @@ TbScreenCoord LbGraphicsScreenWidth(void)
 
 TbScreenCoord LbGraphicsScreenHeight(void)
 {
-    return lbDisplay.GraphicsScreenHeight;
+    return RendererScreenHeight();
 }
 
 /** Resolution in width of the current video mode.
@@ -149,12 +149,12 @@ TbScreenCoord LbGraphicsScreenHeight(void)
  */
 TbScreenCoord LbScreenWidth(void)
 {
-    return lbDisplay.PhysicalScreenWidth;
+    return RendererPhysicalWidth();
 }
 
 TbScreenCoord LbScreenHeight(void)
 {
-    return lbDisplay.PhysicalScreenHeight;
+    return RendererPhysicalHeight();
 }
 
 TbResult LbPaletteFadeStep(unsigned char *from_palette,unsigned char *to_palette,long fade_steps)
@@ -549,12 +549,10 @@ TbResult LbScreenSetup(TbScreenMode mode, TbScreenCoord width, TbScreenCoord hei
     lbDisplay.DrawFlags = 0;
     lbDisplay.DrawColour = 0;
     lbDisplayEx.ShadowColour = 0;
-    lbDisplay.PhysicalScreenWidth = mdinfo->Width;
-    lbDisplay.PhysicalScreenHeight = mdinfo->Height;
+    RendererSetPhysicalDimensions(mdinfo->Width, mdinfo->Height);
     lbScreenMode = mode;
     // The graphics screen size should be really taken after screen is locked, but it seem just getting in now will work too
-    lbDisplay.GraphicsScreenWidth = lbDrawSurface->pitch;
-    lbDisplay.GraphicsScreenHeight = mdinfo->Height;
+    RendererSetScreenDimensions(lbDrawSurface->pitch, mdinfo->Height);
     lbDisplay.WScreen = NULL;
     lbDisplay.GraphicsWindowPtr = NULL;
     lbScreenInitialised = true;
@@ -568,7 +566,7 @@ TbResult LbScreenSetup(TbScreenMode mode, TbScreenCoord width, TbScreenCoord hei
     SYNCDBG(8,"Done filling display properties struct");
     if ( LbMouseIsInstalled() )
     {
-        LbMouseSetWindow(0, 0, lbDisplay.PhysicalScreenWidth, lbDisplay.PhysicalScreenHeight);
+        LbMouseSetWindow(0, 0, RendererPhysicalWidth(), RendererPhysicalHeight());
         if (msspr != NULL)
         {
           LbMouseChangeSpriteAndHotspot(msspr, hot_x, hot_y);

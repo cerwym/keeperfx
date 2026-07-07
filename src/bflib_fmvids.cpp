@@ -225,7 +225,7 @@ void copy_to_screen_scaled(const AVFrame & frame, const int flags)
 	const auto src_buf = frame.data[0];
 	const auto dst_buf = &lbDisplay.WScreen[0];
 	const int scanline = lbDisplay.GraphicsScreenWidth;
-	const int nlines = lbDisplay.GraphicsScreenHeight;
+	const int nlines = RendererScreenHeight();
 	int spw = 0, sph = 0, dst_width = 0, dst_height = 0;
 	smk_compute_dst_rect(frame.width, frame.height, scanline, nlines, flags,
 	                     &spw, &sph, &dst_width, &dst_height);
@@ -615,7 +615,7 @@ struct movie_t {
 		// Compute the letterboxed destination rect (same logic as copy_to_screen_scaled).
 		{
 			const int scr_w = lbDisplay.GraphicsScreenWidth;
-			const int scr_h = lbDisplay.GraphicsScreenHeight;
+			const int scr_h = RendererScreenHeight();
 			int dst_x, dst_y, dst_w, dst_h;
 			if (m_flags & (SMK_FullscreenFit | SMK_FullscreenStretch | SMK_FullscreenCrop)) {
 				smk_compute_dst_rect(m_frame->width, m_frame->height,

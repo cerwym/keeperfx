@@ -333,7 +333,7 @@ void frontnetmap_draw(void)
 {
     SYNCDBG(8,"Starting");
     LbTextSetFont(map_font);
-    LbTextSetWindow(0, 0, lbDisplay.PhysicalScreenWidth, lbDisplay.PhysicalScreenHeight);
+    LbTextSetWindow(0, 0, RendererPhysicalWidth(), RendererPhysicalHeight());
     if ((map_info.fadeflags & MLInfoFlg_Zooming) != 0) {
         frontzoom_to_point(map_info.hotspot_imgpos_x, map_info.hotspot_imgpos_y, map_info.fade_pos);
         compressed_window_draw();
@@ -446,7 +446,7 @@ TbBool frontnetmap_load(void)
     fe_net_level_selected = SINGLEPLAYER_NOTSTARTED;
     net_level_hilighted = SINGLEPLAYER_NOTSTARTED;
     set_pointer_graphic_none();
-    LbMouseSetPosition(lbDisplay.PhysicalScreenWidth/2, lbDisplay.PhysicalScreenHeight/2);
+    LbMouseSetPosition(RendererPhysicalWidth()/2, RendererPhysicalHeight()/2);
     map_sound_fade = FULL_LOUDNESS;
     lbDisplay.DrawFlags = 0;
     set_music_volume(settings.music_volume);

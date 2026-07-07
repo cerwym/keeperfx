@@ -52,9 +52,9 @@ void SoftwareTextRenderer::SetFont(const struct TbSpriteSheet* font)
         } else if (font == frontend_font[1] || font == frontend_font[2] ||
                    font == frontend_font[3] || font == winfont ||
                    font == font_sprites || font == frontstory_font) {
-            dbc_idx = (lbDisplay.PhysicalScreenWidth < 512) ? 0 : 1;
+            dbc_idx = (RendererPhysicalWidth() < 512) ? 0 : 1;
         } else {
-            dbc_idx = (lbDisplay.PhysicalScreenWidth < 512) ? 0 : 1;
+            dbc_idx = (RendererPhysicalWidth() < 512) ? 0 : 1;
         }
 
         const int32_t fonts_count = dbc_fonts_count();
@@ -109,8 +109,8 @@ void SoftwareTextRenderer::SetClipWindow(int32_t x, int32_t y, int32_t w, int32_
     if (y1 < 0) y1 = 0;
     if (x0 > lbDisplay.GraphicsScreenWidth)  x0 = lbDisplay.GraphicsScreenWidth;
     if (x1 > lbDisplay.GraphicsScreenWidth)  x1 = lbDisplay.GraphicsScreenWidth;
-    if (y0 > lbDisplay.GraphicsScreenHeight) y0 = lbDisplay.GraphicsScreenHeight;
-    if (y1 > lbDisplay.GraphicsScreenHeight) y1 = lbDisplay.GraphicsScreenHeight;
+    if (y0 > RendererScreenHeight()) y0 = RendererScreenHeight();
+    if (y1 > RendererScreenHeight()) y1 = RendererScreenHeight();
 
     m_clip_window = { x0, y0, x1 - x0, y1 - y0 };
 }

@@ -20,6 +20,7 @@
 /******************************************************************************/
 #include "kfx_memory.h"
 #include "pre_inc.h"
+#include "renderer/RendererManager.h"
 #include <math.h>
 #include <map>
 #include "bflib_inputctrl.h"
@@ -582,7 +583,7 @@ void LbMouseCheckPosition(TbBool grab_state_changed)
                 }
                 else
                 {
-                    LbMouseSetPosition(lbDisplay.PhysicalScreenWidth/2, lbDisplay.PhysicalScreenHeight/2);
+                    LbMouseSetPosition(RendererPhysicalWidth()/2, RendererPhysicalHeight()/2);
                 }
             }
         }

@@ -20,6 +20,7 @@
 /******************************************************************************/
 #include "kfx_memory.h"
 #include "pre_inc.h"
+#include "renderer/RendererManager.h"
 #include "bflib_vidraw.h"
 
 #include <string.h>
@@ -1302,7 +1303,7 @@ TbResult LbSpriteDrawOneColourUsingScalingData(long posx, long posy, const struc
         if ((lbDisplay.DrawFlags & Lb_SPRITE_FLIP_HORIZ) != 0)
             gspos_x += xstep[1] - 1;
         outbuf = &lbDisplay.GraphicsWindowPtr[gspos_x + lbDisplay.GraphicsScreenWidth * gspos_y];
-        outheight = lbDisplay.GraphicsScreenHeight;
+        outheight = RendererScreenHeight();
     }
     if ( scale_up )
     {

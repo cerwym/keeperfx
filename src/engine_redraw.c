@@ -1063,7 +1063,7 @@ void redraw_display(void)
         LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
     }
     draw_eastegg();
-  //show_onscreen_msg(8, "Physical(%d,%d) Graphics(%d,%d) Lens(%d,%d)", (int)lbDisplay.PhysicalScreenWidth, (int)lbDisplay.PhysicalScreenHeight, (int)lbDisplay.GraphicsScreenWidth, (int)lbDisplay.GraphicsScreenHeight, (int)eye_lens_width, (int)eye_lens_height);
+  //show_onscreen_msg(8, "Physical(%d,%d) Graphics(%d,%d) Lens(%d,%d)", (int)RendererPhysicalWidth(), (int)RendererPhysicalHeight(), (int)lbDisplay.GraphicsScreenWidth, (int)RendererScreenHeight(), (int)eye_lens_width, (int)eye_lens_height);
     SYNCDBG(7,"Finished");
 }
 

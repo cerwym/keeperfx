@@ -160,12 +160,10 @@ void RendererLoadViewport(TbGraphicsWindow *grwnd);
 /* Display property accessors (replaces direct lbDisplay.Field reads)         */
 /******************************************************************************/
 
-/** Visible display width in pixels (window or fullscreen).
- *  Replaces lbDisplay.PhysicalScreenWidth reads. */
+/** Visible display width in pixels (window or fullscreen). */
 TbScreenCoord RendererPhysicalWidth(void);
 
-/** Visible display height in pixels (window or fullscreen).
- *  Replaces lbDisplay.PhysicalScreenHeight reads. */
+/** Visible display height in pixels (window or fullscreen). */
 TbScreenCoord RendererPhysicalHeight(void);
 
 /** Graphics buffer scanline width (pitch) in pixels.
@@ -173,8 +171,7 @@ TbScreenCoord RendererPhysicalHeight(void);
  *  Replaces lbDisplay.GraphicsScreenWidth reads. */
 TbScreenCoord RendererScreenWidth(void);
 
-/** Graphics buffer height in pixels.
- *  Replaces lbDisplay.GraphicsScreenHeight reads. */
+/** Graphics buffer height in pixels. */
 TbScreenCoord RendererScreenHeight(void);
 
 /** Active screen width in physical pixels.
@@ -200,6 +197,7 @@ void RendererSetWScreen(unsigned char* buf);
  *  to a scratch buffer of different size.
  *  Replaces direct lbDisplay.GraphicsScreenWidth/Height writes. */
 void RendererSetScreenDimensions(int width, int height);
+void RendererSetPhysicalDimensions(int width, int height);
 
 /******************************************************************************/
 /* Palette management (replaces LbPalette* functions)                         */

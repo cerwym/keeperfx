@@ -80,6 +80,11 @@ static IWorldViewRenderer*  s_worldViewRenderer   = nullptr;
 static IMapFadePass*        s_mapFadePass         = nullptr;
 static ITextRenderer*       s_textRenderer        = nullptr;
 static IUIRenderer*         s_uiRenderer          = nullptr;
+
+// Renderer-private screen dimensions (formerly lbDisplay.PhysicalScreen*/GraphicsScreenHeight).
+static TbScreenCoord        s_physicalScreenWidth  = 0;
+static TbScreenCoord        s_physicalScreenHeight = 0;
+static TbScreenCoord        s_graphicsScreenHeight = 0;
 static SoftwareUIRenderer*  s_softwareUIRenderer  = nullptr;  // non-null only in software mode
 static ICursorLayer*        s_cursorLayer         = nullptr;
 #ifdef RENDERER_OPENGL_ENABLED
@@ -920,8 +925,8 @@ void RendererSetViewport(int32_t x, int32_t y, int32_t width, int32_t height)
     if (bottom_edge < 0) bottom_edge = 0;
     if (x > lbDisplay.GraphicsScreenWidth) x = lbDisplay.GraphicsScreenWidth;
     if (right_edge > lbDisplay.GraphicsScreenWidth) right_edge = lbDisplay.GraphicsScreenWidth;
-    if (y > lbDisplay.GraphicsScreenHeight) y = lbDisplay.GraphicsScreenHeight;
-    if (bottom_edge > lbDisplay.GraphicsScreenHeight) bottom_edge = lbDisplay.GraphicsScreenHeight;
+    if (y > RendererScreenHeight()) y = RendererScreenHeight();
+    if (bottom_edge > RendererScreenHeight()) bottom_edge = RendererScreenHeight();
     lbDisplay.GraphicsWindowX = x;
     lbDisplay.GraphicsWindowY = y;
     lbDisplay.GraphicsWindowWidth = right_edge - x;
@@ -958,10 +963,10 @@ void RendererLoadViewport(TbGraphicsWindow *grwnd)
 /* Display property accessors                                                 */
 /******************************************************************************/
 
-TbScreenCoord RendererPhysicalWidth(void)  { return lbDisplay.PhysicalScreenWidth;  }
-TbScreenCoord RendererPhysicalHeight(void) { return lbDisplay.PhysicalScreenHeight; }
+TbScreenCoord RendererPhysicalWidth(void)  { return s_physicalScreenWidth;  }
+TbScreenCoord RendererPhysicalHeight(void) { return s_physicalScreenHeight; }
 TbScreenCoord RendererScreenWidth(void)    { return lbDisplay.GraphicsScreenWidth;  }
-TbScreenCoord RendererScreenHeight(void)   { return lbDisplay.GraphicsScreenHeight; }
+TbScreenCoord RendererScreenHeight(void)   { return s_graphicsScreenHeight; }
 unsigned short RendererGetScreenWidth(void)  { return MyScreenWidth; }
 unsigned short RendererGetScreenHeight(void) { return MyScreenHeight; }
 unsigned char* RendererGetWScreen(void)    { return lbDisplay.WScreen; }
@@ -974,7 +979,14 @@ void RendererSetWScreen(unsigned char* buf)
 void RendererSetScreenDimensions(int width, int height)
 {
     lbDisplay.GraphicsScreenWidth  = width;
-    lbDisplay.GraphicsScreenHeight = height;
+    s_graphicsScreenHeight         = height;
+}
+
+/** Set the physical (video-mode) resolution. Formerly lbDisplay.PhysicalScreen*. */
+void RendererSetPhysicalDimensions(int width, int height)
+{
+    s_physicalScreenWidth  = width;
+    s_physicalScreenHeight = height;
 }
 
 /******************************************************************************/
