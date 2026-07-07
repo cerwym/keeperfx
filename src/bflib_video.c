@@ -69,6 +69,9 @@ volatile unsigned long lbIconIndex = 0;
 
 TbDisplayStruct lbDisplay;
 
+/** Active screen-mode index (formerly lbDisplay.ScreenMode). */
+static unsigned short lbScreenMode;
+
 
 unsigned short MyScreenWidth;
 unsigned short MyScreenHeight;
@@ -102,7 +105,7 @@ void *LbExeReferenceNumber(void)
  */
 TbScreenMode LbScreenActiveMode(void)
 {
-    return lbDisplay.ScreenMode;
+    return lbScreenMode;
 }
 
 /** Color depth for the Graphics Screen.
@@ -548,7 +551,7 @@ TbResult LbScreenSetup(TbScreenMode mode, TbScreenCoord width, TbScreenCoord hei
     lbDisplayEx.ShadowColour = 0;
     lbDisplay.PhysicalScreenWidth = mdinfo->Width;
     lbDisplay.PhysicalScreenHeight = mdinfo->Height;
-    lbDisplay.ScreenMode = mode;
+    lbScreenMode = mode;
     lbDisplay.PhysicalScreen = NULL;
     // The graphics screen size should be really taken after screen is locked, but it seem just getting in now will work too
     lbDisplay.GraphicsScreenWidth = lbDrawSurface->pitch;
