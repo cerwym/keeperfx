@@ -3663,7 +3663,7 @@ static TbBool wait_at_frontend(void)
 
     // Once the Mouse Sprite initialization is complete, the sprite's position needs to be reset because it defaults to (0, 0).
     // Note that we cannot use LbMoveGameCursorToHostCursor for this, because the buffer position may remain unchanged.
-    LbMouseSetPositionInitial(lbDisplay.MMouseX, lbDisplay.MMouseY);
+    LbMouseSetPositionInitial(lbMouse.MMouseX, lbMouse.MMouseY);
 
     try_restore_frontend_error_box();
 
@@ -3819,8 +3819,8 @@ void game_loop(void)
       if ( exit_keeper )
         break;
 
-      int32_t mspos_x_bak = lbDisplay.MMouseX;
-      int32_t mspos_y_bak = lbDisplay.MMouseY;
+      int32_t mspos_x_bak = lbMouse.MMouseX;
+      int32_t mspos_y_bak = lbMouse.MMouseY;
 
       if (game.game_kind == GKind_LocalGame)
       {

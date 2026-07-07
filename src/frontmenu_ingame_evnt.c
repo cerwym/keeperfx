@@ -18,6 +18,7 @@
 /******************************************************************************/
 #include "kfx_memory.h"
 #include "pre_inc.h"
+#include "bflib_mouse.h"
 #include "frontmenu_ingame_evnt.h"
 #include "globals.h"
 #include "bflib_basics.h"
@@ -191,7 +192,7 @@ void gui_setup_friend_over(struct GuiButton *gbtn)
         struct Thing* thing = INVALID_THING;
         if (dungeon->visible_battles[visbtl_id] != 0)
         {
-            int battlr_id = (gbtn->scr_pos_x - lbDisplay.MMouseX * pixel_size) / (gbtn->width / 7) + 6;
+            int battlr_id = (gbtn->scr_pos_x - lbMouse.MMouseX * pixel_size) / (gbtn->width / 7) + 6;
             if (battlr_id < MESSAGE_BATTLERS_COUNT-1) {
                 thing = thing_get(friendly_battler_list[MESSAGE_BATTLERS_COUNT * visbtl_id + battlr_id]);
             }
@@ -292,7 +293,7 @@ void gui_setup_enemy_over(struct GuiButton *gbtn)
         struct Thing* thing = INVALID_THING;
         if (dungeon->visible_battles[visbtl_id] != 0)
         {
-            int battlr_id = (lbDisplay.MMouseX * pixel_size - gbtn->scr_pos_x) / (gbtn->width / 7);
+            int battlr_id = (lbMouse.MMouseX * pixel_size - gbtn->scr_pos_x) / (gbtn->width / 7);
             if (battlr_id < MESSAGE_BATTLERS_COUNT-1) {
                 thing = thing_get(enemy_battler_list[MESSAGE_BATTLERS_COUNT * visbtl_id + battlr_id]);
             }

@@ -18,6 +18,7 @@
 /******************************************************************************/
 #include "kfx_memory.h"
 #include "pre_inc.h"
+#include "bflib_mouse.h"
 #include "input_interface.h"
 
 #include "bflib_inputctrl.h"
@@ -47,16 +48,16 @@ static TbBool input_sdl_is_key_down(int keycode)
 static void input_sdl_get_mouse(int* x, int* y, int* buttons)
 {
     if (x != NULL)
-        *x = lbDisplay.MouseX;
+        *x = lbMouse.MouseX;
     if (y != NULL)
-        *y = lbDisplay.MouseY;
+        *y = lbMouse.MouseY;
     if (buttons != NULL) {
         *buttons = 0;
-        if (lbDisplay.LeftButton)
+        if (lbMouse.LeftButton)
             *buttons |= INPUT_MOUSE_BUTTON_LEFT;
-        if (lbDisplay.RightButton)
+        if (lbMouse.RightButton)
             *buttons |= INPUT_MOUSE_BUTTON_RIGHT;
-        if (lbDisplay.MiddleButton)
+        if (lbMouse.MiddleButton)
             *buttons |= INPUT_MOUSE_BUTTON_MIDDLE;
     }
 }

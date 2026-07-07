@@ -319,7 +319,7 @@ TbBool poll_inputs(void)
  */
 long GetMouseX(void)
 {
-    long result = lbDisplay.MMouseX * (long)pixel_size;
+    long result = lbMouse.MMouseX * (long)pixel_size;
     return result;
 }
 
@@ -328,26 +328,26 @@ long GetMouseX(void)
  */
 long GetMouseY(void)
 {
-    long result = lbDisplay.MMouseY * (long)pixel_size;
+    long result = lbMouse.MMouseY * (long)pixel_size;
     return result;
 }
 
 short is_mouse_pressed_lrbutton(void)
 {
-  return (lbDisplay.LeftButton || lbDisplay.RightButton);
+  return (lbMouse.LeftButton || lbMouse.RightButton);
 }
 
 void clear_mouse_pressed_lrbutton(void)
 {
-  lbDisplay.LeftButton = 0;
-  lbDisplay.RightButton = 0;
+  lbMouse.LeftButton = 0;
+  lbMouse.RightButton = 0;
 }
 
 void update_left_button_released(void)
 {
   left_button_released = 0;
   left_button_double_clicked = 0;
-  if ( lbDisplay.LeftButton )
+  if ( lbMouse.LeftButton )
   {
     left_button_held = 1;
     left_button_held_x = GetMouseX();
@@ -355,7 +355,7 @@ void update_left_button_released(void)
   }
   if (left_button_held)
   {
-    if (!lbDisplay.MLeftButton)
+    if (!lbMouse.MLeftButton)
     {
       left_button_released = 1;
       left_button_held = 0;
@@ -380,7 +380,7 @@ void update_right_button_released(void)
 {
   right_button_released = 0;
   right_button_double_clicked = 0;
-  if (lbDisplay.RightButton)
+  if (lbMouse.RightButton)
   {
     right_button_held = 1;
     right_button_held_x = GetMouseX();
@@ -388,7 +388,7 @@ void update_right_button_released(void)
   }
   if ( right_button_held )
   {
-    if ( !lbDisplay.MRightButton )
+    if ( !lbMouse.MRightButton )
     {
       right_button_released = 1;
       right_button_held = 0;
@@ -419,17 +419,17 @@ void update_left_button_clicked(void)
     left_button_clicked_x = x * (long)pixel_size;
     left_button_clicked_y = y * (long)pixel_size;
   } else {
-    left_button_clicked = lbDisplay.LeftButton;
-    left_button_clicked_x = lbDisplay.MouseX * (long)pixel_size;
-    left_button_clicked_y = lbDisplay.MouseY * (long)pixel_size;
+    left_button_clicked = lbMouse.LeftButton;
+    left_button_clicked_x = lbMouse.MouseX * (long)pixel_size;
+    left_button_clicked_y = lbMouse.MouseY * (long)pixel_size;
   }
 }
 
 void update_right_button_clicked(void)
 {
-  right_button_clicked = lbDisplay.RightButton;
-  right_button_clicked_x = lbDisplay.MouseX * (long)pixel_size;
-  right_button_clicked_y = lbDisplay.MouseY * (long)pixel_size;
+  right_button_clicked = lbMouse.RightButton;
+  right_button_clicked_x = lbMouse.MouseX * (long)pixel_size;
+  right_button_clicked_y = lbMouse.MouseY * (long)pixel_size;
 }
 
 void update_wheel_scrolled(void)
@@ -445,7 +445,7 @@ void update_mouse(void)
 {
 #ifdef PLATFORM_VITA
   // Drive lbDisplay button state from native SCE controller input so that
-  // click/release detection (which reads lbDisplay.MLeftButton) works for
+  // click/release detection (which reads lbMouse.MLeftButton) works for
   // face buttons.  The SDL joystick path only fires MActn_LBUTTONDOWN for R1;
   // Cross/Circle are never mapped to mouse clicks through SDL on Vita.
   if (g_input != NULL) {
@@ -458,11 +458,11 @@ void update_mouse(void)
     int prev_left  = (s_prev_input_buttons & INPUT_MOUSE_BUTTON_LEFT)  ? 1 : 0;
     int prev_right = (s_prev_input_buttons & INPUT_MOUSE_BUTTON_RIGHT) ? 1 : 0;
     // Edge: set LeftButton/RightButton on the first frame of a press
-    if (btn_left  && !prev_left)  lbDisplay.LeftButton  = 1;
-    if (btn_right && !prev_right) lbDisplay.RightButton = 1;
+    if (btn_left  && !prev_left)  lbMouse.LeftButton  = 1;
+    if (btn_right && !prev_right) lbMouse.RightButton = 1;
     // Level: keep MLeftButton/MRightButton set for the whole duration of the press
-    lbDisplay.MLeftButton  = btn_left;
-    lbDisplay.MRightButton = btn_right;
+    lbMouse.MLeftButton  = btn_left;
+    lbMouse.MRightButton = btn_right;
     s_prev_input_buttons = ibuttons;
   }
 #endif
@@ -471,15 +471,15 @@ void update_mouse(void)
   update_left_button_clicked();
   update_right_button_clicked();
   update_wheel_scrolled();
-  lbDisplay.LeftButton = 0;
-  lbDisplay.RightButton = 0;
+  lbMouse.LeftButton = 0;
+  lbMouse.RightButton = 0;
   lbDisplayEx.WhellMoveUp = 0;
   lbDisplayEx.WhellMoveDown = 0;
   // [mouse buttons as keybinds - quick fix]
-  lbKeyOn[KC_MOUSE3] = lbDisplay.MiddleButton;
+  lbKeyOn[KC_MOUSE3] = lbMouse.MiddleButton;
   lbKeyOn[KC_MOUSEWHEEL_UP] = wheel_scrolled_up;
   lbKeyOn[KC_MOUSEWHEEL_DOWN] = wheel_scrolled_down;
-  lbInkey = lbDisplay.MiddleButton ? KC_MOUSE3 : wheel_scrolled_down ? KC_MOUSEWHEEL_DOWN : wheel_scrolled_up ? KC_MOUSEWHEEL_UP : lbInkey;
+  lbInkey = lbMouse.MiddleButton ? KC_MOUSE3 : wheel_scrolled_down ? KC_MOUSEWHEEL_DOWN : wheel_scrolled_up ? KC_MOUSEWHEEL_UP : lbInkey;
 
 }
 
@@ -508,7 +508,7 @@ void clear_key_pressed(long key)
     {
         if (key == KC_MOUSE3)
         {
-            lbDisplay.MiddleButton = 0;
+            lbMouse.MiddleButton = 0;
         }
     }
     lbKeyOn[key] = 0;

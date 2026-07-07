@@ -184,36 +184,7 @@ struct DisplayStruct {
         long GraphicsWindowWidth;
         /** Current graphics window height (size in Y axis). */
         long GraphicsWindowHeight;
-        /** Current mouse clipping window start X coordinate. */
-        long MouseWindowX;
-        /** Current mouse clipping window start Y coordinate. */
-        long MouseWindowY;
-        /** Current mouse clipping window width (in pixels). */
-        long MouseWindowWidth;
-        /** Current mouse clipping window height (in pixels). */
-        long MouseWindowHeight;
-        /** Mouse position during button "down" event, X coordinate. */
-        int32_t MouseX;
-        /** Mouse position during button "down" event, Y coordinate. */
-        int32_t MouseY;
-        /** Mouse position during move, X coordinate. */
-        int32_t MMouseX;
-        /** Mouse position during move, Y coordinate. */
-        int32_t MMouseY;
-        /** Mouse position during button release, X coordinate. */
-        int32_t RMouseX;
-        /** Mouse position during button release, Y coordinate. */
-        int32_t RMouseY;
         ushort DrawFlags;
-        uchar LeftButton;
-        uchar RightButton;
-        uchar MiddleButton;
-        uchar MLeftButton;
-        uchar MRightButton;
-        uchar MMiddleButton;
-        uchar RLeftButton;
-        uchar RMiddleButton;
-        uchar RRightButton;
         /** Selected drawing colour index. */
         uchar DrawColour;
         /** Currently active colour palette.

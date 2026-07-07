@@ -3021,7 +3021,7 @@ short get_gui_inputs(short gameplay_on)
       update_creatr_model_activities_list(0);
       maintain_my_battle_list();
   }
-  if (!lbDisplay.MLeftButton)
+  if (!lbMouse.MLeftButton)
   {
       drag_menu_x = -999;
       drag_menu_y = -999;

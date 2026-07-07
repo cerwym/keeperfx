@@ -18,6 +18,7 @@
 /******************************************************************************/
 #include "kfx_memory.h"
 #include "pre_inc.h"
+#include "bflib_mouse.h"
 #include "gui_frontbtns.h"
 
 #include <stdlib.h>     /* free() — for hit_mask release in kill_button() */
@@ -223,7 +224,7 @@ TbBool gui_button_click_inputs(int gmbtn_idx)
     result = false;
     gbtn = &active_buttons[gmbtn_idx];
     Gf_Btn_Callback callback;
-    if (lbDisplay.MLeftButton)
+    if (lbMouse.MLeftButton)
     {
         SYNCDBG(8,"Left down for button %d",(int)gmbtn_idx);
         result = true;
@@ -252,7 +253,7 @@ TbBool gui_button_click_inputs(int gmbtn_idx)
             }
         }
     } else
-    if (lbDisplay.MRightButton)
+    if (lbMouse.MRightButton)
     {
         SYNCDBG(8,"Right down for button %d",(int)gmbtn_idx);
         result = true;

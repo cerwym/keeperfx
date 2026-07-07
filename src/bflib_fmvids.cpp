@@ -1,5 +1,6 @@
 #include "kfx_memory.h"
 #include "pre_inc.h"
+#include "bflib_mouse.h"
 #include "bflib_fmvids.h"
 #include "bflib_video.h"
 #include "bflib_inputctrl.h"
@@ -709,7 +710,7 @@ struct movie_t {
 				return false;
 			} else if (m_flags & SMK_NoStopOnUserInput) {
 				return true;
-			} else if (lbKeyOn[KC_ESCAPE] || lbKeyOn[KC_RETURN] || lbKeyOn[KC_SPACE] || lbDisplay.LeftButton) {
+			} else if (lbKeyOn[KC_ESCAPE] || lbKeyOn[KC_RETURN] || lbKeyOn[KC_SPACE] || lbMouse.LeftButton) {
 				clear_key_pressed(lbInkey);
 				return false;
 			}
@@ -765,7 +766,7 @@ struct movie_t {
 
 extern "C" TbBool play_smk(const char * filename, const int flags) {
 	try {
-		lbDisplay.LeftButton = 0; // hack?
+		lbMouse.LeftButton = 0; // hack?
 		movie_t movie(filename, flags);
 		movie.play();
 		return true;

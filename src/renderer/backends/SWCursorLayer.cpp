@@ -13,6 +13,7 @@
  */
 /******************************************************************************/
 #include "pre_inc.h"
+#include "bflib_mouse.h"
 #include "renderer/backends/SWCursorLayer.h"
 
 #include "bflib_basics.h"
@@ -69,15 +70,15 @@ static void draw_pointer_sprite(int32_t x, int32_t y, const TbSprite* spr,
     int dw = scale_ui_value_lofi(spr->SWidth);
     int dh = scale_ui_value_lofi(spr->SHeight);
     if (dw <= 0 || dh <= 0) return;
-    if (lbDisplay.MouseWindowWidth <= 0 || lbDisplay.MouseWindowHeight <= 0) return;
+    if (lbMouse.MouseWindowWidth <= 0 || lbMouse.MouseWindowHeight <= 0) return;
 
-    if (x < 0 || (dw + spr->SWidth + x) >= lbDisplay.MouseWindowWidth)
-        set_scaling_w_clipped(x, spr->SWidth, dw, lbDisplay.MouseWindowWidth);
+    if (x < 0 || (dw + spr->SWidth + x) >= lbMouse.MouseWindowWidth)
+        set_scaling_w_clipped(x, spr->SWidth, dw, lbMouse.MouseWindowWidth);
     else
         set_scaling_w_simple(x, spr->SWidth, dw);
 
-    if (y < 0 || (dh + spr->SHeight + y) >= lbDisplay.MouseWindowHeight)
-        set_scaling_h_clipped(y, spr->SHeight, dh, lbDisplay.MouseWindowHeight);
+    if (y < 0 || (dh + spr->SHeight + y) >= lbMouse.MouseWindowHeight)
+        set_scaling_h_clipped(y, spr->SHeight, dh, lbMouse.MouseWindowHeight);
     else
         set_scaling_h_simple(y, spr->SHeight, dh);
 
@@ -86,7 +87,7 @@ static void draw_pointer_sprite(int32_t x, int32_t y, const TbSprite* spr,
         spr->Data, spr->SWidth, spr->SHeight, spr->SWidth,
     };
     LbSpriteDrawUsingScalingUpDataSolidLR(outbuf, scanline,
-                                           lbDisplay.MouseWindowHeight,
+                                           lbMouse.MouseWindowHeight,
                                            s_xsteps, s_ysteps, &buf);
 }
 

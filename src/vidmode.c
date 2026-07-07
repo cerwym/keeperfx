@@ -1035,8 +1035,8 @@ TbBool switch_to_next_video_mode(void)
 /** Needed until its contents are refactored, then we can just call switch_to_next_video_mode from PckA_SwitchScrnRes. */
 void switch_to_next_video_mode_wrapper(void)
 {
-  char percent_x = ((float)lbDisplay.MMouseX / (float)(lbDisplay.MouseWindowX + lbDisplay.MouseWindowWidth)) * 100;
-  char percent_y = ((float)lbDisplay.MMouseY / (float)(lbDisplay.MouseWindowY + lbDisplay.MouseWindowHeight)) * 100;
+  char percent_x = ((float)lbMouse.MMouseX / (float)(lbMouse.MouseWindowX + lbMouse.MouseWindowWidth)) * 100;
+  char percent_y = ((float)lbMouse.MMouseY / (float)(lbMouse.MouseWindowY + lbMouse.MouseWindowHeight)) * 100;
 
   if (switch_to_next_video_mode() == Lb_SCREEN_MODE_INVALID)
   {
@@ -1065,7 +1065,7 @@ void switch_to_next_video_mode_wrapper(void)
   {
     turn_on_menu(GMnu_VIDEO);
   }
-  LbMouseSetPosition(((lbDisplay.MouseWindowX + lbDisplay.MouseWindowWidth) / 100) * percent_x, ((lbDisplay.MouseWindowY + lbDisplay.MouseWindowHeight) / 100) * percent_y);
+  LbMouseSetPosition(((lbMouse.MouseWindowX + lbMouse.MouseWindowWidth) / 100) * percent_x, ((lbMouse.MouseWindowY + lbMouse.MouseWindowHeight) / 100) * percent_y);
   return;
 }
 
