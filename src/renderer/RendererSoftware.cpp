@@ -217,7 +217,7 @@ void RendererSoftware::EndFrame()
         // lbDrawSurface into m_world_raster.  On present-only frames, restore
         // the clean world snapshot so overlays don't accumulate.
         const size_t surface_bytes = (size_t)lbDrawSurface->pitch * (size_t)lbDrawSurface->h;
-        if (RendererConsumeFrameHadLock())
+        if (RendererConsumeWorldDrawn())
         {
             if (m_world_raster_size != surface_bytes)
             {

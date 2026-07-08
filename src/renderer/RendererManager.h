@@ -121,9 +121,9 @@ void RendererPresentFrame(void);
 /** Query whether the screen is currently locked (WScreen is valid). */
 int RendererIsScreenLocked(void);
 
-/** Returns 1 (and resets) if LockScreen was called since the last consume.
- *  Used by the software renderer to detect whether world content was drawn. */
-int RendererConsumeFrameHadLock(void);
+/** Returns 1 (and resets) if the world was drawn this frame.
+ *  Used by the software renderer to snapshot the clean world surface. */
+int RendererConsumeWorldDrawn(void);
 
 /******************************************************************************/
 /* Screen setup / teardown (replaces LbScreenSetup / LbScreenReset)           */

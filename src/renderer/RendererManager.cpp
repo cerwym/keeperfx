@@ -819,7 +819,7 @@ void RendererClearScreen(unsigned char colour_index)
 // Tracks whether the screen is currently locked (RendererLockScreen called, not yet unlocked).
 // Decoupled from lbDisplay.WScreen so that GPU mode (where WScreen is always null) works correctly.
 static bool s_screen_locked = false;
-static bool s_frame_had_lock = false;
+static bool s_world_drawn_this_frame = false;
 
 int RendererLockScreen(void)
 {
@@ -844,7 +844,6 @@ int RendererLockScreen(void)
     s_graphicsWindowPtr = &s_wscreen[s_graphicsWindowX +
         s_graphicsScreenWidth * s_graphicsWindowY];
     s_screen_locked = true;
-    s_frame_had_lock = true;
     return 1;
 }
 
@@ -897,10 +896,10 @@ int RendererIsScreenLocked(void)
     return s_screen_locked ? 1 : 0;
 }
 
-int RendererConsumeFrameHadLock(void)
+int RendererConsumeWorldDrawn(void)
 {
-    int v = s_frame_had_lock ? 1 : 0;
-    s_frame_had_lock = false;
+    int v = s_world_drawn_this_frame ? 1 : 0;
+    s_world_drawn_this_frame = false;
     return v;
 }
 
@@ -1052,6 +1051,7 @@ TbResult RendererWaitVbi(void)                   { return LbScreenWaitVbi(); }
 void WorldViewRenderer_BeginWorldPass(unsigned char* framebuf, int pitch, int w, int h,
                                       int vp_x, int vp_y)
 {
+    s_world_drawn_this_frame = true;
     if (s_worldViewRenderer)
         s_worldViewRenderer->BeginWorldPass(framebuf, pitch, w, h, vp_x, vp_y);
 }
