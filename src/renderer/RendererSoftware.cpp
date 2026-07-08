@@ -285,6 +285,9 @@ void RendererSoftware::ClearScreen(uint8_t colour_index)
 {
     if (lbDrawSurface)
         SDL_FillSurfaceRect(lbDrawSurface, NULL, colour_index);
+    // The cached world snapshot is no longer valid after a full-screen clear
+    // (e.g. transitioning to the overhead map, FMV, or menu screens).
+    m_world_raster_valid = false;
 }
 
 uint8_t* RendererSoftware::LockFramebuffer(int* out_pitch)
