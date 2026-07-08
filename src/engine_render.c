@@ -3834,7 +3834,7 @@ static void create_shadows(struct Thing *thing, struct EngineCoord *ecor, struct
     else if (bucket_idx > BUCKETS_COUNT - 2)
         bucket_idx = BUCKETS_COUNT - 2;
 
-    if (RendererHasGPURenderPath())
+    // Try GPU IR submission first; falls through to software bucket if not handled.
     {
         struct WorldShadowSubmitCmd scmd;
         memset(&scmd, 0, sizeof(scmd));
@@ -3870,8 +3870,8 @@ static void create_shadows(struct Thing *thing, struct EngineCoord *ecor, struct
         scmd.wy            = (int32_t)ecor->y;
         scmd.wz            = (int32_t)ecor->z;
         scmd.sort_key      = (uint32_t)bucket_idx;
-        WorldViewRenderer_SubmitWorldShadow(&scmd);
-        return;
+        if (WorldViewRenderer_SubmitWorldShadow(&scmd))
+            return;
     }
 
     struct BucketKindCreatureShadow *kspr = (struct BucketKindCreatureShadow *)get_bucket_item(min_cor_z, QK_CreatureShadow, sizeof(struct BucketKindCreatureShadow));
@@ -3914,25 +3914,26 @@ static void create_shadows(struct Thing *thing, struct EngineCoord *ecor, struct
 }
 
 /** Submit a GPU-only circle blob shadow centred under the creature.
+ *  Returns non-zero if the renderer handled it, 0 if not (software fallback needed).
  *  `ecor` must be the floor-height coord (before height offset is applied). */
-static void create_circle_shadow(struct Thing *thing, struct EngineCoord *ecor)
+static int create_circle_shadow(struct Thing *thing, struct EngineCoord *ecor)
 {
     unsigned short animation_sprite = get_render_animation_sprite(thing->anim_sprite);
     struct KeeperSprite *spr = keepersprite_array(animation_sprite);
     if (spr == NULL)
-        return;
+        return 0;
 
     short dim_ow, dim_oh, dim_tw, dim_th;
     get_keepsprite_unscaled_dimensions(animation_sprite, 0, thing->current_frame,
                                        &dim_ow, &dim_oh, &dim_tw, &dim_th);
     if (dim_ow <= 0 || dim_oh <= 0)
-        return;
+        return 0;
 
     /* Project the floor centre to screen space. */
     struct EngineCoord centre = *ecor;
     rotpers(&centre, &camera_matrix);
     if (centre.z < BUCKETS_STEP)
-        return;
+        return 0;
 
     int bucket_idx = centre.z / BUCKETS_STEP;
     if (bucket_idx >= BUCKETS_COUNT - 1)
@@ -3967,7 +3968,7 @@ static void create_circle_shadow(struct Thing *thing, struct EngineCoord *ecor)
     scmd.wz            = (int32_t)ecor->z;
     scmd.sort_key      = (uint32_t)bucket_idx;
     scmd.is_circle     = 1;
-    WorldViewRenderer_SubmitWorldShadow(&scmd);
+    return WorldViewRenderer_SubmitWorldShadow(&scmd);
 }
 
 // Creature status flower above head in isometric view
@@ -8966,28 +8967,32 @@ static void do_map_who_for_thing(struct Thing *thing)
         {
             int shadow_type = g_renderer_settings.shadow_type;
 
-            /* GPU circle blob — one submission per creature, no light loop */
-            if (RendererHasGPURenderPath() && shadow_type == RENDERER_SHADOW_CIRCLE)
+            /* Circle blob shadow — renderer decides if it can handle it */
+            if (shadow_type == RENDERER_SHADOW_CIRCLE)
             {
                 unsigned short animation_sprite = get_render_animation_sprite(thing->anim_sprite);
                 struct KeeperSprite *spr = keepersprite_array(animation_sprite);
                 if (spr != NULL && (spr->frame_flags & FFL_NoShadows) == 0)
-                    create_circle_shadow(thing, &ecor);
+                {
+                    if (!create_circle_shadow(thing, &ecor))
+                    {
+                        // Renderer didn't handle it; fall through to light-based shadows.
+                        int count = find_closest_lights(&thing->mappos, &nearlgt);
+                        for (int i = 0; i < count; i++)
+                            create_shadows(thing, &ecor, &nearlgt.coord[i]);
+                    }
+                }
             }
             else if (shadow_type != RENDERER_SHADOW_OFF)
             {
-                int count;
-                int i;
-
                 unsigned short animation_sprite = get_render_animation_sprite(thing->anim_sprite);
                 struct KeeperSprite *spr = keepersprite_array(animation_sprite);
                 if ((spr != NULL) && ((spr->frame_flags & FFL_NoShadows) == 0))
                 {
-                    count = find_closest_lights(&thing->mappos, &nearlgt);
-                    /* Clamp to the configured type (1-4 = shadow count, default 4) */
-                    if (RendererHasGPURenderPath() && shadow_type >= 1 && shadow_type <= 4 && count > shadow_type)
+                    int count = find_closest_lights(&thing->mappos, &nearlgt);
+                    if (shadow_type >= 1 && shadow_type <= 4 && count > shadow_type)
                         count = shadow_type;
-                    for (i = 0; i < count; i++)
+                    for (int i = 0; i < count; i++)
                     {
                         create_shadows(thing, &ecor, &nearlgt.coord[i]);
                     }
