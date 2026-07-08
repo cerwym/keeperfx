@@ -6727,14 +6727,13 @@ void display_drawlist(void) // Draws isometric and 1st person view. Not frontvie
                     item.slabSelector->p.V,
                     item.slabSelector->p.S);
                 break;
-            case QK_CreatureStatus: // Status flower above creature heads
-                draw_status_sprites(item.creatureStatus->x, item.creatureStatus->y, item.creatureStatus->thing);
-                break;
-            case QK_FloatingGoldText: // Floating gold text when placing or selling a slab
-                draw_engine_number(item.floatingGoldText);
-                break;
-            case QK_RoomFlagBottomPole: // The bottom pole part, doesn't affect the status sitting on top of the pole
-                draw_engine_room_flagpole(item.roomFlag);
+            // NSP overlay types are handled by draw_nonspatial_sprites_gpu()
+            // which adds the viewport offset for correct screen-absolute coords.
+            // Drawing them here too would double-submit to the IR.
+            case QK_CreatureStatus:
+            case QK_FloatingGoldText:
+            case QK_RoomFlagBottomPole:
+            case QK_RoomFlagStatusBox:
                 break;
             case QK_JontyISOSprite: // Spinning key
                 player = get_my_player();
@@ -6745,9 +6744,6 @@ void display_drawlist(void) // Draws isometric and 1st person view. Not frontvie
                         draw_jonty_mapwho(item.jontySprite);
                     }
                 }
-                break;
-            case QK_RoomFlagStatusBox: // The status sitting on top of the pole
-                draw_engine_room_flag_top(item.roomFlag);
                 break;
             default:
                 render_problems++;
@@ -7383,23 +7379,18 @@ void display_fast_drawlist(struct Camera *cam) // Draws frontview only. Not isom
                     item.slabSelector->p.V,
                     item.slabSelector->p.S);
                 break;
-            case QK_CreatureStatus: // Status flower above creature heads
-                draw_status_sprites(item.creatureStatus->x, item.creatureStatus->y, item.creatureStatus->thing);
+            // NSP overlay types are handled by draw_nonspatial_sprites_gpu()
+            // which adds the viewport offset for correct screen-absolute coords.
+            case QK_CreatureStatus:
+            case QK_FloatingGoldText:
+            case QK_RoomFlagBottomPole:
+            case QK_RoomFlagStatusBox:
                 break;
             case QK_TextureQuad: // Textured polygons
                 draw_texturedquad_block(item.texturedQuad);
                 break;
-            case QK_FloatingGoldText: // Floating gold text when placing or selling a slab
-                draw_engine_number(item.floatingGoldText);
-                break;
-            case QK_RoomFlagBottomPole: // The bottom pole part, doesn't affect the status sitting on top of the pole
-                draw_engine_room_flagpole(item.roomFlag);
-                break;
             case QK_JontyISOSprite: // Spinning Key
                 draw_iso_only_fastview_mapwho(cam, item.jontySprite);
-                break;
-            case QK_RoomFlagStatusBox: // The status sitting on top of the pole
-                draw_engine_room_flag_top(item.roomFlag);
                 break;
             default:
                 render_problems++;
@@ -9560,8 +9551,7 @@ void draw_frontview_engine(struct Camera *cam)
 
     WorldViewRenderer_DrawFrontView(cam);
 
-    if (RendererHasGPURenderPath())
-        draw_nonspatial_sprites_gpu();
+    draw_nonspatial_sprites_gpu();
 
     RendererLoadViewport(&grwnd);
     cam->zoom = zoom_mem;//TODO [zoom] remove when all cam->zoom will be changed to camera_zoom
