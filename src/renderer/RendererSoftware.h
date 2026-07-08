@@ -64,6 +64,8 @@ public:
     uint8_t* LockFramebuffer(int* out_pitch) override;
     void     UnlockFramebuffer() override;
 
+    bool     PresentImage(const struct RendererPresentImageDesc* desc) override;
+
     void     NotifyFmvPalette(const uint8_t* bgra_1024) override;
     bool     SubmitTransparentBlit(const uint8_t* buf, int w, int h) override;
     bool     SubmitOverheadMap(const uint8_t* tile_colors, int tiles_x, int tiles_y,

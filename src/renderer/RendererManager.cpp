@@ -1263,17 +1263,15 @@ TbBool RendererPresentImage(const struct RendererPresentImageDesc* desc)
 {
     if (!desc || !desc->src) return false;
 
-    // GPU path: append an IRImagePresentCmd to the RenderGraph write buffer.
+    // Backend virtual — GPU queues an IR present, software handles FMV
+    // embedded-palette blits via its PresentImage override.
     IRenderer* rend = RendererGetActive();
     if (rend && rend->PresentImage(desc))
         return true;
 
-    // Software backend (or GPU path unavailable): only the classic opaque
-    // game-palette blit has a drop-in CPU equivalent (the WScreen copy). The
-    // other cases (FMV embedded palette, transparent overlay, landview zoom,
-    // RGBA8) return false so the caller runs its own CPU path — e.g. the FMV
-    // copy_to_screen and the landview WScreen fallbacks. These per-backend CPU
-    // paths are what the RenderGraph-unification chapter later deletes.
+    // Fallback for the classic opaque game-palette blit (menu backgrounds,
+    // loading screens). Transparent overlays, landview zoom, and RGBA8 are
+    // not supported here; their callers use backend-specific paths.
     if (desc->format  != PRESENT_FORMAT_INDEXED8 ||
         desc->kind    != PRESENT_KIND_OPAQUE     ||
         desc->palette != PRESENT_PALETTE_GAME)

@@ -98,179 +98,6 @@ static void smk_compute_dst_rect(int src_w, int src_h, int scr_w, int scr_h, int
     *out_h = (int)(in_height * units_per_px / 16.0f);
 }
 
-void copy_to_screen_pxquad(unsigned char *srcbuf, unsigned char *dstbuf, long width, long dst_shift)
-{
-	const auto s = dst_shift >> 2;
-	auto w = ((uint32_t)width) >> 2;
-	auto * src = reinterpret_cast<uint32_t *>(srcbuf);
-	auto * dst = reinterpret_cast<uint32_t *>(dstbuf);
-	do {
-		const auto c = *src++;
-		const auto first_pixel_low_byte = c & 0xFF;
-		const auto first_pixel_high_byte = (c >> 8) & 0xFF;
-		const auto first_doubled_pixel = (first_pixel_high_byte << 24) + (first_pixel_high_byte << 16) + (first_pixel_low_byte << 8) + first_pixel_low_byte;
-		dst[0] = first_doubled_pixel;
-		dst[s] = first_doubled_pixel;
-		const auto second_pixel_low_byte = (c >> 16) & 0xFF;
-		const auto second_pixel_high_byte = (c >> 24) & 0xFF;
-		const auto second_doubled_pixel = (second_pixel_high_byte << 24) + (second_pixel_high_byte << 16) + (second_pixel_low_byte << 8) + second_pixel_low_byte;
-		dst[1] = second_doubled_pixel;
-		dst[s+1] = second_doubled_pixel;
-		dst += 2;
-		w--;
-	}
-	while (w > 0);
-}
-
-void copy_to_screen_pxdblh(unsigned char *srcbuf, unsigned char *dstbuf, long width, long dst_shift)
-{
-	const auto s = dst_shift >> 2;
-	auto w = ((unsigned long)width) >> 2;
-	auto src = (uint32_t *)srcbuf;
-	auto dst = (uint32_t *)dstbuf;
-	do {
-		const auto n = *src++;
-		dst[0] = n;
-		dst[s] = n;
-		dst++;
-		w--;
-	}
-	while (w > 0);
-}
-
-void copy_to_screen_pxdblw(unsigned char *srcbuf, unsigned char *dstbuf, long width)
-{
-	auto w = ((unsigned long)width) >> 2;
-	auto src = (uint32_t *)srcbuf;
-	auto dst = (uint32_t *)dstbuf;
-	do {
-		const auto c = *src++;
-		const auto first_pixel_low_byte = c & 0xFF;
-		const auto first_pixel_high_byte = (c >> 8) & 0xFF;
-		dst[0] = (first_pixel_high_byte << 24) + (first_pixel_high_byte << 16) + (first_pixel_low_byte << 8) + first_pixel_low_byte;
-		const auto second_pixel_low_byte = (c >> 16) & 0xFF;
-		const auto second_pixel_high_byte = (c >> 24) & 0xFF;
-		dst[1] = (second_pixel_high_byte << 24) + (second_pixel_high_byte << 16) + (second_pixel_low_byte << 8) + second_pixel_low_byte;
-		dst += 2;
-		w--;
-	}
-	while (w > 0);
-}
-
-void copy_to_screen(const AVFrame & frame, const int flags)
-{
-	if (RendererHasGPURenderPath()) return;
-	const auto src_pitch = frame.linesize[0];
-	auto srcbuf = frame.data[0];
-	long screen_buffer_center_offset;
-	if (flags & (SMK_PixelDoubleLine | SMK_InterlaceLine)) {
-		screen_buffer_center_offset = RendererScreenWidth() * ((LbScreenHeight() - 2 * frame.height) >> 1);
-	} else {
-		screen_buffer_center_offset = RendererScreenWidth() * ((LbScreenHeight() - frame.height) >> 1);
-	}
-	auto w = frame.width;
-	if (flags & SMK_PixelDoubleWidth) {
-		w = 2 * frame.width;
-	}
-	auto dstbuf = &RendererGetWScreen()[screen_buffer_center_offset + ((LbScreenWidth() - w) >> 1)];
-	if (flags & SMK_PixelDoubleLine) {
-		if (flags & SMK_PixelDoubleWidth) {
-			for (int h = frame.height; h > 0; h--) {
-				copy_to_screen_pxquad(srcbuf, dstbuf, frame.width, RendererScreenWidth());
-				dstbuf += 2 * RendererScreenWidth();
-				srcbuf += src_pitch;
-			}
-		} else {
-			for (int h = frame.height; h > 0; h--) {
-				copy_to_screen_pxdblh(srcbuf, dstbuf, frame.width, RendererScreenWidth());
-				dstbuf += 2 * RendererScreenWidth();
-				srcbuf += src_pitch;
-			}
-		}
-	} else {
-		if (flags & SMK_PixelDoubleWidth) {
-				if (flags & SMK_InterlaceLine) {
-					for (int h = frame.height; h > 0; h--) {
-						copy_to_screen_pxdblw(srcbuf, dstbuf, frame.width);
-						dstbuf += 2 * RendererScreenWidth();
-						srcbuf += src_pitch;
-					}
-				} else {
-					for (int h = frame.height; h > 0; h--) {
-						copy_to_screen_pxdblw(srcbuf, dstbuf, frame.width);
-						dstbuf += RendererScreenWidth();
-						srcbuf += src_pitch;
-					}
-				}
-		} else if (flags & SMK_InterlaceLine) {
-			for (int h = frame.height; h > 0; h--) {
-				memcpy(dstbuf, srcbuf, frame.width);
-				dstbuf += 2 * RendererScreenWidth();
-				srcbuf += src_pitch;
-			}
-		} else {
-			for (int h = frame.height; h > 0; h--) {
-				memcpy(dstbuf, srcbuf, frame.width);
-				dstbuf += RendererScreenWidth();
-				srcbuf += src_pitch;
-			}
-		}
-	}
-}
-
-void copy_to_screen_scaled(const AVFrame & frame, const int flags)
-{
-	if (RendererHasGPURenderPath()) return;
-	const auto src_pitch = frame.linesize[0];
-	const auto src_buf = frame.data[0];
-	const auto dst_buf = &RendererGetWScreen()[0];
-	const int scanline = RendererScreenWidth();
-	const int nlines = RendererScreenHeight();
-	int spw = 0, sph = 0, dst_width = 0, dst_height = 0;
-	smk_compute_dst_rect(frame.width, frame.height, scanline, nlines, flags,
-	                     &spw, &sph, &dst_width, &dst_height);
-
-	// Clearing top of the canvas
-	for (int sh = 0; sh < sph; sh++) {
-		memset(&dst_buf[sh * scanline], 0, scanline);
-	}
-	// Clearing bottom of the canvas
-	// (Note: it must be done before drawing, to make sure we won't overwrite last line)
-	for (int sh = sph + dst_height; sh < nlines; sh++) {
-		memset(&dst_buf[sh * scanline], 0, scanline);
-	}
-	// Now drawing
-	auto dhstart = sph;
-	for (int sh = 0; sh < frame.height; sh++) {
-		const auto dhend = sph + (dst_height * (sh + 1) / frame.height);
-		const auto src = &src_buf[sh * src_pitch];
-		// make for(k=0;k<dhend-dhstart;k++) but restrict k to draw area
-		const auto mhmin = max(0, -dhstart);
-		const auto mhmax = min(dhend - dhstart, nlines - dhstart);
-		for (int k = mhmin; k < mhmax; k++) {
-			const auto dst = &dst_buf[(dhstart + k) * scanline];
-			int dwstart = spw;
-			if (dwstart > 0) {
-				memset(dst, 0, dwstart);
-			}
-			for (int sw = 0; sw < frame.width; sw++) {
-				const auto dwend = spw + (dst_width * (sw + 1) / frame.width);
-				// make for(i=0;i<dwend-dwstart;i++) but restrict i to draw area
-				const auto mwmin = max(0, -dwstart);
-				const auto mwmax = min(dwend - dwstart, scanline - dwstart);
-				for (int i = mwmin; i < mwmax; i++) {
-					dst[dwstart+i] = src[sw];
-				}
-				dwstart = dwend;
-			}
-			if (dwstart < scanline) {
-				memset(dst+dwstart, 0, scanline-dwstart);
-			}
-		}
-		dhstart = dhend;
-	}
-}
-
 struct movie_t {
 
 	using clock = std::chrono::high_resolution_clock;
@@ -629,8 +456,8 @@ struct movie_t {
 				dst_y = (scr_h - dst_h) / 2;
 			}
 			// Unified present path: Indexed8 opaque with the frame's own
-			// (embedded) BGRA palette. GPU backends queue an IR present; the
-			// software backend returns false so the copy_to_screen path below runs.
+			// (embedded) BGRA palette. Both backends handle this through
+			// PresentImage — GPU queues an IR present, software blits to WScreen.
 			struct RendererPresentImageDesc vdesc = {};
 			vdesc.format  = PRESENT_FORMAT_INDEXED8;
 			vdesc.palette = PRESENT_PALETTE_EMBEDDED;
@@ -640,18 +467,7 @@ struct movie_t {
 			vdesc.src_w = m_frame->width; vdesc.src_h = m_frame->height;
 			vdesc.src_pitch = m_frame->linesize[0];
 			vdesc.embedded_palette = m_frame->data[1];
-			if (RendererPresentImage(&vdesc))
-			{
-				RendererUnlockScreen();
-				RendererPresentFrame();
-				return;
-			}
-		}
-		// Software path — renderer returned false (software renderer).
-		if (m_flags & (SMK_FullscreenFit | SMK_FullscreenStretch | SMK_FullscreenCrop)) {
-			copy_to_screen_scaled(*m_frame, m_flags);
-		} else {
-			copy_to_screen(*m_frame, m_flags);
+			RendererPresentImage(&vdesc);
 		}
 		RendererUnlockScreen();
 		RendererPresentFrame();

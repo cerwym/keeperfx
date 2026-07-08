@@ -304,6 +304,67 @@ void RendererSoftware::UnlockFramebuffer()
         SDL_UnlockSurface(lbDrawSurface);
 }
 
+bool RendererSoftware::PresentImage(const struct RendererPresentImageDesc* desc)
+{
+    // Only handle FMV frames with an embedded palette; other cases fall through
+    // to the C bridge's existing software path (copy_raw8_image_buffer).
+    if (!desc || !desc->src)
+        return false;
+    if (desc->format  != PRESENT_FORMAT_INDEXED8 ||
+        desc->kind    != PRESENT_KIND_OPAQUE     ||
+        desc->palette != PRESENT_PALETTE_EMBEDDED)
+    {
+        return false;
+    }
+
+    uint8_t* dst_buf = RendererGetWScreen();
+    if (!dst_buf) return false;
+
+    const int scanline = RendererScreenWidth();
+    const int nlines   = RendererScreenHeight();
+    const int src_pitch = desc->src_pitch ? desc->src_pitch : desc->src_w;
+
+    // Clear letterbox bars (top + bottom)
+    for (int y = 0; y < desc->dst_y; ++y)
+        memset(&dst_buf[y * scanline], 0, scanline);
+    for (int y = desc->dst_y + desc->dst_h; y < nlines; ++y)
+        memset(&dst_buf[y * scanline], 0, scanline);
+
+    // Nearest-neighbour blit from src to the destination rect in WScreen
+    int dh_start = desc->dst_y;
+    for (int sh = 0; sh < desc->src_h; ++sh)
+    {
+        const int dh_end = desc->dst_y + (desc->dst_h * (sh + 1) / desc->src_h);
+        const uint8_t* src = &desc->src[sh * src_pitch];
+        const int mh_min = (dh_start < 0) ? -dh_start : 0;
+        const int mh_max = ((dh_end - dh_start) < (nlines - dh_start))
+                         ? (dh_end - dh_start) : (nlines - dh_start);
+        for (int k = mh_min; k < mh_max; ++k)
+        {
+            uint8_t* dst = &dst_buf[(dh_start + k) * scanline];
+            // Clear left bar
+            if (desc->dst_x > 0)
+                memset(dst, 0, desc->dst_x);
+            int dw_start = desc->dst_x;
+            for (int sw = 0; sw < desc->src_w; ++sw)
+            {
+                const int dw_end = desc->dst_x + (desc->dst_w * (sw + 1) / desc->src_w);
+                const int mw_min = (dw_start < 0) ? -dw_start : 0;
+                const int mw_max = ((dw_end - dw_start) < (scanline - dw_start))
+                                 ? (dw_end - dw_start) : (scanline - dw_start);
+                for (int i = mw_min; i < mw_max; ++i)
+                    dst[dw_start + i] = src[sw];
+                dw_start = dw_end;
+            }
+            // Clear right bar
+            if (dw_start < scanline)
+                memset(dst + dw_start, 0, scanline - dw_start);
+        }
+        dh_start = dh_end;
+    }
+    return true;
+}
+
 bool RendererSoftware::SubmitTransparentBlit(const uint8_t* buf, int w, int h)
 {
     if (!buf || !RendererGetWScreen()) return false;
