@@ -22,7 +22,7 @@
 #include "engine_buckets.h"   // QKinds enum, BasicQ, BucketKind* structs, buckets[]
 #include "engine_textures.h"  // TEXTURE_BLOCKS_COUNT
 #include "renderer/TileAtlasPacker.h" // GetTileUV
-#include "engine_render.h"    // draw_3d_sprites_for_bucket(), draw_nonspatial_sprites_no_shadows()
+#include "engine_render.h"    // draw_3d_sprites_for_bucket()
 #include "bflib_basics.h"      // ERRORLOG / SYNCLOG / WARNLOG
 #include "renderer/opengl/GLUIRenderer.h"
 #include "creature_graphics.h" // KeeperSprite structure
@@ -2163,8 +2163,8 @@ void GLWorldViewRenderer::DrawIsometricView()
     //   JontyISOSprite), the accumulated tile geometry is flushed to GL first,
     //   the sprite draw functions are called (which queue quads to the GPU
     //   sprite backend), then the sprite quads are immediately flushed.
-    // Non-spatial elements (shadows, selector, status, text, room flags) are
-    // drawn afterwards into the CPU staging buffer via draw_nonspatial_sprites().
+    // Non-spatial elements (status, text, room flags) are submitted via
+    // draw_nonspatial_sprites_gpu() which the caller invokes after this function.
     // bi >= 0: the GPU renderer must include bucket 0 (tiles with z < 32 in
     // fill_in_points_isometric are clamped to z=0 → bucket_index=0).  The
     // software renderer skips bucket 0 because its scan-converter can't handle
@@ -2275,7 +2275,7 @@ void GLWorldViewRenderer::DrawIsometricView()
                     bucket_has_3d_sprites = true;
                     break;
 
-                // ── All other types go to draw_nonspatial_sprites() ──────────
+                // ── All other types go to draw_nonspatial_sprites_gpu() ──
                 default:
                     break;
             }

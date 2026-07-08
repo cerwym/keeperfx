@@ -233,7 +233,6 @@ void draw_frontview_engine(struct Camera *cam);
 
 /** Bucket-list draw — called by SoftwareWorldViewRenderer. */
 void display_drawlist(void);
-void display_drawlist_sprites_only(void);
 void display_fast_drawlist(struct Camera *cam);
 
 /** Draw only depth-positioned 3D entity sprites for one bucket.
@@ -245,16 +244,8 @@ void draw_3d_sprites_for_bucket(long bucket_num);
 void draw_frontview_3d_sprites_for_bucket(long bucket_num, struct Camera *cam);
 void draw_frontview_3d_sprites_for_bucket_current(long bucket_num);
 
-/** Draw all non-spatial sprites (shadows, selector, status, text, room flags)
- *  across all buckets into the CPU staging buffer. */
-void draw_nonspatial_sprites(void);
-
-/** Same as draw_nonspatial_sprites() but skips QK_CreatureShadow entries.
- *  Used by the GL renderer which handles shadows via its own GPU path. */
-void draw_nonspatial_sprites_no_shadows(void);
-
-/** GPU-accelerated version of draw_nonspatial_sprites_no_shadows().
- *  Submits UI elements to the hardware renderer for GPU batching instead of CPU rasterization. */
+/** Submits non-spatial UI elements (status flowers, floating gold text,
+ *  room flags, slab selector) to the UIRenderer for batched compositing. */
 void draw_nonspatial_sprites_gpu(void);
 
 /** Rasterize a keeper sprite frame into a 256×256 byte scratch buffer.
