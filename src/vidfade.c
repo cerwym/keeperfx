@@ -327,33 +327,7 @@ long PaletteFadePlayer(struct PlayerInfo *player)
     if (player->palette_fade_step_possession > 0)
       player->palette_fade_step_possession--;
   }
-  // GPU renderers use the screen tint overlay for possession/pain effects;
-  // skip the per-pixel SW palette manipulation to avoid double-tinting.
-  if (RendererHasGPURenderPath())
-    return step;
-  // SW path: compute per-channel palette fade and set to screen.
-  {
-    unsigned char palette[PALETTE_SIZE];
-    for (i=0; i < PALETTE_COLORS; i++)
-    {
-        unsigned char* src = &player->main_palette[3 * i];
-        unsigned char* dst = &palette[3 * i];
-        unsigned long pix = ((step * (((long)src[0]) - 63)) / 120) + 63;
-        if (pix > 63)
-            pix = 63;
-        dst[0] = pix;
-        pix = (step * ((long)src[1])) / 120;
-        if (pix > 63)
-            pix = 63;
-        dst[1] = pix;
-        pix = (step * ((long)src[2])) / 120;
-        if (pix > 63)
-            pix = 63;
-        dst[2] = pix;
-    }
-    RendererWaitVbi();
-    RendererPaletteSet(palette);
-  }
+  RendererApplyPossessionPalette(step, player->main_palette);
   return step;
 }
 

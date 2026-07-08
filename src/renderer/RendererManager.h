@@ -235,6 +235,11 @@ int32_t RendererPaletteFade(unsigned char *pal, int32_t fade_steps, enum TbPalet
  *  Replaces LbPaletteStopOpenFade(). */
 TbResult RendererPaletteStopFade(void);
 
+/** Apply per-pixel possession/pain palette fade for the software renderer.
+ *  GPU renderers use screen tint overlays instead; this is a no-op on GPU. */
+void RendererApplyPossessionPalette(long step, const unsigned char *main_palette);
+TbResult RendererPaletteStopFade(void);
+
 /******************************************************************************/
 /* Screen lifecycle helpers                                                   */
 /******************************************************************************/

@@ -1026,6 +1026,31 @@ TbResult RendererPaletteGet(unsigned char *palette) { return LbPaletteGet(palett
 int32_t RendererPaletteFade(unsigned char *pal, int32_t fade_steps, enum TbPaletteFadeFlag flg) { return LbPaletteFade(pal, fade_steps, flg); }
 TbResult RendererPaletteStopFade(void) { return LbPaletteStopOpenFade(); }
 
+void RendererApplyPossessionPalette(long step, const unsigned char *main_palette)
+{
+    // GPU renderers use the screen tint overlay for possession/pain effects;
+    // the software path must modify the INDEX8 surface palette directly.
+    if (RendererHasGPURenderPath())
+        return;
+    unsigned char palette[PALETTE_SIZE];
+    for (int i = 0; i < PALETTE_COLORS; i++)
+    {
+        const unsigned char *src = &main_palette[3 * i];
+        unsigned char       *dst = &palette[3 * i];
+        unsigned long pix = ((step * (((long)src[0]) - 63)) / 120) + 63;
+        if (pix > 63) pix = 63;
+        dst[0] = (unsigned char)pix;
+        pix = (step * ((long)src[1])) / 120;
+        if (pix > 63) pix = 63;
+        dst[1] = (unsigned char)pix;
+        pix = (step * ((long)src[2])) / 120;
+        if (pix > 63) pix = 63;
+        dst[2] = (unsigned char)pix;
+    }
+    RendererWaitVbi();
+    RendererPaletteSet(palette);
+}
+
 /******************************************************************************/
 /* Screen lifecycle helpers                                                   */
 /******************************************************************************/
