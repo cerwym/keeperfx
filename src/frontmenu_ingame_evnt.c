@@ -397,7 +397,6 @@ void draw_bonus_timer(void)
             width += (width / 8);
         }
     }
-    lbDisplay.DrawFlags = Lb_TEXT_HALIGN_CENTER;
     long scr_x = RendererGetScreenWidth() - width - 16 * units_per_pixel / 16;
     long scr_y = 16 * units_per_pixel / 16;
     if (game.armageddon_cast_turn != 0)
@@ -425,7 +424,7 @@ void draw_bonus_timer(void)
         tx_units_per_px = (22 * units_per_pixel) / LbTextLineHeight();
         y = 0;
     }
-    LbTextDrawResized(0, y, tx_units_per_px, text, lbDisplay.DrawFlags);
+    LbTextDrawResized(0, y, tx_units_per_px, text, Lb_TEXT_HALIGN_CENTER);
     UIRenderer_EndTopOverlay();
     LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
 }
@@ -476,7 +475,6 @@ void draw_timer(void)
             }
         }
     }
-    lbDisplay.DrawFlags = Lb_TEXT_HALIGN_CENTER;
     long scr_x = RendererGetScreenWidth() - width - 16 * units_per_pixel / 16;
     long scr_y = 16 * units_per_pixel / 16;
     if ( (bonus_timer_enabled()) || (script_timer_enabled()) || (display_variable_enabled()) || (game.armageddon_cast_turn != 0) )
@@ -503,7 +501,7 @@ void draw_timer(void)
         tx_units_per_px = (22 * units_per_pixel) / LbTextLineHeight();
         y = 0;
     }
-    LbTextDrawResized(0, y, tx_units_per_px, text, lbDisplay.DrawFlags);
+    LbTextDrawResized(0, y, tx_units_per_px, text, Lb_TEXT_HALIGN_CENTER);
     UIRenderer_EndTopOverlay();
     LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
 }
@@ -538,7 +536,6 @@ void draw_gameturn_timer(void)
             width += (width / 8);
         }
     }
-    lbDisplay.DrawFlags = Lb_TEXT_HALIGN_CENTER;
     long scr_x = RendererGetScreenWidth() - width - 16 * units_per_pixel / 16;
     long scr_y = RendererGetScreenHeight() - height - 16 * units_per_pixel / 16;
 
@@ -561,7 +558,7 @@ void draw_gameturn_timer(void)
         tx_units_per_px = (22 * units_per_pixel) / LbTextLineHeight();
         y = 0;
     }
-    LbTextDrawResized(0, y, tx_units_per_px, text, lbDisplay.DrawFlags);
+    LbTextDrawResized(0, y, tx_units_per_px, text, Lb_TEXT_HALIGN_CENTER);
     LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
 }
 
@@ -629,7 +626,6 @@ void draw_script_timer(PlayerNumber plyr_idx, unsigned char timer_id, unsigned l
             width += (width / 8);
         }
     }
-    lbDisplay.DrawFlags = Lb_TEXT_HALIGN_CENTER;
     long scr_x = RendererGetScreenWidth() - width - 16 * units_per_pixel / 16;
     long scr_y = 16 * units_per_pixel / 16;
     if (game.armageddon_cast_turn != 0)
@@ -657,7 +653,7 @@ void draw_script_timer(PlayerNumber plyr_idx, unsigned char timer_id, unsigned l
         tx_units_per_px = (22 * units_per_pixel) / LbTextLineHeight();
         y = 0;
     }
-    LbTextDrawResized(0, y, tx_units_per_px, text, lbDisplay.DrawFlags);
+    LbTextDrawResized(0, y, tx_units_per_px, text, Lb_TEXT_HALIGN_CENTER);
     UIRenderer_EndTopOverlay();
     LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
 }
@@ -702,7 +698,6 @@ void draw_script_variable(PlayerNumber plyr_idx, unsigned char valtype, unsigned
             width += (width / 3);
         }
     }
-    lbDisplay.DrawFlags = Lb_TEXT_HALIGN_CENTER;
     long scr_x = RendererGetScreenWidth() - width - 16 * units_per_pixel / 16;
     long scr_y = 16 * units_per_pixel / 16;
     if (game.armageddon_cast_turn != 0)
@@ -733,7 +728,7 @@ void draw_script_variable(PlayerNumber plyr_idx, unsigned char valtype, unsigned
         tx_units_per_px = ( (RendererGetScreenHeight() < 400) && (dbc_language > 0) ) ? scale_ui_value(32) : (22 * units_per_pixel) / LbTextLineHeight();
         y = 0;
     }
-    LbTextDrawResized(0, y, tx_units_per_px, text, lbDisplay.DrawFlags);
+    LbTextDrawResized(0, y, tx_units_per_px, text, Lb_TEXT_HALIGN_CENTER);
     UIRenderer_EndTopOverlay();
     LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
 }
@@ -746,7 +741,6 @@ void draw_consolelog()
     UIRenderer_BeginTopOverlay();
     draw_round_slab64k(0, 0, units_per_pixel, RendererScreenWidth(), (RendererScreenHeight()/2), ROUNDSLAB64K_DARK);
     LbTextSetFont(winfont);
-    lbDisplay.DrawFlags = Lb_TEXT_HALIGN_LEFT;
 
     int text_height = (consolelog_font_size * units_per_pixel) / LbTextLineHeight();
     int draw_ypos = text_height / 2; // Starting ypos
@@ -782,14 +776,13 @@ void draw_consolelog()
             strncpy(line_buffer, text + offset, sub_len);
             line_buffer[sub_len] = '\0';
 
-            LbTextDrawResized(text_height, draw_ypos, text_height, line_buffer, lbDisplay.DrawFlags);
+            LbTextDrawResized(text_height, draw_ypos, text_height, line_buffer, Lb_TEXT_HALIGN_LEFT);
             KfxFree(line_buffer);
             draw_ypos += text_height; // Move to the next line position
             offset += sub_len;
             totalLinesDrawn++;
         }
     }
-    lbDisplay.DrawFlags = Lb_TEXT_HALIGN_LEFT;
     UIRenderer_EndTopOverlay();
 }
 
@@ -797,7 +790,6 @@ void draw_frametime()
 {
     char text[64];
     LbTextSetFont(winfont);
-    lbDisplay.DrawFlags = Lb_TEXT_HALIGN_RIGHT;
     int tx_units_per_px = (11 * units_per_pixel) / LbTextLineHeight();
     if (tx_units_per_px < 16)
         tx_units_per_px = 16;
@@ -810,7 +802,7 @@ void draw_frametime()
         snprintf(text, sizeof(text), "%-7s | %-7s | %-10s", "Current", "Min", "Max");
     }
     if (text[0] != 0)
-        LbTextDrawResized(0, (iStartLine)*tx_units_per_px, tx_units_per_px, text, lbDisplay.DrawFlags);
+        LbTextDrawResized(0, (iStartLine)*tx_units_per_px, tx_units_per_px, text, Lb_TEXT_HALIGN_RIGHT);
 
     iStartLine += 1;
     // Frametimes
@@ -839,7 +831,7 @@ void draw_frametime()
             }
         }
         if (text[0] != 0)
-            LbTextDrawResized(0, (iStartLine+i)*tx_units_per_px, tx_units_per_px, text, lbDisplay.DrawFlags);
+            LbTextDrawResized(0, (iStartLine+i)*tx_units_per_px, tx_units_per_px, text, Lb_TEXT_HALIGN_RIGHT);
     }
 
     // Framerates
@@ -866,17 +858,15 @@ void draw_frametime()
             }
         }
         if (text[0] > 0)
-            LbTextDrawResized(0, (iStartLine+i)*tx_units_per_px, tx_units_per_px, text, lbDisplay.DrawFlags);
+            LbTextDrawResized(0, (iStartLine+i)*tx_units_per_px, tx_units_per_px, text, Lb_TEXT_HALIGN_RIGHT);
     }
 
-    lbDisplay.DrawFlags = Lb_TEXT_HALIGN_LEFT;
 }
 
 void draw_network_stats()
 {
     char text[128];
     LbTextSetFont(winfont);
-    lbDisplay.DrawFlags = Lb_TEXT_HALIGN_RIGHT;
     int tx_units_per_px = (11 * units_per_pixel) / LbTextLineHeight();
     if (tx_units_per_px < 16)
         tx_units_per_px = 16;
@@ -900,29 +890,29 @@ void draw_network_stats()
     }
 
     snprintf(text, sizeof(text), "Full ping: %lums", ping);
-    LbTextDrawResized(0, 0, tx_units_per_px, text, lbDisplay.DrawFlags);
+    LbTextDrawResized(0, 0, tx_units_per_px, text, Lb_TEXT_HALIGN_RIGHT);
     snprintf(text, sizeof(text), "Half ping: %lums", half_ping);
-    LbTextDrawResized(0, tx_units_per_px, tx_units_per_px, text, lbDisplay.DrawFlags);
+    LbTextDrawResized(0, tx_units_per_px, tx_units_per_px, text, Lb_TEXT_HALIGN_RIGHT);
     snprintf(text, sizeof(text), "Input lag: %d turns (%dms)",
         input_lag, input_lag_ms);
-    LbTextDrawResized(0, tx_units_per_px * 2, tx_units_per_px, text, lbDisplay.DrawFlags);
+    LbTextDrawResized(0, tx_units_per_px * 2, tx_units_per_px, text, Lb_TEXT_HALIGN_RIGHT);
     snprintf(text, sizeof(text), "Download: %u.%u KB/s",
         incoming_rate_kb10 / 10, incoming_rate_kb10 % 10);
-    LbTextDrawResized(0, tx_units_per_px * 3, tx_units_per_px, text, lbDisplay.DrawFlags);
+    LbTextDrawResized(0, tx_units_per_px * 3, tx_units_per_px, text, Lb_TEXT_HALIGN_RIGHT);
     snprintf(text, sizeof(text), "Upload: %u.%u KB/s",
         outgoing_rate_kb10 / 10, outgoing_rate_kb10 % 10);
-    LbTextDrawResized(0, tx_units_per_px * 4, tx_units_per_px, text, lbDisplay.DrawFlags);
+    LbTextDrawResized(0, tx_units_per_px * 4, tx_units_per_px, text, Lb_TEXT_HALIGN_RIGHT);
     snprintf(text, sizeof(text), "Congestion: %u bytes", transit);
-    LbTextDrawResized(0, tx_units_per_px * 5, tx_units_per_px, text, lbDisplay.DrawFlags);
+    LbTextDrawResized(0, tx_units_per_px * 5, tx_units_per_px, text, Lb_TEXT_HALIGN_RIGHT);
     snprintf(text, sizeof(text), "Loss rate: %u%%", packet_loss_percent);
-    LbTextDrawResized(0, tx_units_per_px * 6, tx_units_per_px, text, lbDisplay.DrawFlags);
+    LbTextDrawResized(0, tx_units_per_px * 6, tx_units_per_px, text, Lb_TEXT_HALIGN_RIGHT);
     snprintf(text, sizeof(text), "Lost packets: %u", lost_packet_count);
-    LbTextDrawResized(0, tx_units_per_px * 7, tx_units_per_px, text, lbDisplay.DrawFlags);
+    LbTextDrawResized(0, tx_units_per_px * 7, tx_units_per_px, text, Lb_TEXT_HALIGN_RIGHT);
     snprintf(text, sizeof(text), "Micro stutters: %d%%", stutter_detection_average);
-    LbTextDrawResized(0, tx_units_per_px * 8, tx_units_per_px, text, lbDisplay.DrawFlags);
+    LbTextDrawResized(0, tx_units_per_px * 8, tx_units_per_px, text, Lb_TEXT_HALIGN_RIGHT);
     snprintf(text, sizeof(text), "Turn length: %" PRId64, turn_length_ns);
-    LbTextDrawResized(0, tx_units_per_px * 9, tx_units_per_px, text, lbDisplay.DrawFlags);
+    LbTextDrawResized(0, tx_units_per_px * 9, tx_units_per_px, text, Lb_TEXT_HALIGN_RIGHT);
     snprintf(text, sizeof(text), "Gameturn: %u", get_gameturn());
-    LbTextDrawResized(0, tx_units_per_px * 10, tx_units_per_px, text, lbDisplay.DrawFlags);
+    LbTextDrawResized(0, tx_units_per_px * 10, tx_units_per_px, text, Lb_TEXT_HALIGN_RIGHT);
 }
 /******************************************************************************/

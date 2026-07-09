@@ -1420,11 +1420,8 @@ void maintain_buildable_info(struct GuiButton* gbtn)
 
 void draw_centred_string64k(const char *text, short x, short y, short base_w, short dst_w)
 {
-    unsigned long flg_mem = lbDisplay.DrawFlags;
-    lbDisplay.DrawFlags &= ~Lb_TEXT_ONE_COLOR;
     LbTextSetJustifyWindow((x - (dst_w / 2)), y, dst_w);
     LbTextSetClipWindow( (x - (dst_w / 2)), y, dst_w, 16*dst_w/base_w);
-    lbDisplay.DrawFlags |= Lb_TEXT_HALIGN_CENTER;
     int tx_units_per_px;
     int text_x;
     int text_y = -6*dst_w/base_w;
@@ -1447,11 +1444,10 @@ void draw_centred_string64k(const char *text, short x, short y, short base_w, sh
         }
         text_x = 0;
     }
-    LbTextDrawResized(text_x, text_y, tx_units_per_px, text, lbDisplay.DrawFlags);
+    LbTextDrawResized(text_x, text_y, tx_units_per_px, text, Lb_TEXT_HALIGN_CENTER);
     LbTextSetJustifyWindow(0, 0, RendererScreenWidth());
     LbTextSetClipWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
     LbTextSetWindow(0, 0, RendererGetScreenWidth(), RendererGetScreenHeight());
-    lbDisplay.DrawFlags = flg_mem;
 }
 
 void draw_name_box(long x, long y, int width, struct Thing *thing)
@@ -1923,7 +1919,7 @@ void gui_area_instance_button(struct GuiButton *gbtn)
     int tx_units_per_px = ( (RendererGetScreenHeight() < 400) && (dbc_language > 0) ) ? scale_ui_value(32) : (gbtn->height * 11 / 12) * 16 / LbTextLineHeight();
     char text[16];
     snprintf(text, sizeof(text), "%d", (curbtn_avail_pos + 1) % 10);
-    LbTextDrawResized(gbtn->scr_pos_x + 52*units_per_px/16, gbtn->scr_pos_y + 9*units_per_px/16, tx_units_per_px, text, lbDisplay.DrawFlags);
+    LbTextDrawResized(gbtn->scr_pos_x + 52*units_per_px/16, gbtn->scr_pos_y + 9*units_per_px/16, tx_units_per_px, text, 0);
     spr_idx = gbtn->sprite_idx;
     // Show disabled icon if instance is on cooldown or creature is frozen.
     TbBool disabled;
