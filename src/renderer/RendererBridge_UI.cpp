@@ -15,7 +15,6 @@
 #include "bflib_basics.h"
 #include "bflib_sprite.h"       // TbSprite
 #include "engine_render.h"      // render_fade_tables
-#include "bflib_video.h"        // lbDisplay.DrawColour
 #include "gui_draw.h"           // get_panel_sprite, gui_slab, GUI_SLAB_DIMENSION, TiledSprite
 #include "config_spritecolors.h" // get_player_colored_icon_idx
 #include "custom_sprites.h"     // get_button_sprite_for_player, get_button_sprite
@@ -25,11 +24,13 @@
 
 /******************************************************************************/
 
-// Transitional helper: build a KfxDrawState from lbDisplay.DrawColour.
+// Transitional helper: build a zero KfxDrawState for bridge functions that
+// use display_draw_state(). DrawFlags and DrawColour are always 0 here —
+// colour is unused by panel sprite implementations.
 // DrawFlags is always 0 here — all callers operate on opaque UI elements.
 static inline KfxDrawState display_draw_state(void)
 {
-    return draw_state_make(0, (unsigned char)lbDisplay.DrawColour);
+    return draw_state_make(0, 0);
 }
 
 void UIRenderer_SubmitSlabSelector(int x1, int y1, int x2, int y2, unsigned char color, float z_depth)
@@ -92,7 +93,7 @@ void UIRenderer_SubmitPanelSprite(int32_t x, int32_t y, int units_per_px, int32_
     if (!ui) return;
     const struct TbSprite* spr = get_panel_sprite(get_player_colored_icon_idx(spridx, my_player_number));
     SpriteHandle h = RendererResolveSprite(spr);
-    ui->SubmitPanelSprite(x, y, units_per_px, h, false, draw_state_make(draw_flags, lbDisplay.DrawColour));
+    ui->SubmitPanelSprite(x, y, units_per_px, h, false, draw_state_make(draw_flags, 0));
 }
 
 void UIRenderer_SubmitPanelSpriteRaw(int32_t x, int32_t y, int units_per_px, const struct TbSprite* spr, TbDrawFlagsMask draw_flags)
@@ -100,7 +101,7 @@ void UIRenderer_SubmitPanelSpriteRaw(int32_t x, int32_t y, int units_per_px, con
     IUIRenderer* ui = RendererGetUIRenderer();
     if (!ui) return;
     SpriteHandle h = RendererResolveSprite(spr);
-    ui->SubmitPanelSprite(x, y, units_per_px, h, false, draw_state_make(draw_flags, lbDisplay.DrawColour));
+    ui->SubmitPanelSprite(x, y, units_per_px, h, false, draw_state_make(draw_flags, 0));
 }
 
 void RendererSubmitButton(const RendererUIButtonDesc* desc)
@@ -130,7 +131,7 @@ void UIRenderer_SubmitPanelSpriteWithBg(int32_t x, int32_t y, int units_per_px,
     int32_t h = ((int32_t)spr->SHeight * units_per_px + 8) / 16;
     ui->SubmitSolidBox(x, y, w, h, bg_color_idx, draw_state_default());
     SpriteHandle sh = RendererResolveSprite(spr);
-    ui->SubmitPanelSprite(x, y, units_per_px, sh, false, draw_state_make(draw_flags, lbDisplay.DrawColour));
+    ui->SubmitPanelSprite(x, y, units_per_px, sh, false, draw_state_make(draw_flags, 0));
 }
 
 void UIRenderer_SubmitPanelSpriteRawColored(int32_t x, int32_t y, int units_per_px, const struct TbSprite* spr, unsigned char color_idx, TbDrawFlagsMask draw_flags)
@@ -138,7 +139,7 @@ void UIRenderer_SubmitPanelSpriteRawColored(int32_t x, int32_t y, int units_per_
     IUIRenderer* ui = RendererGetUIRenderer();
     if (!ui) return;
     SpriteHandle h = RendererResolveSprite(spr);
-    ui->SubmitPanelSpriteColored(x, y, units_per_px, h, (uint8_t)color_idx, draw_state_make(draw_flags, lbDisplay.DrawColour));
+    ui->SubmitPanelSpriteColored(x, y, units_per_px, h, (uint8_t)color_idx, draw_state_make(draw_flags, 0));
 }
 
 void UIRenderer_SubmitOutlineBox(int32_t x, int32_t y, int32_t w, int32_t h, unsigned char color_idx)
@@ -156,7 +157,7 @@ void UIRenderer_SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px, c
     IUIRenderer* ui = RendererGetUIRenderer();
     if (!ui) return;
     SpriteHandle h = RendererResolveSprite(spr);
-    ui->SubmitPanelSpriteRemap(x, y, units_per_px, h, remap_row, draw_state_make(draw_flags, lbDisplay.DrawColour));
+    ui->SubmitPanelSpriteRemap(x, y, units_per_px, h, remap_row, draw_state_make(draw_flags, 0));
 }
 
 void UIRenderer_SubmitPanelSpriteCentered(int32_t x, int32_t y, int units_per_px, int32_t spridx, TbDrawFlagsMask draw_flags)
@@ -168,7 +169,7 @@ void UIRenderer_SubmitPanelSpriteCentered(int32_t x, int32_t y, int units_per_px
     int32_t ox = ((int32_t)spr->SWidth  * units_per_px + 8) / 16 / 2;
     int32_t oy = ((int32_t)spr->SHeight * units_per_px + 8) / 16 / 2;
     SpriteHandle h = RendererResolveSprite(spr);
-    ui->SubmitPanelSprite(x - ox, y - oy, units_per_px, h, false, draw_state_make(draw_flags, lbDisplay.DrawColour));
+    ui->SubmitPanelSprite(x - ox, y - oy, units_per_px, h, false, draw_state_make(draw_flags, 0));
 }
 
 void UIRenderer_SubmitButtonSprite(int32_t x, int32_t y, int units_per_px, short spridx)
