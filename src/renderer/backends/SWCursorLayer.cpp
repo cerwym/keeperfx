@@ -105,10 +105,14 @@ void SWCursorLayer::SubmitKeeperHandSprite(short x, short y,
                                            unsigned short kspr_base,
                                            short angle,
                                            unsigned char sprgroup,
-                                           int32_t scale)
+                                           int32_t scale,
+                                           TbDrawFlagsMask draw_flags)
 {
     // Software renderer has no frame-setup concept — execute immediately.
+    // process_keeper_sprite still reads lbDisplay.DrawFlags; bridge through the global.
+    lbDisplay.DrawFlags = draw_flags;
     process_keeper_sprite(x, y, kspr_base, angle, sprgroup, scale);
+    lbDisplay.DrawFlags = 0;
 }
 
 void SWCursorLayer::Draw()

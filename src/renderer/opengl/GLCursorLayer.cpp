@@ -28,7 +28,6 @@
 #include "renderer/opengl/GLUIRenderer.h"
 #include "renderer/opengl/GLWorldViewRenderer.h"
 #include "renderer/opengl/GLSpriteAtlas.h"
-#include "bflib_video.h"       // lbDisplay.DrawFlags (SubmitKeeperHandSprite capture)
 #include "engine_render.h"     // process_keeper_sprite_ex, EngineSpriteDrawUsingAlpha
 #include "globals.h"
 #include <glad/glad.h>
@@ -49,7 +48,7 @@ void GLCursorLayer::SubmitPointerSprite(const TbSprite* spr,
     cmd.x            = x;
     cmd.y            = y;
     cmd.units_per_px = units_per_px;
-    cmd.draw_flags   = (unsigned int)lbDisplay.DrawFlags;
+    cmd.draw_flags   = 0;
     m_write_cmds->cursor_pointers.Append(cmd);
 }
 
@@ -57,7 +56,8 @@ void GLCursorLayer::SubmitKeeperHandSprite(short x, short y,
                                             unsigned short kspr_base,
                                             short angle,
                                             unsigned char sprgroup,
-                                            int32_t scale)
+                                            int32_t scale,
+                                            TbDrawFlagsMask draw_flags)
 {
     if (!m_wvr) return;
     // Pre-compute the sprite on the game thread: process_keeper_sprite_ex resolves
@@ -68,7 +68,7 @@ void GLCursorLayer::SubmitKeeperHandSprite(short x, short y,
     // which calls DrawCursorKeeperSprites() — no game globals are ever touched there.
     m_wvr->BeginCursorCapture();
     process_keeper_sprite_ex(x, y, kspr_base, angle, sprgroup, scale,
-                             lbDisplay.DrawFlags, EngineSpriteDrawUsingAlpha);
+                             draw_flags, EngineSpriteDrawUsingAlpha);
     m_wvr->EndCursorCapture();
 }
 

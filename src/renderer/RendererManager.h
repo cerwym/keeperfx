@@ -703,7 +703,8 @@ void CursorLayer_SubmitPointerSprite(const struct TbSprite* spr, int32_t x, int3
 /** Submit a power-hand keeper sprite; rendered at end-of-frame via CursorLayer_Draw().
  *  Replaces UIRenderer_SubmitKeeperSprite(). */
 void CursorLayer_SubmitKeeperHandSprite(short x, short y, unsigned short kspr_base,
-                                        short kspr_angle, unsigned char sprgroup, int32_t scale);
+                                        short kspr_angle, unsigned char sprgroup, int32_t scale,
+                                        TbDrawFlagsMask draw_flags);
 
 /** Submit a panel sprite (gui_panel_sprites) at screen-left alignment.
  *  Resolves player coloring for spridx and submits GPU quad; immediate in software mode. */

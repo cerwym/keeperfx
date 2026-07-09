@@ -545,7 +545,6 @@ void draw_power_hand(void)
         return;
     if (game.small_map_state == 2)
         return;
-    lbDisplay.DrawFlags = 0x00;
     if (player->view_type != PVT_DungeonTop)
         return;
     // Color rendering array pointers used by draw_keepersprite()
@@ -616,7 +615,7 @@ void draw_power_hand(void)
     {
         SYNCDBG(7,"Drawing hand %s index %d, busy state", thing_model_name(thing), (int)thing->index);
         CursorLayer_SubmitKeeperHandSprite(GetMouseX()+scale_ui_value(60*global_hand_scale), GetMouseY()+scale_ui_value(40*global_hand_scale),
-          thing->anim_sprite, 0, thing->current_frame, scale_ui_value(64*global_hand_scale));
+          thing->anim_sprite, 0, thing->current_frame, scale_ui_value(64*global_hand_scale), 0);
         draw_mini_things_in_hand(GetMouseX()+scale_ui_value(60*global_hand_scale), GetMouseY());
         return;
     }
@@ -640,7 +639,7 @@ void draw_power_hand(void)
           if (player->work_state == PSt_Slap)
           {
             CursorLayer_SubmitKeeperHandSprite(GetMouseX() + scale_ui_value(70*global_hand_scale), GetMouseY() + scale_ui_value(46*global_hand_scale),
-                thing->anim_sprite, 0, thing->current_frame, scale_ui_value(64*global_hand_scale));
+                thing->anim_sprite, 0, thing->current_frame, scale_ui_value(64*global_hand_scale), 0);
           } else
           if (player->work_state == PSt_CtrlDungeon)
           {
@@ -668,31 +667,24 @@ void draw_power_hand(void)
                 inputpos_x = GetMouseX() + scale_ui_value(pickoffs->delta_x*global_hand_scale);
                 inputpos_y = GetMouseY() + scale_ui_value(pickoffs->delta_y*global_hand_scale);
                 struct CreatureModelConfig* crconf = creature_stats_get(picktng->model);
+                TbDrawFlagsMask draw_flags = 0;
                 if (crconf->transparency_flags == TRF_Transpar_8)
-                {
-                    lbDisplay.DrawFlags |= Lb_SPRITE_TRANSPAR8;
-                    lbDisplay.DrawFlags &= ~Lb_TEXT_UNDERLNSHADOW;
-                }
+                    draw_flags = Lb_SPRITE_TRANSPAR8;
                 else if (crconf->transparency_flags == TRF_Transpar_4)
-                {
-                    lbDisplay.DrawFlags |= Lb_SPRITE_TRANSPAR4;
-                    lbDisplay.DrawFlags &= ~Lb_TEXT_UNDERLNSHADOW;
-                }
+                    draw_flags = Lb_SPRITE_TRANSPAR4;
                 else if(crconf->transparency_flags == TRF_Transpar_Alpha)
-                {
                     EngineSpriteDrawUsingAlpha = 1;
-                }
 
                 CursorLayer_SubmitKeeperHandSprite(inputpos_x / pixel_size, inputpos_y / pixel_size,
-                    picktng->anim_sprite, 0, picktng->current_frame, scale_ui_value(64*global_hand_scale));
-                lbDisplay.DrawFlags = 0;
+                    picktng->anim_sprite, 0, picktng->current_frame, scale_ui_value(64*global_hand_scale),
+                    draw_flags);
                 EngineSpriteDrawUsingAlpha = 0;
             } else
             {
                 inputpos_x = GetMouseX() + scale_ui_value(11*global_hand_scale);
                 inputpos_y = GetMouseY() + scale_ui_value(56*global_hand_scale);
                 CursorLayer_SubmitKeeperHandSprite(inputpos_x / pixel_size, inputpos_y / pixel_size,
-                    picktng->anim_sprite, 0, picktng->current_frame, scale_ui_value(64*global_hand_scale));
+                    picktng->anim_sprite, 0, picktng->current_frame, scale_ui_value(64*global_hand_scale), 0);
             }
             break;
         case TCls_Object:
@@ -701,7 +693,7 @@ void draw_power_hand(void)
               inputpos_x = GetMouseX() + scale_ui_value(11*global_hand_scale);
               inputpos_y = GetMouseY() + scale_ui_value(56*global_hand_scale);
               CursorLayer_SubmitKeeperHandSprite(inputpos_x / pixel_size, inputpos_y / pixel_size,
-                  picktng->anim_sprite, 0, picktng->current_frame, scale_ui_value(64*global_hand_scale));
+                  picktng->anim_sprite, 0, picktng->current_frame, scale_ui_value(64*global_hand_scale), 0);
               break;
             } else
             if ((picktng->class_id == TCls_Object) && object_is_gold_pile(picktng))
@@ -714,14 +706,14 @@ void draw_power_hand(void)
                 inputpos_x = GetMouseX() + scale_ui_value(pickoffs->delta_x * global_hand_scale);
                 inputpos_y = GetMouseY() + scale_ui_value(pickoffs->delta_y * global_hand_scale);
                 CursorLayer_SubmitKeeperHandSprite(inputpos_x / pixel_size, inputpos_y / pixel_size,
-                    picktng->anim_sprite, 0, picktng->current_frame, scale_ui_value(64 * global_hand_scale));
+                    picktng->anim_sprite, 0, picktng->current_frame, scale_ui_value(64 * global_hand_scale), 0);
             }
             break;
         default:
             inputpos_x = GetMouseX();
             inputpos_y = GetMouseY();
             CursorLayer_SubmitKeeperHandSprite(inputpos_x / pixel_size, inputpos_y / pixel_size,
-                  picktng->anim_sprite, 0, picktng->current_frame, scale_ui_value(64*global_hand_scale));
+                  picktng->anim_sprite, 0, picktng->current_frame, scale_ui_value(64*global_hand_scale), 0);
             break;
         }
     }
@@ -731,14 +723,14 @@ void draw_power_hand(void)
         inputpos_x = GetMouseX() + scale_ui_value(58*global_hand_scale);
         inputpos_y = GetMouseY() +  scale_ui_value(6*global_hand_scale);
         CursorLayer_SubmitKeeperHandSprite(inputpos_x / pixel_size, inputpos_y / pixel_size,
-            thing->anim_sprite, 0, thing->current_frame, scale_ui_value(64*global_hand_scale));
+            thing->anim_sprite, 0, thing->current_frame, scale_ui_value(64*global_hand_scale), 0);
         draw_mini_things_in_hand(GetMouseX()+scale_ui_value(60*global_hand_scale), GetMouseY());
     } else // All other animations (HoldGold, Hover, Pickup, SideHover, SideSlap, Slap) use the default offset
     {
         inputpos_x = GetMouseX() + scale_ui_value(60*global_hand_scale);
         inputpos_y = GetMouseY() + scale_ui_value(40*global_hand_scale);
         CursorLayer_SubmitKeeperHandSprite(inputpos_x / pixel_size, inputpos_y / pixel_size,
-            thing->anim_sprite, 0, thing->current_frame, scale_ui_value(64*global_hand_scale));
+            thing->anim_sprite, 0, thing->current_frame, scale_ui_value(64*global_hand_scale), 0);
         draw_mini_things_in_hand(GetMouseX()+scale_ui_value(60*global_hand_scale), GetMouseY());
     }
 }

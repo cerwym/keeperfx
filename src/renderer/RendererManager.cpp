@@ -1215,10 +1215,11 @@ void CursorLayer_SubmitPointerSprite(const struct TbSprite* spr, int32_t x, int3
 }
 
 void CursorLayer_SubmitKeeperHandSprite(short x, short y, unsigned short kspr_base,
-                                        short kspr_angle, unsigned char sprgroup, int32_t scale)
+                                        short kspr_angle, unsigned char sprgroup, int32_t scale,
+                                        TbDrawFlagsMask draw_flags)
 {
     if (s_cursorLayer)
-        s_cursorLayer->SubmitKeeperHandSprite(x, y, kspr_base, kspr_angle, sprgroup, scale);
+        s_cursorLayer->SubmitKeeperHandSprite(x, y, kspr_base, kspr_angle, sprgroup, scale, draw_flags);
 }
 /******************************************************************************/
 

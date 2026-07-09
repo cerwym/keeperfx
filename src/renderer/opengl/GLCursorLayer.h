@@ -46,7 +46,8 @@ public:
                                         unsigned short kspr_base,
                                         short angle,
                                         unsigned char sprgroup,
-                                        int32_t scale) override;
+                                        int32_t scale,
+                                        TbDrawFlagsMask draw_flags) override;
 
     /** No-op: cursor data now lives in UICommandBuffers and is flushed via
      *  ExecuteCursorFromIR().  Draw() is retained for the ICursorLayer default
