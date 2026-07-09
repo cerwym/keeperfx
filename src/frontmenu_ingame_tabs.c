@@ -544,16 +544,13 @@ void gui_area_big_room_button(struct GuiButton *gbtn)
 
     struct Dungeon* dungeon = get_players_dungeon(player);
 
-    unsigned short flg_mem = lbDisplay.DrawFlags;
     int units_per_px = (gbtn->width * 16 + 126 / 2) / 126;
     int ps_units_per_px = simple_gui_panel_sprite_width_units_per_px(gbtn, GPS_rpanel_frame_wide_empty, 100);
 
     if (rkind == RoK_NONE) {
         draw_gui_panel_sprite_left(gbtn->scr_pos_x, gbtn->scr_pos_y, ps_units_per_px, GPS_rpanel_frame_wide_empty, 0);
-        lbDisplay.DrawFlags = flg_mem;
         return;
     }
-    lbDisplay.DrawFlags = 0;
     int i = find_room_type_capacity_total_percentage(player->id_number, rkind);
     if ((rkind == RoK_ENTRANCE) || (rkind == RoK_DUNGHEART) || (i < 0))
     {
@@ -604,7 +601,6 @@ void gui_area_big_room_button(struct GuiButton *gbtn)
     snprintf(gui_textbuf, sizeof(gui_textbuf), "@%ld", amount);
     draw_string64k(gbtn->scr_pos_x + 40*units_per_px/16, gbtn->scr_pos_y - (14 + 6)*units_per_px/16, tx_units_per_px, gui_textbuf);
     LbTextUseByteCoding(true);
-    lbDisplay.DrawFlags = flg_mem;
 }
 
 /**
