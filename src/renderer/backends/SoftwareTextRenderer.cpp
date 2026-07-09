@@ -334,7 +334,6 @@ TbBool SoftwareTextRenderer::DrawTextResized(int32_t posx, int32_t posy,
     if (m_write_cmds) { AppendTextCmd(posx, posy, units_per_px, /*absolute=*/false, text, draw_flags); return true; }
 
     m_text_draw_flags  = draw_flags;
-    m_text_draw_colour = lbDisplay.DrawColour;
 
     TbGraphicsWindow grwnd;
     RendererStoreViewport(&grwnd);
@@ -366,7 +365,6 @@ TbBool SoftwareTextRenderer::DrawTextAt(int32_t screen_x, int32_t screen_y,
     if (m_write_cmds) { AppendTextCmd(screen_x, screen_y, units_per_px, /*absolute=*/true, text, draw_flags); return true; }
 
     m_text_draw_flags  = draw_flags;
-    m_text_draw_colour = lbDisplay.DrawColour;
 
     TbGraphicsWindow grwnd;
     RendererStoreViewport(&grwnd);
@@ -399,7 +397,7 @@ void SoftwareTextRenderer::AppendTextCmd(int32_t x, int32_t y, int32_t units_per
     cmd.pos_y        = y;
     cmd.units_per_px = units_per_px;
     cmd.absolute     = absolute ? 1 : 0;
-    cmd.draw_colour  = lbDisplay.DrawColour;
+    cmd.draw_colour = m_text_draw_colour;
     cmd.draw_flags   = draw_flags;
     cmd.justify_x    = m_justify_window.x;
     cmd.justify_y    = m_justify_window.y;
@@ -430,7 +428,7 @@ void SoftwareTextRenderer::ReplayTextCommand(const IRTextDrawCmd& cmd)
     SetFont(reinterpret_cast<const struct TbSpriteSheet*>(cmd.font));
     m_justify_window = { cmd.justify_x, cmd.justify_y, cmd.justify_w, 0 };
     m_clip_window    = { cmd.clip_x, cmd.clip_y, cmd.clip_w, cmd.clip_h };
-    lbDisplay.DrawColour = cmd.draw_colour;
+    m_text_draw_colour = cmd.draw_colour;
 
     if (cmd.absolute)
         DrawTextAt(cmd.pos_x, cmd.pos_y, cmd.units_per_px, cmd.text, cmd.draw_flags);

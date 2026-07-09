@@ -92,6 +92,15 @@ public:
                               int32_t units_per_px, const char* text,
                               TbDrawFlagsMask draw_flags) = 0;
 
+    /** Set the draw colour used for one-colour and underline text rendering.
+     *  Replaces the former lbDisplay.DrawColour ambient global.
+     *  Callers must set this before calling DrawTextResized/DrawTextAt when
+     *  Lb_TEXT_ONE_COLOR or underline flags are in use. */
+    virtual void SetDrawColour(uint8_t colour) = 0;
+
+    /** Return the current draw colour. */
+    virtual uint8_t GetDrawColour() const = 0;
+
     /** Draw all deferred text to the framebuffer.
      *  Called at end-of-frame after the staging-buffer blit.
      *  Software backends may leave this as a no-op. */

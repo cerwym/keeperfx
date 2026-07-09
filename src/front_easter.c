@@ -216,7 +216,7 @@ void draw_eastegg(void)
       for (i = 0; i < 30; i += 2)
       {
         pos = get_gameturn() - i;
-        lbDisplay.DrawColour = pos;
+        TextRenderer_SetDrawColour(pos);
         LbTextDrawResized(scale_fixed_DK_value((LbCosL(16*(long)pos) / 512 + skeksis_x_offset) / pixel_size),
           scale_fixed_DK_value((LbSinL(32*(long)pos) / 512 + skeksis_y_offset) / pixel_size), ee_units_per_px, text, Lb_TEXT_ONE_COLOR);
       }

@@ -46,6 +46,8 @@ public:
     TbBool DrawTextResized(int32_t posx, int32_t posy, int32_t units_per_px, const char* text, TbDrawFlagsMask draw_flags) override;
     TbBool DrawTextAt(int32_t screen_x, int32_t screen_y, int32_t units_per_px, const char* text, TbDrawFlagsMask draw_flags) override;
     void   Draw() override;         // Flush all queued text draws
+    void   SetDrawColour(uint8_t colour) override { m_text_draw_colour = colour; }
+    uint8_t GetDrawColour() const override        { return m_text_draw_colour; }
 
     // ── IR (Intermediate Representation) path ─────────────────────────────────
 

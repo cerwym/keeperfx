@@ -298,7 +298,7 @@ TbBool GLTextRenderer::DrawTextResized(int32_t posx, int32_t posy, int32_t units
         cmd.pos_y        = posy;
         cmd.units_per_px = units_per_px;
         cmd.absolute     = 0;
-        cmd.draw_colour  = lbDisplay.DrawColour;
+        cmd.draw_colour = m_text_draw_colour;
         cmd.draw_flags   = draw_flags;
         cmd.justify_x    = m_justify_window.x;
         cmd.justify_y    = m_justify_window.y;
@@ -326,7 +326,7 @@ TbBool GLTextRenderer::DrawTextResized(int32_t posx, int32_t posy, int32_t units
         m_pending_fallback.push_back({ posx, posy, units_per_px,
                               m_justify_window.x, m_justify_window.y, m_justify_window.width,
                               m_clip_window.x, m_clip_window.y, m_clip_window.width, m_clip_window.height,
-                              lbDisplay.DrawColour, draw_flags,
+                              m_text_draw_colour, draw_flags,
                               text,
                               m_font,
                               m_dbc_font,
@@ -974,7 +974,7 @@ void GLTextRenderer::AppendUnderlineRects(float x0, float x1, float screen_y, fl
             h -= 1.0f;
         }
     }
-    float pi = (float)(unsigned char)lbDisplay.DrawColour;
+    float pi = (float)(unsigned char)m_text_draw_colour;
     AppendUnderlineRect(x0, x1, screen_y + h, screen_y + h + 1.0f, pi);
     h -= 1.0f;
     if (line_h > DUB) {

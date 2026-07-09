@@ -69,6 +69,19 @@ TbBool TextRenderer_DrawTextAt(int32_t screen_x, int32_t screen_y, int32_t units
     return false;
 }
 
+void TextRenderer_SetDrawColour(unsigned char colour)
+{
+    ITextRenderer* tr = RendererGetTextRenderer();
+    if (tr) tr->SetDrawColour(colour);
+}
+
+unsigned char TextRenderer_GetDrawColour(void)
+{
+    ITextRenderer* tr = RendererGetTextRenderer();
+    if (tr) return tr->GetDrawColour();
+    return 0;
+}
+
 void TextRenderer_Draw(void)
 {
     ITextRenderer* tr = RendererGetTextRenderer();

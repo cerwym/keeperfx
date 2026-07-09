@@ -308,7 +308,7 @@ void startup_saved_packet_game(void)
         ERRORLOG("Unable to load campaign associated with packet file");
     }
     set_selected_level_number(game.packet_save_head.level_num);
-    lbDisplay.DrawColour = colours[15][15][15];
+    TextRenderer_SetDrawColour(colours[15][15][15]);
     game.pckt_gameturn = 0;
 #if (BFDEBUG_LEVEL > 0)
     SYNCDBG(0,"Initialising level %d", (int)get_selected_level_number());

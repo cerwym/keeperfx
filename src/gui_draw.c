@@ -397,7 +397,7 @@ void draw_button_string(struct GuiButton *gbtn, int base_width, const char *text
         if ((cursor_type & 0x02) == 0)
           cursor_pos = input_field_pos;
         LbLocTextStringConcat(dtext, " ", TEXT_BUFFER_LENGTH);
-        lbDisplay.DrawColour = LbTextGetFontFaceColor(TextRenderer_GetFont());
+        TextRenderer_SetDrawColour(LbTextGetFontFaceColor(TextRenderer_GetFont()));
         lbDisplayEx.ShadowColour = LbTextGetFontBackColor(TextRenderer_GetFont());
     }
     TbBool low_res = ( (RendererGetScreenHeight() < 400) && (dbc_language > 0) );

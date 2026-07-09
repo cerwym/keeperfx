@@ -456,6 +456,13 @@ TbBool TextRenderer_DrawTextAt(int32_t screen_x, int32_t screen_y, int32_t units
  *  Must be called after the staging-buffer blit quad and before buffer swap. */
 void TextRenderer_Draw(void);
 
+/** Set the draw colour for subsequent text draws (one-colour and underline rendering).
+ *  Replaces the former lbDisplay.DrawColour = x pattern. */
+void TextRenderer_SetDrawColour(unsigned char colour);
+
+/** Return the current text draw colour. */
+unsigned char TextRenderer_GetDrawColour(void);
+
 /** Height of one line of text in the current font (unscaled). */
 int32_t TextRenderer_LineHeight(void);
 

@@ -128,7 +128,7 @@ static void draw_creature_view_icons(struct Thing* creatng)
                 }
             }
             LbTextSetWindow(x + scale_ui_value_lofi(spr->SWidth / 2), y - scale_ui_value_lofi(spr->SHeight), w, h);
-            lbDisplay.DrawColour = LbTextGetFontFaceColor(winfont);
+            TextRenderer_SetDrawColour(LbTextGetFontFaceColor(winfont));
             lbDisplayEx.ShadowColour = LbTextGetFontBackColor(winfont);
             char text[16];
             snprintf(text, sizeof(text), "%u", (cctrl->timebomb_countdown / turns_per_second));
