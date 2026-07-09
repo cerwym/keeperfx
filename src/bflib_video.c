@@ -59,7 +59,7 @@ volatile TbBool lbHasSecondSurface;
 TbBool lbDoubleBufferingRequested;
 /** Name of the video driver to be used. Must be set before LbScreenInitialize().
  * Under Win32 and with SDL, choises are windib or directx. */
-/** Colour palette buffer, to be used inside lbDisplay. */
+/** Colour palette buffer. */
 unsigned char lbPalette[PALETTE_SIZE];
 /** Driver-specific colour palette buffer. */
 SDL_Color lbPaletteColors[PALETTE_COLORS];
@@ -67,7 +67,8 @@ SDL_Color lbPaletteColors[PALETTE_COLORS];
 char lbDrawAreaTitle[128] = "Bullfrog Shell";
 volatile unsigned long lbIconIndex = 0;
 
-TbDisplayStruct lbDisplay;
+/** Active screen-mode index. */
+static unsigned short lbScreenMode;
 
 
 unsigned short MyScreenWidth;
@@ -102,7 +103,7 @@ void *LbExeReferenceNumber(void)
  */
 TbScreenMode LbScreenActiveMode(void)
 {
-    return lbDisplay.ScreenMode;
+    return lbScreenMode;
 }
 
 /** Color depth for the Graphics Screen.
@@ -127,12 +128,12 @@ unsigned short LbGraphicsScreenBPP(void)
 
 TbScreenCoord LbGraphicsScreenWidth(void)
 {
-    return lbDisplay.GraphicsScreenWidth;
+    return RendererScreenWidth();
 }
 
 TbScreenCoord LbGraphicsScreenHeight(void)
 {
-    return lbDisplay.GraphicsScreenHeight;
+    return RendererScreenHeight();
 }
 
 /** Resolution in width of the current video mode.
@@ -146,12 +147,12 @@ TbScreenCoord LbGraphicsScreenHeight(void)
  */
 TbScreenCoord LbScreenWidth(void)
 {
-    return lbDisplay.PhysicalScreenWidth;
+    return RendererPhysicalWidth();
 }
 
 TbScreenCoord LbScreenHeight(void)
 {
-    return lbDisplay.PhysicalScreenHeight;
+    return RendererPhysicalHeight();
 }
 
 TbResult LbPaletteFadeStep(unsigned char *from_palette,unsigned char *to_palette,long fade_steps)
@@ -453,9 +454,9 @@ TbResult LbScreenSetup(TbScreenMode mode, TbScreenCoord width, TbScreenCoord hei
     int32_t hot_y;
     const struct TbSprite* msspr = NULL;
     LbExeReferenceNumber();
-    if (lbDisplay.MouseSprite != NULL)
+    if (lbMouseSprite != NULL)
     {
-        msspr = lbDisplay.MouseSprite;
+        msspr = lbMouseSprite;
         GetPointerHotspot(&hot_x,&hot_y);
     }
     LbMouseChangeSprite(NULL);
@@ -543,18 +544,11 @@ TbResult LbScreenSetup(TbScreenMode mode, TbScreenCoord width, TbScreenCoord hei
     }
     lbHasSecondSurface = true;
 
-    lbDisplay.DrawFlags = 0;
-    lbDisplay.DrawColour = 0;
-    lbDisplayEx.ShadowColour = 0;
-    lbDisplay.PhysicalScreenWidth = mdinfo->Width;
-    lbDisplay.PhysicalScreenHeight = mdinfo->Height;
-    lbDisplay.ScreenMode = mode;
-    lbDisplay.PhysicalScreen = NULL;
+    RendererSetPhysicalDimensions(mdinfo->Width, mdinfo->Height);
+    lbScreenMode = mode;
     // The graphics screen size should be really taken after screen is locked, but it seem just getting in now will work too
-    lbDisplay.GraphicsScreenWidth = lbDrawSurface->pitch;
-    lbDisplay.GraphicsScreenHeight = mdinfo->Height;
-    lbDisplay.WScreen = NULL;
-    lbDisplay.GraphicsWindowPtr = NULL;
+    RendererSetScreenDimensions(lbDrawSurface->pitch, mdinfo->Height);
+    RendererSetWScreen(NULL);
     lbScreenInitialised = true;
     SYNCLOG("Mode %dx%dx%d setup succeeded",(int)mdinfo->Width,(int)mdinfo->Height,(int)mdinfo->BitsPerPixel);
     if (palette != NULL)
@@ -566,7 +560,7 @@ TbResult LbScreenSetup(TbScreenMode mode, TbScreenCoord width, TbScreenCoord hei
     SYNCDBG(8,"Done filling display properties struct");
     if ( LbMouseIsInstalled() )
     {
-        LbMouseSetWindow(0, 0, lbDisplay.PhysicalScreenWidth, lbDisplay.PhysicalScreenHeight);
+        LbMouseSetWindow(0, 0, RendererPhysicalWidth(), RendererPhysicalHeight());
         if (msspr != NULL)
         {
           LbMouseChangeSpriteAndHotspot(msspr, hot_x, hot_y);
@@ -646,7 +640,6 @@ TbResult LbPaletteSet(unsigned char *palette)
             SDL_SetPaletteColors(pal, lbPaletteColors, 0, PALETTE_COLORS);
     }
     //KfxFree(destColors);
-    lbDisplay.Palette = lbPalette;
     return ret;
 }
 
@@ -660,9 +653,7 @@ TbResult LbPaletteGet(unsigned char *palette)
     SYNCDBG(12,"Starting");
     if ((!lbScreenInitialised) || (lbDrawSurface == NULL))
       return Lb_FAIL;
-    if (lbDisplay.Palette == NULL)
-        return Lb_FAIL;
-    memcpy(palette,lbDisplay.Palette,PALETTE_SIZE);
+    memcpy(palette,lbPalette,PALETTE_SIZE);
 /*  // Getting the palette in SDL way may sometimes lead to problems.
     // Instead, we will remember palette which was set the last time.
     //

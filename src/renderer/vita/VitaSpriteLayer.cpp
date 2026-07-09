@@ -7,6 +7,7 @@
 /******************************************************************************/
 #include "kfx_memory.h"
 #include "pre_inc.h"
+#include "renderer/RendererManager.h"
 #include "renderer/vita/VitaSpriteLayer.h"
 
 #ifdef PLATFORM_VITA
@@ -244,8 +245,8 @@ TbResult VitaSpriteLayer::PushQuad(long virt_x, long virt_y,
     // Convert virtual game coords to Vita native pixels.
     // Apply the current GraphicsWindow offset so windowed sub-draws are
     // correctly positioned (matches what LbSpriteDrawPrepare does for CPU).
-    long abs_x = virt_x + lbDisplay.GraphicsWindowX;
-    long abs_y = virt_y + lbDisplay.GraphicsWindowY;
+    long abs_x = virt_x + RendererGraphicsWindowX();
+    long abs_y = virt_y + RendererGraphicsWindowY();
 
     const float sx = (float)k_screenW / (float)k_gameW;
     const float sy = (float)k_screenH / (float)k_gameH;

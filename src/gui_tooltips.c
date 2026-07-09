@@ -499,7 +499,6 @@ void toggle_tooltips(void)
 
 void draw_tooltip_slab64k(char *tttext, long pos_x, long pos_y, long ttwidth, long ttheight, long viswidth)
 {
-    unsigned int flg_mem = lbDisplay.DrawFlags;
     if (ttwidth > viswidth)
     {
         if (render_tooltip_scroll_timer <= 0)
@@ -518,7 +517,6 @@ void draw_tooltip_slab64k(char *tttext, long pos_x, long pos_y, long ttwidth, lo
     if (tttext != NULL)
     {
         long x = pos_x + scale_ui_value(26);
-        lbDisplay.DrawFlags &= ~Lb_TEXT_ONE_COLOR;
         long y = pos_y - scale_ui_value(ttheight + 28);
         if (x > RendererGetScreenWidth())
           x = RendererGetScreenWidth();
@@ -535,7 +533,6 @@ void draw_tooltip_slab64k(char *tttext, long pos_x, long pos_y, long ttwidth, lo
         if (tttext[0] != '\0')
         {
             draw_slab64k(x, y, units_per_pixel_ui, scale_ui_value_lofi(viswidth), scale_ui_value_lofi(ttheight));
-            lbDisplay.DrawFlags = 0;
             int tx_units_per_px, tx, ty;
             if ( (RendererGetScreenHeight() < 400) && (dbc_language > 0) )
             {
@@ -551,11 +548,10 @@ void draw_tooltip_slab64k(char *tttext, long pos_x, long pos_y, long ttwidth, lo
                 tx = scale_ui_value_lofi(render_tooltip_scroll_offset);
                 ty = -scale_ui_value_lofi(2);
             }
-            LbTextDrawResized(tx, ty, tx_units_per_px, tttext);
+            LbTextDrawResized(tx, ty, tx_units_per_px, tttext, 0);
         }
     }
     LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
-    lbDisplay.DrawFlags = flg_mem;
 }
 
 long find_string_length_to_first_character(char *str, char fch)
@@ -614,12 +610,9 @@ void draw_tooltip_at(long ttpos_x,long ttpos_y,char *tttext)
 {
   if (tttext == NULL)
     return;
-  unsigned int flg_mem = lbDisplay.DrawFlags;
-  lbDisplay.DrawFlags &= ~Lb_TEXT_ONE_COLOR;
   long hdwidth = find_and_pad_string_width_to_first_character(tttext, ':');
   long ttwidth = LbTextStringWidth(tttext);
   long ttheight = LbTextStringHeight(tttext);
-  lbDisplay.DrawFlags = flg_mem;
   struct PlayerInfo* player = get_my_player();
   long pos_x = ttpos_x;
   long pos_y = ttpos_y;

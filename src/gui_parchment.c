@@ -440,7 +440,6 @@ void draw_overhead_map(const struct TbRect *map_area, long block_size, PlayerNum
             map_area->right - map_area->left, map_area->bottom - map_area->top))
         {
             KfxFree(tile_buf);
-            lbDisplay.DrawFlags = 0;
             return;
         }
         KfxFree(tile_buf);
@@ -472,7 +471,6 @@ void draw_overhead_map(const struct TbRect *map_area, long block_size, PlayerNum
         dstline += RendererScreenWidth();
         line++;
     }
-    lbDisplay.DrawFlags = 0;
 }
 
 void draw_overhead_room_icons(const struct TbRect *map_area, long block_size, PlayerNumber plyr_idx)
@@ -504,18 +502,15 @@ void draw_overhead_room_icons(const struct TbRect *map_area, long block_size, Pl
                     // In GL mode draw via UIRenderer; dimmed rooms are skipped (binary blink vs TRANSPAR4 dim).
                     // In software mode set DrawFlags so LbSpriteDrawResized respects the dimming effect.
                     if (!dimmed) {
-                        UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, ps_units_per_px, spr);
+                        UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, ps_units_per_px, spr, 0);
                     } else {
-                        lbDisplay.DrawFlags |= Lb_SPRITE_TRANSPAR4;
-                        UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, ps_units_per_px, spr);
-                        lbDisplay.DrawFlags &= ~Lb_SPRITE_TRANSPAR4;
+                        UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, ps_units_per_px, spr, Lb_SPRITE_TRANSPAR4);
                     }
                 }
             }
           }
         }
     }
-    lbDisplay.DrawFlags &= ~Lb_SPRITE_TRANSPAR4;
 }
 
 int draw_overhead_call_to_arms(const struct TbRect *map_area, long block_size, PlayerNumber plyr_idx)
@@ -798,7 +793,6 @@ void draw_map_level_name(void)
     get_parchment_background_area_rect(&bkgnd_area);
     // Set position
     LbTextSetFont(winfont);
-    lbDisplay.DrawFlags = 0;
     int x = bkgnd_area.left;
     int y = bkgnd_area.top;
     int w = bkgnd_area.right - bkgnd_area.left;
@@ -808,7 +802,7 @@ void draw_map_level_name(void)
     {
         LbTextSetWindow(x, y, w, h);
         int tx_units_per_px = ( (RendererGetScreenHeight() < 400) && (dbc_language > 0) ) ? scale_ui_value(32) : (22 * units_per_pixel) / LbTextLineHeight();
-        LbTextDrawResized((w-LbTextStringWidth(lv_name)*units_per_pixel/16)/2, h/10 - 8*units_per_pixel/16, tx_units_per_px, lv_name);
+        LbTextDrawResized((w-LbTextStringWidth(lv_name)*units_per_pixel/16)/2, h/10 - 8*units_per_pixel/16, tx_units_per_px, lv_name, 0);
     }
 }
 
@@ -845,10 +839,10 @@ void draw_zoom_box_things_on_mapblk(struct Map *mapblk,unsigned short subtile_si
                 if ((get_gameturn() % (8 * gui_blink_rate)) >= 4 * gui_blink_rate)
                 {
                     TbPixel color = get_player_path_colour(thing->owner);
-                    draw_gui_panel_sprite_occentered(scr_x + spos_x, scr_y + spos_y - 13*units_per_pixel/16, ps_units_per_px, spridx, color);
+                    draw_gui_panel_sprite_occentered(scr_x + spos_x, scr_y + spos_y - 13*units_per_pixel/16, ps_units_per_px, spridx, color, 0);
                 } else
                 {
-                    draw_gui_panel_sprite_centered(scr_x + spos_x, scr_y + spos_y - 13*units_per_pixel/16, ps_units_per_px, spridx);
+                    draw_gui_panel_sprite_centered(scr_x + spos_x, scr_y + spos_y - 13*units_per_pixel/16, ps_units_per_px, spridx, 0);
                 }
                 draw_status_sprites(spos_x + scr_x, scr_y + spos_y - 12*units_per_pixel/16, thing);
                 break;
@@ -860,8 +854,8 @@ void draw_zoom_box_things_on_mapblk(struct Map *mapblk,unsigned short subtile_si
                     break;
                 struct ManufactureData* manufctr = get_manufacture_data(get_manufacture_data_index_for_thing(thing->class_id, thing->model));
                 spridx = manufctr->medsym_sprite_idx;
-                //This line and all cases below used to be: draw_gui_panel_sprite_centered(scr_x + spos_x, scr_y + spos_y - 13*units_per_pixel/16, ps_units_per_px, spridx);
-                draw_gui_panel_sprite_centered(scr_x + (spos_x * 3 / 2), scr_y - (spos_y /2), ps_units_per_px, spridx);
+                //This line and all cases below used to be: draw_gui_panel_sprite_centered(scr_x + spos_x, scr_y + spos_y - 13*units_per_pixel/16, ps_units_per_px, spridx, 0);
+                draw_gui_panel_sprite_centered(scr_x + (spos_x * 3 / 2), scr_y - (spos_y /2), ps_units_per_px, spridx, 0);
                 break;
             }
             case TCls_Object:
@@ -879,7 +873,7 @@ void draw_zoom_box_things_on_mapblk(struct Map *mapblk,unsigned short subtile_si
                 }
                 if (spridx > 0)
                 {
-                    draw_gui_panel_sprite_centered(spos_x + scr_x, scr_y + spos_y - 6 * units_per_pixel / 16, ps_units_per_px, spridx);
+                    draw_gui_panel_sprite_centered(spos_x + scr_x, scr_y + spos_y - 6 * units_per_pixel / 16, ps_units_per_px, spridx, 0);
                 }
                 break;
             default:
@@ -928,7 +922,6 @@ void draw_zoom_box_terrain(long scrtop_x, long scrtop_y, int stl_x, int stl_y, P
     }
 
     // Software path: direct pixel write via the SW rasteriser.
-    lbDisplay.DrawFlags = 0;
     setup_vecs(RendererGetWScreen(), NULL, (unsigned int)RendererScreenWidth(), (unsigned int)RendererScreenWidth(), (unsigned int)RendererScreenHeight());
     int scr_y = scrtop_y;
     for (int map_dy = 0; map_dy < draw_tiles_y; map_dy++)
@@ -944,25 +937,23 @@ void draw_zoom_box_terrain(long scrtop_x, long scrtop_y, int stl_x, int stl_y, P
                 draw_texture(scr_x, scr_y, subtile_size, subtile_size, k, 0, -1);
             } else
           {
-            LbDrawBox(scr_x, scr_y, subtile_size, subtile_size, 1);
+            LbDrawBox(scr_x, scr_y, subtile_size, subtile_size, 1, 0);
           }
           scr_x += subtile_size;
       }
       scr_y += subtile_size;
     }
-    lbDisplay.DrawFlags |= Lb_SPRITE_OUTLINE;
-    LbDrawBox(scrtop_x, scrtop_y, draw_tiles_x*subtile_size, draw_tiles_y*subtile_size, 0);
-    lbDisplay.DrawFlags &= ~Lb_SPRITE_OUTLINE;
+    LbDrawBox(scrtop_x, scrtop_y, draw_tiles_x*subtile_size, draw_tiles_y*subtile_size, 0, Lb_SPRITE_OUTLINE);
 }
 
 void draw_zoom_box_things(long scrtop_x, long scrtop_y, int stl_x, int stl_y, PlayerNumber plyr_idx, long draw_tiles_x, long draw_tiles_y, int subtile_size)
 {
     UIRenderer_BeginZoomBoxOverlay(scrtop_x, scrtop_y,
         draw_tiles_x * subtile_size, draw_tiles_y * subtile_size);
-    int scr_y = scrtop_y - lbDisplay.GraphicsWindowY;
+    int scr_y = scrtop_y - RendererGraphicsWindowY();
     for (int map_dy = 0; map_dy < draw_tiles_y; map_dy++)
     {
-        int scr_x = scrtop_x - lbDisplay.GraphicsWindowX;
+        int scr_x = scrtop_x - RendererGraphicsWindowX();
         for (int map_dx = 0; map_dx < draw_tiles_x; map_dx++)
         {
             struct Map* mapblk = get_map_block_at(stl_x + map_dx, stl_y + map_dy);

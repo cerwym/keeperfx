@@ -103,12 +103,12 @@ TbBool is_wide_charcode(unsigned long chr)
  * @param draw_colr
  * @param shadow_colr
  */
-void LbDrawCharUnderline(long pos_x, long pos_y, long width, long height, uchar draw_colr, uchar shadow_colr)
+void LbDrawCharUnderline(long pos_x, long pos_y, long width, long height, uchar draw_colr, uchar shadow_colr, TbDrawFlagsMask draw_flags)
 {
     long h = height;
     long w = width;
     // Draw shadow
-    if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLNSHADOW) != 0) {
+    if ((draw_flags & Lb_TEXT_UNDERLNSHADOW) != 0) {
         long shadow_x = pos_x + 1;
         if (height > 2*DOUBLE_UNDERLINE_BOUND)
             shadow_x++;
@@ -445,17 +445,17 @@ skip_sprite_draw:
 }
 
 
-TbBool LbTextDraw(int posx, int posy, const char *text)
+TbBool LbTextDraw(int posx, int posy, const char *text, TbDrawFlagsMask draw_flags)
 {
-    return TextRenderer_DrawTextResized(posx, posy, 16, text);
+    return TextRenderer_DrawTextResized(posx, posy, 16, text, draw_flags);
 }
 
-TbBool LbTextDrawResized(int posx, int posy, int units_per_px, const char *text)
+TbBool LbTextDrawResized(int posx, int posy, int units_per_px, const char *text, TbDrawFlagsMask draw_flags)
 {
-    return TextRenderer_DrawTextResized(posx, posy, units_per_px, text);
+    return TextRenderer_DrawTextResized(posx, posy, units_per_px, text, draw_flags);
 }
 
-TbBool LbTextDrawResizedFmt(int posx, int posy, int units_per_px, const char *fmt, ...)
+TbBool LbTextDrawResizedFmt(int posx, int posy, int units_per_px, TbDrawFlagsMask draw_flags, const char *fmt, ...)
 {
     char * text = (char *)KfxAlloc(8192);
     if (text == NULL) return false;
@@ -463,7 +463,7 @@ TbBool LbTextDrawResizedFmt(int posx, int posy, int units_per_px, const char *fm
     va_start(val, fmt);
     vsnprintf(text, TEXT_DRAW_MAX_LEN, fmt, val);
     va_end(val);
-    TbBool result = TextRenderer_DrawTextResized(posx, posy, units_per_px, text);
+    TbBool result = TextRenderer_DrawTextResized(posx, posy, units_per_px, text, draw_flags);
     KfxFree(text);
     return result;
 }
@@ -765,7 +765,7 @@ long text_string_height(int units_per_px, const char *text)
     return (long)TextRenderer_StringHeight((int32_t)units_per_px, text);
 }
 
-int LbTextNumberDraw(int pos_x, int pos_y, int units_per_px, long number, unsigned short fdflags)
+int LbTextNumberDraw(int pos_x, int pos_y, int units_per_px, long number, unsigned short fdflags, TbDrawFlagsMask draw_flags)
 {
     if (TextRenderer_GetFont() == NULL)
       return 0;
@@ -785,11 +785,11 @@ int LbTextNumberDraw(int pos_x, int pos_y, int units_per_px, long number, unsign
         LbTextSetWindow(pos_x-(w>>1), pos_y, w, h);
         break;
     }
-    LbTextDrawResized(0, 0, units_per_px, text);
+    LbTextDrawResized(0, 0, units_per_px, text, draw_flags);
     return w;
 }
 
-int LbTextStringDraw(int pos_x, int pos_y, int units_per_px, const char *text, unsigned short fdflags)
+int LbTextStringDraw(int pos_x, int pos_y, int units_per_px, const char *text, unsigned short fdflags, TbDrawFlagsMask draw_flags)
 {
     if (TextRenderer_GetFont() == NULL)
       return 0;
@@ -809,7 +809,7 @@ int LbTextStringDraw(int pos_x, int pos_y, int units_per_px, const char *text, u
         LbTextSetWindow(pos_x-(w>>1), pos_y, w, h);
         break;
     }
-    LbTextDrawResized(0, 0, units_per_px, text);
+    LbTextDrawResized(0, 0, units_per_px, text, draw_flags);
     return w;
 }
 

@@ -25,6 +25,7 @@
 #include "bflib_sprite.h"
 #include "globals.h"
 #include "vidmode.h"
+#include "renderer/DrawState.h"  /* TbDrawFlagsMask */
 
 // Sprites
 // Maybe "Count + 1"? there is no sprite#517
@@ -78,12 +79,12 @@ TbBool draw_text_box_top(const char* text, ushort drawflags);
 void draw_scroll_box(struct GuiButton *gbtn, int units_per_px, int num_rows);
 int scroll_box_get_units_per_px(struct GuiButton *gbtn);
 
-#define draw_gui_panel_sprite_left(x, y, units_per_px, spridx) draw_gui_panel_sprite_left_player(x, y, units_per_px, spridx, my_player_number)
-void draw_gui_panel_sprite_left_player(long x, long y, int units_per_px, long spridx, PlayerNumber plyr_idx);
-#define draw_gui_panel_sprite_rmleft(x, y, units_per_px, spridx, remap) draw_gui_panel_sprite_rmleft_player(x, y, units_per_px, spridx, remap, my_player_number)
-void draw_gui_panel_sprite_rmleft_player(long x, long y, int units_per_px, long spridx, unsigned long remap, PlayerNumber plyr_idx);
-void draw_gui_panel_sprite_centered(long x, long y, int units_per_px, long spridx);
-void draw_gui_panel_sprite_occentered(long x, long y, int units_per_px, long spridx, TbPixel color);
+#define draw_gui_panel_sprite_left(x, y, units_per_px, spridx, draw_flags) draw_gui_panel_sprite_left_player(x, y, units_per_px, spridx, my_player_number, draw_flags)
+void draw_gui_panel_sprite_left_player(long x, long y, int units_per_px, long spridx, PlayerNumber plyr_idx, TbDrawFlagsMask draw_flags);
+#define draw_gui_panel_sprite_rmleft(x, y, units_per_px, spridx, remap, draw_flags) draw_gui_panel_sprite_rmleft_player(x, y, units_per_px, spridx, remap, my_player_number, draw_flags)
+void draw_gui_panel_sprite_rmleft_player(long x, long y, int units_per_px, long spridx, unsigned long remap, PlayerNumber plyr_idx, TbDrawFlagsMask draw_flags);
+void draw_gui_panel_sprite_centered(long x, long y, int units_per_px, long spridx, TbDrawFlagsMask draw_flags);
+void draw_gui_panel_sprite_occentered(long x, long y, int units_per_px, long spridx, TbPixel color, TbDrawFlagsMask draw_flags);
 void draw_button_sprite_left(long x, long y, int units_per_px, long spridx);
 void draw_button_sprite_rmleft(long x, long y, int units_per_px, long spridx, unsigned long remap);
 

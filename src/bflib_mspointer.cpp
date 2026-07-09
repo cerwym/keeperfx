@@ -195,18 +195,18 @@ void LbI_PointerHandler::NewMousePos(void)
         rect_1038.left -= this->draw_pos_x;
         this->draw_pos_x = 0;
     } else
-    if (this->draw_pos_x+dstwidth > lbDisplay.PhysicalScreenWidth)
+    if (this->draw_pos_x+dstwidth > RendererPhysicalWidth())
     {
-        rect_1038.right += lbDisplay.PhysicalScreenWidth-dstwidth-this->draw_pos_x;
+        rect_1038.right += RendererPhysicalWidth()-dstwidth-this->draw_pos_x;
     }
     if (this->draw_pos_y < 0)
     {
         rect_1038.top -= this->draw_pos_y;
         this->draw_pos_y = 0;
     } else
-    if (this->draw_pos_y+dstheight > lbDisplay.PhysicalScreenHeight)
+    if (this->draw_pos_y+dstheight > RendererPhysicalHeight())
     {
-        rect_1038.bottom += lbDisplay.PhysicalScreenHeight - dstheight - this->draw_pos_y;
+        rect_1038.bottom += RendererPhysicalHeight() - dstheight - this->draw_pos_y;
     }
 }
 

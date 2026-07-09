@@ -129,8 +129,7 @@ public:
     /**
      * Submit a solid-color rectangle.
      * CPU default: direct LbDrawBox software rasterisation.
-     * @param state  Per-call draw descriptor (only Lb_SPRITE_OUTLINE is consulted
-     *               here); replaces the former ambient lbDisplay.DrawFlags read.
+     * @param state  Per-call draw descriptor (only Lb_SPRITE_OUTLINE is consulted here).
      */
     virtual void SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx, KfxDrawState state);
  
@@ -139,10 +138,6 @@ public:
      * CPU default: direct GlassMap box blend.
      */
     virtual void SubmitSolidBoxAlpha(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx, float alpha);
- 
-    /** Submit a filled circle.
-     *  CPU default: LbDrawCircle.  GPU callers may approximate this however they need. */
-    virtual void SubmitCircle(int32_t x, int32_t y, int32_t radius, uint8_t color_idx);
  
     /** Submit a raw TbSprite draw with explicit Bullfrog draw flags.
      *  CPU default: original LbSpriteDraw path. */

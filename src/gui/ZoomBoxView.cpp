@@ -8,7 +8,6 @@
 /******************************************************************************/
 #include "pre_inc.h"
 #include "gui/ZoomBoxView.h"
-#include "gui/DrawFlagsGuard.h"
 
 // Renderer abstraction
 #include "renderer/RendererManager.h"   // RendererSchedulePiPRender, RendererGetZoomBoxMode,

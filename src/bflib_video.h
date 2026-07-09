@@ -153,96 +153,6 @@ struct ScreenModeInfo {
 };
 typedef struct ScreenModeInfo TbScreenModeInfo;
 
-struct DisplayStruct {
-        /** Pointer to physical screen buffer, if locked. */
-        uchar *PhysicalScreen;
-        /** Pointer to graphics screen buffer, if locked. */
-        uchar *WScreen;
-        /** Pointer to glass map, used for 8-bit video transparency. */
-        uchar *GlassMap;
-        /** Pointer to fade table, used for 8-bit video fading. */
-        uchar *FadeTable;
-        /** Pointer to graphics window buffer, if locked. */
-        uchar *GraphicsWindowPtr;
-        /** Sprite used as mouse cursor. */
-        const struct TbSprite *MouseSprite;
-        /** Resolution in width of the current video mode.
-         *  Note that it's not always "physical" size.
-         *  It is the part of screen buffer which is being drawn
-         *  on physical screen (WScreen X drawing size). */
-        long PhysicalScreenWidth;
-        /** Resolution in height of the current video mode.
-         *  Note that it's not always "physical" size.
-         *  It is the part of screen buffer which is being drawn
-         *  on physical screen (WScreen Y drawing size). */
-        long PhysicalScreenHeight;
-        /** Width of the screen buffer (WScreen X pitch).
-         *  Note that only part of this width may be drawn on real screen. */
-        long GraphicsScreenWidth;
-        /** Height of the screen buffer (WScreen Y pitch).
-        *  Note that only part of this height may be drawn on real screen. */
-        long GraphicsScreenHeight;
-        /** Current graphics window beginning X coordinate. */
-        long GraphicsWindowX;
-        /** Current graphics window beginning Y coordinate. */
-        long GraphicsWindowY;
-        /** Current graphics window width (size in X axis). */
-        long GraphicsWindowWidth;
-        /** Current graphics window height (size in Y axis). */
-        long GraphicsWindowHeight;
-        /** Current mouse clipping window start X coordinate. */
-        long MouseWindowX;
-        /** Current mouse clipping window start Y coordinate. */
-        long MouseWindowY;
-        /** Current mouse clipping window width (in pixels). */
-        long MouseWindowWidth;
-        /** Current mouse clipping window height (in pixels). */
-        long MouseWindowHeight;
-        /** Mouse position during button "down" event, X coordinate. */
-        int32_t MouseX;
-        /** Mouse position during button "down" event, Y coordinate. */
-        int32_t MouseY;
-        /** Mouse position during move, X coordinate. */
-        int32_t MMouseX;
-        /** Mouse position during move, Y coordinate. */
-        int32_t MMouseY;
-        /** Mouse position during button release, X coordinate. */
-        int32_t RMouseX;
-        /** Mouse position during button release, Y coordinate. */
-        int32_t RMouseY;
-        ushort DrawFlags;
-        short MouseMoveRatio; // was ushort OldVideoMode; but wasn't needed
-        ushort ScreenMode;
-        /** VESA set-up flag, used only with VBE video modes. */
-        uchar VesaIsSetUp;
-        uchar LeftButton;
-        uchar RightButton;
-        uchar MiddleButton;
-        uchar MLeftButton;
-        uchar MRightButton;
-        uchar MMiddleButton;
-        uchar RLeftButton;
-        uchar RMiddleButton;
-        uchar RRightButton;
-        uchar FadeStep;
-        /** Selected drawing colour index. */
-        uchar DrawColour;
-        /** Currently active colour palette.
-         *  LbPaletteGet() should be used to retrieve a copy of the palette. */
-        uchar *Palette;
-};
-typedef struct DisplayStruct TbDisplayStruct;
-
-/** Extensions to DisplayStruct - will be later integrated into it. */
-struct DisplayStructEx {
-    short WhellPosition;
-    ushort WhellMoveUp;
-    ushort WhellMoveDown;
-    /** Colour index used for drawing shadow. */
-    uchar ShadowColour;
-};
-typedef struct DisplayStructEx TbDisplayStructEx;
-
 struct SDL_Surface;
 
 /** The software renderer's off-screen draw surface.
@@ -263,7 +173,6 @@ void LbScreenFreeDrawSurface(void);
 /******************************************************************************/
 extern volatile TbBool lbScreenInitialised;
 extern volatile TbBool lbUseSdk;
-extern volatile TbDisplayStructEx lbDisplayEx;
 extern unsigned char lbPalette[PALETTE_SIZE];
 
 #define VGA6_MAX                                63.0f // VGA 6-bit palette component range (0–63)
@@ -303,7 +212,6 @@ extern unsigned short units_per_pixel;
 
 extern unsigned short display_id;
 
-extern TbDisplayStruct lbDisplay;
 /******************************************************************************/
 TbBool LbScreenIsModeAvailable(TbScreenMode mode, unsigned short display);
 TbScreenMode LbRecogniseVideoModeString(const char *desc);

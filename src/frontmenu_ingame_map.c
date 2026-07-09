@@ -139,7 +139,7 @@ TbBool reset_all_minimap_interpolation = false;
 // Writes a single minimap pixel.
 // If the renderer provided a pixel buffer (s_minimap_pixels != NULL), writes
 // into it at (x, y) with stride = MapDiagonalLength.
-// Otherwise writes directly to lbDisplay.WScreen (software mode).
+// Otherwise writes directly to RendererGetWScreen() (software mode).
 void panel_map_draw_pixel(RealScreenCoord x, RealScreenCoord y, TbPixel col)
 {
     if ((y >= 0) && (y < MapDiagonalLength))
@@ -149,7 +149,7 @@ void panel_map_draw_pixel(RealScreenCoord x, RealScreenCoord y, TbPixel col)
             if (s_minimap_pixels != NULL) {
                 s_minimap_pixels[y * MapDiagonalLength + x] = col;
             } else {
-                lbDisplay.WScreen[(PanelMapY + y) * lbDisplay.GraphicsScreenWidth + (PanelMapX + x)] = col;
+                RendererGetWScreen()[(PanelMapY + y) * RendererScreenWidth() + (PanelMapX + x)] = col;
             }
         }
     }
@@ -697,7 +697,6 @@ int draw_line_to_heart(struct PlayerInfo *player, long units_per_px, long zoom)
     if (!thing_exists(thing)) {
         return 0;
     }
-    lbDisplay.DrawFlags |= Lb_SPRITE_TRANSPAR4;
     // Position of the thing on unrotated map
     // for camera, coordinates within subtile are skipped; the thing uses full resolution coordinates
     interpolate_minimap_thing(thing, cam);
@@ -742,7 +741,6 @@ int draw_line_to_heart(struct PlayerInfo *player, long units_per_px, long zoom)
             panel_map_draw_pixel((draw_x >> 8) + draw_square[p].delta_x, (draw_y >> 8) + draw_square[p].delta_y, col);
         }
     }
-    lbDisplay.DrawFlags &= ~Lb_SPRITE_TRANSPAR4;
     return 1;
 }
 
@@ -1352,8 +1350,8 @@ void panel_map_draw_slabs(long x, long y, long units_per_px, long zoom)
         out_line   = s_minimap_pixels;
         out_stride = MapDiagonalLength;
     } else {
-        out_line   = &lbDisplay.WScreen[PanelMapX + lbDisplay.GraphicsScreenWidth * PanelMapY];
-        out_stride = lbDisplay.GraphicsScreenWidth;
+        out_line   = &RendererGetWScreen()[PanelMapX + RendererScreenWidth() * PanelMapY];
+        out_stride = RendererScreenWidth();
     }
     int h;
     for (h = 0; h < MapDiagonalLength; h++)
@@ -1419,7 +1417,7 @@ void panel_map_draw_slabs(long x, long y, long units_per_px, long zoom)
 
 /**
  * After panel_map_draw_slabs + panel_map_draw_overlay_things have finished
- * writing into the renderer-owned pixel buffer (GPU mode) or lbDisplay.WScreen (software mode),
+ * writing into the renderer-owned pixel buffer (GPU mode) or RendererGetWScreen() (software mode),
  * submit the minimap data to the UIRenderer so it appears in the frame.
  *
  * In GPU mode: triggers GLUIRenderer to upload the buffer to a GL_R8 texture and

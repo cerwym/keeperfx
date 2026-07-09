@@ -40,6 +40,7 @@
 #pragma once
 
 #include <cstdint>
+#include "renderer/DrawState.h"  // TbDrawFlagsMask
 
 struct TbSprite;
 struct UICommandBuffers; // forward declaration — full type needed only by implementations
@@ -57,12 +58,13 @@ public:
 
     /** Submit one keeper-hand sprite for this frame.
      *  Called from draw_power_hand() in place of UIRenderer_SubmitKeeperSprite.
-     *  Parameters match process_keeper_sprite() exactly. */
+     *  Parameters match process_keeper_sprite_ex() exactly. */
     virtual void SubmitKeeperHandSprite(short x, short y,
                                         unsigned short kspr_base,
                                         short angle,
                                         unsigned char sprgroup,
-                                        int32_t scale) = 0;
+                                        int32_t scale,
+                                        TbDrawFlagsMask draw_flags) = 0;
 
     /** Draw all queued cursor sprites to the framebuffer.
      *  Called from RendererOpenGL::EndFrame() and RendererSoftware::EndFrame()

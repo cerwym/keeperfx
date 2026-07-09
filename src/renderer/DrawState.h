@@ -30,13 +30,19 @@
 extern "C" {
 #endif
 
+/** Underlying storage type for TbDrawFlags bitmasks.  The C enum constants
+ *  are int-promoted when OR'd together; this typedef keeps the intent clear
+ *  while remaining C-compatible (C has no typed enum bitwise operators). */
+typedef unsigned int TbDrawFlagsMask;
+
 /** The per-draw "how to draw" modifiers. Immutable by convention: build one,
  *  pass it, never mutate a shared instance. */
 typedef struct KfxDrawState {
-    /** Lb_SPRITE_* / Lb_TEXT_* bitmask: transparency (TRANSPAR4/8), flip
-     *  (H/V), outline, and text alignment / underline / one-colour. Same bit
-     *  vocabulary as the former lbDisplay.DrawFlags. */
-    unsigned int flags;
+    /** Lb_SPRITE_* / Lb_TEXT_* bitmask (TbDrawFlags values OR'd together).
+     *  Transparency (TRANSPAR4/8), flip (H/V), outline, and text alignment /
+     *  underline / one-colour. Same bit vocabulary as the former
+     *  lbDisplay.DrawFlags. */
+    TbDrawFlagsMask flags;
     /** Active draw colour (palette index) — one-colour sprites and text.
      *  Same as the former lbDisplay.DrawColour (TbPixel == unsigned char). */
     unsigned char colour;
@@ -52,7 +58,7 @@ static inline KfxDrawState draw_state_default(void)
 }
 
 /** Build a draw state from explicit flags + colour. */
-static inline KfxDrawState draw_state_make(unsigned int flags, unsigned char colour)
+static inline KfxDrawState draw_state_make(TbDrawFlagsMask flags, unsigned char colour)
 {
     KfxDrawState s;
     s.flags  = flags;

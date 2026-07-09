@@ -19,6 +19,7 @@
 /******************************************************************************/
 #include "kfx_memory.h"
 #include "../../pre_inc.h"
+#include "renderer/RendererManager.h"
 #include "LensManager.h"
 
 #include "MistEffect.h"
@@ -449,8 +450,8 @@ void LensManager::FreeAllEffects()
 
 TbBool LensManager::AllocateBuffers()
 {
-    m_buffer_width = lbDisplay.GraphicsScreenWidth;
-    m_buffer_height = lbDisplay.GraphicsScreenHeight;
+    m_buffer_width = RendererScreenWidth();
+    m_buffer_height = RendererScreenHeight();
     
     unsigned long buffer_size = m_buffer_width * m_buffer_height + 2;
     

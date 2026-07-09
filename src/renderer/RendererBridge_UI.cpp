@@ -15,7 +15,6 @@
 #include "bflib_basics.h"
 #include "bflib_sprite.h"       // TbSprite
 #include "engine_render.h"      // render_fade_tables
-#include "bflib_video.h"        // lbDisplay.DrawFlags
 #include "gui_draw.h"           // get_panel_sprite, gui_slab, GUI_SLAB_DIMENSION, TiledSprite
 #include "config_spritecolors.h" // get_player_colored_icon_idx
 #include "custom_sprites.h"     // get_button_sprite_for_player, get_button_sprite
@@ -25,11 +24,13 @@
 
 /******************************************************************************/
 
-// Transitional helper: build a KfxDrawState from the still-live lbDisplay draw
-// globals.
+// Transitional helper: build a zero KfxDrawState for bridge functions that
+// use display_draw_state(). DrawFlags and DrawColour are always 0 here —
+// colour is unused by panel sprite implementations.
+// DrawFlags is always 0 here — all callers operate on opaque UI elements.
 static inline KfxDrawState display_draw_state(void)
 {
-    return draw_state_make((unsigned int)lbDisplay.DrawFlags, (unsigned char)lbDisplay.DrawColour);
+    return draw_state_make(0, 0);
 }
 
 void UIRenderer_SubmitSlabSelector(int x1, int y1, int x2, int y2, unsigned char color, float z_depth)
@@ -86,66 +87,59 @@ void UIRenderer_EndZoomBoxOverlay(int x, int y, int w, int h)
     if (ui) ui->EndZoomBoxOverlay(x, y, w, h);
 }
  
-void UIRenderer_SubmitPanelSprite(int32_t x, int32_t y, int units_per_px, int32_t spridx)
+void UIRenderer_SubmitPanelSprite(int32_t x, int32_t y, int units_per_px, int32_t spridx, TbDrawFlagsMask draw_flags)
 {
     IUIRenderer* ui = RendererGetUIRenderer();
     if (!ui) return;
     const struct TbSprite* spr = get_panel_sprite(get_player_colored_icon_idx(spridx, my_player_number));
     SpriteHandle h = RendererResolveSprite(spr);
-    ui->SubmitPanelSprite(x, y, units_per_px, h, false, display_draw_state());
+    ui->SubmitPanelSprite(x, y, units_per_px, h, false, draw_state_make(draw_flags, 0));
 }
 
-void UIRenderer_SubmitPanelSpriteRaw(int32_t x, int32_t y, int units_per_px, const struct TbSprite* spr)
+void UIRenderer_SubmitPanelSpriteRaw(int32_t x, int32_t y, int units_per_px, const struct TbSprite* spr, TbDrawFlagsMask draw_flags)
 {
     IUIRenderer* ui = RendererGetUIRenderer();
     if (!ui) return;
     SpriteHandle h = RendererResolveSprite(spr);
-    ui->SubmitPanelSprite(x, y, units_per_px, h, false, display_draw_state());
+    ui->SubmitPanelSprite(x, y, units_per_px, h, false, draw_state_make(draw_flags, 0));
 }
 
 void RendererSubmitButton(const RendererUIButtonDesc* desc)
 {
     if (!desc) return;
-    // Background segment strip -> UI node.  Each raw submit reads the ambient
-    // lbDisplay.DrawFlags, matching the old inline path where the segments were
-    // drawn before the label's flags were set.
+    // Background segment strip -> UI node. Segments pass 0 draw_flags (opaque).
     for (int i = 0; i < desc->segment_count && i < RENDERER_BUTTON_MAX_SEGMENTS; ++i) {
         const struct TbSprite* spr = desc->segments[i].spr;
         if (spr)
             UIRenderer_SubmitPanelSpriteRaw(desc->segments[i].x, desc->segments[i].y,
-                                            desc->units_per_px, spr);
+                                            desc->units_per_px, spr, 0);
     }
-    // Label -> text node (not the LbText* globals).  The text path reads
-    // lbDisplay.DrawFlags, so set it here exactly as the old code did before
-    // LbTextDrawResized.
+    // Label -> text node; draw_flags passed explicitly via label_draw_flags.
     if (desc->text && desc->font) {
-        lbDisplay.DrawFlags = desc->label_draw_flags;
         TextRenderer_SetFont(desc->font);
         TextRenderer_SetWindow(desc->text_x, desc->text_y, desc->text_w, desc->text_h);
-        TextRenderer_DrawTextResized(0, 0, desc->units_per_px, desc->text);
+        TextRenderer_DrawTextResized(0, 0, desc->units_per_px, desc->text, desc->label_draw_flags);
     }
 }
 
 void UIRenderer_SubmitPanelSpriteWithBg(int32_t x, int32_t y, int units_per_px,
-                                        const struct TbSprite* spr, unsigned char bg_color_idx)
+                                        const struct TbSprite* spr, unsigned char bg_color_idx, TbDrawFlagsMask draw_flags)
 {
     IUIRenderer* ui = RendererGetUIRenderer();
     if (!ui || !spr) return;
-    // Compute the sprite's on-screen dimensions.
     int32_t w = ((int32_t)spr->SWidth  * units_per_px + 8) / 16;
     int32_t h = ((int32_t)spr->SHeight * units_per_px + 8) / 16;
-    // Submit opaque background fill, then the sprite on top.
     ui->SubmitSolidBox(x, y, w, h, bg_color_idx, draw_state_default());
     SpriteHandle sh = RendererResolveSprite(spr);
-    ui->SubmitPanelSprite(x, y, units_per_px, sh, false, display_draw_state());
+    ui->SubmitPanelSprite(x, y, units_per_px, sh, false, draw_state_make(draw_flags, 0));
 }
 
-void UIRenderer_SubmitPanelSpriteRawColored(int32_t x, int32_t y, int units_per_px, const struct TbSprite* spr, unsigned char color_idx)
+void UIRenderer_SubmitPanelSpriteRawColored(int32_t x, int32_t y, int units_per_px, const struct TbSprite* spr, unsigned char color_idx, TbDrawFlagsMask draw_flags)
 {
     IUIRenderer* ui = RendererGetUIRenderer();
     if (!ui) return;
     SpriteHandle h = RendererResolveSprite(spr);
-    ui->SubmitPanelSpriteColored(x, y, units_per_px, h, (uint8_t)color_idx, display_draw_state());
+    ui->SubmitPanelSpriteColored(x, y, units_per_px, h, (uint8_t)color_idx, draw_state_make(draw_flags, 0));
 }
 
 void UIRenderer_SubmitOutlineBox(int32_t x, int32_t y, int32_t w, int32_t h, unsigned char color_idx)
@@ -158,15 +152,15 @@ void UIRenderer_SubmitOutlineBox(int32_t x, int32_t y, int32_t w, int32_t h, uns
     UIRenderer_SubmitSolidBox(x + w - 1, y,     1, h, color_idx);  // right
 }
 
-void UIRenderer_SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px, const struct TbSprite* spr, int remap_row)
+void UIRenderer_SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px, const struct TbSprite* spr, int remap_row, TbDrawFlagsMask draw_flags)
 {
     IUIRenderer* ui = RendererGetUIRenderer();
     if (!ui) return;
     SpriteHandle h = RendererResolveSprite(spr);
-    ui->SubmitPanelSpriteRemap(x, y, units_per_px, h, remap_row, display_draw_state());
+    ui->SubmitPanelSpriteRemap(x, y, units_per_px, h, remap_row, draw_state_make(draw_flags, 0));
 }
 
-void UIRenderer_SubmitPanelSpriteCentered(int32_t x, int32_t y, int units_per_px, int32_t spridx)
+void UIRenderer_SubmitPanelSpriteCentered(int32_t x, int32_t y, int units_per_px, int32_t spridx, TbDrawFlagsMask draw_flags)
 {
     IUIRenderer* ui = RendererGetUIRenderer();
     if (!ui) return;
@@ -175,7 +169,7 @@ void UIRenderer_SubmitPanelSpriteCentered(int32_t x, int32_t y, int units_per_px
     int32_t ox = ((int32_t)spr->SWidth  * units_per_px + 8) / 16 / 2;
     int32_t oy = ((int32_t)spr->SHeight * units_per_px + 8) / 16 / 2;
     SpriteHandle h = RendererResolveSprite(spr);
-    ui->SubmitPanelSprite(x - ox, y - oy, units_per_px, h, false, display_draw_state());
+    ui->SubmitPanelSprite(x - ox, y - oy, units_per_px, h, false, draw_state_make(draw_flags, 0));
 }
 
 void UIRenderer_SubmitButtonSprite(int32_t x, int32_t y, int units_per_px, short spridx)
@@ -244,13 +238,8 @@ void UIRenderer_SubmitCircle(int32_t x, int32_t y, int32_t radius, unsigned char
 {
     IUIRenderer* ui = RendererGetUIRenderer();
     if (!ui) return;
-    if (RendererHasGPURenderPath())
-    {
-        int32_t d = radius * 2 + 1;
-        ui->SubmitSolidBox(x - radius, y - radius, d, d, color_idx, draw_state_default());
-        return;
-    }
-    ui->SubmitCircle(x, y, radius, color_idx);
+    int32_t d = radius * 2 + 1;
+    ui->SubmitSolidBox(x - radius, y - radius, d, d, color_idx, draw_state_default());
 }
 
 void UIRenderer_SetSlabTexture(void)
@@ -392,10 +381,8 @@ TbResult UIRenderer_SubmitRawSprite(long x, long y, const struct TbSprite* spr,
 {
     IUIRenderer* ui = RendererGetUIRenderer();
     if (!ui || !spr) return Lb_FAIL;
-    if (!RendererHasGPURenderPath())
-        return ui->SubmitRawSprite(x, y, spr, draw_state_make(draw_flags, 0));
     SpriteHandle h = RendererResolveSprite(spr);
-    if (h == kInvalidSpriteHandle) return Lb_FAIL;  // atlas miss → caller falls through to SW
+    if (h == kInvalidSpriteHandle) return Lb_FAIL;
     ui->SubmitPanelSprite((int32_t)x, (int32_t)y, 16, h, false, draw_state_make(draw_flags, 0));
     return Lb_OK;
 }
@@ -406,8 +393,6 @@ TbResult UIRenderer_SubmitRawSpriteOneColour(long x, long y, const struct TbSpri
 {
     IUIRenderer* ui = RendererGetUIRenderer();
     if (!ui || !spr) return Lb_FAIL;
-    if (!RendererHasGPURenderPath())
-        return ui->SubmitRawSpriteOneColour(x, y, spr, colour, draw_state_make(draw_flags, 0));
     SpriteHandle h = RendererResolveSprite(spr);
     if (h == kInvalidSpriteHandle) return Lb_FAIL;
     ui->SubmitPanelSpriteColored((int32_t)x, (int32_t)y, 16, h, colour, draw_state_make(draw_flags, 0));
@@ -420,8 +405,6 @@ TbResult UIRenderer_SubmitRawSpriteRemap(long x, long y, const struct TbSprite* 
 {
     IUIRenderer* ui = RendererGetUIRenderer();
     if (!ui || !spr || !cmap) return Lb_FAIL;
-    if (!RendererHasGPURenderPath())
-        return ui->SubmitRawSpriteRemap(x, y, spr, cmap, draw_state_make(draw_flags, 0));
     SpriteHandle h = RendererResolveSprite(spr);
     if (h == kInvalidSpriteHandle) return Lb_FAIL;
     // Compute the remap row from the pointer offset into render_fade_tables.

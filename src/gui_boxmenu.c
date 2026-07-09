@@ -369,7 +369,6 @@ long gfa_is_creature(struct GuiBox *gbox, struct GuiBoxOption *goptn, int32_t *t
 void gui_draw_all_boxes(void)
 {
   SYNCDBG(5,"Starting");
-  lbDisplay.DrawFlags = Lb_TEXT_ONE_COLOR;
   LbTextSetFont(font_sprites);
   struct GuiBox* gbox = gui_get_lowest_priority_box();
   while (gbox != NULL)
@@ -791,7 +790,7 @@ void gui_draw_box(struct GuiBox *gbox)
     {
         UIRenderer_SubmitSolidBoxAlpha(gbox->pos_x/pixel_size, gbox->pos_y/pixel_size, gbox->width/pixel_size, gbox->height/pixel_size, colours[6][0][0], 0.5f);
         UIRenderer_SubmitOutlineBox(gbox->pos_x/pixel_size, gbox->pos_y/pixel_size, gbox->width/pixel_size, gbox->height/pixel_size, colours[0][0][0]);
-        lbDisplay.DrawColour = colours[3][3][3];
+        TextRenderer_SetDrawColour(colours[3][3][3]);
         goptn = gbox->optn_list;
         while (goptn->label[0] != '!')
         {
@@ -800,10 +799,10 @@ void gui_draw_box(struct GuiBox *gbox)
           else
             goptn->enabled = 1;
           if (!goptn->enabled)
-            lbDisplay.DrawColour = colours[0][0][0];
+            TextRenderer_SetDrawColour(colours[0][0][0]);
           else
-            lbDisplay.DrawColour = colours[3][3][3];
-          LbTextDrawResized(pos_x/pixel_size, pos_y/pixel_size, 16, goptn->label);
+            TextRenderer_SetDrawColour(colours[3][3][3]);
+          LbTextDrawResized(pos_x/pixel_size, pos_y/pixel_size, 16, goptn->label, Lb_TEXT_ONE_COLOR);
           goptn++;
           pos_y += lnheight;
         }
@@ -819,14 +818,14 @@ void gui_draw_box(struct GuiBox *gbox)
             else
               goptn->enabled = 1;
             if (!goptn->enabled)
-              lbDisplay.DrawColour = colours[0][0][0];
+              TextRenderer_SetDrawColour(colours[0][0][0]);
             else
             if ( ((gbox == gbox_over) && (goptn == goptn_over) && (gbox != dragging_box.gbox)) ||
                  ((gbox != NULL) && (goptn->active != 0)) )
-              lbDisplay.DrawColour = colours[15][15][15];
+              TextRenderer_SetDrawColour(colours[15][15][15]);
             else
-              lbDisplay.DrawColour = colours[9][9][9];
-            LbTextDrawResized(pos_x/pixel_size, pos_y/pixel_size, 16, goptn->label);
+              TextRenderer_SetDrawColour(colours[9][9][9]);
+            LbTextDrawResized(pos_x/pixel_size, pos_y/pixel_size, 16, goptn->label, Lb_TEXT_ONE_COLOR);
             goptn++;
             pos_y += lnheight;
         }

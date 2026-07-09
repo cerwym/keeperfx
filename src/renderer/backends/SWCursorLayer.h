@@ -24,7 +24,8 @@ public:
                                         unsigned short kspr_base,
                                         short angle,
                                         unsigned char sprgroup,
-                                        int32_t scale) override;
+                                        int32_t scale,
+                                        TbDrawFlagsMask draw_flags) override;
 
     virtual void Draw() override;
     virtual void Clear() override;

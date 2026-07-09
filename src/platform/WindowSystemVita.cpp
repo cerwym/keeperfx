@@ -43,8 +43,8 @@ void WindowSystemVita::PollInput()
     // Compute delta from current engine cursor position so that the pointer
     // handler's absolute clamp logic works correctly.
     struct TbPoint delta;
-    delta.x = newX - lbDisplay.MMouseX;
-    delta.y = newY - lbDisplay.MMouseY;
+    delta.x = newX - lbMouse.MMouseX;
+    delta.y = newY - lbMouse.MMouseY;
 
     if (delta.x != 0 || delta.y != 0)
     {

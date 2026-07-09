@@ -33,6 +33,7 @@
 
 #include <SDL3/SDL.h>
 #include <cstring>
+#include <cstdlib>
 
 extern "C" void draw_texture(int32_t texture_x, int32_t texture_y, int32_t texture_width, int32_t texture_height,
                              int32_t texture_block_index, int32_t flags, int32_t fade_level);
@@ -131,6 +132,11 @@ bool RendererSoftware::Init()
 
 void RendererSoftware::Shutdown()
 {
+    free(m_world_raster);
+    m_world_raster = nullptr;
+    m_world_raster_size = 0;
+    m_world_raster_valid = false;
+
     if (s_scaleSurface) {
         SDL_DestroySurface(s_scaleSurface);
         s_scaleSurface = nullptr;
@@ -150,8 +156,8 @@ void RendererSoftware::Shutdown()
 
 bool RendererSoftware::BeginFrame()
 {
-    m_screenW = lbDisplay.PhysicalScreenWidth;
-    m_screenH = lbDisplay.PhysicalScreenHeight;
+    m_screenW = RendererPhysicalWidth();
+    m_screenH = RendererPhysicalHeight();
 
     // RendererBeginFrame() is not guarded and runs twice per present (once in
     // RendererLockScreen, again in RendererPresentFrame).  Open the IR graph
@@ -196,20 +202,39 @@ void RendererSoftware::EndFrame()
     FrameState fs = {};
     m_render_graph.Flip(fs);
 
-    // The deferred UI+text replay and the cursor draw into lbDisplay.WScreen,
+    // The deferred UI+text replay and the cursor draw into the WScreen buffer,
     // but RendererUnlockScreen() nulled it before present.  The draw-surface
     // pixels are always valid (no real SDL lock needed), so point WScreen back
     // at them with a full-screen graphics window for the replay, then clear it.
     if (lbDrawSurface)
     {
-        lbDisplay.WScreen              = static_cast<TbPixel*>(lbDrawSurface->pixels);
-        lbDisplay.GraphicsScreenWidth  = lbDrawSurface->pitch;
-        lbDisplay.GraphicsScreenHeight = lbDrawSurface->h;
-        lbDisplay.GraphicsWindowX      = 0;
-        lbDisplay.GraphicsWindowY      = 0;
-        lbDisplay.GraphicsWindowWidth  = lbDrawSurface->w;
-        lbDisplay.GraphicsWindowHeight = lbDrawSurface->h;
-        lbDisplay.GraphicsWindowPtr    = lbDisplay.WScreen;
+        RendererSetWScreen(static_cast<TbPixel*>(lbDrawSurface->pixels));
+        RendererSetScreenDimensions(lbDrawSurface->pitch, lbDrawSurface->h);
+        RendererSetViewport(0, 0, lbDrawSurface->w, lbDrawSurface->h);
+
+        // World-raster cache: make transparent UI compositing idempotent.
+        // On frames that drew world content (LockScreen was called), snapshot
+        // lbDrawSurface into m_world_raster.  On present-only frames, restore
+        // the clean world snapshot so overlays don't accumulate.
+        const size_t surface_bytes = (size_t)lbDrawSurface->pitch * (size_t)lbDrawSurface->h;
+        if (RendererConsumeWorldDrawn())
+        {
+            if (m_world_raster_size != surface_bytes)
+            {
+                free(m_world_raster);
+                m_world_raster = static_cast<uint8_t*>(malloc(surface_bytes));
+                m_world_raster_size = m_world_raster ? surface_bytes : 0;
+            }
+            if (m_world_raster)
+            {
+                memcpy(m_world_raster, lbDrawSurface->pixels, surface_bytes);
+                m_world_raster_valid = true;
+            }
+        }
+        else if (m_world_raster_valid)
+        {
+            memcpy(lbDrawSurface->pixels, m_world_raster, surface_bytes);
+        }
 
         if (ui)
             ui->ReplayMergedFromIR(m_render_graph.GetUIBuffersRT(),
@@ -217,8 +242,7 @@ void RendererSoftware::EndFrame()
                                    text);
         CursorLayer_Draw();
 
-        lbDisplay.WScreen           = NULL;
-        lbDisplay.GraphicsWindowPtr = NULL;
+        RendererSetWScreen(NULL);
     }
 
     SDL_Window* win = static_cast<SDL_Window*>(platform_get_sdl_window());
@@ -261,6 +285,9 @@ void RendererSoftware::ClearScreen(uint8_t colour_index)
 {
     if (lbDrawSurface)
         SDL_FillSurfaceRect(lbDrawSurface, NULL, colour_index);
+    // The cached world snapshot is no longer valid after a full-screen clear
+    // (e.g. transitioning to the overhead map, FMV, or menu screens).
+    m_world_raster_valid = false;
 }
 
 uint8_t* RendererSoftware::LockFramebuffer(int* out_pitch)
@@ -278,6 +305,67 @@ void RendererSoftware::UnlockFramebuffer()
 {
     if (lbDrawSurface)
         SDL_UnlockSurface(lbDrawSurface);
+}
+
+bool RendererSoftware::PresentImage(const struct RendererPresentImageDesc* desc)
+{
+    // Only handle FMV frames with an embedded palette; other cases fall through
+    // to the C bridge's existing software path (copy_raw8_image_buffer).
+    if (!desc || !desc->src)
+        return false;
+    if (desc->format  != PRESENT_FORMAT_INDEXED8 ||
+        desc->kind    != PRESENT_KIND_OPAQUE     ||
+        desc->palette != PRESENT_PALETTE_EMBEDDED)
+    {
+        return false;
+    }
+
+    uint8_t* dst_buf = RendererGetWScreen();
+    if (!dst_buf) return false;
+
+    const int scanline = RendererScreenWidth();
+    const int nlines   = RendererScreenHeight();
+    const int src_pitch = desc->src_pitch ? desc->src_pitch : desc->src_w;
+
+    // Clear letterbox bars (top + bottom)
+    for (int y = 0; y < desc->dst_y; ++y)
+        memset(&dst_buf[y * scanline], 0, scanline);
+    for (int y = desc->dst_y + desc->dst_h; y < nlines; ++y)
+        memset(&dst_buf[y * scanline], 0, scanline);
+
+    // Nearest-neighbour blit from src to the destination rect in WScreen
+    int dh_start = desc->dst_y;
+    for (int sh = 0; sh < desc->src_h; ++sh)
+    {
+        const int dh_end = desc->dst_y + (desc->dst_h * (sh + 1) / desc->src_h);
+        const uint8_t* src = &desc->src[sh * src_pitch];
+        const int mh_min = (dh_start < 0) ? -dh_start : 0;
+        const int mh_max = ((dh_end - dh_start) < (nlines - dh_start))
+                         ? (dh_end - dh_start) : (nlines - dh_start);
+        for (int k = mh_min; k < mh_max; ++k)
+        {
+            uint8_t* dst = &dst_buf[(dh_start + k) * scanline];
+            // Clear left bar
+            if (desc->dst_x > 0)
+                memset(dst, 0, desc->dst_x);
+            int dw_start = desc->dst_x;
+            for (int sw = 0; sw < desc->src_w; ++sw)
+            {
+                const int dw_end = desc->dst_x + (desc->dst_w * (sw + 1) / desc->src_w);
+                const int mw_min = (dw_start < 0) ? -dw_start : 0;
+                const int mw_max = ((dw_end - dw_start) < (scanline - dw_start))
+                                 ? (dw_end - dw_start) : (scanline - dw_start);
+                for (int i = mw_min; i < mw_max; ++i)
+                    dst[dw_start + i] = src[sw];
+                dw_start = dw_end;
+            }
+            // Clear right bar
+            if (dw_start < scanline)
+                memset(dst + dw_start, 0, scanline - dw_start);
+        }
+        dh_start = dh_end;
+    }
+    return true;
 }
 
 bool RendererSoftware::SubmitTransparentBlit(const uint8_t* buf, int w, int h)
@@ -352,7 +440,7 @@ void RendererSoftware::SubmitZoomBoxTiles(const uint16_t* tile_block_ids, int ti
 {
     if (!tile_block_ids || tiles_x <= 0 || tiles_y <= 0) return;
 
-    lbDisplay.DrawFlags = 0;
+    TbDrawFlagsMask tile_flags = 0;
     setup_vecs(RendererGetWScreen(), NULL, (unsigned int)RendererScreenWidth(),
                (unsigned int)RendererScreenWidth(), (unsigned int)RendererScreenHeight());
 
@@ -366,15 +454,13 @@ void RendererSoftware::SubmitZoomBoxTiles(const uint16_t* tile_block_ids, int ti
             if (block != 0xFFFF)
                 draw_texture(scr_x, scr_y, tile_w, tile_h, block, 0, -1);
             else
-                LbDrawBox(scr_x, scr_y, tile_w, tile_h, 1);
+                LbDrawBox(scr_x, scr_y, tile_w, tile_h, 1, tile_flags);
             scr_x += tile_w;
         }
         scr_y += tile_h;
     }
 
-    lbDisplay.DrawFlags |= Lb_SPRITE_OUTLINE;
-    LbDrawBox(dst_x, dst_y, tiles_x * tile_w, tiles_y * tile_h, 0);
-    lbDisplay.DrawFlags &= ~Lb_SPRITE_OUTLINE;
+    LbDrawBox(dst_x, dst_y, tiles_x * tile_w, tiles_y * tile_h, 0, tile_flags | Lb_SPRITE_OUTLINE);
 }
 
 void RendererSoftware::DrawSwipeOverlay(struct TbSpriteSheet* sprites, int frame,
@@ -400,7 +486,6 @@ void RendererSoftware::DrawSwipeOverlay(struct TbSpriteSheet* sprites, int frame
 
     if (draw_lr)
     {
-        lbDisplay.DrawFlags = Lb_SPRITE_TRANSPAR4;
         int delta_y = sprlist[1].SHeight;
         for (int i = 0; i < SPRITES_X * SPRITES_Y; i += SPRITES_X)
         {
@@ -408,7 +493,7 @@ void RendererSoftware::DrawSwipeOverlay(struct TbSpriteSheet* sprites, int frame
             int scrpos_x = ((m_screenW + (2 * engine_window_x)) * 16 / units_per_px - allwidth) / 2;
             for (int n = 0; n < SPRITES_X; n++)
             {
-                LbSpriteDrawResized(scrpos_x * units_per_px / 16, scrpos_y * units_per_px / 16, units_per_px, spr);
+                LbSpriteDrawResized(scrpos_x * units_per_px / 16, scrpos_y * units_per_px / 16, units_per_px, spr, Lb_SPRITE_TRANSPAR4);
                 scrpos_x += spr->SWidth;
                 spr++;
             }
@@ -417,7 +502,6 @@ void RendererSoftware::DrawSwipeOverlay(struct TbSpriteSheet* sprites, int frame
     }
     else
     {
-        lbDisplay.DrawFlags = Lb_SPRITE_TRANSPAR4 | Lb_SPRITE_FLIP_HORIZ;
         for (int i = 0; i < SPRITES_X * SPRITES_Y; i += SPRITES_X)
         {
             const struct TbSprite* spr = &sprlist[SPRITES_X + i];
@@ -425,14 +509,13 @@ void RendererSoftware::DrawSwipeOverlay(struct TbSpriteSheet* sprites, int frame
             int scrpos_x = (m_screenW * 16 / units_per_px - allwidth) / 2;
             for (int n = 0; n < SPRITES_X; n++)
             {
-                LbSpriteDrawResized(scrpos_x * units_per_px / 16, scrpos_y * units_per_px / 16, units_per_px, spr);
+                LbSpriteDrawResized(scrpos_x * units_per_px / 16, scrpos_y * units_per_px / 16, units_per_px, spr, Lb_SPRITE_TRANSPAR4 | Lb_SPRITE_FLIP_HORIZ);
                 scrpos_x += spr->SWidth;
                 spr--;
             }
             scrpos_y += delta_y;
         }
     }
-    lbDisplay.DrawFlags = 0;
 }
 
 void RendererSoftware::BeginLensCapture()
@@ -448,14 +531,13 @@ void RendererSoftware::BeginLensCapture()
         return;
 
     m_saved_wscreen = RendererGetWScreen();
-    m_saved_graphics_w = lbDisplay.GraphicsScreenWidth;
-    m_saved_graphics_h = lbDisplay.GraphicsScreenHeight;
+    m_saved_graphics_w = RendererScreenWidth();
+    m_saved_graphics_h = RendererScreenHeight();
     RendererStoreViewport(&m_saved_viewport);
 
     memset(m_lens_buffer, 0, (size_t)m_lens_buffer_w * (size_t)m_lens_buffer_h * sizeof(TbPixel));
-    lbDisplay.WScreen = m_lens_buffer;
-    lbDisplay.GraphicsScreenWidth = (int)m_lens_buffer_w;
-    lbDisplay.GraphicsScreenHeight = (int)m_lens_buffer_h;
+    RendererSetWScreen(m_lens_buffer);
+    RendererSetScreenDimensions((int)m_lens_buffer_w, (int)m_lens_buffer_h);
     RendererSetViewport(0, 0, RendererScreenWidth(), RendererScreenHeight());
     setup_engine_window(0, 0, RendererGetScreenWidth(), RendererGetScreenHeight());
     m_lens_capture_active = true;
@@ -472,9 +554,8 @@ void RendererSoftware::EndLensCapture()
     const long view_x = player->engine_window_x / pixel_size;
     const long view_y = player->engine_window_y / pixel_size;
 
-    lbDisplay.WScreen = m_saved_wscreen;
-    lbDisplay.GraphicsScreenWidth = m_saved_graphics_w;
-    lbDisplay.GraphicsScreenHeight = m_saved_graphics_h;
+    RendererSetWScreen(m_saved_wscreen);
+    RendererSetScreenDimensions(m_saved_graphics_w, m_saved_graphics_h);
     RendererLoadViewport(&m_saved_viewport);
     setup_engine_window(0, 0, RendererGetScreenWidth(), RendererGetScreenHeight());
 

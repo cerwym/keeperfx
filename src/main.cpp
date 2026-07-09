@@ -787,8 +787,7 @@ void init_keeper(void)
     init_top_texture_to_cube_table();
     game.neutral_player_num = PLAYER_NEUTRAL;
     poly_pool_end = poly_pool + PlatformManager_GetPolyPoolSize() - 128;
-    lbDisplay.GlassMap = pixmap.ghost;
-    lbDisplay.DrawColour = colours[15][15][15];
+    TextRenderer_SetDrawColour(colours[15][15][15]);
     game.comp_player_aggressive  = (comp_player_conf.player_assist_default == comp_player_conf.computer_assist_types[0]);
     game.comp_player_defensive   = (comp_player_conf.player_assist_default == comp_player_conf.computer_assist_types[1]);
     game.comp_player_construct   = (comp_player_conf.player_assist_default == comp_player_conf.computer_assist_types[2]);
@@ -819,7 +818,6 @@ TbBool initial_setup(void)
     load_pointer_file(0);
     update_screen_mode_data(320, 200);
     clear_game();
-    lbDisplay.DrawFlags |= 0x4000u;
     return true;
 }
 
@@ -3040,11 +3038,7 @@ void engine(struct PlayerInfo *player, struct Camera *cam)
 {
     TbGraphicsWindow grwnd;
     TbGraphicsWindow ewnd;
-    unsigned short flg_mem;
-
     SYNCDBG(9,"Starting");
-
-    flg_mem = lbDisplay.DrawFlags;
     update_engine_settings(player);
     mx = cam->mappos.x.val;
     my = cam->mappos.y.val;
@@ -3059,11 +3053,10 @@ void engine(struct PlayerInfo *player, struct Camera *cam)
     view_height_over_2 = ewnd.height/2;
     view_width_over_2 = ewnd.width/2;
     RendererSetViewport(ewnd.x, ewnd.y, ewnd.width, ewnd.height);
-    WorldViewRenderer_BeginWorldPass(lbDisplay.GraphicsWindowPtr, RendererScreenWidth(),ewnd.width, ewnd.height, ewnd.x, ewnd.y);
+    WorldViewRenderer_BeginWorldPass(RendererGetGraphicsWindowPtr(), RendererScreenWidth(),ewnd.width, ewnd.height, ewnd.x, ewnd.y);
     UIRenderer_SetGameViewport(ewnd.x, ewnd.y, ewnd.width, ewnd.height);
     camera_zoom = scale_camera_zoom_to_screen(cam->zoom);
     draw_view(cam, 0);
-    lbDisplay.DrawFlags = flg_mem;
     thing_being_displayed = 0;
     RendererLoadViewport(&grwnd);
 }
@@ -3664,7 +3657,7 @@ static TbBool wait_at_frontend(void)
 
     // Once the Mouse Sprite initialization is complete, the sprite's position needs to be reset because it defaults to (0, 0).
     // Note that we cannot use LbMoveGameCursorToHostCursor for this, because the buffer position may remain unchanged.
-    LbMouseSetPositionInitial(lbDisplay.MMouseX, lbDisplay.MMouseY);
+    LbMouseSetPositionInitial(lbMouse.MMouseX, lbMouse.MMouseY);
 
     try_restore_frontend_error_box();
 
@@ -3820,8 +3813,8 @@ void game_loop(void)
       if ( exit_keeper )
         break;
 
-      int32_t mspos_x_bak = lbDisplay.MMouseX;
-      int32_t mspos_y_bak = lbDisplay.MMouseY;
+      int32_t mspos_x_bak = lbMouse.MMouseX;
+      int32_t mspos_y_bak = lbMouse.MMouseY;
 
       if (game.game_kind == GKind_LocalGame)
       {

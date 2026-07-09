@@ -1,4 +1,4 @@
-﻿/******************************************************************************/
+/******************************************************************************/
 // Dungeon Keeper - Renderer Abstraction Layer
 /******************************************************************************/
 /** @file RendererOpenGL.cpp
@@ -2388,7 +2388,7 @@ IWorldViewRenderer* RendererOpenGL::CreateGLWorldViewRenderer()
 IMapFadePass* RendererOpenGL::CreateGLMapFadePass()
 {
     auto* glmf = new GLMapFadePass{this};
-    glmf->SetScreenSize(lbDisplay.PhysicalScreenWidth, lbDisplay.PhysicalScreenHeight);
+    glmf->SetScreenSize(RendererPhysicalWidth(), RendererPhysicalHeight());
     SetGLMapFadePass(glmf);
     return glmf;
 }
@@ -2403,7 +2403,7 @@ ITextRenderer* RendererOpenGL::CreateGLTextRenderer()
         return nullptr;
     }
     glt->SetPaletteTexture(m_texPalette);
-    glt->SetScreenSize(lbDisplay.PhysicalScreenWidth, lbDisplay.PhysicalScreenHeight);
+    glt->SetScreenSize(RendererPhysicalWidth(), RendererPhysicalHeight());
     SetTextRenderer(glt);
     return glt;
 }
@@ -2421,7 +2421,7 @@ IUIRenderer* RendererOpenGL::CreateGLUIRenderer()
     glui->SetFontAtlas(m_font_atlas);
     glui->SetPaletteTexture(m_texPalette, GL_TEXTURE_2D);
     glui->SetPaletteSource(lbPalette);
-    glui->SetScreenDimensions(lbDisplay.PhysicalScreenWidth, lbDisplay.PhysicalScreenHeight);
+    glui->SetScreenDimensions(RendererPhysicalWidth(), RendererPhysicalHeight());
     SetGLUIRenderer(glui);
     return glui;
 }

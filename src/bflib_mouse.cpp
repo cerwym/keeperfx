@@ -42,7 +42,9 @@ extern "C" {
 
 volatile TbBool lbMouseGrab = true;
 volatile TbBool lbMouseGrabbed = true;
-volatile TbDisplayStructEx lbDisplayEx;
+/** Mouse sensitivity ratio in 8.8 fixed point. */
+short lbMouseMoveRatio;
+volatile struct MouseWheelState lbMouseWheel;
 /******************************************************************************/
 TbResult LbMouseChangeSpriteAndHotspot(const struct TbSprite *pointerSprite, long hot_x, long hot_y)
 {
@@ -112,8 +114,8 @@ TbResult LbMouseSetPosition(long x, long y)
 
 void LbMoveHostCursorToGameCursor(void)
 {
-    int game_cursor_x = lbDisplay.MMouseX;
-    int game_cursor_y = lbDisplay.MMouseY;
+    int game_cursor_x = lbMouse.MMouseX;
+    int game_cursor_y = lbMouse.MMouseY;
     float hcx_f = 0.0f, hcy_f = 0.0f;
     SDL_GetMouseState(&hcx_f, &hcy_f);
     int host_cursor_x = (int)hcx_f, host_cursor_y = (int)hcy_f;
@@ -125,8 +127,8 @@ void LbMoveHostCursorToGameCursor(void)
 
 TbResult LbMoveGameCursorToHostCursor(void)
 {
-    int game_cursor_x = lbDisplay.MMouseX;
-    int game_cursor_y = lbDisplay.MMouseY;
+    int game_cursor_x = lbMouse.MMouseX;
+    int game_cursor_y = lbMouse.MMouseY;
     float hcx_f = 0.0f, hcy_f = 0.0f;
     SDL_GetMouseState(&hcx_f, &hcy_f);
     int host_cursor_x = (int)hcx_f, host_cursor_y = (int)hcy_f;
@@ -199,7 +201,7 @@ TbResult LbMouseOnMove(struct TbPoint shift)
 {
   if ((!lbMouseInstalled) || (lbMouseOffline))
     return Lb_FAIL;
-  if (!pointerHandler.SetMousePosition(lbDisplay.MMouseX+shift.x, lbDisplay.MMouseY+shift.y))
+  if (!pointerHandler.SetMousePosition(lbMouse.MMouseX+shift.x, lbMouse.MMouseY+shift.y))
     return Lb_FAIL;
   return Lb_SUCCESS;
 }
@@ -238,78 +240,78 @@ void mouseControl(unsigned int action, struct TbPoint *pos)
         LbMouseOnMove(dstPos);
         break;
     case MActn_LBUTTONDOWN:
-        lbDisplay.MLeftButton = 1;
-        if ( !lbDisplay.LeftButton )
+        lbMouse.MLeftButton = 1;
+        if ( !lbMouse.LeftButton )
         {
             LbMouseOnMove(dstPos);
-            lbDisplay.MouseX = lbDisplay.MMouseX;
-            lbDisplay.MouseY = lbDisplay.MMouseY;
-            lbDisplay.RLeftButton = 0;
-            lbDisplay.LeftButton = 1;
+            lbMouse.MouseX = lbMouse.MMouseX;
+            lbMouse.MouseY = lbMouse.MMouseY;
+            lbMouse.RLeftButton = 0;
+            lbMouse.LeftButton = 1;
         }
         break;
     case MActn_LBUTTONUP:
-        lbDisplay.MLeftButton = 0;
-        if ( !lbDisplay.RLeftButton )
+        lbMouse.MLeftButton = 0;
+        if ( !lbMouse.RLeftButton )
         {
             LbMouseOnMove(dstPos);
-            lbDisplay.RMouseX = lbDisplay.MMouseX;
-            lbDisplay.RMouseY = lbDisplay.MMouseY;
-            lbDisplay.RLeftButton = 1;
+            lbMouse.RMouseX = lbMouse.MMouseX;
+            lbMouse.RMouseY = lbMouse.MMouseY;
+            lbMouse.RLeftButton = 1;
         }
         break;
     case MActn_RBUTTONDOWN:
-        lbDisplay.MRightButton = 1;
-        if ( !lbDisplay.RightButton )
+        lbMouse.MRightButton = 1;
+        if ( !lbMouse.RightButton )
         {
             LbMouseOnMove(dstPos);
-            lbDisplay.MouseX = lbDisplay.MMouseX;
-            lbDisplay.MouseY = lbDisplay.MMouseY;
-            lbDisplay.RRightButton = 0;
-            lbDisplay.RightButton = 1;
+            lbMouse.MouseX = lbMouse.MMouseX;
+            lbMouse.MouseY = lbMouse.MMouseY;
+            lbMouse.RRightButton = 0;
+            lbMouse.RightButton = 1;
         }
         break;
     case MActn_RBUTTONUP:
-        lbDisplay.MRightButton = 0;
-        if ( !lbDisplay.RRightButton )
+        lbMouse.MRightButton = 0;
+        if ( !lbMouse.RRightButton )
         {
             LbMouseOnMove(dstPos);
-            lbDisplay.RMouseX = lbDisplay.MMouseX;
-            lbDisplay.RMouseY = lbDisplay.MMouseY;
-            lbDisplay.RRightButton = 1;
+            lbMouse.RMouseX = lbMouse.MMouseX;
+            lbMouse.RMouseY = lbMouse.MMouseY;
+            lbMouse.RRightButton = 1;
         }
         break;
     case MActn_MBUTTONDOWN:
-        lbDisplay.MMiddleButton = 1;
-        if ( !lbDisplay.MiddleButton )
+        lbMouse.MMiddleButton = 1;
+        if ( !lbMouse.MiddleButton )
         {
             LbMouseOnMove(dstPos);
-            lbDisplay.MouseX = lbDisplay.MMouseX;
-            lbDisplay.MouseY = lbDisplay.MMouseY;
-            lbDisplay.MiddleButton = 1;
-            lbDisplay.RMiddleButton = 0;
+            lbMouse.MouseX = lbMouse.MMouseX;
+            lbMouse.MouseY = lbMouse.MMouseY;
+            lbMouse.MiddleButton = 1;
+            lbMouse.RMiddleButton = 0;
         }
         break;
     case MActn_MBUTTONUP:
-        lbDisplay.MMiddleButton = 0;
-        if ( !lbDisplay.RMiddleButton )
+        lbMouse.MMiddleButton = 0;
+        if ( !lbMouse.RMiddleButton )
         {
             LbMouseOnMove(dstPos);
-            lbDisplay.RMouseX = lbDisplay.MMouseX;
-            lbDisplay.RMouseY = lbDisplay.MMouseY;
-            lbDisplay.RMiddleButton = 1;
-            lbDisplay.MiddleButton = 0; // lbDisplay.MiddleButton is not handled as well as lbDisplay.LeftButton and lbDisplay.RightButton, so reset it here
+            lbMouse.RMouseX = lbMouse.MMouseX;
+            lbMouse.RMouseY = lbMouse.MMouseY;
+            lbMouse.RMiddleButton = 1;
+            lbMouse.MiddleButton = 0; // lbMouse.MiddleButton is not handled as well as lbMouse.LeftButton and lbMouse.RightButton, so reset it here
         }
         break;
     case MActn_WHEELMOVEUP:
-        lbDisplayEx.WhellPosition = lbDisplayEx.WhellPosition - 1;
-        lbDisplayEx.WhellMoveUp = lbDisplayEx.WhellMoveUp + 1;
-        lbDisplayEx.WhellMoveDown = 0;
+        lbMouseWheel.WheelPosition = lbMouseWheel.WheelPosition - 1;
+        lbMouseWheel.WheelMoveUp = lbMouseWheel.WheelMoveUp + 1;
+        lbMouseWheel.WheelMoveDown = 0;
         break;
     case MActn_WHEELMOVEDOWN:
-        lbDisplayEx.WhellPosition = lbDisplayEx.WhellPosition + 1;
-        lbDisplayEx.WhellMoveUp = 0;
-        lbDisplayEx.WhellMoveDown = lbDisplayEx.WhellMoveDown + 1;
+        lbMouseWheel.WheelPosition = lbMouseWheel.WheelPosition + 1;
+        lbMouseWheel.WheelMoveUp = 0;
+        lbMouseWheel.WheelMoveDown = lbMouseWheel.WheelMoveDown + 1;
         break;
     default:
         break;
@@ -333,7 +335,7 @@ TbResult LbMouseChangeMoveRatio(long ratio_x, long ratio_y)
         return Lb_FAIL;
     SYNCLOG("New ratio %ldx%ld",ratio_x, ratio_y);
     // Currently we don't have two ratio factors, so let's store an average
-    lbDisplay.MouseMoveRatio = (ratio_x + ratio_y)/2;
+    lbMouseMoveRatio = (ratio_x + ratio_y)/2;
     //TODO INPUT Separate mouse ratios in X and Y direction when lbDisplay from DLL will no longer be used.
     //minfo.XMoveRatio = ratio_x;
     //minfo.YMoveRatio = ratio_y;

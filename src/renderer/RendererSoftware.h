@@ -48,6 +48,13 @@ private:
     uint32_t    m_frame_seq = 0;   // shared UI+text submission counter, reset each frame
     bool        m_frame_open = false; // guards the double BeginFrame per present (lock + present)
 
+    // ── World-raster cache (software flicker fix) ────────────────────────────
+    // Snapshot of lbDrawSurface after the world draw and before UI replay.
+    // Restored each EndFrame so transparent UI compositing is idempotent.
+    uint8_t*    m_world_raster       = nullptr;
+    size_t      m_world_raster_size  = 0;
+    bool        m_world_raster_valid = false;
+
 public:
     bool     Init() override;
     void     Shutdown() override;
@@ -56,6 +63,8 @@ public:
     void     ClearScreen(uint8_t colour_index) override;
     uint8_t* LockFramebuffer(int* out_pitch) override;
     void     UnlockFramebuffer() override;
+
+    bool     PresentImage(const struct RendererPresentImageDesc* desc) override;
 
     void     NotifyFmvPalette(const uint8_t* bgra_1024) override;
     bool     SubmitTransparentBlit(const uint8_t* buf, int w, int h) override;

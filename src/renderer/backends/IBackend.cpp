@@ -27,11 +27,7 @@ TbResult IBackend::SubmitSprite(long x, long y, const struct TbSprite* spr,
     if (!spr) {
         return Lb_FAIL;
     }
-    // Save and restore DrawFlags so the blitter sees the correct per-call flags.
-    unsigned int saved_flags = lbDisplay.DrawFlags;
-    lbDisplay.DrawFlags = draw_flags;
-    TbResult ret = LbSpriteDraw(x, y, spr);
-    lbDisplay.DrawFlags = saved_flags;
+    TbResult ret = LbSpriteDraw(x, y, spr, draw_flags);
     return ret;
 }
 
@@ -41,10 +37,7 @@ TbResult IBackend::SubmitSpriteOneColour(long x, long y, const struct TbSprite* 
     if (!spr) {
         return Lb_FAIL;
     }
-    unsigned int saved_flags = lbDisplay.DrawFlags;
-    lbDisplay.DrawFlags = draw_flags;
-    TbResult ret = LbSpriteDrawOneColour(x, y, spr, colour);
-    lbDisplay.DrawFlags = saved_flags;
+    TbResult ret = LbSpriteDrawOneColour(x, y, spr, colour, draw_flags);
     return ret;
 }
 
@@ -55,11 +48,8 @@ TbResult IBackend::SubmitSpriteRemap(long x, long y, const struct TbSprite* spr,
     if (!spr || !colortable) {
         return Lb_FAIL;
     }
-    unsigned int saved_flags = lbDisplay.DrawFlags;
-    lbDisplay.DrawFlags = draw_flags;
     TbResult ret = LbSpriteDrawScaledRemap(x, y, spr,
-                                           spr->SWidth, spr->SHeight, colortable);
-    lbDisplay.DrawFlags = saved_flags;
+                                           spr->SWidth, spr->SHeight, colortable, draw_flags);
     return ret;
 }
 

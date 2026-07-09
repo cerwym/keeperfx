@@ -436,7 +436,7 @@ void draw_map_level_ensigns(void)
       {
           long x = lvinfo->ensign_x - (long)map_info.screen_shift_x - (int)(spr->SWidth >> 1);
           long y = lvinfo->ensign_y - (long)map_info.screen_shift_y - (int)(spr->SHeight);
-          UIRenderer_SubmitPanelSpriteRaw(scale_value_landview(x), scale_value_landview(y), units_per_pixel_landview, spr);
+          UIRenderer_SubmitPanelSpriteRaw(scale_value_landview(x), scale_value_landview(y), units_per_pixel_landview, spr, 0);
       }
       lvinfo = get_prev_level_info(lvinfo);
     }
@@ -1240,7 +1240,6 @@ void draw_map_level_descriptions(void)
 {
   if ((fe_net_level_selected > 0) || (net_level_hilighted > 0))
   {
-    lbDisplay.DrawFlags = 0;
     LevelNumber lvnum = fe_net_level_selected;
     if (lvnum <= 0)
       lvnum = net_level_hilighted;
@@ -1257,8 +1256,8 @@ void draw_map_level_descriptions(void)
     long x = lvinfo->ensign_x - (long)map_info.screen_shift_x;
     long y = lvinfo->ensign_y - (long)map_info.screen_shift_y - 8;
     long h = LbTextHeight(level_name);
-    LbDrawBox(scale_value_landview(x-4), scale_value_landview(y), scale_value_landview(w+8), scale_value_landview(h), 0);
-    LbTextDrawResized(scale_value_landview(x), scale_value_landview(y), units_per_pixel_landview, level_name);
+    LbDrawBox(scale_value_landview(x-4), scale_value_landview(y), scale_value_landview(w+8), scale_value_landview(h), 0, 0);
+    LbTextDrawResized(scale_value_landview(x), scale_value_landview(y), units_per_pixel_landview, level_name, 0);
   }
 }
 
@@ -1306,8 +1305,7 @@ static void draw_ensign_name_tooltip(void)
     UIRenderer_EndTopOverlay();
 
     LbTextSetWindow(x, y, box_w, box_h);
-    lbDisplay.DrawFlags = 0;
-    LbTextDrawResized(scale_value_landview(PAD_PX), 0, units_per_pixel_landview, level_name);
+    LbTextDrawResized(scale_value_landview(PAD_PX), 0, units_per_pixel_landview, level_name, 0);
     LbTextSetWindow(0, 0, RendererPhysicalWidth(), RendererPhysicalHeight());
 }
 

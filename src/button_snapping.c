@@ -13,6 +13,7 @@
  */
 /******************************************************************************/
 #include "pre_inc.h"
+#include "renderer/RendererManager.h"
 #include "bflib_guibtns.h"
 #include "bflib_basics.h"
 #include "bflib_planar.h"
@@ -234,8 +235,8 @@ static TbBool find_nearest_landview_flag_in_direction(long mouse_x, long mouse_y
     dx /= mag;
     dy /= mag;
 
-    long screen_max_x = map_info.screen_shift_x + lbDisplay.PhysicalScreenWidth * 16 / units_per_pixel_landview;
-    long screen_max_y = map_info.screen_shift_y + lbDisplay.PhysicalScreenHeight * 16 / units_per_pixel_landview;
+    long screen_max_x = map_info.screen_shift_x + RendererPhysicalWidth() * 16 / units_per_pixel_landview;
+    long screen_max_y = map_info.screen_shift_y + RendererPhysicalHeight() * 16 / units_per_pixel_landview;
 
     TbBool flag_found = false;
     struct LevelInformation* lvinfo = get_first_level_info();

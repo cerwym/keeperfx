@@ -20,6 +20,7 @@
 /******************************************************************************/
 #include "kfx_memory.h"
 #include "pre_inc.h"
+#include "renderer/RendererManager.h"
 #include "bflib_vidraw.h"
 
 #include <string.h>
@@ -1267,8 +1268,9 @@ TbResult LbSpriteDrawOneColourUsingScalingDownDataSolidLR(uchar *outbuf, int sca
  * @return Gives 0 on success.
  * @see LbSpriteSetScalingData()
  */
-TbResult LbSpriteDrawOneColourUsingScalingData(long posx, long posy, const struct TbSprite *sprite, TbPixel colour)
+TbResult LbSpriteDrawOneColourUsingScalingData(long posx, long posy, const struct TbSprite *sprite, TbPixel colour, TbDrawFlagsMask draw_flags)
 {
+    lb_draw_flags = draw_flags;
     SYNCDBG(17,"Drawing at (%ld,%ld)",posx,posy);
     unsigned char* render_ghost = pixmap.ghost; // ghost transparency LUT, owned by vidmode
     int32_t *xstep;
@@ -1279,13 +1281,13 @@ TbResult LbSpriteDrawOneColourUsingScalingData(long posx, long posy, const struc
         long sposy;
         sposx = posx;
         sposy = posy;
-        scanline = lbDisplay.GraphicsScreenWidth;
-        if ((lbDisplay.DrawFlags & Lb_SPRITE_FLIP_HORIZ) != 0) {
+        scanline = RendererScreenWidth();
+        if ((lb_draw_flags & Lb_SPRITE_FLIP_HORIZ) != 0) {
             sposx = sprite->SWidth + posx - 1;
         }
-        if ((lbDisplay.DrawFlags & Lb_SPRITE_FLIP_VERTIC) != 0) {
+        if ((lb_draw_flags & Lb_SPRITE_FLIP_VERTIC) != 0) {
             sposy = sprite->SHeight + posy - 1;
-            scanline = -lbDisplay.GraphicsScreenWidth;
+            scanline = -RendererScreenWidth();
         }
         xstep = &xsteps_array[2 * sposx];
         ystep = &ysteps_array[2 * sposy];
@@ -1296,19 +1298,19 @@ TbResult LbSpriteDrawOneColourUsingScalingData(long posx, long posy, const struc
         int gspos_x;
         int gspos_y;
         gspos_y = ystep[0];
-        if ((lbDisplay.DrawFlags & Lb_SPRITE_FLIP_VERTIC) != 0)
+        if ((lb_draw_flags & Lb_SPRITE_FLIP_VERTIC) != 0)
             gspos_y += ystep[1] - 1;
         gspos_x = xstep[0];
-        if ((lbDisplay.DrawFlags & Lb_SPRITE_FLIP_HORIZ) != 0)
+        if ((lb_draw_flags & Lb_SPRITE_FLIP_HORIZ) != 0)
             gspos_x += xstep[1] - 1;
-        outbuf = &lbDisplay.GraphicsWindowPtr[gspos_x + lbDisplay.GraphicsScreenWidth * gspos_y];
-        outheight = lbDisplay.GraphicsScreenHeight;
+        outbuf = &RendererGetGraphicsWindowPtr()[gspos_x + RendererScreenWidth() * gspos_y];
+        outheight = RendererScreenHeight();
     }
     if ( scale_up )
     {
-        if ((lbDisplay.DrawFlags & Lb_SPRITE_TRANSPAR4) != 0)
+        if ((lb_draw_flags & Lb_SPRITE_TRANSPAR4) != 0)
         {
-          if ((lbDisplay.DrawFlags & Lb_SPRITE_FLIP_HORIZ) != 0)
+          if ((lb_draw_flags & Lb_SPRITE_FLIP_HORIZ) != 0)
           {
               return LbSpriteDrawOneColourUsingScalingUpDataTrans1RL(outbuf, scanline, outheight, xstep, ystep, sprite, colour, render_ghost);
           }
@@ -1318,9 +1320,9 @@ TbResult LbSpriteDrawOneColourUsingScalingData(long posx, long posy, const struc
           }
         }
         else
-        if ((lbDisplay.DrawFlags & Lb_SPRITE_TRANSPAR8) != 0)
+        if ((lb_draw_flags & Lb_SPRITE_TRANSPAR8) != 0)
         {
-          if ((lbDisplay.DrawFlags & Lb_SPRITE_FLIP_HORIZ) != 0)
+          if ((lb_draw_flags & Lb_SPRITE_FLIP_HORIZ) != 0)
           {
               return LbSpriteDrawOneColourUsingScalingUpDataTrans2RL(outbuf, scanline, outheight, xstep, ystep, sprite, colour, render_ghost);
           }
@@ -1331,7 +1333,7 @@ TbResult LbSpriteDrawOneColourUsingScalingData(long posx, long posy, const struc
         }
         else
         {
-          if ((lbDisplay.DrawFlags & Lb_SPRITE_FLIP_HORIZ) != 0)
+          if ((lb_draw_flags & Lb_SPRITE_FLIP_HORIZ) != 0)
           {
               return LbSpriteDrawOneColourUsingScalingUpDataSolidRL(outbuf, scanline, outheight, xstep, ystep, sprite, colour);
           }
@@ -1343,9 +1345,9 @@ TbResult LbSpriteDrawOneColourUsingScalingData(long posx, long posy, const struc
     }
     else
     {
-        if ((lbDisplay.DrawFlags & Lb_SPRITE_TRANSPAR4) != 0)
+        if ((lb_draw_flags & Lb_SPRITE_TRANSPAR4) != 0)
         {
-          if ((lbDisplay.DrawFlags & Lb_SPRITE_FLIP_HORIZ) != 0)
+          if ((lb_draw_flags & Lb_SPRITE_FLIP_HORIZ) != 0)
           {
               return LbSpriteDrawOneColourUsingScalingDownDataTrans1RL(outbuf, scanline, outheight, xstep, ystep, sprite, colour, render_ghost);
           }
@@ -1355,9 +1357,9 @@ TbResult LbSpriteDrawOneColourUsingScalingData(long posx, long posy, const struc
           }
         }
         else
-        if ((lbDisplay.DrawFlags & Lb_SPRITE_TRANSPAR8) != 0)
+        if ((lb_draw_flags & Lb_SPRITE_TRANSPAR8) != 0)
         {
-          if ((lbDisplay.DrawFlags & Lb_SPRITE_FLIP_HORIZ) != 0)
+          if ((lb_draw_flags & Lb_SPRITE_FLIP_HORIZ) != 0)
           {
               return LbSpriteDrawOneColourUsingScalingDownDataTrans2RL(outbuf, scanline, outheight, xstep, ystep, sprite, colour, render_ghost);
           }
@@ -1368,7 +1370,7 @@ TbResult LbSpriteDrawOneColourUsingScalingData(long posx, long posy, const struc
         }
         else
         {
-          if ((lbDisplay.DrawFlags & Lb_SPRITE_FLIP_HORIZ) != 0)
+          if ((lb_draw_flags & Lb_SPRITE_FLIP_HORIZ) != 0)
           {
               return LbSpriteDrawOneColourUsingScalingDownDataSolidRL(outbuf, scanline, outheight, xstep, ystep, sprite, colour);
           }

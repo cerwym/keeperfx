@@ -82,13 +82,12 @@ void draw_high_score_entry(int idx, long pos_x, long pos_y, int col1_width, int 
     }
     struct HighScore* hscore = &campaign.hiscore_table[idx];
     // TODO: These were originally right-aligned, but there's a glitch that causes longer numbers to be aligned weirdly at some resolutions in dbc mode.
-    lbDisplay.DrawFlags = Lb_TEXT_HALIGN_LEFT;
     int i = pos_x + col1_width;
-    LbTextNumberDraw(i, pos_y, units_per_px, idx+1, Fnt_CenterPos);
+    LbTextNumberDraw(i, pos_y, units_per_px, idx+1, Fnt_CenterPos, Lb_TEXT_HALIGN_LEFT);
     i += col2_width;
-    LbTextNumberDraw(i, pos_y, units_per_px, hscore->score, Fnt_LeftJustify);
+    LbTextNumberDraw(i, pos_y, units_per_px, hscore->score, Fnt_LeftJustify, Lb_TEXT_HALIGN_LEFT);
     i += col3_width;
-    LbTextNumberDraw(i, pos_y, units_per_px, hscore->lvnum, Fnt_LeftJustify);
+    LbTextNumberDraw(i, pos_y, units_per_px, hscore->lvnum, Fnt_LeftJustify, Lb_TEXT_HALIGN_LEFT);
     i += col4_width;
     if (idx == high_score_entry_input_active)
     {
@@ -104,10 +103,10 @@ void draw_high_score_entry(int idx, long pos_x, long pos_y, int col1_width, int 
                 str[len+1] = '\0';
             }
         }
-        LbTextStringDraw(i, pos_y, units_per_px, str, Fnt_LeftJustify);
+        LbTextStringDraw(i, pos_y, units_per_px, str, Fnt_LeftJustify, Lb_TEXT_HALIGN_LEFT);
     } else
     {
-        LbTextStringDraw(i, pos_y, units_per_px, hscore->name, Fnt_LeftJustify);
+        LbTextStringDraw(i, pos_y, units_per_px, hscore->name, Fnt_LeftJustify, Lb_TEXT_HALIGN_LEFT);
     }
 }
 
@@ -128,7 +127,6 @@ void frontend_draw_high_score_table(struct GuiButton *gbtn)
         fs_units_per_px = (gbtn->width * 16 + orig_size/2) / orig_size;
     }
     LbTextSetFont(frontend_font[1]);
-    lbDisplay.DrawFlags = 0;
     spr = get_frontend_sprite(GFS_hugearea_thn_cor_ml);
     int pos_x = gbtn->scr_pos_x + spr->SWidth * fs_units_per_px / 16;
     spr = get_frontend_sprite(GFS_hugearea_thn_cor_tl);
@@ -438,16 +436,16 @@ void frontend_draw_highscores_scroll_box_tab(struct GuiButton *gbtn)
     // Since this tab is attachable from top, it is important to keep bottom position without variation
     int pos_y = gbtn->scr_pos_y + gbtn->height - spr->SHeight * fs_units_per_px / 16;
     spr = get_frontend_sprite(GFS_hugearea_thc_cor_tl);
-    LbSpriteDrawResized(pos_x, pos_y, fs_units_per_px, spr);
+    LbSpriteDrawResized(pos_x, pos_y, fs_units_per_px, spr, 0);
     pos_x += spr->SWidth * fs_units_per_px / 16;
     spr = get_frontend_sprite(GFS_hugearea_thc_tx1_tc);
     for (int i = 3; i > 0; i--)
     {
-        LbSpriteDrawResized(pos_x, pos_y, fs_units_per_px, spr);
+        LbSpriteDrawResized(pos_x, pos_y, fs_units_per_px, spr, 0);
         pos_x += spr->SWidth * fs_units_per_px / 16;
     }
     spr = get_frontend_sprite(GFS_hugearea_thc_cor_tr);
-    LbSpriteDrawResized(pos_x, pos_y, fs_units_per_px, spr);
+    LbSpriteDrawResized(pos_x, pos_y, fs_units_per_px, spr, 0);
 }
 
 void frontend_draw_high_scores_mappack(struct GuiButton *gbtn)
@@ -457,11 +455,10 @@ void frontend_draw_high_scores_mappack(struct GuiButton *gbtn)
         text = campaign.display_name;
     else
         text = frontend_button_caption_text(gbtn);
-    lbDisplay.DrawFlags = Lb_TEXT_HALIGN_CENTER;
     LbTextSetFont(frontend_font[2]);
     int tx_units_per_px = gbtn->height * 16 / LbTextLineHeight();
     LbTextSetWindow(gbtn->scr_pos_x, gbtn->scr_pos_y, gbtn->width, gbtn->height);
-    LbTextDrawResized((dbc_language > 0) ? -30 : 0, 0, tx_units_per_px, text);
+    LbTextDrawResized((dbc_language > 0) ? -30 : 0, 0, tx_units_per_px, text, Lb_TEXT_HALIGN_CENTER);
 }
 
 unsigned long count_high_scores()

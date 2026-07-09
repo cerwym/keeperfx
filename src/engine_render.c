@@ -3834,7 +3834,7 @@ static void create_shadows(struct Thing *thing, struct EngineCoord *ecor, struct
     else if (bucket_idx > BUCKETS_COUNT - 2)
         bucket_idx = BUCKETS_COUNT - 2;
 
-    if (RendererHasGPURenderPath())
+    // Try GPU IR submission first; falls through to software bucket if not handled.
     {
         struct WorldShadowSubmitCmd scmd;
         memset(&scmd, 0, sizeof(scmd));
@@ -3870,8 +3870,8 @@ static void create_shadows(struct Thing *thing, struct EngineCoord *ecor, struct
         scmd.wy            = (int32_t)ecor->y;
         scmd.wz            = (int32_t)ecor->z;
         scmd.sort_key      = (uint32_t)bucket_idx;
-        WorldViewRenderer_SubmitWorldShadow(&scmd);
-        return;
+        if (WorldViewRenderer_SubmitWorldShadow(&scmd))
+            return;
     }
 
     struct BucketKindCreatureShadow *kspr = (struct BucketKindCreatureShadow *)get_bucket_item(min_cor_z, QK_CreatureShadow, sizeof(struct BucketKindCreatureShadow));
@@ -3914,25 +3914,26 @@ static void create_shadows(struct Thing *thing, struct EngineCoord *ecor, struct
 }
 
 /** Submit a GPU-only circle blob shadow centred under the creature.
+ *  Returns non-zero if the renderer handled it, 0 if not (software fallback needed).
  *  `ecor` must be the floor-height coord (before height offset is applied). */
-static void create_circle_shadow(struct Thing *thing, struct EngineCoord *ecor)
+static int create_circle_shadow(struct Thing *thing, struct EngineCoord *ecor)
 {
     unsigned short animation_sprite = get_render_animation_sprite(thing->anim_sprite);
     struct KeeperSprite *spr = keepersprite_array(animation_sprite);
     if (spr == NULL)
-        return;
+        return 0;
 
     short dim_ow, dim_oh, dim_tw, dim_th;
     get_keepsprite_unscaled_dimensions(animation_sprite, 0, thing->current_frame,
                                        &dim_ow, &dim_oh, &dim_tw, &dim_th);
     if (dim_ow <= 0 || dim_oh <= 0)
-        return;
+        return 0;
 
     /* Project the floor centre to screen space. */
     struct EngineCoord centre = *ecor;
     rotpers(&centre, &camera_matrix);
     if (centre.z < BUCKETS_STEP)
-        return;
+        return 0;
 
     int bucket_idx = centre.z / BUCKETS_STEP;
     if (bucket_idx >= BUCKETS_COUNT - 1)
@@ -3967,7 +3968,7 @@ static void create_circle_shadow(struct Thing *thing, struct EngineCoord *ecor)
     scmd.wz            = (int32_t)ecor->z;
     scmd.sort_key      = (uint32_t)bucket_idx;
     scmd.is_circle     = 1;
-    WorldViewRenderer_SubmitWorldShadow(&scmd);
+    return WorldViewRenderer_SubmitWorldShadow(&scmd);
 }
 
 // Creature status flower above head in isometric view
@@ -4887,54 +4888,52 @@ static void process_keeper_flame_on_sprite(struct BucketKindJontySprite* jspr, l
     }
 
     //Object/Trap itself
-    clear_flag(lbDisplay.DrawFlags, TRF_Transpar_Flags);
-    EngineSpriteDrawUsingAlpha = 0;
-    if (flag_is_set(thing->rendering_flags,TRF_Transpar_8))
-        lbDisplay.DrawFlags |= Lb_SPRITE_TRANSPAR8;
+    TbDrawFlagsMask sprite_flags = 0;
+    unsigned char sprite_alpha = 0;
+    if (flag_is_set(thing->rendering_flags, TRF_Transpar_8))
+        sprite_flags |= Lb_SPRITE_TRANSPAR8;
     if (flag_is_set(thing->rendering_flags, TRF_Transpar_4))
-        lbDisplay.DrawFlags |= Lb_SPRITE_TRANSPAR4;
+        sprite_flags |= Lb_SPRITE_TRANSPAR4;
     if (flag_is_set(thing->rendering_flags, TRF_Transpar_Alpha))
-        EngineSpriteDrawUsingAlpha = 1;
+        sprite_alpha = 1;
     animation_sprite = get_render_animation_sprite(thing->anim_sprite);
     current_frame = thing->current_frame;
-    process_keeper_sprite(jspr->scr_x, jspr->scr_y, animation_sprite, angle, current_frame, base_sprite_size);
+    process_keeper_sprite(jspr->scr_x, jspr->scr_y, animation_sprite, angle, current_frame, base_sprite_size, sprite_flags, sprite_alpha);
 
     //Flame
-    lbDisplay.DrawFlags = 0;
-    EngineSpriteDrawUsingAlpha = 0;
+    TbDrawFlagsMask flame_flags = 0;
+    unsigned char flame_alpha = 0;
     if (flame.transparency_flags == TRF_Transpar_8)
     {
-        lbDisplay.DrawFlags |= Lb_SPRITE_TRANSPAR8;
+        flame_flags |= Lb_SPRITE_TRANSPAR8;
     }
     else if (flame.transparency_flags == TRF_Transpar_4)
     {
-        lbDisplay.DrawFlags |= Lb_SPRITE_TRANSPAR4;
+        flame_flags |= Lb_SPRITE_TRANSPAR4;
     }
     else if (flame.transparency_flags == TRF_Transpar_Alpha)
     {
-        EngineSpriteDrawUsingAlpha = 1;
+        flame_alpha = 1;
     }
     unsigned short flame_sprite = get_render_animation_sprite(flame.animation_id);
     unsigned char flame_frames = keepersprite_frames(flame_sprite);
     if (flame_frames > 0) {
         nframe = (thing->index + get_gameturn() * flame.anim_speed / 256) % flame_frames;
-        process_keeper_sprite(jspr->scr_x + add_x, jspr->scr_y + add_y, flame_sprite, angle, nframe, scale);
+        process_keeper_sprite(jspr->scr_x + add_x, jspr->scr_y + add_y, flame_sprite, angle, nframe, scale, flame_flags, flame_alpha);
     }
 }
 
 static unsigned short get_thing_shade(struct Thing* thing);
 static void draw_fastview_mapwho(struct Camera *cam, struct BucketKindJontySprite *jspr)
 {
-    unsigned short flg_mem;
-    unsigned char alpha_mem;
     struct PlayerInfo *player = get_my_player();
     struct ObjectConfigStats* objst;
     struct Thing *thing = jspr->thing;
     unsigned short animation_sprite;
     unsigned char current_frame;
     short angle;
-    flg_mem = lbDisplay.DrawFlags;
-    alpha_mem = EngineSpriteDrawUsingAlpha;
+    TbDrawFlagsMask work_flags = 0;
+    unsigned char work_alpha = 0;
     animation_sprite = get_render_animation_sprite(thing->anim_sprite);
     current_frame = thing->current_frame;
     if (keepersprite_rotable(animation_sprite))
@@ -4949,10 +4948,10 @@ static void draw_fastview_mapwho(struct Camera *cam, struct BucketKindJontySprit
     switch(thing->rendering_flags & TRF_Transpar_Alpha)
     {
         case TRF_Transpar_8:
-            lbDisplay.DrawFlags |= Lb_SPRITE_TRANSPAR8;
+            work_flags |= Lb_SPRITE_TRANSPAR8;
             break;
         case TRF_Transpar_4:
-            lbDisplay.DrawFlags |= Lb_SPRITE_TRANSPAR4;
+            work_flags |= Lb_SPRITE_TRANSPAR4;
             break;
         default:
             break;
@@ -4965,32 +4964,31 @@ static void draw_fastview_mapwho(struct Camera *cam, struct BucketKindJontySprit
     int size_on_screen = thing->sprite_size * ((camera_zoom << 13) / 0x10000 / pixel_size) / 0x10000;
     if ( thing->rendering_flags & TRF_Tint_Flags )
     {
-        lbDisplay.DrawFlags |= Lb_TEXT_UNDERLNSHADOW;
+        work_flags |= Lb_TEXT_UNDERLNSHADOW;
         lbSpriteReMapPtr = &pixmap.ghost[256 * thing->tint_colour];
     }
     else if ( shade_intensity == 0x2000 )
     {
-        lbDisplay.DrawFlags &= ~Lb_TEXT_UNDERLNSHADOW;
+        work_flags &= ~Lb_TEXT_UNDERLNSHADOW;
     }
     else
     {
-        lbDisplay.DrawFlags |= Lb_TEXT_UNDERLNSHADOW;
+        work_flags |= Lb_TEXT_UNDERLNSHADOW;
         lbSpriteReMapPtr = &pixmap.fade_tables[shade_intensity << 8];
     }
 
-    EngineSpriteDrawUsingAlpha = 0;
     switch (thing->rendering_flags & (TRF_Transpar_Flags))
     {
         case TRF_Transpar_8:
-            lbDisplay.DrawFlags |= Lb_SPRITE_TRANSPAR8;
-            lbDisplay.DrawFlags &= ~Lb_TEXT_UNDERLNSHADOW;
+            work_flags |= Lb_SPRITE_TRANSPAR8;
+            work_flags &= ~Lb_TEXT_UNDERLNSHADOW;
             break;
         case TRF_Transpar_4:
-            lbDisplay.DrawFlags |= Lb_SPRITE_TRANSPAR4;
-            lbDisplay.DrawFlags &= ~Lb_TEXT_UNDERLNSHADOW;
+            work_flags |= Lb_SPRITE_TRANSPAR4;
+            work_flags &= ~Lb_TEXT_UNDERLNSHADOW;
             break;
         case TRF_Transpar_Alpha:
-            EngineSpriteDrawUsingAlpha = 1;
+            work_alpha = 1;
             break;
     }
 
@@ -5000,12 +4998,12 @@ static void draw_fastview_mapwho(struct Camera *cam, struct BucketKindJontySprit
         || (player->work_state == PSt_QueryAll))
     {
         if ((local_thing_under_hand == thing->index) && ((get_gameturn() % (4 * gui_blink_rate)) >= 2 * gui_blink_rate)) {
-            lbDisplay.DrawFlags |= Lb_TEXT_UNDERLNSHADOW;
+            work_flags |= Lb_TEXT_UNDERLNSHADOW;
             lbSpriteReMapPtr = white_pal;
         } else {
             if ((thing->rendering_flags & TRF_BeingHit) != 0)
             {
-                lbDisplay.DrawFlags |= Lb_TEXT_UNDERLNSHADOW;
+                work_flags |= Lb_TEXT_UNDERLNSHADOW;
                 lbSpriteReMapPtr = red_pal;
                 thing->time_spent_displaying_hurt_colour += game.delta_time;
                 if (thing->time_spent_displaying_hurt_colour >= 1.0 || game.frame_skip > 0)
@@ -5026,8 +5024,6 @@ static void draw_fastview_mapwho(struct Camera *cam, struct BucketKindJontySprit
     if (animation_sprite_id_invalid(animation_sprite))
     {
         ERRORLOG("Invalid graphic Id %d from model %d, class %d", (int)animation_sprite, (int)thing->model, (int)thing->class_id);
-        lbDisplay.DrawFlags = flg_mem;
-        EngineSpriteDrawUsingAlpha = alpha_mem;
         return;
     }
     TbBool flame_on_sprite = false;
@@ -5065,11 +5061,9 @@ static void draw_fastview_mapwho(struct Camera *cam, struct BucketKindJontySprit
     {
         if (is_shown || get_my_player()->id_number == thing->owner || thing->trap.revealed)
         {
-            process_keeper_sprite(jspr->scr_x, jspr->scr_y, animation_sprite, angle, current_frame, size_on_screen);
+            process_keeper_sprite(jspr->scr_x, jspr->scr_y, animation_sprite, angle, current_frame, size_on_screen, work_flags, work_alpha);
         }
     }
-    lbDisplay.DrawFlags = flg_mem;
-    EngineSpriteDrawUsingAlpha = alpha_mem;
 }
 
 static void draw_engine_number(struct BucketKindFloatingGoldText *num)
@@ -5083,9 +5077,7 @@ static void draw_engine_number(struct BucketKindFloatingGoldText *num)
     // 1st argument: the scale when fully zoomed out. 2nd argument: the scale at base level zoom
     float scale_by_zoom = LbLerp(0.15, 1.00, hud_scale);
 
-    flg_mem = lbDisplay.DrawFlags;
     player = get_my_player();
-    lbDisplay.DrawFlags &= ~Lb_SPRITE_FLIP_HORIZ;
     spr = get_button_sprite(GBS_fontchars_number_dig0);
     w = scale_ui_value(spr->SWidth) * scale_by_zoom;
     h = scale_ui_value(spr->SHeight) * scale_by_zoom;
@@ -5096,12 +5088,10 @@ static void draw_engine_number(struct BucketKindFloatingGoldText *num)
     ) {
         UIRenderer_SubmitDigitSprites(num->x, num->y - h, w, h, num->lvl);
     }
-    lbDisplay.DrawFlags = flg_mem;
 }
 
 static void draw_engine_room_flagpole(struct BucketKindRoomFlag *rflg)
 {
-    lbDisplay.DrawFlags &= ~Lb_SPRITE_FLIP_HORIZ;
 
     struct Room *room = room_get(rflg->lvl);
     if (!room_exists(room) || !room_can_have_ensign(room->kind)) {
@@ -5177,7 +5167,6 @@ void fill_status_sprite_indexes(struct Thing *thing, struct CreatureControl *cct
     (*health_spridx) = choose_health_sprite(thing);
     if (is_my_player_number(thing->owner))
     {
-        lbDisplay.DrawFlags |= Lb_SPRITE_TRANSPAR4;
         if (get_gameturn() - cctrl->thought_bubble_last_turn_drawn == 1)
         {
             if (cctrl->thought_bubble_display_timer < 40) {
@@ -5292,16 +5281,11 @@ void draw_status_sprites(long scrpos_x, long scrpos_y, struct Thing *thing)
         return; // Do not draw if camera is 1st person.
     }
 
-    unsigned short flg_mem;
-
-    flg_mem = lbDisplay.DrawFlags;
-    lbDisplay.DrawFlags = 0;
 
     struct CreatureControl *cctrl;
     cctrl = creature_control_get_from_thing(thing);
     if ((cctrl->force_health_flower_hidden == true) || flag_is_set(get_creature_model_flags(thing), CMF_NoHealthFlower)) {
-        lbDisplay.DrawFlags = flg_mem;
-        return;
+            return;
     }
     if (flag_is_set(game.mode_flags,MFlg_NoHeroHealthFlower))
     {
@@ -5352,8 +5336,6 @@ void draw_status_sprites(long scrpos_x, long scrpos_y, struct Thing *thing)
         UIRenderer_SubmitScaledSprite(scrpos_x - w / 2, scrpos_y - h, w, h, spr);
     }
 
-    lbDisplay.DrawFlags &= ~Lb_SPRITE_TRANSPAR8;
-    lbDisplay.DrawFlags &= ~Lb_SPRITE_TRANSPAR4;
     if (((get_gameturn() % (8 * gui_blink_rate)) < 4 * gui_blink_rate) && (anger_spridx > 0))
     {
         spr = get_button_sprite(anger_spridx);
@@ -5440,7 +5422,6 @@ void draw_status_sprites(long scrpos_x, long scrpos_y, struct Thing *thing)
             UIRenderer_SubmitScaledSprite(scrpos_x - w / 2, scrpos_y - h - h_add, w, h, spr);
         }
     }
-    lbDisplay.DrawFlags = flg_mem;
 }
 
 static void draw_iso_only_fastview_mapwho(struct Camera *cam, struct BucketKindJontySprite *spr)
@@ -5452,8 +5433,6 @@ static void draw_iso_only_fastview_mapwho(struct Camera *cam, struct BucketKindJ
 #define ROOM_FLAG_PROGRESS_BAR_WIDTH 10
 static void draw_room_flag_top(long x, long y, int units_per_px, const struct Room *room)
 {
-    unsigned long flg_mem;
-    flg_mem = lbDisplay.DrawFlags;
     int bar_fill;
     int bar_empty;
     const struct TbSprite *spr;
@@ -5503,13 +5482,11 @@ static void draw_room_flag_top(long x, long y, int units_per_px, const struct Ro
     }
     bar_width = (2 * bar_empty * units_per_px + 8) / 16;
     UIRenderer_SubmitSolidBox(barpos_x - bar_width, y + (24 * units_per_px + 8) / 16, bar_width, bar_height, colours[0][0][0]);
-    lbDisplay.DrawFlags = flg_mem;
 }
 #undef ROOM_FLAG_PROGRESS_BAR_WIDTH
 
 static void draw_engine_room_flag_top(struct BucketKindRoomFlag *rflg)
 {
-    lbDisplay.DrawFlags &= ~Lb_SPRITE_FLIP_HORIZ;
 
     struct Room *room = room_get(rflg->lvl);
     if (!room_exists(room) || !room_can_have_ensign(room->kind)) {
@@ -6727,14 +6704,13 @@ void display_drawlist(void) // Draws isometric and 1st person view. Not frontvie
                     item.slabSelector->p.V,
                     item.slabSelector->p.S);
                 break;
-            case QK_CreatureStatus: // Status flower above creature heads
-                draw_status_sprites(item.creatureStatus->x, item.creatureStatus->y, item.creatureStatus->thing);
-                break;
-            case QK_FloatingGoldText: // Floating gold text when placing or selling a slab
-                draw_engine_number(item.floatingGoldText);
-                break;
-            case QK_RoomFlagBottomPole: // The bottom pole part, doesn't affect the status sitting on top of the pole
-                draw_engine_room_flagpole(item.roomFlag);
+            // NSP overlay types are handled by draw_nonspatial_sprites_gpu()
+            // which adds the viewport offset for correct screen-absolute coords.
+            // Drawing them here too would double-submit to the IR.
+            case QK_CreatureStatus:
+            case QK_FloatingGoldText:
+            case QK_RoomFlagBottomPole:
+            case QK_RoomFlagStatusBox:
                 break;
             case QK_JontyISOSprite: // Spinning key
                 player = get_my_player();
@@ -6746,9 +6722,6 @@ void display_drawlist(void) // Draws isometric and 1st person view. Not frontvie
                     }
                 }
                 break;
-            case QK_RoomFlagStatusBox: // The status sitting on top of the pole
-                draw_engine_room_flag_top(item.roomFlag);
-                break;
             default:
                 render_problems++;
                 render_prob_kind = item.b->kind;
@@ -6758,79 +6731,6 @@ void display_drawlist(void) // Draws isometric and 1st person view. Not frontvie
     }
     if (render_problems > 0)
       WARNLOG("Incurred %lu rendering problems; last was with poly kind %ld",render_problems,render_prob_kind);
-}
-
-/** Draws only the sprite/UI bucket types to the CPU framebuffer.
- *  Called by the GPU world renderer after flushing geometry to the VBO so that
- *  creatures, shadows, status icons, room flags, etc. are composited on top of
- *  the GPU-rendered tiles during EndFrame. */
-void display_drawlist_sprites_only(void)
-{
-    struct PlayerInfo *player;
-    const struct Camera *cam;
-    union {
-        struct BasicQ *b;
-        struct BucketKindJontySprite *jontySprite;
-        struct BucketKindCreatureShadow *creatureShadow;
-        struct BucketKindSlabSelector *slabSelector;
-        struct BucketKindCreatureStatus *creatureStatus;
-        struct BucketKindFloatingGoldText *floatingGoldText;
-        struct BucketKindRoomFlag *roomFlag;
-    } item;
-    long bucket_num;
-    render_fade_tables = pixmap.fade_tables;
-    for (bucket_num = BUCKETS_COUNT-1; bucket_num > 0; bucket_num--)
-    {
-        for (item.b = buckets[bucket_num]; item.b != NULL; item.b = item.b->next)
-        {
-            switch (item.b->kind)
-            {
-            case QK_JontySprite:
-                draw_jonty_mapwho(item.jontySprite);
-                break;
-            case QK_JontyISOSprite:
-                player = get_my_player();
-                cam = get_local_active_camera(player->id_number);
-                if (cam != NULL)
-                {
-                    if (cam->view_mode == PVM_IsoWibbleView || cam->view_mode == PVM_IsoStraightView) {
-                        draw_jonty_mapwho(item.jontySprite);
-                    }
-                }
-                break;
-            case QK_CreatureShadow:
-                draw_keepsprite_unscaled_in_buffer(item.creatureShadow->anim_sprite, item.creatureShadow->angle, item.creatureShadow->current_frame, big_scratch);
-                vec_map = big_scratch;
-                vec_mode = VM_SpriteTranslucent;
-                vec_colour = item.creatureShadow->vertex_first.S;
-                trig(&item.creatureShadow->vertex_first, &item.creatureShadow->vertex_second, &item.creatureShadow->vertex_third);
-                trig(&item.creatureShadow->vertex_first, &item.creatureShadow->vertex_third, &item.creatureShadow->vertex_fourth);
-                break;
-            case QK_SlabSelector:
-                draw_clipped_line(
-                    item.slabSelector->p.X,
-                    item.slabSelector->p.Y,
-                    item.slabSelector->p.U,
-                    item.slabSelector->p.V,
-                    item.slabSelector->p.S);
-                break;
-            case QK_CreatureStatus:
-                draw_status_sprites(item.creatureStatus->x, item.creatureStatus->y, item.creatureStatus->thing);
-                break;
-            case QK_FloatingGoldText:
-                draw_engine_number(item.floatingGoldText);
-                break;
-            case QK_RoomFlagBottomPole:
-                draw_engine_room_flagpole(item.roomFlag);
-                break;
-            case QK_RoomFlagStatusBox:
-                draw_engine_room_flag_top(item.roomFlag);
-                break;
-            default:
-                break;
-            }
-        }
-    }
 }
 
 /** Draws only the depth-positioned 3D entity sprites (JontySprite /
@@ -6907,113 +6807,10 @@ void draw_frontview_3d_sprites_for_bucket_current(long bucket_num)
         draw_frontview_3d_sprites_for_bucket(bucket_num, cam);
 }
 
-/** Draws all non-spatial sprites (creature shadows, slab selector, status
- *  icons, floating gold text, room flags) across all buckets.  These are
- *  CPU-rasterised into the staging buffer or composited as overlay elements,
- *  so they are drawn AFTER the depth-correct GPU tile+sprite passes. */
-void draw_nonspatial_sprites(void)
-{
-    union {
-        struct BasicQ *b;
-        struct BucketKindCreatureShadow *creatureShadow;
-        struct BucketKindSlabSelector *slabSelector;
-        struct BucketKindCreatureStatus *creatureStatus;
-        struct BucketKindFloatingGoldText *floatingGoldText;
-        struct BucketKindRoomFlag *roomFlag;
-    } item;
-    long bucket_num;
 
-    render_fade_tables = pixmap.fade_tables;
-
-    for (bucket_num = BUCKETS_COUNT-1; bucket_num > 0; bucket_num--)
-    {
-        for (item.b = buckets[bucket_num]; item.b != NULL; item.b = item.b->next)
-        {
-            switch (item.b->kind)
-            {
-            case QK_CreatureShadow:
-                draw_keepsprite_unscaled_in_buffer(item.creatureShadow->anim_sprite, item.creatureShadow->angle, item.creatureShadow->current_frame, big_scratch);
-                vec_map = big_scratch;
-                vec_mode = VM_SpriteTranslucent;
-                vec_colour = item.creatureShadow->vertex_first.S;
-                trig(&item.creatureShadow->vertex_first, &item.creatureShadow->vertex_second, &item.creatureShadow->vertex_third);
-                trig(&item.creatureShadow->vertex_first, &item.creatureShadow->vertex_third, &item.creatureShadow->vertex_fourth);
-                break;
-            case QK_SlabSelector:
-                draw_clipped_line(
-                    item.slabSelector->p.X,
-                    item.slabSelector->p.Y,
-                    item.slabSelector->p.U,
-                    item.slabSelector->p.V,
-                    item.slabSelector->p.S);
-                break;
-            case QK_CreatureStatus:
-                draw_status_sprites(item.creatureStatus->x, item.creatureStatus->y, item.creatureStatus->thing);
-                break;
-            case QK_FloatingGoldText:
-                draw_engine_number(item.floatingGoldText);
-                break;
-            case QK_RoomFlagBottomPole:
-                draw_engine_room_flagpole(item.roomFlag);
-                break;
-            case QK_RoomFlagStatusBox:
-                draw_engine_room_flag_top(item.roomFlag);
-                break;
-            default:
-                break;
-            }
-        }
-    }
-}
-
-void draw_nonspatial_sprites_no_shadows(void)
-{
-    union {
-        struct BasicQ *b;
-        struct BucketKindSlabSelector *slabSelector;
-        struct BucketKindCreatureStatus *creatureStatus;
-        struct BucketKindFloatingGoldText *floatingGoldText;
-        struct BucketKindRoomFlag *roomFlag;
-    } item;
-    long bucket_num;
-
-    render_fade_tables = pixmap.fade_tables;
-
-    for (bucket_num = BUCKETS_COUNT-1; bucket_num > 0; bucket_num--)
-    {
-        for (item.b = buckets[bucket_num]; item.b != NULL; item.b = item.b->next)
-        {
-            switch (item.b->kind)
-            {
-            case QK_SlabSelector:
-                draw_clipped_line(
-                    item.slabSelector->p.X,
-                    item.slabSelector->p.Y,
-                    item.slabSelector->p.U,
-                    item.slabSelector->p.V,
-                    item.slabSelector->p.S);
-                break;
-            case QK_CreatureStatus:
-                draw_status_sprites(item.creatureStatus->x, item.creatureStatus->y, item.creatureStatus->thing);
-                break;
-            case QK_FloatingGoldText:
-                draw_engine_number(item.floatingGoldText);
-                break;
-            case QK_RoomFlagBottomPole:
-                draw_engine_room_flagpole(item.roomFlag);
-                break;
-            case QK_RoomFlagStatusBox:
-                draw_engine_room_flag_top(item.roomFlag);
-                break;
-            default:
-                break;
-            }
-        }
-    }
-}
-
-/** GPU-accelerated version of draw_nonspatial_sprites_no_shadows().
- *  Submits UI elements to the hardware renderer for GPU batching instead of CPU rasterization. */
+/** Submits non-spatial UI elements (status flowers, floating gold text,
+ *  room flags, slab selector) to the UIRenderer for batched compositing.
+ *  Adds viewport offset to bucket-relative coordinates. */
 void draw_nonspatial_sprites_gpu(void)
 {
     union {
@@ -7383,23 +7180,18 @@ void display_fast_drawlist(struct Camera *cam) // Draws frontview only. Not isom
                     item.slabSelector->p.V,
                     item.slabSelector->p.S);
                 break;
-            case QK_CreatureStatus: // Status flower above creature heads
-                draw_status_sprites(item.creatureStatus->x, item.creatureStatus->y, item.creatureStatus->thing);
+            // NSP overlay types are handled by draw_nonspatial_sprites_gpu()
+            // which adds the viewport offset for correct screen-absolute coords.
+            case QK_CreatureStatus:
+            case QK_FloatingGoldText:
+            case QK_RoomFlagBottomPole:
+            case QK_RoomFlagStatusBox:
                 break;
             case QK_TextureQuad: // Textured polygons
                 draw_texturedquad_block(item.texturedQuad);
                 break;
-            case QK_FloatingGoldText: // Floating gold text when placing or selling a slab
-                draw_engine_number(item.floatingGoldText);
-                break;
-            case QK_RoomFlagBottomPole: // The bottom pole part, doesn't affect the status sitting on top of the pole
-                draw_engine_room_flagpole(item.roomFlag);
-                break;
             case QK_JontyISOSprite: // Spinning Key
                 draw_iso_only_fastview_mapwho(cam, item.jontySprite);
-                break;
-            case QK_RoomFlagStatusBox: // The status sitting on top of the pole
-                draw_engine_room_flag_top(item.roomFlag);
                 break;
             default:
                 render_problems++;
@@ -7947,7 +7739,7 @@ static long heap_manage_keepersprite(unsigned short kspr_idx)
     return result;
 }
 
-static void draw_keepersprite(long x, long y, const struct KeeperSprite * kspr, long kspr_idx)
+static void draw_keepersprite(long x, long y, const struct KeeperSprite * kspr, long kspr_idx, TbDrawFlagsMask draw_flags)
 {
     if ((kspr_idx < 0)
         || ((kspr_idx >= KEEPSPRITE_LENGTH) && (kspr_idx < KEEPERSPRITE_ADD_OFFSET))
@@ -7993,7 +7785,7 @@ static void draw_keepersprite(long x, long y, const struct KeeperSprite * kspr, 
         }
         // Fold EngineSpriteDrawUsingAlpha into draw_flags so the GPU path can
         // choose the correct blend (Lb_SPRITE_ALPHA_ADDITIVE = glow/fire additive).
-        unsigned int gpu_flags = lbDisplay.DrawFlags;
+        unsigned int gpu_flags = draw_flags;
         if (EngineSpriteDrawUsingAlpha) gpu_flags |= Lb_SPRITE_ALPHA_ADDITIVE;
         if (try_submit_keepersprite_to_render_system(screen_x, screen_y, screen_w, screen_h,
                                                      *sprite_data_ptr, kspr->SWidth, clipped_height,
@@ -8008,9 +7800,9 @@ static void draw_keepersprite(long x, long y, const struct KeeperSprite * kspr, 
         kspr->SWidth,
     };
     if ( EngineSpriteDrawUsingAlpha ) {
-        DrawAlphaSpriteUsingScalingData(x, y, &buffer);
+        DrawAlphaSpriteUsingScalingData(x, y, &buffer, draw_flags);
     } else {
-        LbSpriteDrawUsingScalingData(x, y, &buffer);
+        LbSpriteDrawUsingScalingData(x, y, &buffer, draw_flags);
     }
     SYNCDBG(18,"Finished");
 }
@@ -8022,7 +7814,7 @@ static void set_thing_pointed_at(struct Thing *thing)
     }
 }
 
-static void draw_single_keepersprite_omni_xflip(long kspos_x, long kspos_y, struct KeeperSprite *kspr, long kspr_idx, long scale)
+static void draw_single_keepersprite_omni_xflip(long kspos_x, long kspos_y, struct KeeperSprite *kspr, long kspr_idx, long scale, TbDrawFlagsMask draw_flags)
 {
     long src_dy = (long)kspr->FrameHeight;
     long src_dx = (long)kspr->FrameWidth;
@@ -8041,10 +7833,10 @@ static void draw_single_keepersprite_omni_xflip(long kspos_x, long kspos_y, stru
           }
       }
     }
-    draw_keepersprite(x, y, kspr, kspr_idx);
+    draw_keepersprite(x, y, kspr, kspr_idx, draw_flags);
 }
 
-static void draw_single_keepersprite_omni(long kspos_x, long kspos_y, struct KeeperSprite *kspr, long kspr_idx, long scale)
+static void draw_single_keepersprite_omni(long kspos_x, long kspos_y, struct KeeperSprite *kspr, long kspr_idx, long scale, TbDrawFlagsMask draw_flags)
 {
     long src_dy = (long)kspr->FrameHeight;
     long src_dx = (long)kspr->FrameWidth;
@@ -8063,10 +7855,10 @@ static void draw_single_keepersprite_omni(long kspos_x, long kspos_y, struct Kee
           }
       }
     }
-    draw_keepersprite(x, y, kspr, kspr_idx);
+    draw_keepersprite(x, y, kspr, kspr_idx, draw_flags);
 }
 
-static void draw_single_keepersprite_xflip(long kspos_x, long kspos_y, struct KeeperSprite *kspr, long kspr_idx, long scale)
+static void draw_single_keepersprite_xflip(long kspos_x, long kspos_y, struct KeeperSprite *kspr, long kspr_idx, long scale, TbDrawFlagsMask draw_flags)
 {
     SYNCDBG(18,"Starting");
     long src_dy = (long)kspr->SHeight;
@@ -8088,11 +7880,11 @@ static void draw_single_keepersprite_xflip(long kspos_x, long kspos_y, struct Ke
           }
       }
     }
-    draw_keepersprite(0, 0, kspr, kspr_idx);
+    draw_keepersprite(0, 0, kspr, kspr_idx, draw_flags);
     SYNCDBG(18,"Finished");
 }
 
-static void draw_single_keepersprite(long kspos_x, long kspos_y, struct KeeperSprite *kspr, long kspr_idx, long scale)
+static void draw_single_keepersprite(long kspos_x, long kspos_y, struct KeeperSprite *kspr, long kspr_idx, long scale, TbDrawFlagsMask draw_flags)
 {
     SYNCDBG(18,"Starting");
     long src_dy = (long)kspr->SHeight;
@@ -8114,11 +7906,13 @@ static void draw_single_keepersprite(long kspos_x, long kspos_y, struct KeeperSp
             }
         }
     }
-    draw_keepersprite(0, 0, kspr, kspr_idx);
+    draw_keepersprite(0, 0, kspr, kspr_idx, draw_flags);
     SYNCDBG(18,"Finished");
 }
 
-void process_keeper_sprite(short x, short y, unsigned short kspr_base, short kspr_angle, unsigned char sprgroup, long scale)
+void process_keeper_sprite(short x, short y, unsigned short kspr_base, short kspr_angle,
+                           unsigned char sprgroup, long scale,
+                           TbDrawFlagsMask draw_flags, unsigned char alpha)
 {
     struct KeeperSprite *creature_sprites;
     struct PlayerInfo *player;
@@ -8155,10 +7949,12 @@ void process_keeper_sprite(short x, short y, unsigned short kspr_base, short ksp
     else
         needs_xflip = 1;
 
+    TbDrawFlagsMask work_flags;
     if ( needs_xflip )
-      lbDisplay.DrawFlags |= Lb_SPRITE_FLIP_HORIZ;
+      work_flags = draw_flags | Lb_SPRITE_FLIP_HORIZ;
     else
-      lbDisplay.DrawFlags &= ~Lb_SPRITE_FLIP_HORIZ;
+      work_flags = draw_flags & ~Lb_SPRITE_FLIP_HORIZ;
+    EngineSpriteDrawUsingAlpha = alpha;
     sprite_group = sprgroup;
     lltemp = 4 - ((((long)kspr_angle + DEGREES_22_5) & ANGLE_MASK) >> 8);
     sprite_rot = llabs(lltemp);
@@ -8218,10 +8014,10 @@ void process_keeper_sprite(short x, short y, unsigned short kspr_base, short ksp
         draw_idx = sprite_group + kspr_idx;
         if ( needs_xflip )
         {
-            draw_single_keepersprite_omni_xflip(scaled_x, scaled_y, kspr, draw_idx, scale);
+            draw_single_keepersprite_omni_xflip(scaled_x, scaled_y, kspr, draw_idx, scale, work_flags);
         } else
         {
-            draw_single_keepersprite_omni(scaled_x, scaled_y, kspr, draw_idx, scale);
+            draw_single_keepersprite_omni(scaled_x, scaled_y, kspr, draw_idx, scale, work_flags);
         }
     } else
     if (creature_sprites->Rotable == 2)
@@ -8234,15 +8030,15 @@ void process_keeper_sprite(short x, short y, unsigned short kspr_base, short ksp
         draw_idx = sprite_group + sprite_rot * (long)kspr->FramesCount + kspr_idx;
         if ( needs_xflip )
         {
-            draw_single_keepersprite_xflip(scaled_x, scaled_y, kspr, draw_idx, scale);
+            draw_single_keepersprite_xflip(scaled_x, scaled_y, kspr, draw_idx, scale, work_flags);
         } else
         {
-            draw_single_keepersprite(scaled_x, scaled_y, kspr, draw_idx, scale);
+            draw_single_keepersprite(scaled_x, scaled_y, kspr, draw_idx, scale, work_flags);
         }
     }
 }
 
-static void prepare_jonty_remap_and_scale(int32_t *scale, const struct BucketKindJontySprite *jspr)
+static TbDrawFlagsMask prepare_jonty_remap_and_scale(int32_t *scale, const struct BucketKindJontySprite *jspr)
 {
     long i;
     struct Thing *thing;
@@ -8293,20 +8089,22 @@ static void prepare_jonty_remap_and_scale(int32_t *scale, const struct BucketKin
 
     shade_factor = shade >> 8;
     *scale = (thelens * (long)thing->sprite_size) / fade;
+    TbDrawFlagsMask flags = 0;
     if ((thing->rendering_flags & (TRF_Tint_1|TRF_Tint_2)) != 0)
     {
-        lbDisplay.DrawFlags |= Lb_TEXT_UNDERLNSHADOW;
+        flags |= Lb_TEXT_UNDERLNSHADOW;
         shade_factor = thing->tint_colour;
         lbSpriteReMapPtr = &pixmap.ghost[256 * shade_factor];
     } else
     if (shade_factor == 32)
     {
-        lbDisplay.DrawFlags &= ~Lb_TEXT_UNDERLNSHADOW;
+        /* no UNDERLNSHADOW — fully lit */
     } else
     {
-        lbDisplay.DrawFlags |= Lb_TEXT_UNDERLNSHADOW;
+        flags |= Lb_TEXT_UNDERLNSHADOW;
         lbSpriteReMapPtr = &pixmap.fade_tables[256 * shade_factor];
     }
+    return flags;
 }
 
 static void draw_mapwho_ariadne_path(struct Thing *thing)
@@ -8346,8 +8144,6 @@ static void draw_mapwho_ariadne_path(struct Thing *thing)
 
 static void draw_jonty_mapwho(struct BucketKindJontySprite *jspr)
 {
-    unsigned short flg_mem;
-    unsigned char alpha_mem;
     struct PlayerInfo *player = get_my_player();
     struct Thing *thing = jspr->thing;
     unsigned short animation_sprite;
@@ -8355,8 +8151,8 @@ static void draw_jonty_mapwho(struct BucketKindJontySprite *jspr)
     long angle;
     int32_t scaled_size;
     struct ObjectConfigStats* objst;
-    flg_mem = lbDisplay.DrawFlags;
-    alpha_mem = EngineSpriteDrawUsingAlpha;
+    TbDrawFlagsMask work_flags;
+    unsigned char work_alpha = 0;
     animation_sprite = get_render_animation_sprite(thing->anim_sprite);
     current_frame = thing->current_frame;
     if (keepersprite_rotable(animation_sprite))
@@ -8366,20 +8162,19 @@ static void draw_jonty_mapwho(struct BucketKindJontySprite *jspr)
     }
     else
       angle = thing->move_angle_xy;
-    prepare_jonty_remap_and_scale(&scaled_size, jspr);
-    EngineSpriteDrawUsingAlpha = 0;
+    work_flags = prepare_jonty_remap_and_scale(&scaled_size, jspr);
     switch (thing->rendering_flags & (TRF_Transpar_Flags))
     {
     case TRF_Transpar_8:
-        lbDisplay.DrawFlags |= Lb_SPRITE_TRANSPAR8;
-        lbDisplay.DrawFlags &= ~Lb_TEXT_UNDERLNSHADOW;
+        work_flags |= Lb_SPRITE_TRANSPAR8;
+        work_flags &= ~Lb_TEXT_UNDERLNSHADOW;
         break;
     case TRF_Transpar_4:
-        lbDisplay.DrawFlags |= Lb_SPRITE_TRANSPAR4;
-        lbDisplay.DrawFlags &= ~Lb_TEXT_UNDERLNSHADOW;
+        work_flags |= Lb_SPRITE_TRANSPAR4;
+        work_flags &= ~Lb_TEXT_UNDERLNSHADOW;
         break;
     case TRF_Transpar_Alpha:
-        EngineSpriteDrawUsingAlpha = 1;
+        work_alpha = 1;
         break;
     }
 
@@ -8389,7 +8184,7 @@ static void draw_jonty_mapwho(struct BucketKindJontySprite *jspr)
         {
           if (camera_get_active(player->id_number)->view_mode == PVM_IsoWibbleView || camera_get_active(player->id_number)->view_mode == PVM_IsoStraightView)
           {
-              lbDisplay.DrawFlags |= Lb_TEXT_UNDERLNSHADOW;
+              work_flags |= Lb_TEXT_UNDERLNSHADOW;
               lbSpriteReMapPtr = white_pal;
           }
           else if (camera_get_active(player->id_number)->view_mode == PVM_CreatureView)
@@ -8401,7 +8196,7 @@ static void draw_jonty_mapwho(struct BucketKindJontySprite *jspr)
                   struct Thing *dragtng = thing_get(cctrl->dragtng_idx);
                   if (!thing_exists(dragtng))
                   {
-                    lbDisplay.DrawFlags |= Lb_TEXT_UNDERLNSHADOW;
+                    work_flags |= Lb_TEXT_UNDERLNSHADOW;
                     lbSpriteReMapPtr = white_pal;
                   }
                   else if (thing_is_trap_crate(dragtng))
@@ -8411,7 +8206,7 @@ static void draw_jonty_mapwho(struct BucketKindJontySprite *jspr)
                       {
                           if (handthing->class_id == TCls_Trap)
                           {
-                              lbDisplay.DrawFlags |= Lb_TEXT_UNDERLNSHADOW;
+                              work_flags |= Lb_TEXT_UNDERLNSHADOW;
                               lbSpriteReMapPtr = white_pal;
                           }
                       }
@@ -8421,7 +8216,7 @@ static void draw_jonty_mapwho(struct BucketKindJontySprite *jspr)
         } else {
             if ((thing->rendering_flags & TRF_BeingHit) != 0)
             {
-                lbDisplay.DrawFlags |= Lb_TEXT_UNDERLNSHADOW;
+                work_flags |= Lb_TEXT_UNDERLNSHADOW;
                 lbSpriteReMapPtr = red_pal;
                 thing->time_spent_displaying_hurt_colour += game.delta_time;
                 if (thing->time_spent_displaying_hurt_colour >= 1.0 || game.frame_skip > 0)
@@ -8470,7 +8265,7 @@ static void draw_jonty_mapwho(struct BucketKindJontySprite *jspr)
                 process_keeper_flame_on_sprite(jspr, angle, scaled_size);
                 break;
             }
-            process_keeper_sprite(jspr->scr_x, jspr->scr_y, animation_sprite, angle, current_frame, scaled_size);
+            process_keeper_sprite(jspr->scr_x, jspr->scr_y, animation_sprite, angle, current_frame, scaled_size, work_flags, work_alpha);
             break;
         case TCls_Trap:
             trapst = get_trap_model_stats(thing->model);
@@ -8483,15 +8278,13 @@ static void draw_jonty_mapwho(struct BucketKindJontySprite *jspr)
                 process_keeper_flame_on_sprite(jspr, angle, scaled_size);
                 break;
             }
-            process_keeper_sprite(jspr->scr_x, jspr->scr_y, animation_sprite, angle, current_frame, scaled_size);
+            process_keeper_sprite(jspr->scr_x, jspr->scr_y, animation_sprite, angle, current_frame, scaled_size, work_flags, work_alpha);
             break;
         default:
-            process_keeper_sprite(jspr->scr_x, jspr->scr_y, animation_sprite, angle, current_frame, scaled_size);
+            process_keeper_sprite(jspr->scr_x, jspr->scr_y, animation_sprite, angle, current_frame, scaled_size, work_flags, work_alpha);
             break;
         }
     }
-    lbDisplay.DrawFlags = flg_mem;
-    EngineSpriteDrawUsingAlpha = alpha_mem;
     WorldViewRenderer_SetCurrentSpriteContext(-1, 0);
 }
 
@@ -9151,28 +8944,32 @@ static void do_map_who_for_thing(struct Thing *thing)
         {
             int shadow_type = g_renderer_settings.shadow_type;
 
-            /* GPU circle blob — one submission per creature, no light loop */
-            if (RendererHasGPURenderPath() && shadow_type == RENDERER_SHADOW_CIRCLE)
+            /* Circle blob shadow — renderer decides if it can handle it */
+            if (shadow_type == RENDERER_SHADOW_CIRCLE)
             {
                 unsigned short animation_sprite = get_render_animation_sprite(thing->anim_sprite);
                 struct KeeperSprite *spr = keepersprite_array(animation_sprite);
                 if (spr != NULL && (spr->frame_flags & FFL_NoShadows) == 0)
-                    create_circle_shadow(thing, &ecor);
+                {
+                    if (!create_circle_shadow(thing, &ecor))
+                    {
+                        // Renderer didn't handle it; fall through to light-based shadows.
+                        int count = find_closest_lights(&thing->mappos, &nearlgt);
+                        for (int i = 0; i < count; i++)
+                            create_shadows(thing, &ecor, &nearlgt.coord[i]);
+                    }
+                }
             }
             else if (shadow_type != RENDERER_SHADOW_OFF)
             {
-                int count;
-                int i;
-
                 unsigned short animation_sprite = get_render_animation_sprite(thing->anim_sprite);
                 struct KeeperSprite *spr = keepersprite_array(animation_sprite);
                 if ((spr != NULL) && ((spr->frame_flags & FFL_NoShadows) == 0))
                 {
-                    count = find_closest_lights(&thing->mappos, &nearlgt);
-                    /* Clamp to the configured type (1-4 = shadow count, default 4) */
-                    if (RendererHasGPURenderPath() && shadow_type >= 1 && shadow_type <= 4 && count > shadow_type)
+                    int count = find_closest_lights(&thing->mappos, &nearlgt);
+                    if (shadow_type >= 1 && shadow_type <= 4 && count > shadow_type)
                         count = shadow_type;
-                    for (i = 0; i < count; i++)
+                    for (int i = 0; i < count; i++)
                     {
                         create_shadows(thing, &ecor, &nearlgt.coord[i]);
                     }
@@ -9453,7 +9250,7 @@ void draw_frontview_engine(struct Camera *cam)
     RendererStoreViewport(&grwnd);
     store_engine_window(&ewnd,pixel_size);
     RendererSetViewport(ewnd.x, ewnd.y, ewnd.width, ewnd.height);
-    WorldViewRenderer_BeginWorldPass(lbDisplay.GraphicsWindowPtr, RendererScreenWidth(), ewnd.width, ewnd.height, ewnd.x, ewnd.y);
+    WorldViewRenderer_BeginWorldPass(RendererGetGraphicsWindowPtr(), RendererScreenWidth(), ewnd.width, ewnd.height, ewnd.x, ewnd.y);
     // World-space overlay sprites (WorldOverlay/WorldOverlayFlat) no longer need
     // to be clipped out of the sidebar panel's screen area -- GameUI now draws
     // after them and is opaque where it draws, so it simply paints over
@@ -9560,8 +9357,7 @@ void draw_frontview_engine(struct Camera *cam)
 
     WorldViewRenderer_DrawFrontView(cam);
 
-    if (RendererHasGPURenderPath())
-        draw_nonspatial_sprites_gpu();
+    draw_nonspatial_sprites_gpu();
 
     RendererLoadViewport(&grwnd);
     cam->zoom = zoom_mem;//TODO [zoom] remove when all cam->zoom will be changed to camera_zoom
@@ -9608,13 +9404,7 @@ void process_keeper_sprite_ex(short x, short y, unsigned short kspr_base,
                                short kspr_angle, unsigned char sprgroup, long scale,
                                unsigned int draw_flags, unsigned char alpha)
 {
-    unsigned int  saved_flags = lbDisplay.DrawFlags;
-    unsigned char saved_alpha = EngineSpriteDrawUsingAlpha;
-    lbDisplay.DrawFlags        = draw_flags;
-    EngineSpriteDrawUsingAlpha = alpha;
-    process_keeper_sprite(x, y, kspr_base, kspr_angle, sprgroup, scale);
-    lbDisplay.DrawFlags        = saved_flags;
-    EngineSpriteDrawUsingAlpha = saved_alpha;
+    process_keeper_sprite(x, y, kspr_base, kspr_angle, sprgroup, scale, draw_flags, alpha);
 }
 
 void engine_save_render_state(struct EngineRenderState *s)

@@ -15,6 +15,7 @@
 #pragma once
 
 #include "bflib_video.h"          /* TbPixel */
+#include "renderer/DrawState.h"   /* TbDrawFlagsMask */
 #include "renderer/RendererSettings.h" /* RendererSettings, g_renderer_settings */
 #include "renderer/BackendCapabilities.h" /* struct BackendCapabilities */
 #include <stdint.h>                /* int32_t */
@@ -103,15 +104,14 @@ void RendererEndFrame(void);
 void RendererClearScreen(unsigned char colour_index);
 
 /******************************************************************************/
-/* High-level screen lifecycle (replaces LbScreen* trampolines)               */
+/* High-level screen lifecycle                                                */
 /******************************************************************************/
 
 /** Begin a frame and lock the framebuffer for CPU access.
- *  Updates lbDisplay.WScreen, GraphicsScreenWidth and GraphicsWindowPtr.
  *  @return Non-zero on success (frame is locked and drawable). */
 int RendererLockScreen(void);
 
-/** Unlock the framebuffer and clear lbDisplay CPU pointers. */
+/** Unlock the framebuffer. */
 void RendererUnlockScreen(void);
 
 /** Present the completed frame: runs platform tick, mouse cursor
@@ -121,106 +121,102 @@ void RendererPresentFrame(void);
 /** Query whether the screen is currently locked (WScreen is valid). */
 int RendererIsScreenLocked(void);
 
+/** Returns 1 (and resets) if the world was drawn this frame.
+ *  Used by the software renderer to snapshot the clean world surface. */
+int RendererConsumeWorldDrawn(void);
+
 /******************************************************************************/
-/* Screen setup / teardown (replaces LbScreenSetup / LbScreenReset)           */
+/* Screen setup / teardown                                                    */
 /******************************************************************************/
 
 /** Create or reconfigure the game window and draw surface.
  *  Handles SDL window creation, fullscreen toggling, surface allocation,
- *  palette, mouse, and lbDisplay initialisation.
- *  Replaces LbScreenSetup(). */
+ *  palette, mouse, and display initialisation. */
 TbResult RendererSetupScreen(TbScreenMode mode, TbScreenCoord width, TbScreenCoord height,
     unsigned char *palette, short buffers_count, TbBool wscreen_vid);
 
 /** Tear down the draw surface and optionally release render resources.
- *  @param exiting_application  Pass true when shutting down the process.
- *  Replaces LbScreenReset(). */
+ *  @param exiting_application  Pass true when shutting down the process. */
 TbResult RendererResetScreen(TbBool exiting_application);
 
 /******************************************************************************/
-/* Graphics viewport (replaces LbScreenSetGraphicsWindow / Store / Load)      */
+/* Graphics viewport                                                          */
 /******************************************************************************/
 
-/** Set the graphics viewport with bounds clamping.
- *  Updates lbDisplay.GraphicsWindow* fields and recomputes GraphicsWindowPtr.
- *  Replaces LbScreenSetGraphicsWindow(). */
+/** Set the graphics viewport with bounds clamping. */
 void RendererSetViewport(int32_t x, int32_t y, int32_t width, int32_t height);
 
-/** Save the current viewport into a TbGraphicsWindow struct.
- *  Use when you need named save slots (e.g. saving before a clip window swap).
- *  Replaces LbScreenStoreGraphicsWindow(). */
+/** Save the current viewport into a TbGraphicsWindow struct. */
 void RendererStoreViewport(TbGraphicsWindow *grwnd);
 
-/** Restore a previously saved viewport from a TbGraphicsWindow struct.
- *  Values are loaded without clamping (assumes they came from RendererStoreViewport).
- *  Replaces LbScreenLoadGraphicsWindow(). */
+/** Restore a previously saved viewport from a TbGraphicsWindow struct. */
 void RendererLoadViewport(TbGraphicsWindow *grwnd);
 
 /******************************************************************************/
-/* Display property accessors (replaces direct lbDisplay.Field reads)         */
+/* Display property accessors                                                 */
 /******************************************************************************/
 
-/** Visible display width in pixels (window or fullscreen).
- *  Replaces lbDisplay.PhysicalScreenWidth reads. */
+/** Visible display width in pixels (window or fullscreen). */
 TbScreenCoord RendererPhysicalWidth(void);
 
-/** Visible display height in pixels (window or fullscreen).
- *  Replaces lbDisplay.PhysicalScreenHeight reads. */
+/** Visible display height in pixels (window or fullscreen). */
 TbScreenCoord RendererPhysicalHeight(void);
 
 /** Graphics buffer scanline width (pitch) in pixels.
- *  Use for pixel address arithmetic (ptr + y * stride + x).
- *  Replaces lbDisplay.GraphicsScreenWidth reads. */
+ *  Use for pixel address arithmetic (ptr + y * stride + x). */
 TbScreenCoord RendererScreenWidth(void);
 
-/** Graphics buffer height in pixels.
- *  Replaces lbDisplay.GraphicsScreenHeight reads. */
+/** Graphics buffer height in pixels. */
 TbScreenCoord RendererScreenHeight(void);
 
-/** Active screen width in physical pixels.
- *  Replaces direct screen-width global reads. */
+/** Current graphics/clip window rect. */
+long RendererGraphicsWindowX(void);
+long RendererGraphicsWindowY(void);
+long RendererGraphicsWindowWidth(void);
+long RendererGraphicsWindowHeight(void);
+
+/** Active screen width in physical pixels. */
 unsigned short RendererGetScreenWidth(void);
 
-/** Active screen height in physical pixels.
- *  Replaces direct screen-height global reads. */
+/** Active screen height in physical pixels. */
 unsigned short RendererGetScreenHeight(void);
 
-/** Pointer to the locked CPU framebuffer, or NULL if not locked.
- *  Replaces lbDisplay.WScreen reads. */
+/** Pointer to the locked CPU framebuffer, or NULL if not locked. */
 unsigned char* RendererGetWScreen(void);
+
+/** Pointer into the locked CPU framebuffer at the current graphics-window origin. */
+unsigned char* RendererGetGraphicsWindowPtr(void);
 
 /** Redirect the CPU framebuffer pointer to a caller-owned buffer.
  *  Subsequent sprite draws will rasterise into @p buf instead of the
- *  default framebuffer.  Pass NULL to restore normal operation.
- *  Replaces direct lbDisplay.WScreen writes. */
+ *  default framebuffer.  Pass NULL to restore normal operation. */
 void RendererSetWScreen(unsigned char* buf);
 
 /** Override the graphics buffer dimensions.
  *  Must be paired with RendererSetWScreen() when redirecting sprite drawing
- *  to a scratch buffer of different size.
- *  Replaces direct lbDisplay.GraphicsScreenWidth/Height writes. */
+ *  to a scratch buffer of different size. */
 void RendererSetScreenDimensions(int width, int height);
+void RendererSetPhysicalDimensions(int width, int height);
 
 /******************************************************************************/
-/* Palette management (replaces LbPalette* functions)                         */
+/* Palette management                                                         */
 /******************************************************************************/
 
-/** Set the 8-bit palette (768 bytes, 256 × RGB6).
- *  Updates the SDL surface palette and lbDisplay.Palette.
- *  Replaces LbPaletteSet(). */
+/** Set the 8-bit palette (768 bytes, 256 × RGB6). */
 TbResult RendererPaletteSet(unsigned char *palette);
 
-/** Copy the current palette into the caller's buffer (768 bytes).
- *  Replaces LbPaletteGet(). */
+/** Copy the current palette into the caller's buffer (768 bytes). */
 TbResult RendererPaletteGet(unsigned char *palette);
 
-/** Drive one step of a palette fade.
- *  Returns the current fade step count.
- *  Replaces LbPaletteFade(). */
+/** Drive one step of a palette fade.  Returns the current fade step count. */
 int32_t RendererPaletteFade(unsigned char *pal, int32_t fade_steps, enum TbPaletteFadeFlag flg);
 
-/** Cancel an in-progress open fade.
- *  Replaces LbPaletteStopOpenFade(). */
+/** Cancel an in-progress open fade. */
+TbResult RendererPaletteStopFade(void);
+
+/** Apply per-pixel possession/pain palette fade for the software renderer.
+ *  GPU renderers use screen tint overlays instead; this is a no-op on GPU. */
+void RendererApplyPossessionPalette(long step, const unsigned char *main_palette);
 TbResult RendererPaletteStopFade(void);
 
 /******************************************************************************/
@@ -232,22 +228,19 @@ TbResult RendererPaletteStopFade(void);
  *  Window creation happens later in LbScreenSetup via PlatformManager_CreateWindow. */
 TbResult RendererScreenInitialize(void);
 
-/** Enable or disable double-buffering for the draw surface.
- *  Replaces LbScreenSetDoubleBuffering(). */
+/** Enable or disable double-buffering for the draw surface. */
 TbResult RendererSetDoubleBuffering(TbBool state);
 
-/** Set the window title bar text.  Replaces LbSetTitle(). */
+/** Set the window title bar text. */
 TbResult RendererSetTitle(const char *title);
 
-/** Set the window icon resource.  Replaces LbSetIcon(). */
+/** Set the window icon resource. */
 TbResult RendererSetIcon(unsigned short nicon);
 
-/** Return the currently active screen mode enum value.
- *  Replaces LbScreenActiveMode(). */
+/** Return the currently active screen mode enum value. */
 TbScreenMode RendererActiveMode(void);
 
-/** Wait for vertical blanking interval (currently a no-op).
- *  Replaces LbScreenWaitVbi(). */
+/** Wait for vertical blanking interval (currently a no-op). */
 TbResult RendererWaitVbi(void);
 
 /** Call immediately after load_texture_map_file() to discard the cached GPU tile
@@ -429,15 +422,27 @@ void TextRenderer_GetClipWindow(int32_t* x, int32_t* y, int32_t* w, int32_t* h);
 
 /** Draw text at (posx, posy) relative to the text window with word-wrap.
  *  GPU backends queue the draw; call TextRenderer_Draw() to emit it. */
-TbBool TextRenderer_DrawTextResized(int32_t posx, int32_t posy, int32_t units_per_px, const char* text);
+TbBool TextRenderer_DrawTextResized(int32_t posx, int32_t posy, int32_t units_per_px, const char* text, TbDrawFlagsMask draw_flags);
 
 /** Draw text at absolute screen coordinates. No window setup needed.
  *  GPU backends queue the draw; call TextRenderer_Draw() to emit it. */
-TbBool TextRenderer_DrawTextAt(int32_t screen_x, int32_t screen_y, int32_t units_per_px, const char* text);
+TbBool TextRenderer_DrawTextAt(int32_t screen_x, int32_t screen_y, int32_t units_per_px, const char* text, TbDrawFlagsMask draw_flags);
 
 /** Draw all deferred text to the framebuffer.
  *  Must be called after the staging-buffer blit quad and before buffer swap. */
 void TextRenderer_Draw(void);
+
+/** Set the draw colour for subsequent text draws (one-colour and underline rendering). */
+void TextRenderer_SetDrawColour(unsigned char colour);
+
+/** Return the current text draw colour. */
+unsigned char TextRenderer_GetDrawColour(void);
+
+/** Set the shadow colour for Lb_TEXT_UNDERLNSHADOW rendering. */
+void TextRenderer_SetShadowColour(unsigned char colour);
+
+/** Return the current text shadow colour. */
+unsigned char TextRenderer_GetShadowColour(void);
 
 /** Height of one line of text in the current font (unscaled). */
 int32_t TextRenderer_LineHeight(void);
@@ -501,11 +506,9 @@ struct RendererPresentImageDesc {
     float layer_z;     /* draw order; lower = earlier */
 };
 
-/** Present a full-screen, non-atlas image (background, parchment, overlay, zoom,
- *  FMV) through the unified IR path.  Replaces RendererBlitRaw8 /
- *  RendererSubmitTransparentBlit / RendererSubmitLandviewZoom / SubmitVideoFrame.
- *  GPU backends queue an IRImagePresentCmd; the software backend runs the
- *  Indexed8 CPU path.  @return true when accepted. */
+/** Present a full-screen, non-atlas image (background, parchment, overlay, zoom, FMV)
+ *  through the unified IR path. GPU backends queue an IRImagePresentCmd;
+ *  the software backend runs the Indexed8 CPU path. @return true when accepted. */
 TbBool RendererPresentImage(const struct RendererPresentImageDesc* desc);
 
 /** Notify the renderer that an FMV frame's palette has changed.
@@ -666,8 +669,7 @@ void UIRenderer_BeginZoomBoxOverlay(int x, int y, int w, int h);
 void UIRenderer_EndZoomBoxOverlay(int x, int y, int w, int h);
 
 /** Draw deferred cursor sprites (OS pointer + power-hand).
- *  Must be called AFTER TextRenderer_Draw() so the cursor composites above
- *  all text.  Replaces UIRenderer_DrawHandSprites(). */
+ *  Must be called AFTER TextRenderer_Draw() so the cursor composites above all text. */
 void CursorLayer_Draw(void);
 
 /** Reset the cursor layer pending lists at the start of each frame.
@@ -679,48 +681,46 @@ void CursorLayer_Clear(void);
  *  signalling the render thread — mirrors GLUIRenderer::FlipBuffers(). */
 void CursorLayer_FlipBuffers(void);
 
-/** Submit the OS pointer sprite for deferred rendering at end-of-frame.
- *  Replaces the old LbI_PointerHandler::OnEndSwap() path. */
+/** Submit the OS pointer sprite for deferred rendering at end-of-frame. */
 void CursorLayer_SubmitPointerSprite(const struct TbSprite* spr, int32_t x, int32_t y, int units_per_px);
 
-/** Submit a power-hand keeper sprite; rendered at end-of-frame via CursorLayer_Draw().
- *  Replaces UIRenderer_SubmitKeeperSprite(). */
+/** Submit a power-hand keeper sprite; rendered at end-of-frame via CursorLayer_Draw(). */
 void CursorLayer_SubmitKeeperHandSprite(short x, short y, unsigned short kspr_base,
-                                        short kspr_angle, unsigned char sprgroup, int32_t scale);
+                                        short kspr_angle, unsigned char sprgroup, int32_t scale,
+                                        TbDrawFlagsMask draw_flags);
 
 /** Submit a panel sprite (gui_panel_sprites) at screen-left alignment.
  *  Resolves player coloring for spridx and submits GPU quad; immediate in software mode. */
-void UIRenderer_SubmitPanelSprite(int32_t x, int32_t y, int units_per_px, int32_t spridx);
+void UIRenderer_SubmitPanelSprite(int32_t x, int32_t y, int units_per_px, int32_t spridx, TbDrawFlagsMask draw_flags);
 
 /** Submit a panel sprite from a pre-resolved TbSprite pointer.
  *  Use when the caller has already called get_panel_sprite(); avoids a second lookup. */
 struct TbSprite;
-void UIRenderer_SubmitPanelSpriteRaw(int32_t x, int32_t y, int units_per_px, const struct TbSprite* spr);
+void UIRenderer_SubmitPanelSpriteRaw(int32_t x, int32_t y, int units_per_px, const struct TbSprite* spr, TbDrawFlagsMask draw_flags);
 
 /** Submit a panel sprite with an opaque background fill behind it.
  *  Draws a solid box at the sprite's screen rect in bg_color_idx, then the sprite
  *  on top.  Use for portraits and icons that need a solid backing so transparent
  *  atlas pixels (index 0) don't punch through to the panel behind. */
 void UIRenderer_SubmitPanelSpriteWithBg(int32_t x, int32_t y, int units_per_px,
-                                        const struct TbSprite* spr, unsigned char bg_color_idx);
+                                        const struct TbSprite* spr, unsigned char bg_color_idx, TbDrawFlagsMask draw_flags);
 
 /** Submit a panel sprite drawn entirely in a single flat colour (sprite used as discard mask).
  *  GPU: atlas R8 index used to discard transparent pixels; all opaque pixels output color_idx.
  *  CPU fallback: LbSpriteDrawResizedOneColour. */
-void UIRenderer_SubmitPanelSpriteRawColored(int32_t x, int32_t y, int units_per_px, const struct TbSprite* spr, unsigned char color_idx);
+void UIRenderer_SubmitPanelSpriteRawColored(int32_t x, int32_t y, int units_per_px, const struct TbSprite* spr, unsigned char color_idx, TbDrawFlagsMask draw_flags);
 
 /** Submit a 1-pixel-thick outline rectangle (border only, no fill).
- *  Decomposes into four thin UIRenderer_SubmitSolidBox strips.
- *  Replaces LbDrawBox with Lb_SPRITE_OUTLINE set. */
+ *  Decomposes into four thin UIRenderer_SubmitSolidBox strips. */
 void UIRenderer_SubmitOutlineBox(int32_t x, int32_t y, int32_t w, int32_t h, unsigned char color_idx);
 
 /** Route a palette-remapped panel/button sprite draw through the active UI renderer.
  *  The remap is performed by indexing pixmap.fade_tables[remap_row*256].
  *  GPU backends override with a fall-table shader; the base uses LbSpriteDrawResizedRemap. */
-void UIRenderer_SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px, const struct TbSprite* spr, int remap_row);
+void UIRenderer_SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px, const struct TbSprite* spr, int remap_row, TbDrawFlagsMask draw_flags);
 
 /** Submit a panel sprite centered on (x, y). */
-void UIRenderer_SubmitPanelSpriteCentered(int32_t x, int32_t y, int units_per_px, int32_t spridx);
+void UIRenderer_SubmitPanelSpriteCentered(int32_t x, int32_t y, int units_per_px, int32_t spridx, TbDrawFlagsMask draw_flags);
 
 /** Submit a button sprite (button_sprites) at screen-left alignment. */
 void UIRenderer_SubmitButtonSprite(int32_t x, int32_t y, int units_per_px, short spridx);
@@ -814,8 +814,7 @@ TbBool UIRenderer_GetMinimapOpaqueBlackIndex(unsigned char* idx);
 
 /** Submit a TiledSprite (like the status panel) through the UI renderer.
  *  Iterates tiles in the same order as LbTiledSpriteDraw, resolving each sprite
- *  to a SpriteHandle and calling SubmitScaledSprite.  Replaces LbTiledSpriteDraw
- *  for GPU-routed rendering. */
+ *  to a SpriteHandle and calling SubmitScaledSprite. */
 struct TiledSprite;
 void UIRenderer_SubmitTiledSprite(int32_t x, int32_t y, int units_per_px, const struct TiledSprite* bigspr);
 

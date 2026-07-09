@@ -43,9 +43,13 @@ public:
     void GetClipWindow(int32_t* x, int32_t* y, int32_t* w, int32_t* h) const override;
 
     // ITextRenderer interface — Drawing
-    TbBool DrawTextResized(int32_t posx, int32_t posy, int32_t units_per_px, const char* text) override;
-    TbBool DrawTextAt(int32_t screen_x, int32_t screen_y, int32_t units_per_px, const char* text) override;
+    TbBool DrawTextResized(int32_t posx, int32_t posy, int32_t units_per_px, const char* text, TbDrawFlagsMask draw_flags) override;
+    TbBool DrawTextAt(int32_t screen_x, int32_t screen_y, int32_t units_per_px, const char* text, TbDrawFlagsMask draw_flags) override;
     void   Draw() override;         // Flush all queued text draws
+    void   SetDrawColour(uint8_t colour) override { m_text_draw_colour = colour; }
+    uint8_t GetDrawColour() const override        { return m_text_draw_colour; }
+    void   SetShadowColour(uint8_t colour) override { m_text_shadow_colour = colour; }
+    uint8_t GetShadowColour() const override        { return m_text_shadow_colour; }
 
     // ── IR (Intermediate Representation) path ─────────────────────────────────
 
@@ -101,7 +105,7 @@ private:
         int wnd_x, wnd_y, wnd_width;        // lbTextJustifyWindow captured at queue time
         int clip_x, clip_y, clip_w, clip_h; // lbTextClipWindow captured at queue time
         unsigned char  draw_colour;         // lbDisplay.DrawColour at queue time
-        unsigned short draw_flags;          // lbDisplay.DrawFlags  at queue time
+        uint32_t       draw_flags;          // lbDisplay.DrawFlags  at queue time
         std::string text;
         const struct TbSpriteSheet* font;   // Active font captured at call time
         const struct AsianFont* dbc_font;   // DBC font (nullptr when DBC off)
@@ -143,10 +147,10 @@ private:
     int              m_screen_height;    // Screen height for NDC conversion
 
     // Per-draw draw-state: set in Draw() before each TextLayout call, mutated
-    // in-place by FlushSegment control codes.  Replaces the lbDisplay.DrawFlags/
-    // DrawColour save/restore pattern — no global writes during rendering.
-    uint16_t         m_text_draw_flags  = 0;
+    // in-place by FlushSegment control codes.
+    uint32_t         m_text_draw_flags  = 0;
     uint8_t          m_text_draw_colour = 0;
+    uint8_t          m_text_shadow_colour = 0;
     
     // Shader uniform locations
     int              m_loc_viewport;     // u_viewport uniform

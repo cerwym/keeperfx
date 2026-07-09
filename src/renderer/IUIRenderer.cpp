@@ -88,7 +88,7 @@ void IUIRenderer::EndZoomBoxOverlay(int x, int y, int w, int h)
 
 void IUIRenderer::SetupMinimapBackground(int diaglen, int panel_x, int panel_y)
 {
-    if (!MapBackground || !MapShapeStart || !MapShapeEnd || !lbDisplay.WScreen)
+    if (!MapBackground || !MapShapeStart || !MapShapeEnd || !RendererGetWScreen())
     {
         NumBackColours = 0;
         return;
@@ -96,7 +96,7 @@ void IUIRenderer::SetupMinimapBackground(int diaglen, int panel_x, int panel_y)
 
     int num_colours = 0;
     long bkgnd_pos = 0;
-    TbPixel* out = &lbDisplay.WScreen[panel_x + lbDisplay.GraphicsScreenWidth * panel_y];
+    TbPixel* out = &RendererGetWScreen()[panel_x + RendererScreenWidth() * panel_y];
     for (int h = 0; h < diaglen; h++)
     {
         for (int w = MapShapeStart[h]; w < MapShapeEnd[h]; w++)
@@ -119,7 +119,7 @@ void IUIRenderer::SetupMinimapBackground(int diaglen, int panel_x, int panel_y)
             MapBackground[bkgnd_pos + w] = (unsigned char)colour;
         }
         bkgnd_pos += diaglen;
-        out += lbDisplay.GraphicsScreenWidth;
+        out += RendererScreenWidth();
     }
     NumBackColours = num_colours;
 }
@@ -148,11 +148,8 @@ void IUIRenderer::SubmitPanelSprite(int32_t x, int32_t y, int units_per_px,
     if (it == m_handle_to_sprite.end()) return;
     unsigned int effective_flags = state.flags;
     if (flip_horiz) effective_flags |= Lb_SPRITE_FLIP_HORIZ;
-    unsigned int saved = lbDisplay.DrawFlags;
-    lbDisplay.DrawFlags = effective_flags;
     ScopedSpriteSubmitGuard guard;
-    LbSpriteDrawResized(x, y, units_per_px, it->second);
-    lbDisplay.DrawFlags = saved;
+    LbSpriteDrawResized(x, y, units_per_px, it->second, effective_flags);
 }
 
 void IUIRenderer::SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px,
@@ -171,11 +168,8 @@ void IUIRenderer::SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px,
     auto it = m_handle_to_sprite.find(spr);
     if (it == m_handle_to_sprite.end()) return;
     ScopedSpriteSubmitGuard guard;
-    unsigned int saved = lbDisplay.DrawFlags;
-    lbDisplay.DrawFlags = state.flags;
     LbSpriteDrawResizedRemap(x, y, units_per_px, it->second,
-                             &pixmap.fade_tables[remap_row * 256]);
-    lbDisplay.DrawFlags = saved;
+                             &pixmap.fade_tables[remap_row * 256], state.flags);
 }
 
 void IUIRenderer::SubmitPanelSpriteColored(int32_t x, int32_t y, int units_per_px,
@@ -194,10 +188,7 @@ void IUIRenderer::SubmitPanelSpriteColored(int32_t x, int32_t y, int units_per_p
     auto it = m_handle_to_sprite.find(spr);
     if (it == m_handle_to_sprite.end()) return;
     ScopedSpriteSubmitGuard guard;
-    unsigned int saved = lbDisplay.DrawFlags;
-    lbDisplay.DrawFlags = state.flags;
-    LbSpriteDrawResizedOneColour(x, y, units_per_px, it->second, color_idx);
-    lbDisplay.DrawFlags = saved;
+    LbSpriteDrawResizedOneColour(x, y, units_per_px, it->second, color_idx, state.flags);
 }
 
 void IUIRenderer::SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h,
@@ -215,10 +206,7 @@ void IUIRenderer::SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h,
     auto it = m_handle_to_sprite.find(spr);
     if (it == m_handle_to_sprite.end()) return;
     ScopedSpriteSubmitGuard guard;
-    unsigned int saved = lbDisplay.DrawFlags;
-    lbDisplay.DrawFlags = state.flags;
-    LbSpriteDrawScaled(x, y, it->second, w, h);
-    lbDisplay.DrawFlags = saved;
+    LbSpriteDrawScaled(x, y, it->second, w, h, state.flags);
 }
 
 void IUIRenderer::SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx, KfxDrawState state)
@@ -236,19 +224,17 @@ void IUIRenderer::SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, uin
     if (state.flags & Lb_SPRITE_OUTLINE)
     {
         if (w < 1 || h < 1) return;
-        unsigned short saved_flags = lbDisplay.DrawFlags;
-        lbDisplay.DrawFlags &= ~Lb_SPRITE_OUTLINE;
-        LbDrawBoxClip(x, y, (unsigned long)w, 1, color_idx);
-        LbDrawBoxClip(x, y + h - 1, (unsigned long)w, 1, color_idx);
+        TbDrawFlagsMask box_flags = state.flags & ~Lb_SPRITE_OUTLINE;
+        LbDrawBoxClip(x, y, (unsigned long)w, 1, color_idx, box_flags);
+        LbDrawBoxClip(x, y + h - 1, (unsigned long)w, 1, color_idx, box_flags);
         if (h > 2)
         {
-            LbDrawBoxClip(x, y + 1, 1, (unsigned long)(h - 2), color_idx);
-            LbDrawBoxClip(x + w - 1, y + 1, 1, (unsigned long)(h - 2), color_idx);
+            LbDrawBoxClip(x, y + 1, 1, (unsigned long)(h - 2), color_idx, box_flags);
+            LbDrawBoxClip(x + w - 1, y + 1, 1, (unsigned long)(h - 2), color_idx, box_flags);
         }
-        lbDisplay.DrawFlags = saved_flags;
         return;
     }
-    LbDrawBoxClip(x, y, (unsigned long)w, (unsigned long)h, color_idx);
+    LbDrawBoxClip(x, y, (unsigned long)w, (unsigned long)h, color_idx, state.flags);
 }
  
 void IUIRenderer::SubmitSolidBoxAlpha(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx, float alpha)
@@ -262,30 +248,20 @@ void IUIRenderer::SubmitSolidBoxAlpha(int32_t x, int32_t y, int32_t w, int32_t h
         m_ui_write_cmds->solid_boxes.Append(cmd);
         return;
     }
-    unsigned short saved_flags = lbDisplay.DrawFlags;
-    lbDisplay.DrawFlags &= ~(Lb_SPRITE_TRANSPAR4 | Lb_SPRITE_TRANSPAR8);
+    TbDrawFlagsMask box_flags = 0;
     if (alpha < 0.75f)
-        lbDisplay.DrawFlags |= Lb_SPRITE_TRANSPAR4;
+        box_flags |= Lb_SPRITE_TRANSPAR4;
     else if (alpha < 0.9f)
-        lbDisplay.DrawFlags |= Lb_SPRITE_TRANSPAR8;
-    LbDrawBoxClip(x, y, (unsigned long)w, (unsigned long)h, color_idx);
-    lbDisplay.DrawFlags = saved_flags;
-}
-
-void IUIRenderer::SubmitCircle(int32_t x, int32_t y, int32_t radius, uint8_t color_idx)
-{
-    LbDrawCircle(x, y, radius, color_idx);
+        box_flags |= Lb_SPRITE_TRANSPAR8;
+    LbDrawBoxClip(x, y, (unsigned long)w, (unsigned long)h, color_idx, box_flags);
 }
 
 TbResult IUIRenderer::SubmitRawSprite(long x, long y, const struct TbSprite* spr,
                                       KfxDrawState state)
 {
     if (!spr) return Lb_FAIL;
-    unsigned int saved_flags = lbDisplay.DrawFlags;
-    lbDisplay.DrawFlags = state.flags;
     ScopedSpriteSubmitGuard guard;
-    TbResult ret = LbSpriteDraw(x, y, spr);
-    lbDisplay.DrawFlags = saved_flags;
+    TbResult ret = LbSpriteDraw(x, y, spr, state.flags);
     return ret;
 }
 
@@ -293,11 +269,8 @@ TbResult IUIRenderer::SubmitRawSpriteOneColour(long x, long y, const struct TbSp
                                                unsigned char colour, KfxDrawState state)
 {
     if (!spr) return Lb_FAIL;
-    unsigned int saved_flags = lbDisplay.DrawFlags;
-    lbDisplay.DrawFlags = state.flags;
     ScopedSpriteSubmitGuard guard;
-    TbResult ret = LbSpriteDrawOneColour(x, y, spr, colour);
-    lbDisplay.DrawFlags = saved_flags;
+    TbResult ret = LbSpriteDrawOneColour(x, y, spr, colour, state.flags);
     return ret;
 }
 
@@ -305,23 +278,20 @@ TbResult IUIRenderer::SubmitRawSpriteRemap(long x, long y, const struct TbSprite
                                            const unsigned char* cmap, KfxDrawState state)
 {
     if (!spr || !cmap) return Lb_FAIL;
-    unsigned int saved_flags = lbDisplay.DrawFlags;
-    lbDisplay.DrawFlags = state.flags;
     ScopedSpriteSubmitGuard guard;
-    TbResult ret = LbSpriteDrawScaledRemap(x, y, spr, spr->SWidth, spr->SHeight, cmap);
-    lbDisplay.DrawFlags = saved_flags;
+    TbResult ret = LbSpriteDrawScaledRemap(x, y, spr, spr->SWidth, spr->SHeight, cmap, state.flags);
     return ret;
 }
 
 uint8_t* IUIRenderer::AcquireMinimapBuffer(int /*size*/)
 {
-    // CPU mode: caller writes directly to lbDisplay.WScreen.
+    // CPU mode: caller writes directly to RendererGetWScreen().
     return nullptr;
 }
 
 void IUIRenderer::SubmitMinimap(int /*screen_x*/, int /*screen_y*/, int /*size*/)
 {
-    // No-op: minimap pixels were written directly to lbDisplay.WScreen.
+    // No-op: minimap pixels were written directly to RendererGetWScreen().
 }
 
 void IUIRenderer::SetUICommandBuffers(UICommandBuffers* cmds)

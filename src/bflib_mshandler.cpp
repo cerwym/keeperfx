@@ -35,6 +35,8 @@
 // Global variables
 int volatile lbMouseInstalled = false;
 int volatile lbMouseOffline = false;
+const struct TbSprite *lbMouseSprite = NULL; // current mouse cursor sprite (was lbDisplay.MouseSprite)
+struct TbMouseState lbMouse; // mouse input state (was embedded in lbDisplay)
 class MouseStateHandler pointerHandler;
 
 /******************************************************************************/
@@ -73,7 +75,7 @@ bool MouseStateHandler::Release(void)
 {
     std::lock_guard<std::mutex> guard(lock);
     lbMouseInstalled = false;
-    lbDisplay.MouseSprite = NULL;
+    lbMouseSprite = NULL;
     this->installed = false;
     mssprite = NULL;
     pointer.Release();
@@ -100,8 +102,8 @@ bool MouseStateHandler::SetMousePosition(long x, long y)
       mx = x;
       my = y;
     }
-    lbDisplay.MMouseX = mx;
-    lbDisplay.MMouseY = my;
+    lbMouse.MMouseX = mx;
+    lbMouse.MMouseY = my;
     return true;
 }
 
@@ -115,22 +117,22 @@ bool MouseStateHandler::SetPosition(long x, long y)
       return false;
     // Clip coordinates to our mouse window
     mx = x;
-    if (x < lbDisplay.MouseWindowX)
+    if (x < lbMouse.MouseWindowX)
     {
-      mx = lbDisplay.MouseWindowX;
+      mx = lbMouse.MouseWindowX;
     } else
-    if (x >= lbDisplay.MouseWindowX+lbDisplay.MouseWindowWidth)
+    if (x >= lbMouse.MouseWindowX+lbMouse.MouseWindowWidth)
     {
-      mx = lbDisplay.MouseWindowWidth + lbDisplay.MouseWindowX - 1;
+      mx = lbMouse.MouseWindowWidth + lbMouse.MouseWindowX - 1;
     }
     my = y;
-    if (y < lbDisplay.MouseWindowY)
+    if (y < lbMouse.MouseWindowY)
     {
-      my = lbDisplay.MouseWindowY;
+      my = lbMouse.MouseWindowY;
     } else
-    if ( y >= lbDisplay.MouseWindowHeight+lbDisplay.MouseWindowY)
+    if ( y >= lbMouse.MouseWindowHeight+lbMouse.MouseWindowY)
     {
-      my = lbDisplay.MouseWindowHeight + lbDisplay.MouseWindowY - 1;
+      my = lbMouse.MouseWindowHeight + lbMouse.MouseWindowY - 1;
     }
     // If the coords are unchanged
     if ((mx == mspos.x) && (my == mspos.y))
@@ -142,7 +144,7 @@ bool MouseStateHandler::SetPosition(long x, long y)
     mspos.y = my;
     if ((mssprite != NULL) && (this->installed))
     {
-      //show_onscreen_msg(5, "POS %3d x %3d CLIP %3d x %3d WINDOW %3d x %3d", x,y,mx,my,lbDisplay.MouseWindowX,lbDisplay.MouseWindowY);
+      //show_onscreen_msg(5, "POS %3d x %3d CLIP %3d x %3d WINDOW %3d x %3d", x,y,mx,my,lbMouse.MouseWindowX,lbMouse.MouseWindowY);
       if (!pointer.OnMove())
       {
         mspos.x = prev_x;
@@ -156,12 +158,12 @@ bool MouseStateHandler::SetPosition(long x, long y)
 bool MouseStateHandler::SetMouseWindow(long x, long y,long width, long height)
 {
     std::lock_guard<std::mutex> guard(lock);
-    lbDisplay.MouseWindowX = x;
-    lbDisplay.MouseWindowY = y;
-    lbDisplay.MouseWindowWidth = width;
-    lbDisplay.MouseWindowHeight = height;
-    adjust_point(&lbDisplay.MMouseX, &lbDisplay.MMouseY);
-    adjust_point(&lbDisplay.MouseX, &lbDisplay.MouseY);
+    lbMouse.MouseWindowX = x;
+    lbMouse.MouseWindowY = y;
+    lbMouse.MouseWindowWidth = width;
+    lbMouse.MouseWindowHeight = height;
+    adjust_point(&lbMouse.MMouseX, &lbMouse.MMouseY);
+    adjust_point(&lbMouse.MouseX, &lbMouse.MouseY);
     return true;
 }
 
@@ -196,7 +198,7 @@ bool MouseStateHandler::SetMousePointerAndOffset(const struct TbSprite *mouseSpr
 {
     struct TbPoint point;
     std::lock_guard<std::mutex> guard(lock);
-    if (mouseSprite == lbDisplay.MouseSprite)
+    if (mouseSprite == lbMouseSprite)
       return true;
     if (mouseSprite != NULL)
     {
@@ -206,7 +208,7 @@ bool MouseStateHandler::SetMousePointerAndOffset(const struct TbSprite *mouseSpr
             return false;
         }
     }
-    lbDisplay.MouseSprite = mouseSprite;
+    lbMouseSprite = mouseSprite;
     point.x = x;
     point.y = y;
     return this->SetPointer(mouseSprite, &point);
@@ -215,7 +217,7 @@ bool MouseStateHandler::SetMousePointerAndOffset(const struct TbSprite *mouseSpr
 bool MouseStateHandler::SetMousePointer(const struct TbSprite *mouseSprite)
 {
     std::lock_guard<std::mutex> guard(lock);
-    if (mouseSprite == lbDisplay.MouseSprite)
+    if (mouseSprite == lbMouseSprite)
       return true;
     if (mouseSprite != NULL)
       if ( (mouseSprite->SWidth > 64) || (mouseSprite->SHeight > 64) )
@@ -223,7 +225,7 @@ bool MouseStateHandler::SetMousePointer(const struct TbSprite *mouseSprite)
         WARNLOG("Mouse pointer too large");
         return false;
       }
-    lbDisplay.MouseSprite = mouseSprite;
+    lbMouseSprite = mouseSprite;
     this->SetPointer(mouseSprite, NULL);
     return true;
 }

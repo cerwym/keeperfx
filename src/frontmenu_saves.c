@@ -177,12 +177,11 @@ void frontend_draw_load_game_button(struct GuiButton *gbtn)
     // Select font to draw
     int font_idx = frontend_button_caption_font(gbtn, frontend_mouse_over_button);
     LbTextSetFont(frontend_font[font_idx]);
-    lbDisplay.DrawFlags = Lb_TEXT_HALIGN_LEFT;
     // Set drawing window and draw the text
     int tx_units_per_px = (gbtn->height * 13 / 11) * 16 / LbTextLineHeight();
     int height = LbTextLineHeight() * tx_units_per_px / 16;
     LbTextSetWindow(gbtn->scr_pos_x, gbtn->scr_pos_y, gbtn->width, height);
-    LbTextDrawResized(0, 0, tx_units_per_px, save_game_catalogue[i].textname);
+    LbTextDrawResized(0, 0, tx_units_per_px, save_game_catalogue[i].textname, Lb_TEXT_HALIGN_LEFT);
 }
 
 void frontend_load_game_up_maintain(struct GuiButton *gbtn)

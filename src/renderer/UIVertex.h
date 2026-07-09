@@ -4,7 +4,7 @@
 /** @file UIVertex.h
  *     Shared GPU vertex format for UI rendering (used by both GL and Vulkan).
  * @par Purpose:
- *     Defines UIVertex (formerly GLUIVertex) in a backend-independent header
+ *     Defines UIVertex in a backend-independent header
  *     so VKPipelineCache and other non-GL code can reference the layout.
  */
 /******************************************************************************/

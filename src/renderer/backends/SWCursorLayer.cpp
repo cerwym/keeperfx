@@ -4,7 +4,7 @@
 /** @file SWCursorLayer.cpp
  *     Software (CPU) implementation of ICursorLayer.
  *
- *     The pointer sprite is drawn into lbDisplay.WScreen immediately in
+ *     The pointer sprite is drawn into RendererGetWScreen() immediately in
  *     Flush() — no backup/restore is needed because WScreen is fully
  *     rebuilt from scratch on every frame before EndFrame() is called.
  *
@@ -13,15 +13,16 @@
  */
 /******************************************************************************/
 #include "pre_inc.h"
+#include "bflib_mouse.h"
 #include "renderer/backends/SWCursorLayer.h"
 
 #include "bflib_basics.h"
 #include "bflib_sprite.h"      // TbSprite
-#include "bflib_video.h"       // lbDisplay
 #include "bflib_sprfnt.h"      // scale_ui_value_lofi
 #include "bflib_vidraw.h"      // LbSpriteDrawUsingScalingUpDataSolidLR, LbSpriteSetScaling*
-#include "engine_render.h"     // process_keeper_sprite
+#include "engine_render.h"     // process_keeper_sprite_ex
 #include "globals.h"
+#include "renderer/RendererManager.h"
 
 #include "post_inc.h"
 
@@ -62,22 +63,22 @@ static void set_scaling_h_simple(long y, long sh, long dh)
     LbSpriteSetScalingHeightSimpleArray(s_ysteps, y, sh, dh);
 }
 
-/** Draw cursor sprite directly into outbuf (lbDisplay.WScreen). */
+/** Draw cursor sprite directly into outbuf (RendererGetWScreen()). */
 static void draw_pointer_sprite(int32_t x, int32_t y, const TbSprite* spr,
                                  TbPixel* outbuf, unsigned long scanline)
 {
     int dw = scale_ui_value_lofi(spr->SWidth);
     int dh = scale_ui_value_lofi(spr->SHeight);
     if (dw <= 0 || dh <= 0) return;
-    if (lbDisplay.MouseWindowWidth <= 0 || lbDisplay.MouseWindowHeight <= 0) return;
+    if (lbMouse.MouseWindowWidth <= 0 || lbMouse.MouseWindowHeight <= 0) return;
 
-    if (x < 0 || (dw + spr->SWidth + x) >= lbDisplay.MouseWindowWidth)
-        set_scaling_w_clipped(x, spr->SWidth, dw, lbDisplay.MouseWindowWidth);
+    if (x < 0 || (dw + spr->SWidth + x) >= lbMouse.MouseWindowWidth)
+        set_scaling_w_clipped(x, spr->SWidth, dw, lbMouse.MouseWindowWidth);
     else
         set_scaling_w_simple(x, spr->SWidth, dw);
 
-    if (y < 0 || (dh + spr->SHeight + y) >= lbDisplay.MouseWindowHeight)
-        set_scaling_h_clipped(y, spr->SHeight, dh, lbDisplay.MouseWindowHeight);
+    if (y < 0 || (dh + spr->SHeight + y) >= lbMouse.MouseWindowHeight)
+        set_scaling_h_clipped(y, spr->SHeight, dh, lbMouse.MouseWindowHeight);
     else
         set_scaling_h_simple(y, spr->SHeight, dh);
 
@@ -86,7 +87,7 @@ static void draw_pointer_sprite(int32_t x, int32_t y, const TbSprite* spr,
         spr->Data, spr->SWidth, spr->SHeight, spr->SWidth,
     };
     LbSpriteDrawUsingScalingUpDataSolidLR(outbuf, scanline,
-                                           lbDisplay.MouseWindowHeight,
+                                           lbMouse.MouseWindowHeight,
                                            s_xsteps, s_ysteps, &buf);
 }
 
@@ -103,22 +104,22 @@ void SWCursorLayer::SubmitKeeperHandSprite(short x, short y,
                                            unsigned short kspr_base,
                                            short angle,
                                            unsigned char sprgroup,
-                                           int32_t scale)
+                                           int32_t scale,
+                                           TbDrawFlagsMask draw_flags)
 {
-    // Software renderer has no frame-setup concept — execute immediately.
-    process_keeper_sprite(x, y, kspr_base, angle, sprgroup, scale);
+    process_keeper_sprite_ex(x, y, kspr_base, angle, sprgroup, scale, draw_flags, 0);
 }
 
 void SWCursorLayer::Draw()
 {
     // Draw the pointer sprite into WScreen right before the SDL blit.
     // WScreen is fully rebuilt each frame so no backup/restore is needed.
-    if (m_pointer_spr && lbDisplay.WScreen)
+    if (m_pointer_spr && RendererGetWScreen())
     {
         draw_pointer_sprite(m_pointer_x, m_pointer_y,
                             m_pointer_spr,
-                            lbDisplay.WScreen,
-                            (unsigned long)lbDisplay.GraphicsScreenWidth);
+                            RendererGetWScreen(),
+                            (unsigned long)RendererScreenWidth());
     }
 }
 

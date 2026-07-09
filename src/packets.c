@@ -765,7 +765,7 @@ TbBool process_players_global_packet_action(PlayerNumber plyr_idx) {
     case PckA_ZoomFromMap:
         set_player_cameras_position(player, subtile_coord_center(pckt->actn_par1),
                                     subtile_coord_center(pckt->actn_par2));
-        if (network_is_active() || (!MapFadePass_SupportsNativeResolution() && lbDisplay.PhysicalScreenWidth > 320)) {
+        if (network_is_active() || (!MapFadePass_SupportsNativeResolution() && RendererPhysicalWidth() > 320)) {
             if (is_my_player_number(plyr_idx))
                 toggle_status_menu((game.operation_flags & GOF_ShowPanel) != 0);
             set_player_mode(player, PVT_DungeonTop);

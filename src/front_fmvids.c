@@ -112,9 +112,9 @@ short play_smacker_file(char *filename, FrontendMenuState nstate)
   RendererPaletteSet(frontend_palette);
   if (nstate >= 0)
     frontend_set_state(nstate);
-  lbDisplay.LeftButton = 0;
-  lbDisplay.RightButton = 0;
-  lbDisplay.MiddleButton = 0;
+  lbMouse.LeftButton = 0;
+  lbMouse.RightButton = 0;
+  lbMouse.MiddleButton = 0;
   return result;
 }
 

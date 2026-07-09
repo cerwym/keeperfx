@@ -504,7 +504,6 @@ TbBool init_fades_table(void)
         compute_fade_tables(&pixmap,engine_palette,engine_palette);
         LbFileSaveAt(fname, &pixmap, sizeof(struct TbColorTables));
     }
-    lbDisplay.FadeTable = pixmap.fade_tables;
     TbPixel cblack = 144;
     // Update black color
     for (long i = 0; i < 8192; i++)
@@ -629,7 +628,6 @@ TbScreenMode setup_screen_mode(TbScreenMode nmode, TbBool failsafe)
   }
   TbBool hi_res = ((RendererScreenHeight() < 400) ? false : true);
   long lens_mem = game.applied_lens_type;
-  unsigned int flg_mem = lbDisplay.DrawFlags;
   TbBool was_minimal_res = (MinimalResolutionSetup || force_video_mode_reset);
   set_pointer_graphic_none();
   if (RendererScreenHeight() < 200)
@@ -703,7 +701,6 @@ TbScreenMode setup_screen_mode(TbScreenMode nmode, TbBool failsafe)
   if (parchment_loaded)
     reload_parchment_file(hi_res);
   reinitialise_eye_lens(lens_mem);
-  lbDisplay.DrawFlags = flg_mem;
   setup_heap_manager();
   force_video_mode_reset = false;
   SYNCDBG(8,"Finished");
@@ -818,7 +815,6 @@ TbScreenMode setup_screen_mode_minimal(TbScreenMode nmode)
     }
   }
   TbBool hi_res = ((RendererScreenHeight() < 400) ? false : true);
-  ushort flg_mem = lbDisplay.DrawFlags;
   if (RendererScreenHeight() < 200)
   {
     WARNLOG("Unhandled previous Screen Mode %d, Reset skipped",(int)old_mode);
@@ -882,7 +878,6 @@ TbScreenMode setup_screen_mode_minimal(TbScreenMode nmode)
   RendererClearScreen(0);
   RendererPresentFrame();
   update_screen_mode_data(new_mdinfo->Width, new_mdinfo->Height);
-  lbDisplay.DrawFlags = flg_mem;
   force_video_mode_reset = false;
   return nmode;
 }
@@ -1036,8 +1031,8 @@ TbBool switch_to_next_video_mode(void)
 /** Needed until its contents are refactored, then we can just call switch_to_next_video_mode from PckA_SwitchScrnRes. */
 void switch_to_next_video_mode_wrapper(void)
 {
-  char percent_x = ((float)lbDisplay.MMouseX / (float)(lbDisplay.MouseWindowX + lbDisplay.MouseWindowWidth)) * 100;
-  char percent_y = ((float)lbDisplay.MMouseY / (float)(lbDisplay.MouseWindowY + lbDisplay.MouseWindowHeight)) * 100;
+  char percent_x = ((float)lbMouse.MMouseX / (float)(lbMouse.MouseWindowX + lbMouse.MouseWindowWidth)) * 100;
+  char percent_y = ((float)lbMouse.MMouseY / (float)(lbMouse.MouseWindowY + lbMouse.MouseWindowHeight)) * 100;
 
   if (switch_to_next_video_mode() == Lb_SCREEN_MODE_INVALID)
   {
@@ -1066,7 +1061,7 @@ void switch_to_next_video_mode_wrapper(void)
   {
     turn_on_menu(GMnu_VIDEO);
   }
-  LbMouseSetPosition(((lbDisplay.MouseWindowX + lbDisplay.MouseWindowWidth) / 100) * percent_x, ((lbDisplay.MouseWindowY + lbDisplay.MouseWindowHeight) / 100) * percent_y);
+  LbMouseSetPosition(((lbMouse.MouseWindowX + lbMouse.MouseWindowWidth) / 100) * percent_x, ((lbMouse.MouseWindowY + lbMouse.MouseWindowHeight) / 100) * percent_y);
   return;
 }
 

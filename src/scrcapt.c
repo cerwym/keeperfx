@@ -140,7 +140,7 @@ TbBool perform_any_screen_capturing(void)
     if (captured) {
         //Set font; if winfont isn't loaded, it should be NULL, so text will just be invisible
         LbTextSetFont(winfont);
-        LbTextDraw(600*units_per_pixel/16, 4*units_per_pixel/16, "REC");
+        LbTextDraw(600*units_per_pixel/16, 4*units_per_pixel/16, "REC", 0);
     }
     return captured;
 }

@@ -35,8 +35,12 @@ public:
     void GetClipWindow(int32_t* x, int32_t* y, int32_t* w, int32_t* h) const override;
 
     // Drawing
-    TbBool DrawTextResized(int32_t posx, int32_t posy, int32_t units_per_px, const char* text) override;
-    TbBool DrawTextAt(int32_t screen_x, int32_t screen_y, int32_t units_per_px, const char* text) override;
+    TbBool DrawTextResized(int32_t posx, int32_t posy, int32_t units_per_px, const char* text, TbDrawFlagsMask draw_flags) override;
+    TbBool DrawTextAt(int32_t screen_x, int32_t screen_y, int32_t units_per_px, const char* text, TbDrawFlagsMask draw_flags) override;
+    void   SetDrawColour(uint8_t colour) override { m_text_draw_colour = colour; }
+    uint8_t GetDrawColour() const override        { return m_text_draw_colour; }
+    void   SetShadowColour(uint8_t colour) override { m_text_shadow_colour = colour; }
+    uint8_t GetShadowColour() const override        { return m_text_shadow_colour; }
 
     // ── Software IR executor ──────────────────────────────────────────────────
     /** Open/close the text IR write window (software deferral). When set, the
@@ -66,7 +70,8 @@ private:
     /** Snapshot current font/window/draw state into an IRTextDrawCmd and append
      *  it to m_write_cmds (software deferral).  Stamps the shared seq. */
     void AppendTextCmd(int32_t x, int32_t y, int32_t units_per_px,
-                       bool absolute, const char* text);
+                       bool absolute, const char* text,
+                       TbDrawFlagsMask draw_flags);
 
     /** Segment callback for paragraph layout — dispatches to PutDownSprites. */
     static void SwDrawSegment(const char* sbuf, const char* ebuf,
@@ -99,13 +104,11 @@ private:
 
     /**************************************************************************/
     /* Working draw-state during layout — owned here, seeded at draw entry,    */
-    /* mutated by inline text escape codes.  Mirrors GLTextRenderer's           */
-    /* m_text_draw_flags/colour; replaces the former ambient lbDisplay reads.   */
-    /* (Synced to lbDisplay.DrawFlags before each glyph LbSpriteDraw until the   */
-    /*  should be removed when state is passed.)                         */
+    /* mutated by inline text escape codes.                                    */
     /**************************************************************************/
     unsigned int                m_text_draw_flags  = 0;
     unsigned char               m_text_draw_colour = 0;
+    unsigned char               m_text_shadow_colour = 0;
 
     /**************************************************************************/
     /* Text windows                                                           */

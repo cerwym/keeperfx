@@ -27,7 +27,7 @@
  * Each visual role in the menu has a named style.  Styles encode:
  *   font_ptr   — pointer to the TbSpriteSheet* global to use
  *   ups_pct    — scale relative to the computed base ups (100 = 1:1)
- *   draw_flags — OR'd into lbDisplay.DrawFlags for this draw
+ *   draw_flags — passed directly to LbTextDrawResized for this draw
  *
  * Color comes from the font sprite sheet itself, not DrawColour:
  *   frontend_font[0] — dim     (face color 238)  inactive / unimportant
@@ -39,7 +39,7 @@
 typedef struct {
     struct TbSpriteSheet** font_ptr; /* &winfont, &frontend_font[N], etc. */
     int           ups_pct;           /* 100 = base size, 125 = 25% larger  */
-    unsigned short draw_flags;
+    TbDrawFlagsMask draw_flags;
 } RendMenuTextStyle;
 
 /* Roles — add new ones here as the menu grows */
@@ -84,13 +84,13 @@ static const RendMenuTextStyle k_styles[RMSTYLE_COUNT] = {
  * Apply a named style and return the effective units_per_px to pass to
  * LbTextDrawResized.  Call this immediately before every text draw.
  * Guards against a NULL font pointer (e.g. frontend fonts not loaded).
+ * The draw_flags for the style can be read from k_styles[id].draw_flags.
  */
 static int style_begin(RendMenuStyleId id, int base_ups)
 {
     const RendMenuTextStyle* s = &k_styles[id];
     struct TbSpriteSheet* fnt = (s->font_ptr && *s->font_ptr) ? *s->font_ptr : winfont;
     LbTextSetFont(fnt);
-    lbDisplay.DrawFlags = s->draw_flags;
     return base_ups * s->ups_pct / 100;
 }
 
@@ -470,7 +470,6 @@ void RendMenu_Draw(void)
     const struct TbSpriteSheet* save_font = TextRenderer_GetFont();
     int save_cx, save_cy, save_cw, save_ch;
     int save_jx, save_jy, save_jw;
-    unsigned short save_draw_flags = lbDisplay.DrawFlags;
     LbTextGetClipWindow(&save_cx, &save_cy, &save_cw, &save_ch);
     LbTextGetJustifyWindow(&save_jx, &save_jy, &save_jw);
 
@@ -582,13 +581,13 @@ void RendMenu_Draw(void)
     if (draw_full && show_left)
     {
         int eff = style_begin(RMSTYLE_NAV_ARROW, ups);
-        LbTextDrawResized(0, 4 * ups / 16, eff, "<");
+        LbTextDrawResized(0, 4 * ups / 16, eff, "<", 0);
     }
     /* > nav arrow */
     if (draw_full && show_right)
     {
         int eff = style_begin(RMSTYLE_NAV_ARROW, ups);
-        LbTextDrawResized(sw - arrow_w, 4 * ups / 16, eff, ">");
+        LbTextDrawResized(sw - arrow_w, 4 * ups / 16, eff, ">", 0);
     }
 
     for (int t = s_state.tab_scroll; t < s_state.tab_scroll + tabs_vis && t < tc; t++)
@@ -611,7 +610,7 @@ void RendMenu_Draw(void)
         if (draw_full)
         {
             LbTextSetWindow(tx + pad, 4 * ups / 16, inner_w, lh + 4 * ups / 16);
-            LbTextDrawResized(rel_x, 0, eff_ups, tabs[t].name);
+            LbTextDrawResized(rel_x, 0, eff_ups, tabs[t].name, k_styles[tab_style].draw_flags);
         }
     }
     LbTextSetWindow(0, 0, sw, sh);
@@ -638,7 +637,7 @@ void RendMenu_Draw(void)
                 int lw  = LbTextStringWidthM(e->label, eff);
                 int lx  = (pw - lw) / 2;
                 if (lx < 0) lx = 0;
-                LbTextDrawResized(mx + lx, ry + ups / 16, eff, e->label);
+                LbTextDrawResized(mx + lx, ry + ups / 16, eff, e->label, Lb_SPRITE_TRANSPAR8);
                 continue;
             }
 
@@ -649,7 +648,7 @@ void RendMenu_Draw(void)
             if (is_focused)
             {
                 int eff = style_begin(RMSTYLE_CURSOR, ups);
-                LbTextDrawResized(mx + 2 * ups / 16, ry + ups / 16, eff, ">");
+                LbTextDrawResized(mx + 2 * ups / 16, ry + ups / 16, eff, ">", 0);
             }
 
             /* Row label */
@@ -657,7 +656,7 @@ void RendMenu_Draw(void)
                                 : !is_available ? RMSTYLE_LABEL_DISABLED
                                 :                 RMSTYLE_LABEL;
             int eff_lbl = style_begin(lbl, ups);
-            LbTextDrawResized(mx + 12 * ups / 16, ry + ups / 16, eff_lbl, e->label);
+            LbTextDrawResized(mx + 12 * ups / 16, ry + ups / 16, eff_lbl, e->label, k_styles[lbl].draw_flags);
 
             /* Value string */
             char valbuf[48];
@@ -679,21 +678,21 @@ void RendMenu_Draw(void)
                     int text_y  = ry + ups / 16;
 
                     style_begin(RMSTYLE_ARROW, ups);
-                    LbTextDrawResized(base_x, text_y, eff_arr, "<");
+                    LbTextDrawResized(base_x, text_y, eff_arr, "<", 0);
 
                     style_begin(RMSTYLE_VALUE_FOCUSED, ups);
-                    LbTextDrawResized(base_x + arr_w, text_y, eff_val, valbuf);
+                    LbTextDrawResized(base_x + arr_w, text_y, eff_val, valbuf, 0);
 
                     style_begin(RMSTYLE_ARROW, ups);
                     LbTextDrawResized(base_x + arr_w + val_w + space_w,
-                                      text_y, eff_arr, ">");
+                                      text_y, eff_arr, ">", 0);
                 }
                 else
                 {
                     int eff_val = style_begin(RMSTYLE_VALUE, ups);
                     int val_w   = LbTextStringWidthM(valbuf, eff_val);
                     LbTextDrawResized(mx + pw - val_w - 6 * ups / 16,
-                                      ry + ups / 16, eff_val, valbuf);
+                                      ry + ups / 16, eff_val, valbuf, 0);
                 }
             }
         }
@@ -709,7 +708,7 @@ void RendMenu_Draw(void)
         {
             int eff = style_begin(RMSTYLE_DESC, ups);
             LbTextDrawResized(mx + 4 * ups / 16, desc_y + 2 * ups / 16, eff,
-                              focused_e->desc);
+                              focused_e->desc, 0);
         }
     }
 
@@ -733,7 +732,7 @@ void RendMenu_Draw(void)
 
             /* Label */
             int eff_lbl = style_begin(RMSTYLE_LABEL_FOCUSED, ups);
-            LbTextDrawResized(bar_x + pad, ry + ups / 16, eff_lbl, pe->label);
+            LbTextDrawResized(bar_x + pad, ry + ups / 16, eff_lbl, pe->label, 0);
 
             /* < value > right-aligned in bar */
             char valbuf[48];
@@ -752,14 +751,14 @@ void RendMenu_Draw(void)
                 int text_y = ry + ups / 16;
 
                 style_begin(RMSTYLE_ARROW, ups);
-                LbTextDrawResized(base_x, text_y, eff_arr, "<");
+                LbTextDrawResized(base_x, text_y, eff_arr, "<", 0);
 
                 style_begin(RMSTYLE_VALUE_FOCUSED, ups);
-                LbTextDrawResized(base_x + arr_w, text_y, eff_val, valbuf);
+                LbTextDrawResized(base_x + arr_w, text_y, eff_val, valbuf, 0);
 
                 style_begin(RMSTYLE_ARROW, ups);
                 LbTextDrawResized(base_x + arr_w + val_w + space_w,
-                                  text_y, eff_arr, ">");
+                                  text_y, eff_arr, ">", 0);
             }
         }
     }
@@ -768,5 +767,4 @@ void RendMenu_Draw(void)
     LbTextSetClipWindow(save_cx, save_cy, save_cx + save_cw, save_cy + save_ch);
     LbTextSetJustifyWindow(save_jx, save_jy, save_jw);
     LbTextSetFont(save_font);
-    lbDisplay.DrawFlags = save_draw_flags;
 }

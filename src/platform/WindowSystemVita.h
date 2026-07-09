@@ -32,7 +32,7 @@ public:
     void WarpCursor(int, int) override {}
 
     /** Reads the virtual cursor from input_vita and injects a MOUSEMOVE so
-     *  the engine's lbDisplay.MMouseX/Y tracks the analog/touch position. */
+     *  the engine's lbMouse.MMouseX/Y tracks the analog/touch position. */
     void PollInput() override;
 };
 

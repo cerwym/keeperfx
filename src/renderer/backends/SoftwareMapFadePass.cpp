@@ -36,7 +36,7 @@ void SoftwareMapFadePass::PrepareBuffers(uint8_t* fade_src, uint8_t* fade_dest, 
     int fadebuf_pos = 0;
     for (int i = 0; i < height; i++)
     {
-        unsigned char* src = RendererGetWScreen() + lbDisplay.GraphicsScreenWidth * i;
+        unsigned char* src = RendererGetWScreen() + RendererScreenWidth() * i;
         unsigned char* dst = &fade_src[fadebuf_pos];
         fadebuf_pos += scanline;
         memcpy(dst, src, RendererScreenWidth());
@@ -48,7 +48,7 @@ void SoftwareMapFadePass::PrepareBuffers(uint8_t* fade_src, uint8_t* fade_dest, 
     fadebuf_pos = 0;
     for (int i = 0; i < height; i++)
     {
-        unsigned char* src = RendererGetWScreen() + lbDisplay.GraphicsScreenWidth * i;
+        unsigned char* src = RendererGetWScreen() + RendererScreenWidth() * i;
         unsigned char* dst = &fade_dest[fadebuf_pos];
         fadebuf_pos += scanline;
         memcpy(dst, src, RendererScreenWidth());
@@ -66,7 +66,7 @@ int32_t SoftwareMapFadePass::StepFadeIn(int32_t step)
         generate_map_fade_ghost_table("data/mapfadeg.dat", engine_palette, m_map_fade_ghost_table);
     }
     map_fade(RendererGetWScreen(), m_map_fade_dest, m_map_fade_src, pixmap.fade_tables,
-        m_map_fade_ghost_table, step, 320, 200, lbDisplay.GraphicsScreenWidth);
+        m_map_fade_ghost_table, step, 320, 200, RendererScreenWidth());
     return (8 - get_my_player()->instance_remain_turns) * 4;
 }
  
@@ -81,6 +81,6 @@ int32_t SoftwareMapFadePass::StepFadeOut(int32_t step)
         generate_map_fade_ghost_table("data/mapfadeg.dat", engine_palette, m_map_fade_ghost_table);
     }
     map_fade(RendererGetWScreen(), m_map_fade_dest, m_map_fade_src, pixmap.fade_tables,
-        m_map_fade_ghost_table, step, 320, 200, lbDisplay.GraphicsScreenWidth);
+        m_map_fade_ghost_table, step, 320, 200, RendererScreenWidth());
     return get_my_player()->instance_remain_turns * 4;
 }

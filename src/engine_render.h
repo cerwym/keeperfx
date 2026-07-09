@@ -23,6 +23,7 @@
 #include "globals.h"
 #include "game_legacy.h"
 #include "bflib_render_types.h"  /* PolyPoint, GtBlock */
+#include "renderer/DrawState.h"  /* TbDrawFlagsMask */
 #include "bflib_sprite.h"
 #include "engine_lenses.h"
 
@@ -187,14 +188,12 @@ int floor_height_for_volume_box(PlayerNumber plyr_idx, MapSlabCoord slb_x, MapSl
 void frame_wibble_generate(void);
 void setup_rotate_stuff(long a1, long a2, long a3, long a4, long a5, long a6, long a7, long a8);
 
-void process_keeper_sprite(short x, short y, unsigned short a3, short kspr_angle, unsigned char a5, long a6);
+void process_keeper_sprite(short x, short y, unsigned short kspr_base, short kspr_angle,
+                           unsigned char sprgroup, long scale,
+                           TbDrawFlagsMask draw_flags, unsigned char alpha);
 
-/** process_keeper_sprite wrapper that sets draw globals to specified values,
- *  calls process_keeper_sprite, then restores them.
- *  Allows renderer code to replay captured draw state without touching lbDisplay
- *  or EngineSpriteDrawUsingAlpha directly.
- *  @param draw_flags  lbDisplay.DrawFlags value to set during the call.
- *  @param alpha       EngineSpriteDrawUsingAlpha value to set during the call. */
+/** Thin alias for process_keeper_sprite with explicit draw_flags and alpha.
+ *  Kept for call sites that already have the flags as named variables. */
 void process_keeper_sprite_ex(short x, short y, unsigned short kspr_base,
                                short kspr_angle, unsigned char sprgroup, long scale,
                                unsigned int draw_flags, unsigned char alpha);
@@ -233,7 +232,6 @@ void draw_frontview_engine(struct Camera *cam);
 
 /** Bucket-list draw — called by SoftwareWorldViewRenderer. */
 void display_drawlist(void);
-void display_drawlist_sprites_only(void);
 void display_fast_drawlist(struct Camera *cam);
 
 /** Draw only depth-positioned 3D entity sprites for one bucket.
@@ -245,16 +243,8 @@ void draw_3d_sprites_for_bucket(long bucket_num);
 void draw_frontview_3d_sprites_for_bucket(long bucket_num, struct Camera *cam);
 void draw_frontview_3d_sprites_for_bucket_current(long bucket_num);
 
-/** Draw all non-spatial sprites (shadows, selector, status, text, room flags)
- *  across all buckets into the CPU staging buffer. */
-void draw_nonspatial_sprites(void);
-
-/** Same as draw_nonspatial_sprites() but skips QK_CreatureShadow entries.
- *  Used by the GL renderer which handles shadows via its own GPU path. */
-void draw_nonspatial_sprites_no_shadows(void);
-
-/** GPU-accelerated version of draw_nonspatial_sprites_no_shadows().
- *  Submits UI elements to the hardware renderer for GPU batching instead of CPU rasterization. */
+/** Submits non-spatial UI elements (status flowers, floating gold text,
+ *  room flags, slab selector) to the UIRenderer for batched compositing. */
 void draw_nonspatial_sprites_gpu(void);
 
 /** Rasterize a keeper sprite frame into a 256×256 byte scratch buffer.

@@ -68,8 +68,7 @@ void message_draw(void)
         {
             long x = 148 * units_per_pixel / 16;
             LbTextSetWindow(0, 0, RendererGetScreenWidth(), RendererGetScreenHeight());
-            clear_flag(lbDisplay.DrawFlags, Lb_TEXT_ONE_COLOR);
-            LbTextDrawResized(x+32*units_per_pixel/16, y, tx_units_per_px, game.messages[i].text);
+            LbTextDrawResized(x+32*units_per_pixel/16, y, tx_units_per_px, game.messages[i].text, 0);
             unsigned long spr_idx = 0;
             PlayerNumber plyr_idx = game.messages[i].plyr_idx;
             switch (game.messages[i].type)
@@ -151,13 +150,13 @@ void message_draw(void)
             {
                 case MsgType_Player:
                 {
-                    draw_gui_panel_sprite_left_player(x, y, ps_units_per_px, spr_idx, plyr_idx);
+                    draw_gui_panel_sprite_left_player(x, y, ps_units_per_px, spr_idx, plyr_idx, 0);
                     break;
                 }
                 case MsgType_Creature:
                 {
                     spr = get_panel_sprite(spr_idx);
-                    UIRenderer_SubmitPanelSpriteRaw(x, y, ps_units_per_px, spr);
+                    UIRenderer_SubmitPanelSpriteRaw(x, y, ps_units_per_px, spr, 0);
                     break;
                 }
                 case MsgType_CreatureSpell:
@@ -167,7 +166,7 @@ void message_draw(void)
                 case MsgType_CreatureInstance:
                 {
                     spr = get_panel_sprite(spr_idx);
-                    UIRenderer_SubmitPanelSpriteRaw(x, y, ps_units_per_px, spr);
+                    UIRenderer_SubmitPanelSpriteRaw(x, y, ps_units_per_px, spr, 0);
                     break;
                 }
             }

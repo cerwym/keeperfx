@@ -117,6 +117,44 @@ struct DevInput {
 /******************************************************************************/
 extern volatile TbBool lbMouseGrab; // set to false if user sets altinput command line option
 extern volatile TbBool lbMouseGrabbed; // whether the mouse is current grabbed by the game window
+extern short lbMouseMoveRatio; // mouse sensitivity ratio (8.8 fixed point)
+extern const struct TbSprite *lbMouseSprite; // current mouse cursor sprite
+
+/** Mouse input state (position, buttons, clip window).
+ *  X/Y = button-down pos, MX/MY = move pos,
+ *  RX/RY = release pos; M*Button = move-time button state, R*Button = release. */
+struct TbMouseState {
+    long          MouseWindowX;
+    long          MouseWindowY;
+    long          MouseWindowWidth;
+    long          MouseWindowHeight;
+    int32_t       MouseX;
+    int32_t       MouseY;
+    int32_t       MMouseX;
+    int32_t       MMouseY;
+    int32_t       RMouseX;
+    int32_t       RMouseY;
+    unsigned char LeftButton;
+    unsigned char RightButton;
+    unsigned char MiddleButton;
+    unsigned char MLeftButton;
+    unsigned char MRightButton;
+    unsigned char MMiddleButton;
+    unsigned char RLeftButton;
+    unsigned char RMiddleButton;
+    unsigned char RRightButton;
+};
+extern struct TbMouseState lbMouse;
+
+/** Mouse wheel scroll state — position counter and per-frame move counts.
+ *  Written by the SDL event handler (bflib_mouse.cpp); read and cleared by
+ *  kjm_input.c each frame to derive wheel_scrolled_up/down. */
+struct MouseWheelState {
+    short  WheelPosition;
+    ushort WheelMoveUp;
+    ushort WheelMoveDown;
+};
+extern volatile struct MouseWheelState lbMouseWheel;
 /******************************************************************************/
 TbResult LbMouseChangeSpriteAndHotspot(const struct TbSprite *mouseSprite, long hot_x, long hot_y);
 TbResult LbMouseSetup(struct TbSprite *mouseSprite);

@@ -80,6 +80,20 @@ static IWorldViewRenderer*  s_worldViewRenderer   = nullptr;
 static IMapFadePass*        s_mapFadePass         = nullptr;
 static ITextRenderer*       s_textRenderer        = nullptr;
 static IUIRenderer*         s_uiRenderer          = nullptr;
+
+// Renderer-private screen dimensions.
+static TbScreenCoord        s_physicalScreenWidth  = 0;
+static TbScreenCoord        s_physicalScreenHeight = 0;
+static TbScreenCoord        s_graphicsScreenWidth  = 0;
+static TbScreenCoord        s_graphicsScreenHeight = 0;
+static unsigned char*       s_wscreen              = NULL;
+static unsigned char*       s_graphicsWindowPtr    = NULL;
+
+// Renderer-private graphics/clip window rect.
+static long                 s_graphicsWindowX      = 0;
+static long                 s_graphicsWindowY      = 0;
+static long                 s_graphicsWindowWidth  = 0;
+static long                 s_graphicsWindowHeight = 0;
 static SoftwareUIRenderer*  s_softwareUIRenderer  = nullptr;  // non-null only in software mode
 static ICursorLayer*        s_cursorLayer         = nullptr;
 #ifdef RENDERER_OPENGL_ENABLED
@@ -805,6 +819,7 @@ void RendererClearScreen(unsigned char colour_index)
 // Tracks whether the screen is currently locked (RendererLockScreen called, not yet unlocked).
 // Decoupled from lbDisplay.WScreen so that GPU mode (where WScreen is always null) works correctly.
 static bool s_screen_locked = false;
+static bool s_world_drawn_this_frame = false;
 
 int RendererLockScreen(void)
 {
@@ -812,23 +827,22 @@ int RendererLockScreen(void)
         return 0;
     if (RendererHasGPURenderPath()) {
         // GPU mode: no CPU framebuffer. WScreen stays null for the entire frame.
-        lbDisplay.WScreen = NULL;
-        lbDisplay.GraphicsWindowPtr = NULL;
-        lbDisplay.GraphicsScreenWidth = RendererScreenWidth();
+        s_wscreen = NULL;
+        s_graphicsWindowPtr = NULL;
         s_screen_locked = true;
         return 1;
     }
     int pitch = 0;
     unsigned char *pixels = RendererLockFramebuffer(&pitch);
     if (!pixels) {
-        lbDisplay.GraphicsWindowPtr = NULL;
-        lbDisplay.WScreen = NULL;
+        s_graphicsWindowPtr = NULL;
+        s_wscreen = NULL;
         return 0;
     }
-    lbDisplay.WScreen = pixels;
-    lbDisplay.GraphicsScreenWidth = pitch;
-    lbDisplay.GraphicsWindowPtr = &lbDisplay.WScreen[lbDisplay.GraphicsWindowX +
-        lbDisplay.GraphicsScreenWidth * lbDisplay.GraphicsWindowY];
+    s_wscreen = pixels;
+    s_graphicsScreenWidth = pitch;
+    s_graphicsWindowPtr = &s_wscreen[s_graphicsWindowX +
+        s_graphicsScreenWidth * s_graphicsWindowY];
     s_screen_locked = true;
     return 1;
 }
@@ -836,8 +850,8 @@ int RendererLockScreen(void)
 void RendererUnlockScreen(void)
 {
     s_screen_locked = false;
-    lbDisplay.WScreen = NULL;
-    lbDisplay.GraphicsWindowPtr = NULL;
+    s_wscreen = NULL;
+    s_graphicsWindowPtr = NULL;
     RendererUnlockFramebuffer();
 }
 
@@ -882,6 +896,13 @@ int RendererIsScreenLocked(void)
     return s_screen_locked ? 1 : 0;
 }
 
+int RendererConsumeWorldDrawn(void)
+{
+    int v = s_world_drawn_this_frame ? 1 : 0;
+    s_world_drawn_this_frame = false;
+    return v;
+}
+
 /******************************************************************************/
 /* Screen setup / teardown (replaces LbScreenSetup / LbScreenReset)           */
 /******************************************************************************/
@@ -918,63 +939,77 @@ void RendererSetViewport(int32_t x, int32_t y, int32_t width, int32_t height)
     if (right_edge < 0) right_edge = 0;
     if (y < 0) y = 0;
     if (bottom_edge < 0) bottom_edge = 0;
-    if (x > lbDisplay.GraphicsScreenWidth) x = lbDisplay.GraphicsScreenWidth;
-    if (right_edge > lbDisplay.GraphicsScreenWidth) right_edge = lbDisplay.GraphicsScreenWidth;
-    if (y > lbDisplay.GraphicsScreenHeight) y = lbDisplay.GraphicsScreenHeight;
-    if (bottom_edge > lbDisplay.GraphicsScreenHeight) bottom_edge = lbDisplay.GraphicsScreenHeight;
-    lbDisplay.GraphicsWindowX = x;
-    lbDisplay.GraphicsWindowY = y;
-    lbDisplay.GraphicsWindowWidth = right_edge - x;
-    lbDisplay.GraphicsWindowHeight = bottom_edge - y;
-    if (lbDisplay.WScreen != NULL)
-        lbDisplay.GraphicsWindowPtr = lbDisplay.WScreen + lbDisplay.GraphicsScreenWidth * y + x;
+    if (x > s_graphicsScreenWidth) x = s_graphicsScreenWidth;
+    if (right_edge > s_graphicsScreenWidth) right_edge = s_graphicsScreenWidth;
+    if (y > RendererScreenHeight()) y = RendererScreenHeight();
+    if (bottom_edge > RendererScreenHeight()) bottom_edge = RendererScreenHeight();
+    s_graphicsWindowX = x;
+    s_graphicsWindowY = y;
+    s_graphicsWindowWidth = right_edge - x;
+    s_graphicsWindowHeight = bottom_edge - y;
+    if (s_wscreen != NULL)
+        s_graphicsWindowPtr = s_wscreen + s_graphicsScreenWidth * y + x;
     else
-        lbDisplay.GraphicsWindowPtr = NULL;
+        s_graphicsWindowPtr = NULL;
 }
 
 void RendererStoreViewport(TbGraphicsWindow *grwnd)
 {
-    grwnd->x = lbDisplay.GraphicsWindowX;
-    grwnd->y = lbDisplay.GraphicsWindowY;
-    grwnd->width = lbDisplay.GraphicsWindowWidth;
-    grwnd->height = lbDisplay.GraphicsWindowHeight;
+    grwnd->x = s_graphicsWindowX;
+    grwnd->y = s_graphicsWindowY;
+    grwnd->width = s_graphicsWindowWidth;
+    grwnd->height = s_graphicsWindowHeight;
     grwnd->ptr = NULL;
 }
 
 void RendererLoadViewport(TbGraphicsWindow *grwnd)
 {
-    lbDisplay.GraphicsWindowX = grwnd->x;
-    lbDisplay.GraphicsWindowY = grwnd->y;
-    lbDisplay.GraphicsWindowWidth = grwnd->width;
-    lbDisplay.GraphicsWindowHeight = grwnd->height;
-    if (lbDisplay.WScreen != NULL)
-        lbDisplay.GraphicsWindowPtr = lbDisplay.WScreen
-            + lbDisplay.GraphicsScreenWidth * lbDisplay.GraphicsWindowY + lbDisplay.GraphicsWindowX;
+    s_graphicsWindowX = grwnd->x;
+    s_graphicsWindowY = grwnd->y;
+    s_graphicsWindowWidth = grwnd->width;
+    s_graphicsWindowHeight = grwnd->height;
+    if (s_wscreen != NULL)
+        s_graphicsWindowPtr = s_wscreen
+            + s_graphicsScreenWidth * s_graphicsWindowY + s_graphicsWindowX;
     else
-        lbDisplay.GraphicsWindowPtr = NULL;
+        s_graphicsWindowPtr = NULL;
 }
 
 /******************************************************************************/
 /* Display property accessors                                                 */
 /******************************************************************************/
 
-TbScreenCoord RendererPhysicalWidth(void)  { return lbDisplay.PhysicalScreenWidth;  }
-TbScreenCoord RendererPhysicalHeight(void) { return lbDisplay.PhysicalScreenHeight; }
-TbScreenCoord RendererScreenWidth(void)    { return lbDisplay.GraphicsScreenWidth;  }
-TbScreenCoord RendererScreenHeight(void)   { return lbDisplay.GraphicsScreenHeight; }
+TbScreenCoord RendererPhysicalWidth(void)  { return s_physicalScreenWidth;  }
+TbScreenCoord RendererPhysicalHeight(void) { return s_physicalScreenHeight; }
+TbScreenCoord RendererScreenWidth(void)    { return s_graphicsScreenWidth;  }
+TbScreenCoord RendererScreenHeight(void)   { return s_graphicsScreenHeight; }
+long RendererGraphicsWindowX(void)      { return s_graphicsWindowX;      }
+long RendererGraphicsWindowY(void)      { return s_graphicsWindowY;      }
+long RendererGraphicsWindowWidth(void)  { return s_graphicsWindowWidth;  }
+long RendererGraphicsWindowHeight(void) { return s_graphicsWindowHeight; }
 unsigned short RendererGetScreenWidth(void)  { return MyScreenWidth; }
 unsigned short RendererGetScreenHeight(void) { return MyScreenHeight; }
-unsigned char* RendererGetWScreen(void)    { return lbDisplay.WScreen; }
+unsigned char* RendererGetWScreen(void)    { return s_wscreen; }
+unsigned char* RendererGetGraphicsWindowPtr(void) { return s_graphicsWindowPtr; }
 
 void RendererSetWScreen(unsigned char* buf)
 {
-    lbDisplay.WScreen = buf;
+    s_wscreen = buf;
+    if (!buf)
+        s_graphicsWindowPtr = NULL;
 }
 
 void RendererSetScreenDimensions(int width, int height)
 {
-    lbDisplay.GraphicsScreenWidth  = width;
-    lbDisplay.GraphicsScreenHeight = height;
+    s_graphicsScreenWidth  = width;
+    s_graphicsScreenHeight         = height;
+}
+
+/** Set the physical (video-mode) resolution. Formerly lbDisplay.PhysicalScreen*. */
+void RendererSetPhysicalDimensions(int width, int height)
+{
+    s_physicalScreenWidth  = width;
+    s_physicalScreenHeight = height;
 }
 
 /******************************************************************************/
@@ -990,6 +1025,31 @@ TbResult RendererPaletteSet(unsigned char *palette) { return LbPaletteSet(palett
 TbResult RendererPaletteGet(unsigned char *palette) { return LbPaletteGet(palette); }
 int32_t RendererPaletteFade(unsigned char *pal, int32_t fade_steps, enum TbPaletteFadeFlag flg) { return LbPaletteFade(pal, fade_steps, flg); }
 TbResult RendererPaletteStopFade(void) { return LbPaletteStopOpenFade(); }
+
+void RendererApplyPossessionPalette(long step, const unsigned char *main_palette)
+{
+    // GPU renderers use the screen tint overlay for possession/pain effects;
+    // the software path must modify the INDEX8 surface palette directly.
+    if (RendererHasGPURenderPath())
+        return;
+    unsigned char palette[PALETTE_SIZE];
+    for (int i = 0; i < PALETTE_COLORS; i++)
+    {
+        const unsigned char *src = &main_palette[3 * i];
+        unsigned char       *dst = &palette[3 * i];
+        unsigned long pix = ((step * (((long)src[0]) - 63)) / 120) + 63;
+        if (pix > 63) pix = 63;
+        dst[0] = (unsigned char)pix;
+        pix = (step * ((long)src[1])) / 120;
+        if (pix > 63) pix = 63;
+        dst[1] = (unsigned char)pix;
+        pix = (step * ((long)src[2])) / 120;
+        if (pix > 63) pix = 63;
+        dst[2] = (unsigned char)pix;
+    }
+    RendererWaitVbi();
+    RendererPaletteSet(palette);
+}
 
 /******************************************************************************/
 /* Screen lifecycle helpers                                                   */
@@ -1016,6 +1076,7 @@ TbResult RendererWaitVbi(void)                   { return LbScreenWaitVbi(); }
 void WorldViewRenderer_BeginWorldPass(unsigned char* framebuf, int pitch, int w, int h,
                                       int vp_x, int vp_y)
 {
+    s_world_drawn_this_frame = true;
     if (s_worldViewRenderer)
         s_worldViewRenderer->BeginWorldPass(framebuf, pitch, w, h, vp_x, vp_y);
 }
@@ -1154,10 +1215,11 @@ void CursorLayer_SubmitPointerSprite(const struct TbSprite* spr, int32_t x, int3
 }
 
 void CursorLayer_SubmitKeeperHandSprite(short x, short y, unsigned short kspr_base,
-                                        short kspr_angle, unsigned char sprgroup, int32_t scale)
+                                        short kspr_angle, unsigned char sprgroup, int32_t scale,
+                                        TbDrawFlagsMask draw_flags)
 {
     if (s_cursorLayer)
-        s_cursorLayer->SubmitKeeperHandSprite(x, y, kspr_base, kspr_angle, sprgroup, scale);
+        s_cursorLayer->SubmitKeeperHandSprite(x, y, kspr_base, kspr_angle, sprgroup, scale, draw_flags);
 }
 /******************************************************************************/
 
@@ -1202,17 +1264,15 @@ TbBool RendererPresentImage(const struct RendererPresentImageDesc* desc)
 {
     if (!desc || !desc->src) return false;
 
-    // GPU path: append an IRImagePresentCmd to the RenderGraph write buffer.
+    // Backend virtual — GPU queues an IR present, software handles FMV
+    // embedded-palette blits via its PresentImage override.
     IRenderer* rend = RendererGetActive();
     if (rend && rend->PresentImage(desc))
         return true;
 
-    // Software backend (or GPU path unavailable): only the classic opaque
-    // game-palette blit has a drop-in CPU equivalent (the WScreen copy). The
-    // other cases (FMV embedded palette, transparent overlay, landview zoom,
-    // RGBA8) return false so the caller runs its own CPU path — e.g. the FMV
-    // copy_to_screen and the landview WScreen fallbacks. These per-backend CPU
-    // paths are what the RenderGraph-unification chapter later deletes.
+    // Fallback for the classic opaque game-palette blit (menu backgrounds,
+    // loading screens). Transparent overlays, landview zoom, and RGBA8 are
+    // not supported here; their callers use backend-specific paths.
     if (desc->format  != PRESENT_FORMAT_INDEXED8 ||
         desc->kind    != PRESENT_KIND_OPAQUE     ||
         desc->palette != PRESENT_PALETTE_GAME)
@@ -1220,7 +1280,7 @@ TbBool RendererPresentImage(const struct RendererPresentImageDesc* desc)
         return false;
     }
     return copy_raw8_image_buffer(
-        lbDisplay.WScreen,
+        s_wscreen,
         RendererScreenWidth(), RendererScreenHeight(),
         desc->dst_w, desc->dst_h, desc->dst_x, desc->dst_y,
         desc->src, desc->src_w, desc->src_h);

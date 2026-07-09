@@ -240,9 +240,7 @@ void frontstats_draw_main_stats(struct GuiButton *gbtn)
             border = spr->SWidth * fs_units_per_px / 16;
         }
         LbTextSetWindow(pos_x + border, pos_y, gbtn->width - 2 * border, ln_height);
-        lbDisplay.DrawFlags = Lb_TEXT_HALIGN_LEFT;
-        LbTextDrawResized(0, 0, tx_units_per_px, get_string(stat->name_stridx));
-        lbDisplay.DrawFlags = Lb_TEXT_HALIGN_RIGHT;
+        LbTextDrawResized(0, 0, tx_units_per_px, get_string(stat->name_stridx), Lb_TEXT_HALIGN_LEFT);
         int stat_val;
         if (stat->get_value != NULL)
         {
@@ -254,11 +252,11 @@ void frontstats_draw_main_stats(struct GuiButton *gbtn)
         }
         if ( (timer_enabled()) && (stat->name_stridx == GUIStr_Time) && (!TimerGame) )
         {
-            LbTextDrawResizedFmt(0, 0, tx_units_per_px, "%02ld:%02ld:%02ld:%03ld", Timer.Hours, Timer.Minutes, Timer.Seconds, Timer.MSeconds);
+            LbTextDrawResizedFmt(0, 0, tx_units_per_px, Lb_TEXT_HALIGN_RIGHT, "%02ld:%02ld:%02ld:%03ld", Timer.Hours, Timer.Minutes, Timer.Seconds, Timer.MSeconds);
         }
         else
         {
-            LbTextDrawResizedFmt(0, 0, tx_units_per_px, "%d", stat_val);
+            LbTextDrawResizedFmt(0, 0, tx_units_per_px, Lb_TEXT_HALIGN_RIGHT, "%d", stat_val);
         }
         pos_y += ln_height + 1 * units_per_pixel / 16;
     }
@@ -281,9 +279,7 @@ void frontstats_draw_scrolling_stats(struct GuiButton *gbtn)
     int pos_y = -scrolling_offset * tx_units_per_px / 16;
     for (struct StatsData* stat = &scrolling_stats_data[scrolling_index]; pos_y < gbtn->height; pos_y += ln_height + 4 * units_per_pixel / 16)
     {
-        lbDisplay.DrawFlags = Lb_TEXT_HALIGN_LEFT;
-        LbTextDrawResized(pos_x, pos_y, tx_units_per_px, get_string(stat->name_stridx));
-        lbDisplay.DrawFlags = Lb_TEXT_HALIGN_RIGHT;
+        LbTextDrawResized(pos_x, pos_y, tx_units_per_px, get_string(stat->name_stridx), Lb_TEXT_HALIGN_LEFT);
         int stat_val;
         if (stat->get_value != NULL)
         {
@@ -293,7 +289,7 @@ void frontstats_draw_scrolling_stats(struct GuiButton *gbtn)
         {
             stat_val = -1;
         }
-        LbTextDrawResizedFmt(pos_x, pos_y, tx_units_per_px, "%d", stat_val);
+        LbTextDrawResizedFmt(pos_x, pos_y, tx_units_per_px, Lb_TEXT_HALIGN_RIGHT, "%d", stat_val);
         stat++;
         if (!stat->name_stridx)
           stat = scrolling_stats_data;

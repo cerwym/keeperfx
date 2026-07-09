@@ -316,15 +316,14 @@ static void draw_netmap_players_hands(void)
         spr = get_hand_sprite_for_packet(&nspck, anim_frame, &x, &y);
         x -= (long)map_info.screen_shift_x;
         y -= (long)map_info.screen_shift_y;
-        LbSpriteDrawResized(scale_value_landview(x), scale_value_landview(y), units_per_pixel_landview, spr);
+        LbSpriteDrawResized(scale_value_landview(x), scale_value_landview(y), units_per_pixel_landview, spr, 0);
         w = LbTextStringWidth(plyr_nam);
         if (w > 0) {
-            lbDisplay.DrawFlags = 0;
             h = LbTextHeight(level_name);
             y += 32;
             x += 32;
-            LbDrawBox(scale_value_landview(x-4), scale_value_landview(y), scale_value_landview(w+8), scale_value_landview(h), colr);
-            LbTextDrawResized(scale_value_landview(x), scale_value_landview(y), units_per_pixel_landview, plyr_nam);
+            LbDrawBox(scale_value_landview(x-4), scale_value_landview(y), scale_value_landview(w+8), scale_value_landview(h), colr, 0);
+            LbTextDrawResized(scale_value_landview(x), scale_value_landview(y), units_per_pixel_landview, plyr_nam, 0);
         }
     }
 }
@@ -333,7 +332,7 @@ void frontnetmap_draw(void)
 {
     SYNCDBG(8,"Starting");
     LbTextSetFont(map_font);
-    LbTextSetWindow(0, 0, lbDisplay.PhysicalScreenWidth, lbDisplay.PhysicalScreenHeight);
+    LbTextSetWindow(0, 0, RendererPhysicalWidth(), RendererPhysicalHeight());
     if ((map_info.fadeflags & MLInfoFlg_Zooming) != 0) {
         frontzoom_to_point(map_info.hotspot_imgpos_x, map_info.hotspot_imgpos_y, map_info.fade_pos);
         compressed_window_draw();
@@ -446,9 +445,8 @@ TbBool frontnetmap_load(void)
     fe_net_level_selected = SINGLEPLAYER_NOTSTARTED;
     net_level_hilighted = SINGLEPLAYER_NOTSTARTED;
     set_pointer_graphic_none();
-    LbMouseSetPosition(lbDisplay.PhysicalScreenWidth/2, lbDisplay.PhysicalScreenHeight/2);
+    LbMouseSetPosition(RendererPhysicalWidth()/2, RendererPhysicalHeight()/2);
     map_sound_fade = FULL_LOUDNESS;
-    lbDisplay.DrawFlags = 0;
     set_music_volume(settings.music_volume);
     frontmap_start_music();
     if (fe_network_active) {

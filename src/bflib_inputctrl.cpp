@@ -20,6 +20,7 @@
 /******************************************************************************/
 #include "kfx_memory.h"
 #include "pre_inc.h"
+#include "renderer/RendererManager.h"
 #include <math.h>
 #include <map>
 #include "bflib_inputctrl.h"
@@ -366,11 +367,11 @@ static void process_event(const SDL_Event *ev)
 #ifdef KEEPERFX_IMGUI_ENABLED
         if (DebugOverlay_IsVisible()) return;
 #endif
-        if (lbMouseGrabbed && lbDisplay.MouseMoveRatio > 0)
+        if (lbMouseGrabbed && lbMouseMoveRatio > 0)
         {
             // SDL3: xrel/yrel are float
-            int dx = (int)ev->motion.xrel * lbDisplay.MouseMoveRatio + frac_x;
-            int dy = (int)ev->motion.yrel * lbDisplay.MouseMoveRatio + frac_y;
+            int dx = (int)ev->motion.xrel * lbMouseMoveRatio + frac_x;
+            int dy = (int)ev->motion.yrel * lbMouseMoveRatio + frac_y;
 
             mouseDelta.x = (dx + 128) >> 8;
             mouseDelta.y = (dy + 128) >> 8;
@@ -385,7 +386,7 @@ static void process_event(const SDL_Event *ev)
             if (isMouseActivated)
             {
                 isMouseActivated = 0;
-                pointerHandler.SetMousePosition((int)ev->motion.x + lbDisplay.MouseWindowY, (int)ev->motion.y + lbDisplay.MouseWindowY);
+                pointerHandler.SetMousePosition((int)ev->motion.x + lbMouse.MouseWindowY, (int)ev->motion.y + lbMouse.MouseWindowY);
                 mouseDelta.x = 0;
                 mouseDelta.y = 0;
                 frac_x = 0;
@@ -582,7 +583,7 @@ void LbMouseCheckPosition(TbBool grab_state_changed)
                 }
                 else
                 {
-                    LbMouseSetPosition(lbDisplay.PhysicalScreenWidth/2, lbDisplay.PhysicalScreenHeight/2);
+                    LbMouseSetPosition(RendererPhysicalWidth()/2, RendererPhysicalHeight()/2);
                 }
             }
         }

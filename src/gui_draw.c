@@ -237,16 +237,10 @@ void draw_ornate_slab_outline64k(long pos_x, long pos_y, int units_per_px, long 
 
 void draw_round_slab64k(long pos_x, long pos_y, int units_per_px, long width, long height, long style_type)
 {
-    unsigned short drwflags_mem = lbDisplay.DrawFlags;
-    lbDisplay.DrawFlags &= ~Lb_SPRITE_OUTLINE;
     if (style_type == ROUNDSLAB64K_LIGHT) {
-        lbDisplay.DrawFlags |= Lb_SPRITE_TRANSPAR4;
-        LbDrawBox(pos_x + scale_ui_value_lofi(4), pos_y + scale_ui_value_lofi(4), width - scale_ui_value_lofi(8), height - scale_ui_value_lofi(8), 1);
-        lbDisplay.DrawFlags &= ~Lb_SPRITE_TRANSPAR4;
+        LbDrawBox(pos_x + scale_ui_value_lofi(4), pos_y + scale_ui_value_lofi(4), width - scale_ui_value_lofi(8), height - scale_ui_value_lofi(8), 1, Lb_SPRITE_TRANSPAR4);
     } else {
-        lbDisplay.DrawFlags |= Lb_SPRITE_TRANSPAR8;
-        LbDrawBox(pos_x + scale_ui_value_lofi(4), pos_y + scale_ui_value_lofi(4), width - scale_ui_value_lofi(8), height - scale_ui_value_lofi(8), 1);
-        lbDisplay.DrawFlags &= ~Lb_SPRITE_TRANSPAR8;
+        LbDrawBox(pos_x + scale_ui_value_lofi(4), pos_y + scale_ui_value_lofi(4), width - scale_ui_value_lofi(8), height - scale_ui_value_lofi(8), 1, Lb_SPRITE_TRANSPAR8);
     }
     int x;
     int y;
@@ -257,25 +251,24 @@ void draw_round_slab64k(long pos_x, long pos_y, int units_per_px, long width, lo
     {
         x = pos_x + i + scale_ui_value_lofi(34);
         y = pos_y;
-        UIRenderer_SubmitPanelSprite(x, y, ps_units_per_spr, GPS_message_frame_thin_hex_ct);
+        UIRenderer_SubmitPanelSprite(x, y, ps_units_per_spr, GPS_message_frame_thin_hex_ct, 0);
         y += height - scale_ui_value_lofi(4);
-        UIRenderer_SubmitPanelSprite(x, y, ps_units_per_spr, GPS_message_frame_thin_hex_cb);
+        UIRenderer_SubmitPanelSprite(x, y, ps_units_per_spr, GPS_message_frame_thin_hex_cb, 0);
     }
     for (i = 0; i < height - scale_ui_value_lofi(56); i += scale_ui_value_lofi(20))
     {
         x = pos_x;
         y = pos_y + i + scale_ui_value_lofi(28);
-        UIRenderer_SubmitPanelSprite(x, y, ps_units_per_spr, GPS_message_frame_thin_hex_cr);
+        UIRenderer_SubmitPanelSprite(x, y, ps_units_per_spr, GPS_message_frame_thin_hex_cr, 0);
         x += width - scale_ui_value_lofi(4);
-        UIRenderer_SubmitPanelSprite(x, y, ps_units_per_spr, GPS_message_frame_thin_hex_cl);
+        UIRenderer_SubmitPanelSprite(x, y, ps_units_per_spr, GPS_message_frame_thin_hex_cl, 0);
     }
     x = pos_x + width - scale_ui_value_lofi(34);
     y = pos_y + height - scale_ui_value_lofi(28);
-    UIRenderer_SubmitPanelSprite(pos_x, pos_y, ps_units_per_spr, GPS_message_frame_thin_hex_tl);
-    UIRenderer_SubmitPanelSprite(x,     pos_y, ps_units_per_spr, GPS_message_frame_thin_hex_tr);
-    UIRenderer_SubmitPanelSprite(pos_x, y,     ps_units_per_spr, GPS_message_frame_thin_hex_bl);
-    UIRenderer_SubmitPanelSprite(x,     y,     ps_units_per_spr, GPS_message_frame_thin_hex_br);
-    lbDisplay.DrawFlags = drwflags_mem;
+    UIRenderer_SubmitPanelSprite(pos_x, pos_y, ps_units_per_spr, GPS_message_frame_thin_hex_tl, 0);
+    UIRenderer_SubmitPanelSprite(x,     pos_y, ps_units_per_spr, GPS_message_frame_thin_hex_tr, 0);
+    UIRenderer_SubmitPanelSprite(pos_x, y,     ps_units_per_spr, GPS_message_frame_thin_hex_bl, 0);
+    UIRenderer_SubmitPanelSprite(x,     y,     ps_units_per_spr, GPS_message_frame_thin_hex_br, 0);
 }
 
 /**
@@ -395,7 +388,6 @@ int simple_frontend_sprite_width_units_per_px(const struct GuiButton *gbtn, long
 void draw_button_string(struct GuiButton *gbtn, int base_width, const char *text)
 {
     static unsigned char cursor_type = 0;
-    unsigned long flgmem = lbDisplay.DrawFlags;
     long cursor_pos = -1;
     static char dtext[TEXT_BUFFER_LENGTH];
     snprintf(dtext, TEXT_BUFFER_LENGTH, "%s", text);
@@ -405,8 +397,8 @@ void draw_button_string(struct GuiButton *gbtn, int base_width, const char *text
         if ((cursor_type & 0x02) == 0)
           cursor_pos = input_field_pos;
         LbLocTextStringConcat(dtext, " ", TEXT_BUFFER_LENGTH);
-        lbDisplay.DrawColour = LbTextGetFontFaceColor(TextRenderer_GetFont());
-        lbDisplayEx.ShadowColour = LbTextGetFontBackColor(TextRenderer_GetFont());
+        TextRenderer_SetDrawColour(LbTextGetFontFaceColor(TextRenderer_GetFont()));
+        TextRenderer_SetShadowColour(LbTextGetFontBackColor(TextRenderer_GetFont()));
     }
     TbBool low_res = ( (RendererGetScreenHeight() < 400) && (dbc_language > 0) );
     int width = gbtn->width;
@@ -443,7 +435,7 @@ void draw_button_string(struct GuiButton *gbtn, int base_width, const char *text
     }
     LbTextSetJustifyWindow(x, gbtn->scr_pos_y, width);
     LbTextSetClipWindow(x, gbtn->scr_pos_y, width, gbtn->height);
-    lbDisplay.DrawFlags = Lb_TEXT_HALIGN_CENTER;// | Lb_TEXT_UNDERLNSHADOW;
+    TbDrawFlagsMask btn_draw_flags = Lb_TEXT_HALIGN_CENTER;// | Lb_TEXT_UNDERLNSHADOW;
     if (cursor_pos >= 0) {
         // Mind the order, 'cause inserting makes positions shift
         LbLocTextStringInsert(dtext, "\x0B", cursor_pos+1, TEXT_BUFFER_LENGTH);
@@ -488,11 +480,10 @@ void draw_button_string(struct GuiButton *gbtn, int base_width, const char *text
             }
         }
     }
-    LbTextDrawResized(w, h, tx_units_per_px, dtext);
+    LbTextDrawResized(w, h, tx_units_per_px, dtext, btn_draw_flags);
     LbTextSetJustifyWindow(0, 0, RendererScreenWidth());
     LbTextSetClipWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
     LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
-    lbDisplay.DrawFlags = flgmem;
 }
 
 void draw_message_box_at(long startx, long starty, long box_width, long box_height, long spritesx, long spritesy)
@@ -505,13 +496,13 @@ void draw_message_box_at(long startx, long starty, long box_width, long box_heig
     long y = starty;
     {
         spr = get_frontend_sprite(GFS_hugearea_thn_cor_tl);
-        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr);
+        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr, 0);
         x += spr->SWidth * units_per_pixel / 16;
     }
     for (n=0; n < spritesx; n++)
     {
         spr = get_frontend_sprite((n % 4) + GFS_hugearea_thn_tx1_tc);
-        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr);
+        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr, 0);
         x += spr->SWidth * units_per_pixel / 16;
     }
     x = startx;
@@ -522,12 +513,12 @@ void draw_message_box_at(long startx, long starty, long box_width, long box_heig
     for (n=0; n < spritesx; n++)
     {
         spr = get_frontend_sprite((n % 4) + GFS_hugearea_thn_tx1_tc);
-        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr);
+        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr, 0);
         x += spr->SWidth * units_per_pixel / 16;
     }
     {
         spr = get_frontend_sprite(GFS_hugearea_thn_cor_tr);
-        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr);
+        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr, 0);
     }
     // Draw centered line of sprites
     spr = get_frontend_sprite(GFS_hugearea_thn_cor_tl);
@@ -535,18 +526,18 @@ void draw_message_box_at(long startx, long starty, long box_width, long box_heig
     y += spr->SHeight * units_per_pixel / 16;
     {
         spr = get_frontend_sprite(GFS_hugearea_thc_cor_ml);
-        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr);
+        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr, 0);
         x += spr->SWidth * units_per_pixel / 16;
     }
     for (n=0; n < spritesx; n++)
     {
         spr = get_frontend_sprite((n % 4) + GFS_hugearea_thc_tx1_mc);
-        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr);
+        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr, 0);
         x += spr->SWidth * units_per_pixel / 16;
     }
     {
         spr = get_frontend_sprite(GFS_hugearea_thc_cor_mr);
-        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr);
+        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr, 0);
     }
     // Draw bottom line of sprites
     spr = get_frontend_sprite(GFS_hugearea_thc_cor_ml);
@@ -554,18 +545,18 @@ void draw_message_box_at(long startx, long starty, long box_width, long box_heig
     y += spr->SHeight * units_per_pixel / 16;
     {
         spr = get_frontend_sprite(GFS_hugearea_thn_cor_bl);
-        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr);
+        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr, 0);
         x += spr->SWidth * units_per_pixel / 16;
     }
     for (n=0; n < spritesx; n++)
     {
         spr = get_frontend_sprite((n % 4) + GFS_hugearea_thn_tx1_bc);
-        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr);
+        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr, 0);
         x += spr->SWidth * units_per_pixel / 16;
     }
     {
         spr = get_frontend_sprite(GFS_hugearea_thn_cor_br);
-        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr);
+        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr, 0);
     }
 }
 
@@ -597,7 +588,6 @@ TbBool draw_text_box(const char *text)
     long starty = (RendererPhysicalHeight() - box_height) / 2;
     draw_message_box_at(startx, starty, box_width, box_height, spritesx, spritesy);
     // Draw the text inside box
-    lbDisplay.DrawFlags = Lb_TEXT_HALIGN_CENTER;
     int tx_units_per_px = ((box_height / 4) * 13 / 11) * 16 / LbTextLineHeight();
     LbTextSetWindow(startx, starty, box_width, box_height);
     n = LbTextLineHeight() * tx_units_per_px / 16;
@@ -607,7 +597,7 @@ TbBool draw_text_box(const char *text)
             line_count++;
         }
     }
-    return LbTextDrawResized(0, (box_height - line_count * n) / 2, tx_units_per_px, text);
+    return LbTextDrawResized(0, (box_height - line_count * n) / 2, tx_units_per_px, text, Lb_TEXT_HALIGN_CENTER);
 }
 
 TbBool draw_text_box_top(const char* text, ushort drawflags)
@@ -636,15 +626,14 @@ TbBool draw_text_box_top(const char* text, ushort drawflags)
         }
     long box_width = (108 * spritesx + 18) * units_per_pixel / 16;
     long box_height = 92 * units_per_pixel / 16;
-    long startx = (lbDisplay.PhysicalScreenWidth - box_width) / 2;
-    long starty = (lbDisplay.PhysicalScreenHeight - box_height) / 2;
+    long startx = (RendererPhysicalWidth() - box_width) / 2;
+    long starty = (RendererPhysicalHeight() - box_height) / 2;
     draw_message_box_at(startx, starty, box_width, box_height, spritesx, spritesy);
     // Draw the text inside box
-    lbDisplay.DrawFlags = drawflags;
     int tx_units_per_px = ((box_height / 4) * 13 / 11) * 16 / LbTextLineHeight();
     LbTextSetWindow(startx, starty, box_width, box_height);
     n = LbTextLineHeight() * tx_units_per_px / 16;
-    return LbTextDrawResized(tx_units_per_px/2, 0, tx_units_per_px, text);
+    return LbTextDrawResized(tx_units_per_px/2, 0, tx_units_per_px, text, drawflags);
 }
 
 int scroll_box_get_units_per_px(struct GuiButton *gbtn)
@@ -665,14 +654,13 @@ void draw_scroll_box(struct GuiButton *gbtn, int units_per_px, int num_rows)
     const struct TbSprite *spr;
     int pos_x;
     int i;
-    lbDisplay.DrawFlags = 0;
     int pos_y = gbtn->scr_pos_y;
     { // First row
         pos_x = gbtn->scr_pos_x;
         spr = get_frontend_sprite(GFS_hugearea_thn_cor_tl);
         for (i = 6; i > 0; i--)
         {
-            UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, units_per_px, spr);
+            UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, units_per_px, spr, 0);
             pos_x += spr->SWidth * units_per_px / 16;
             spr++;
         }
@@ -689,7 +677,7 @@ void draw_scroll_box(struct GuiButton *gbtn, int units_per_px, int num_rows)
         pos_x = gbtn->scr_pos_x;
         for (i = 6; i > 0; i--)
         {
-            UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, units_per_px, spr);
+            UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, units_per_px, spr, 0);
             pos_x += spr->SWidth * units_per_px / 16;
             spr++;
         }
@@ -705,43 +693,43 @@ void draw_scroll_box(struct GuiButton *gbtn, int units_per_px, int num_rows)
     pos_x = gbtn->scr_pos_x;
     for (i = 6; i > 0; i--)
     {
-        UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, units_per_px, spr);
+        UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, units_per_px, spr, 0);
         pos_x += spr->SWidth * units_per_px / 16;
         spr++;
     }
 }
 
-void draw_gui_panel_sprite_left_player(long x, long y, int units_per_px, long spridx, PlayerNumber plyr_idx)
+void draw_gui_panel_sprite_left_player(long x, long y, int units_per_px, long spridx, PlayerNumber plyr_idx, TbDrawFlagsMask draw_flags)
 {
     spridx = get_player_colored_icon_idx(spridx, plyr_idx);
     const struct TbSprite* spr = get_panel_sprite(spridx);
-    UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_px, spr);
+    UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_px, spr, draw_flags);
 }
 
-void draw_gui_panel_sprite_rmleft_player(long x, long y, int units_per_px, long spridx, unsigned long remap, PlayerNumber plyr_idx)
+void draw_gui_panel_sprite_rmleft_player(long x, long y, int units_per_px, long spridx, unsigned long remap, PlayerNumber plyr_idx, TbDrawFlagsMask draw_flags)
 {
     spridx = get_player_colored_icon_idx(spridx, plyr_idx);
     const struct TbSprite* spr = get_panel_sprite(spridx);
-    UIRenderer_SubmitPanelSpriteRemap(x, y, units_per_px, spr, (int)remap);
+    UIRenderer_SubmitPanelSpriteRemap(x, y, units_per_px, spr, (int)remap, draw_flags);
 }
 
-void draw_gui_panel_sprite_centered(long x, long y, int units_per_px, long spridx)
+void draw_gui_panel_sprite_centered(long x, long y, int units_per_px, long spridx, TbDrawFlagsMask draw_flags)
 {
     spridx = get_player_colored_icon_idx(spridx, my_player_number);
     const struct TbSprite* spr = get_panel_sprite(spridx);
     if (!spr) return;
     x -= ((spr->SWidth  * units_per_px / 16) >> 1);
     y -= ((spr->SHeight * units_per_px / 16) >> 1);
-    UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_px, spr);
+    UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_px, spr, draw_flags);
 }
 
-void draw_gui_panel_sprite_occentered(long x, long y, int units_per_px, long spridx, TbPixel color)
+void draw_gui_panel_sprite_occentered(long x, long y, int units_per_px, long spridx, TbPixel color, TbDrawFlagsMask draw_flags)
 {
     spridx = get_player_colored_icon_idx(spridx,my_player_number);
     const struct TbSprite* spr = get_panel_sprite(spridx);
     x -= ((spr->SWidth*units_per_px/16) >> 1);
     y -= ((spr->SHeight*units_per_px/16) >> 1);
-    UIRenderer_SubmitPanelSpriteRawColored(x, y, units_per_px, spr, color);
+    UIRenderer_SubmitPanelSpriteRawColored(x, y, units_per_px, spr, color, draw_flags);
 }
 
 void draw_button_sprite_left(long x, long y, int units_per_px, long spridx)
@@ -752,21 +740,18 @@ void draw_button_sprite_left(long x, long y, int units_per_px, long spridx)
 void draw_button_sprite_rmleft(long x, long y, int units_per_px, long spridx, unsigned long remap)
 {
     const struct TbSprite* spr = get_button_sprite_for_player(spridx, my_player_number);
-    UIRenderer_SubmitPanelSpriteRemap(x, y, units_per_px, spr, (int)remap);
+    UIRenderer_SubmitPanelSpriteRemap(x, y, units_per_px, spr, (int)remap, 0);
 }
 
 void draw_frontend_sprite_left(long x, long y, int units_per_px, long spridx)
 {
     const struct TbSprite* spr = get_frontend_sprite(spridx);
-    UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_px, spr);
+    UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_px, spr, 0);
 }
 
 void draw_string64k(long x, long y, int units_per_px, const char * text)
 {
-    unsigned short drwflags_mem = lbDisplay.DrawFlags;
-    lbDisplay.DrawFlags &= ~Lb_TEXT_ONE_COLOR;
-    LbTextDrawResized(x, y, units_per_px, text);
-    lbDisplay.DrawFlags = drwflags_mem;
+    LbTextDrawResized(x, y, units_per_px, text, 0);
 }
 
 TbBool frontmenu_copy_background_at(const struct TbRect *bkgnd_area, int units_per_px)
