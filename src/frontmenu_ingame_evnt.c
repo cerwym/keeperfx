@@ -220,9 +220,9 @@ void draw_battle_head(struct Thing *thing, long scr_x, long scr_y, int units_per
     int curscr_x = scr_x - (spr->SWidth * ps_units_per_px / 16) / 2;
     int curscr_y = scr_y - (spr->SHeight * ps_units_per_px / 16) / 2;
     if ((thing->creature.health_bar_turns) && ((get_gameturn() % (2 * gui_blink_rate)) >= gui_blink_rate)) {
-        UIRenderer_SubmitPanelSpriteRawColored(curscr_x, curscr_y, ps_units_per_px, spr, player_flash_colours[get_player_color_idx(thing->owner)]);
+        UIRenderer_SubmitPanelSpriteRawColored(curscr_x, curscr_y, ps_units_per_px, spr, player_flash_colours[get_player_color_idx(thing->owner)], lbDisplay.DrawFlags);
     } else {
-        UIRenderer_SubmitPanelSpriteRaw(curscr_x, curscr_y, ps_units_per_px, spr);
+        UIRenderer_SubmitPanelSpriteRaw(curscr_x, curscr_y, ps_units_per_px, spr, lbDisplay.DrawFlags);
     }
     curscr_x = scr_x - 8*units_per_px/16;
     curscr_y = scr_y - 8*units_per_px/16 + (spr->SHeight*ps_units_per_px/16)/2;
@@ -243,7 +243,7 @@ void draw_battle_head(struct Thing *thing, long scr_x, long scr_y, int units_per
     curscr_y = (scr_y - ((spr->SHeight*bs_units_per_px/16) >> (unsigned char)high_res));
     curscr_x = (scr_x - ((spr->SWidth*bs_units_per_px/16) >> (unsigned char)high_res));
     spr = get_button_sprite(GBS_creature_flower_level_01 + cctrl->exp_level);
-    UIRenderer_SubmitPanelSpriteRaw(curscr_x, curscr_y, ps_units_per_px, spr);
+    UIRenderer_SubmitPanelSpriteRaw(curscr_x, curscr_y, ps_units_per_px, spr, lbDisplay.DrawFlags);
 }
 
 void gui_area_friendly_battlers(struct GuiButton *gbtn)

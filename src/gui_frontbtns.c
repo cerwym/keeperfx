@@ -525,10 +525,10 @@ void gui_area_new_normal_button(struct GuiButton *gbtn)
         i = 0;
         if ((!gbtn->button_state_left_pressed) && (!gbtn->button_state_right_pressed))
             i = 1;
-        draw_gui_panel_sprite_left(gbtn->scr_pos_x, gbtn->scr_pos_y, ps_units_per_px, gbtn->sprite_idx+i);
+        draw_gui_panel_sprite_left(gbtn->scr_pos_x, gbtn->scr_pos_y, ps_units_per_px, gbtn->sprite_idx+i, lbDisplay.DrawFlags);
     } else
     {
-        draw_gui_panel_sprite_rmleft(gbtn->scr_pos_x, gbtn->scr_pos_y, ps_units_per_px, gbtn->sprite_idx+1, 12);
+        draw_gui_panel_sprite_rmleft(gbtn->scr_pos_x, gbtn->scr_pos_y, ps_units_per_px, gbtn->sprite_idx+1, 12, lbDisplay.DrawFlags);
     }
     SYNCDBG(12,"Finished");
 }
@@ -544,10 +544,10 @@ void gui_area_new_vertical_button(struct GuiButton *gbtn)
         i = 0;
         if ((!gbtn->button_state_left_pressed) && (!gbtn->button_state_right_pressed))
             i = 1;
-        draw_gui_panel_sprite_left(gbtn->scr_pos_x, gbtn->scr_pos_y, ps_units_per_px, gbtn->sprite_idx+i);
+        draw_gui_panel_sprite_left(gbtn->scr_pos_x, gbtn->scr_pos_y, ps_units_per_px, gbtn->sprite_idx+i, lbDisplay.DrawFlags);
     } else
     {
-        draw_gui_panel_sprite_rmleft(gbtn->scr_pos_x, gbtn->scr_pos_y, ps_units_per_px, gbtn->sprite_idx+1, 12);
+        draw_gui_panel_sprite_rmleft(gbtn->scr_pos_x, gbtn->scr_pos_y, ps_units_per_px, gbtn->sprite_idx+1, 12, lbDisplay.DrawFlags);
     }
     SYNCDBG(12,"Finished");
 }
@@ -563,14 +563,14 @@ void gui_draw_tab(struct GuiButton *gbtn)
     ps_units_per_px = simple_gui_panel_sprite_width_units_per_px(gbtn, i, 100);
     if ((!gbtn->button_state_left_pressed) && (!gbtn->button_state_right_pressed))
         i++;
-    draw_gui_panel_sprite_left(gbtn->scr_pos_x, gbtn->scr_pos_y, ps_units_per_px, i);
+    draw_gui_panel_sprite_left(gbtn->scr_pos_x, gbtn->scr_pos_y, ps_units_per_px, i, lbDisplay.DrawFlags);
 }
 
 void gui_area_new_null_button(struct GuiButton *gbtn)
 {
     int ps_units_per_px;
     ps_units_per_px = simple_gui_panel_sprite_height_units_per_px(gbtn, gbtn->sprite_idx, 128);
-    draw_gui_panel_sprite_left(gbtn->scr_pos_x, gbtn->scr_pos_y, ps_units_per_px, gbtn->sprite_idx);
+    draw_gui_panel_sprite_left(gbtn->scr_pos_x, gbtn->scr_pos_y, ps_units_per_px, gbtn->sprite_idx, lbDisplay.DrawFlags);
 }
 
 void gui_area_compsetting_button(struct GuiButton *gbtn)
@@ -594,14 +594,14 @@ void gui_area_compsetting_button(struct GuiButton *gbtn)
     ps_units_per_px = simple_gui_panel_sprite_height_units_per_px(gbtn, spr_idx, 100);
     if ((gbtn->flags & LbBtnF_Enabled) == 0)
     {
-        draw_gui_panel_sprite_rmleft(gbtn->scr_pos_x, gbtn->scr_pos_y, ps_units_per_px, spr_idx, 12);
+        draw_gui_panel_sprite_rmleft(gbtn->scr_pos_x, gbtn->scr_pos_y, ps_units_per_px, spr_idx, 12, lbDisplay.DrawFlags);
     } else
     if ((gbtn->button_state_left_pressed) || (gbtn->button_state_right_pressed))
     {
-        draw_gui_panel_sprite_rmleft(gbtn->scr_pos_x, gbtn->scr_pos_y, ps_units_per_px, spr_idx, 44);
+        draw_gui_panel_sprite_rmleft(gbtn->scr_pos_x, gbtn->scr_pos_y, ps_units_per_px, spr_idx, 44, lbDisplay.DrawFlags);
     } else
     {
-        draw_gui_panel_sprite_left(gbtn->scr_pos_x, gbtn->scr_pos_y, ps_units_per_px, spr_idx);
+        draw_gui_panel_sprite_left(gbtn->scr_pos_x, gbtn->scr_pos_y, ps_units_per_px, spr_idx, lbDisplay.DrawFlags);
     }
     SYNCDBG(12,"Finished");
 }
@@ -627,14 +627,14 @@ void gui_area_creature_list_icon(struct GuiButton *gbtn)
     ps_units_per_px = simple_gui_panel_sprite_width_units_per_px(gbtn, spr_idx, 138);
     if ((gbtn->flags & LbBtnF_Enabled) == 0)
     {
-        draw_gui_panel_sprite_rmleft(gbtn->scr_pos_x, gbtn->scr_pos_y, ps_units_per_px, spr_idx, 12);
+        draw_gui_panel_sprite_rmleft(gbtn->scr_pos_x, gbtn->scr_pos_y, ps_units_per_px, spr_idx, 12, lbDisplay.DrawFlags);
     } else
     if ((gbtn->button_state_left_pressed) || (gbtn->button_state_right_pressed))
     {
-        draw_gui_panel_sprite_rmleft(gbtn->scr_pos_x, gbtn->scr_pos_y, ps_units_per_px, spr_idx, 44);
+        draw_gui_panel_sprite_rmleft(gbtn->scr_pos_x, gbtn->scr_pos_y, ps_units_per_px, spr_idx, 44, lbDisplay.DrawFlags);
     } else
     {
-        draw_gui_panel_sprite_left(gbtn->scr_pos_x, gbtn->scr_pos_y, ps_units_per_px, spr_idx);
+        draw_gui_panel_sprite_left(gbtn->scr_pos_x, gbtn->scr_pos_y, ps_units_per_px, spr_idx, lbDisplay.DrawFlags);
     }
     SYNCDBG(12,"Finished");
 }
@@ -659,14 +659,14 @@ void gui_area_new_no_anim_button(struct GuiButton *gbtn)
     ps_units_per_px = simple_gui_panel_sprite_height_units_per_px(gbtn, spr_idx, 128);
     if ((gbtn->flags & LbBtnF_Enabled) == 0)
     {
-        draw_gui_panel_sprite_rmleft(gbtn->scr_pos_x, gbtn->scr_pos_y, ps_units_per_px, spr_idx, 12);
+        draw_gui_panel_sprite_rmleft(gbtn->scr_pos_x, gbtn->scr_pos_y, ps_units_per_px, spr_idx, 12, lbDisplay.DrawFlags);
     } else
     if ((gbtn->button_state_left_pressed) || (gbtn->button_state_right_pressed))
     {
-        draw_gui_panel_sprite_rmleft(gbtn->scr_pos_x, gbtn->scr_pos_y, ps_units_per_px, spr_idx, 44);
+        draw_gui_panel_sprite_rmleft(gbtn->scr_pos_x, gbtn->scr_pos_y, ps_units_per_px, spr_idx, 44, lbDisplay.DrawFlags);
     } else
     {
-        draw_gui_panel_sprite_left(gbtn->scr_pos_x, gbtn->scr_pos_y, ps_units_per_px, spr_idx);
+        draw_gui_panel_sprite_left(gbtn->scr_pos_x, gbtn->scr_pos_y, ps_units_per_px, spr_idx, lbDisplay.DrawFlags);
     }
     SYNCDBG(12,"Finished");
 }
@@ -857,16 +857,16 @@ void frontend_draw_scroll_box_tab(struct GuiButton *gbtn)
     // Since this tab is attachable from top, it is important to keep bottom position without variation
     pos_y = gbtn->scr_pos_y + gbtn->height - spr->SHeight * fs_units_per_px / 16;
     spr = get_frontend_sprite(GFS_hugearea_thc_cor_tl);
-    UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, fs_units_per_px, spr);
+    UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, fs_units_per_px, spr, lbDisplay.DrawFlags);
     pos_x += spr->SWidth * fs_units_per_px / 16;
     spr = get_frontend_sprite(GFS_hugearea_thc_tx1_tc);
-    UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, fs_units_per_px, spr);
+    UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, fs_units_per_px, spr, lbDisplay.DrawFlags);
     pos_x += spr->SWidth * fs_units_per_px / 16;
     spr = get_frontend_sprite(GFS_hugearea_thc_tx1_tc);
-    UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, fs_units_per_px, spr);
+    UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, fs_units_per_px, spr, lbDisplay.DrawFlags);
     pos_x += spr->SWidth * fs_units_per_px / 16;
     spr = get_frontend_sprite(GFS_hugearea_thc_cor_tr);
-    UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, fs_units_per_px, spr);
+    UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, fs_units_per_px, spr, lbDisplay.DrawFlags);
 }
 
 void frontend_draw_scroll_box(struct GuiButton *gbtn)
@@ -1048,10 +1048,10 @@ void gui_area_flash_cycle_button(struct GuiButton *gbtn)
         if ((!gbtn->button_state_left_pressed) && (!gbtn->button_state_right_pressed)) {
             spr_idx++;
         }
-        draw_gui_panel_sprite_left(gbtn->scr_pos_x, gbtn->scr_pos_y, ps_units_per_px, spr_idx);
+        draw_gui_panel_sprite_left(gbtn->scr_pos_x, gbtn->scr_pos_y, ps_units_per_px, spr_idx, lbDisplay.DrawFlags);
     } else
     {
-        draw_gui_panel_sprite_rmleft(gbtn->scr_pos_x, gbtn->scr_pos_y, ps_units_per_px, spr_idx, 12);
+        draw_gui_panel_sprite_rmleft(gbtn->scr_pos_x, gbtn->scr_pos_y, ps_units_per_px, spr_idx, 12, lbDisplay.DrawFlags);
     }
     SYNCDBG(12,"Finished");
 }
@@ -1109,7 +1109,7 @@ void gui_draw_scroll_box(struct GuiButton *gbtn, int height_lines, TbBool draw_s
     pos_x = gbtn->scr_pos_x;
     for (i=0; i < 6; i++)
     {
-        UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, units_per_px, spr);
+        UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, units_per_px, spr, lbDisplay.DrawFlags);
         pos_x += spr->SWidth * units_per_px / 16;
         spr++;
     }
@@ -1131,7 +1131,7 @@ void gui_draw_scroll_box(struct GuiButton *gbtn, int height_lines, TbBool draw_s
       pos_x = gbtn->scr_pos_x;
       for (i=0; i < 6; i++)
       {
-          UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, units_per_px, spr);
+          UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, units_per_px, spr, lbDisplay.DrawFlags);
           pos_x += spr->SWidth * units_per_px / 16;
           spr++;
       }
@@ -1156,7 +1156,7 @@ void gui_draw_scroll_box(struct GuiButton *gbtn, int height_lines, TbBool draw_s
     pos_x = gbtn->scr_pos_x;
     for (i=0; i < 6; i++)
     {
-        UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, units_per_px, spr);
+        UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, units_per_px, spr, lbDisplay.DrawFlags);
         pos_x += spr->SWidth * units_per_px / 16;
         spr++;
     }

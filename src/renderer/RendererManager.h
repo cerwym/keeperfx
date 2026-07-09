@@ -707,24 +707,24 @@ void CursorLayer_SubmitKeeperHandSprite(short x, short y, unsigned short kspr_ba
 
 /** Submit a panel sprite (gui_panel_sprites) at screen-left alignment.
  *  Resolves player coloring for spridx and submits GPU quad; immediate in software mode. */
-void UIRenderer_SubmitPanelSprite(int32_t x, int32_t y, int units_per_px, int32_t spridx);
+void UIRenderer_SubmitPanelSprite(int32_t x, int32_t y, int units_per_px, int32_t spridx, TbDrawFlagsMask draw_flags);
 
 /** Submit a panel sprite from a pre-resolved TbSprite pointer.
  *  Use when the caller has already called get_panel_sprite(); avoids a second lookup. */
 struct TbSprite;
-void UIRenderer_SubmitPanelSpriteRaw(int32_t x, int32_t y, int units_per_px, const struct TbSprite* spr);
+void UIRenderer_SubmitPanelSpriteRaw(int32_t x, int32_t y, int units_per_px, const struct TbSprite* spr, TbDrawFlagsMask draw_flags);
 
 /** Submit a panel sprite with an opaque background fill behind it.
  *  Draws a solid box at the sprite's screen rect in bg_color_idx, then the sprite
  *  on top.  Use for portraits and icons that need a solid backing so transparent
  *  atlas pixels (index 0) don't punch through to the panel behind. */
 void UIRenderer_SubmitPanelSpriteWithBg(int32_t x, int32_t y, int units_per_px,
-                                        const struct TbSprite* spr, unsigned char bg_color_idx);
+                                        const struct TbSprite* spr, unsigned char bg_color_idx, TbDrawFlagsMask draw_flags);
 
 /** Submit a panel sprite drawn entirely in a single flat colour (sprite used as discard mask).
  *  GPU: atlas R8 index used to discard transparent pixels; all opaque pixels output color_idx.
  *  CPU fallback: LbSpriteDrawResizedOneColour. */
-void UIRenderer_SubmitPanelSpriteRawColored(int32_t x, int32_t y, int units_per_px, const struct TbSprite* spr, unsigned char color_idx);
+void UIRenderer_SubmitPanelSpriteRawColored(int32_t x, int32_t y, int units_per_px, const struct TbSprite* spr, unsigned char color_idx, TbDrawFlagsMask draw_flags);
 
 /** Submit a 1-pixel-thick outline rectangle (border only, no fill).
  *  Decomposes into four thin UIRenderer_SubmitSolidBox strips.
@@ -734,10 +734,10 @@ void UIRenderer_SubmitOutlineBox(int32_t x, int32_t y, int32_t w, int32_t h, uns
 /** Route a palette-remapped panel/button sprite draw through the active UI renderer.
  *  The remap is performed by indexing pixmap.fade_tables[remap_row*256].
  *  GPU backends override with a fall-table shader; the base uses LbSpriteDrawResizedRemap. */
-void UIRenderer_SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px, const struct TbSprite* spr, int remap_row);
+void UIRenderer_SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px, const struct TbSprite* spr, int remap_row, TbDrawFlagsMask draw_flags);
 
 /** Submit a panel sprite centered on (x, y). */
-void UIRenderer_SubmitPanelSpriteCentered(int32_t x, int32_t y, int units_per_px, int32_t spridx);
+void UIRenderer_SubmitPanelSpriteCentered(int32_t x, int32_t y, int units_per_px, int32_t spridx, TbDrawFlagsMask draw_flags);
 
 /** Submit a button sprite (button_sprites) at screen-left alignment. */
 void UIRenderer_SubmitButtonSprite(int32_t x, int32_t y, int units_per_px, short spridx);

@@ -436,7 +436,7 @@ void draw_map_level_ensigns(void)
       {
           long x = lvinfo->ensign_x - (long)map_info.screen_shift_x - (int)(spr->SWidth >> 1);
           long y = lvinfo->ensign_y - (long)map_info.screen_shift_y - (int)(spr->SHeight);
-          UIRenderer_SubmitPanelSpriteRaw(scale_value_landview(x), scale_value_landview(y), units_per_pixel_landview, spr);
+          UIRenderer_SubmitPanelSpriteRaw(scale_value_landview(x), scale_value_landview(y), units_per_pixel_landview, spr, lbDisplay.DrawFlags);
       }
       lvinfo = get_prev_level_info(lvinfo);
     }

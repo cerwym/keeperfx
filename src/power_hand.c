@@ -570,7 +570,7 @@ void draw_power_hand(void)
         {
             roomst = get_room_kind_stats(room->kind);
 
-            UIRenderer_SubmitPanelSpriteCentered(GetMouseX()+scale_ui_value(24*global_hand_scale), GetMouseY()+scale_ui_value(32*global_hand_scale), ps_units_per_px, roomst->medsym_sprite_idx);
+            UIRenderer_SubmitPanelSpriteCentered(GetMouseX()+scale_ui_value(24*global_hand_scale), GetMouseY()+scale_ui_value(32*global_hand_scale), ps_units_per_px, roomst->medsym_sprite_idx, lbDisplay.DrawFlags);
         }
         if ((!power_hand_is_empty(player)) && (game.small_map_state == 1))
         {
@@ -589,7 +589,7 @@ void draw_power_hand(void)
         if ((!room_is_invalid(room)) && (subtile_revealed(stl_x, stl_y, player->id_number)))
         {
             roomst = get_room_kind_stats(room->kind);
-            UIRenderer_SubmitPanelSpriteCentered(GetMouseX()+scale_ui_value(24*global_hand_scale), GetMouseY()+scale_ui_value(32*global_hand_scale), ps_units_per_px, roomst->medsym_sprite_idx);
+            UIRenderer_SubmitPanelSpriteCentered(GetMouseX()+scale_ui_value(24*global_hand_scale), GetMouseY()+scale_ui_value(32*global_hand_scale), ps_units_per_px, roomst->medsym_sprite_idx, lbDisplay.DrawFlags);
         }
         if ((!power_hand_is_empty(player)) && (game.small_map_state == 1))
         {
@@ -1223,7 +1223,7 @@ void draw_mini_things_in_hand(long x, long y)
                 scrpos_x = scrbase_x + scale_ui_value(16) * icol;
                 scrpos_y = scrbase_y + scale_ui_value(18) * irow;
                 // Draw creature symbol
-                UIRenderer_SubmitPanelSprite(scrpos_x, scrpos_y, ps_units_per_px, spr_idx);
+                UIRenderer_SubmitPanelSprite(scrpos_x, scrpos_y, ps_units_per_px, spr_idx, lbDisplay.DrawFlags);
                 char ownshift_y;
                 if (RendererGetScreenHeight() < 400)
                 {
@@ -1275,7 +1275,7 @@ void draw_mini_things_in_hand(long x, long y)
                 shift_y = 0;
             scrpos_x = scrbase_x + scale_ui_value(16) * icol;
             scrpos_y = scrbase_y + scale_ui_value(14) * irow;
-            UIRenderer_SubmitPanelSprite(scrpos_x - 2, scrpos_y + scale_ui_value(shift_y), ps_units_per_px, spr_idx);
+            UIRenderer_SubmitPanelSprite(scrpos_x - 2, scrpos_y + scale_ui_value(shift_y), ps_units_per_px, spr_idx, lbDisplay.DrawFlags);
         } else
         if ((thing->class_id == TCls_Object))
         {
@@ -1286,7 +1286,7 @@ void draw_mini_things_in_hand(long x, long y)
                 shift_y = 0;
             scrpos_x = scrbase_x + scale_ui_value(16) * icol;
             scrpos_y = scrbase_y + scale_ui_value(14) * irow;
-            UIRenderer_SubmitPanelSprite(scrpos_x - 2, scrpos_y + scale_ui_value(shift_y), ps_units_per_px, spr_idx);
+            UIRenderer_SubmitPanelSprite(scrpos_x - 2, scrpos_y + scale_ui_value(shift_y), ps_units_per_px, spr_idx, lbDisplay.DrawFlags);
         } else
         {
             spr_idx = GPS_room_hatchery_std_s;
@@ -1296,7 +1296,7 @@ void draw_mini_things_in_hand(long x, long y)
                 shift_y = 0;
             scrpos_x = scrbase_x + scale_ui_value(16) * icol;
             scrpos_y = scrbase_y + scale_ui_value(14) * irow;
-            UIRenderer_SubmitPanelSprite(scrpos_x - 2, scrpos_y + scale_ui_value(shift_y), ps_units_per_px, spr_idx);
+            UIRenderer_SubmitPanelSprite(scrpos_x - 2, scrpos_y + scale_ui_value(shift_y), ps_units_per_px, spr_idx, lbDisplay.DrawFlags);
         }
     }
 }

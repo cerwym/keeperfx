@@ -86,21 +86,21 @@ void UIRenderer_EndZoomBoxOverlay(int x, int y, int w, int h)
     if (ui) ui->EndZoomBoxOverlay(x, y, w, h);
 }
  
-void UIRenderer_SubmitPanelSprite(int32_t x, int32_t y, int units_per_px, int32_t spridx)
+void UIRenderer_SubmitPanelSprite(int32_t x, int32_t y, int units_per_px, int32_t spridx, TbDrawFlagsMask draw_flags)
 {
     IUIRenderer* ui = RendererGetUIRenderer();
     if (!ui) return;
     const struct TbSprite* spr = get_panel_sprite(get_player_colored_icon_idx(spridx, my_player_number));
     SpriteHandle h = RendererResolveSprite(spr);
-    ui->SubmitPanelSprite(x, y, units_per_px, h, false, display_draw_state());
+    ui->SubmitPanelSprite(x, y, units_per_px, h, false, draw_state_make(draw_flags, lbDisplay.DrawColour));
 }
 
-void UIRenderer_SubmitPanelSpriteRaw(int32_t x, int32_t y, int units_per_px, const struct TbSprite* spr)
+void UIRenderer_SubmitPanelSpriteRaw(int32_t x, int32_t y, int units_per_px, const struct TbSprite* spr, TbDrawFlagsMask draw_flags)
 {
     IUIRenderer* ui = RendererGetUIRenderer();
     if (!ui) return;
     SpriteHandle h = RendererResolveSprite(spr);
-    ui->SubmitPanelSprite(x, y, units_per_px, h, false, display_draw_state());
+    ui->SubmitPanelSprite(x, y, units_per_px, h, false, draw_state_make(draw_flags, lbDisplay.DrawColour));
 }
 
 void RendererSubmitButton(const RendererUIButtonDesc* desc)
@@ -113,7 +113,7 @@ void RendererSubmitButton(const RendererUIButtonDesc* desc)
         const struct TbSprite* spr = desc->segments[i].spr;
         if (spr)
             UIRenderer_SubmitPanelSpriteRaw(desc->segments[i].x, desc->segments[i].y,
-                                            desc->units_per_px, spr);
+                                            desc->units_per_px, spr, 0);
     }
     // Label -> text node (not the LbText* globals).  The text path reads
     // lbDisplay.DrawFlags, so set it here exactly as the old code did before
@@ -126,25 +126,23 @@ void RendererSubmitButton(const RendererUIButtonDesc* desc)
 }
 
 void UIRenderer_SubmitPanelSpriteWithBg(int32_t x, int32_t y, int units_per_px,
-                                        const struct TbSprite* spr, unsigned char bg_color_idx)
+                                        const struct TbSprite* spr, unsigned char bg_color_idx, TbDrawFlagsMask draw_flags)
 {
     IUIRenderer* ui = RendererGetUIRenderer();
     if (!ui || !spr) return;
-    // Compute the sprite's on-screen dimensions.
     int32_t w = ((int32_t)spr->SWidth  * units_per_px + 8) / 16;
     int32_t h = ((int32_t)spr->SHeight * units_per_px + 8) / 16;
-    // Submit opaque background fill, then the sprite on top.
     ui->SubmitSolidBox(x, y, w, h, bg_color_idx, draw_state_default());
     SpriteHandle sh = RendererResolveSprite(spr);
-    ui->SubmitPanelSprite(x, y, units_per_px, sh, false, display_draw_state());
+    ui->SubmitPanelSprite(x, y, units_per_px, sh, false, draw_state_make(draw_flags, lbDisplay.DrawColour));
 }
 
-void UIRenderer_SubmitPanelSpriteRawColored(int32_t x, int32_t y, int units_per_px, const struct TbSprite* spr, unsigned char color_idx)
+void UIRenderer_SubmitPanelSpriteRawColored(int32_t x, int32_t y, int units_per_px, const struct TbSprite* spr, unsigned char color_idx, TbDrawFlagsMask draw_flags)
 {
     IUIRenderer* ui = RendererGetUIRenderer();
     if (!ui) return;
     SpriteHandle h = RendererResolveSprite(spr);
-    ui->SubmitPanelSpriteColored(x, y, units_per_px, h, (uint8_t)color_idx, display_draw_state());
+    ui->SubmitPanelSpriteColored(x, y, units_per_px, h, (uint8_t)color_idx, draw_state_make(draw_flags, lbDisplay.DrawColour));
 }
 
 void UIRenderer_SubmitOutlineBox(int32_t x, int32_t y, int32_t w, int32_t h, unsigned char color_idx)
@@ -157,15 +155,15 @@ void UIRenderer_SubmitOutlineBox(int32_t x, int32_t y, int32_t w, int32_t h, uns
     UIRenderer_SubmitSolidBox(x + w - 1, y,     1, h, color_idx);  // right
 }
 
-void UIRenderer_SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px, const struct TbSprite* spr, int remap_row)
+void UIRenderer_SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px, const struct TbSprite* spr, int remap_row, TbDrawFlagsMask draw_flags)
 {
     IUIRenderer* ui = RendererGetUIRenderer();
     if (!ui) return;
     SpriteHandle h = RendererResolveSprite(spr);
-    ui->SubmitPanelSpriteRemap(x, y, units_per_px, h, remap_row, display_draw_state());
+    ui->SubmitPanelSpriteRemap(x, y, units_per_px, h, remap_row, draw_state_make(draw_flags, lbDisplay.DrawColour));
 }
 
-void UIRenderer_SubmitPanelSpriteCentered(int32_t x, int32_t y, int units_per_px, int32_t spridx)
+void UIRenderer_SubmitPanelSpriteCentered(int32_t x, int32_t y, int units_per_px, int32_t spridx, TbDrawFlagsMask draw_flags)
 {
     IUIRenderer* ui = RendererGetUIRenderer();
     if (!ui) return;
@@ -174,7 +172,7 @@ void UIRenderer_SubmitPanelSpriteCentered(int32_t x, int32_t y, int units_per_px
     int32_t ox = ((int32_t)spr->SWidth  * units_per_px + 8) / 16 / 2;
     int32_t oy = ((int32_t)spr->SHeight * units_per_px + 8) / 16 / 2;
     SpriteHandle h = RendererResolveSprite(spr);
-    ui->SubmitPanelSprite(x - ox, y - oy, units_per_px, h, false, display_draw_state());
+    ui->SubmitPanelSprite(x - ox, y - oy, units_per_px, h, false, draw_state_make(draw_flags, lbDisplay.DrawColour));
 }
 
 void UIRenderer_SubmitButtonSprite(int32_t x, int32_t y, int units_per_px, short spridx)
