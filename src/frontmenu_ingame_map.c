@@ -697,7 +697,6 @@ int draw_line_to_heart(struct PlayerInfo *player, long units_per_px, long zoom)
     if (!thing_exists(thing)) {
         return 0;
     }
-    lbDisplay.DrawFlags |= Lb_SPRITE_TRANSPAR4;
     // Position of the thing on unrotated map
     // for camera, coordinates within subtile are skipped; the thing uses full resolution coordinates
     interpolate_minimap_thing(thing, cam);
@@ -742,7 +741,6 @@ int draw_line_to_heart(struct PlayerInfo *player, long units_per_px, long zoom)
             panel_map_draw_pixel((draw_x >> 8) + draw_square[p].delta_x, (draw_y >> 8) + draw_square[p].delta_y, col);
         }
     }
-    lbDisplay.DrawFlags &= ~Lb_SPRITE_TRANSPAR4;
     return 1;
 }
 
