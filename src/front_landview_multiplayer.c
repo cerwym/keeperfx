@@ -316,7 +316,7 @@ static void draw_netmap_players_hands(void)
         spr = get_hand_sprite_for_packet(&nspck, anim_frame, &x, &y);
         x -= (long)map_info.screen_shift_x;
         y -= (long)map_info.screen_shift_y;
-        LbSpriteDrawResized(scale_value_landview(x), scale_value_landview(y), units_per_pixel_landview, spr);
+        LbSpriteDrawResized(scale_value_landview(x), scale_value_landview(y), units_per_pixel_landview, spr, lbDisplay.DrawFlags);
         w = LbTextStringWidth(plyr_nam);
         if (w > 0) {
             h = LbTextHeight(level_name);

@@ -215,9 +215,9 @@ TbResult LbSpriteDrawOneColour(long x, long y, const struct TbSprite *spr, const
 TbResult LbSpriteDrawScaled(long xpos, long ypos, const struct TbSprite *sprite, long dest_width, long dest_height, TbDrawFlagsMask draw_flags);
 TbResult LbSpriteDrawScaledOneColour(long xpos, long ypos, const struct TbSprite *sprite, long dest_width, long dest_height, const TbPixel colour, TbDrawFlagsMask draw_flags);
 int LbSpriteDrawScaledRemap(long xpos, long ypos, const struct TbSprite *sprite, long dest_width, long dest_height, const unsigned char *cmap, TbDrawFlagsMask draw_flags);
-#define LbSpriteDrawResized(xpos, ypos, un_per_px, sprite) LbSpriteDrawScaled(xpos, ypos, sprite, ((sprite)->SWidth * un_per_px + 8) / 16, ((sprite)->SHeight * un_per_px + 8) / 16, lbDisplay.DrawFlags)
-#define LbSpriteDrawResizedOneColour(xpos, ypos, un_per_px, sprite, colour) LbSpriteDrawScaledOneColour(xpos, ypos, sprite, ((sprite)->SWidth * un_per_px + 8) / 16, ((sprite)->SHeight * un_per_px + 8) / 16, colour, lbDisplay.DrawFlags)
-#define LbSpriteDrawResizedRemap(xpos, ypos, un_per_px, sprite, cmap) LbSpriteDrawScaledRemap(xpos, ypos, sprite, ((sprite)->SWidth * un_per_px + 8) / 16, ((sprite)->SHeight * un_per_px + 8) / 16, cmap, lbDisplay.DrawFlags)
+#define LbSpriteDrawResized(xpos, ypos, un_per_px, sprite, draw_flags) LbSpriteDrawScaled(xpos, ypos, sprite, ((sprite)->SWidth * un_per_px + 8) / 16, ((sprite)->SHeight * un_per_px + 8) / 16, draw_flags)
+#define LbSpriteDrawResizedOneColour(xpos, ypos, un_per_px, sprite, colour, draw_flags) LbSpriteDrawScaledOneColour(xpos, ypos, sprite, ((sprite)->SWidth * un_per_px + 8) / 16, ((sprite)->SHeight * un_per_px + 8) / 16, colour, draw_flags)
+#define LbSpriteDrawResizedRemap(xpos, ypos, un_per_px, sprite, cmap, draw_flags) LbSpriteDrawScaledRemap(xpos, ypos, sprite, ((sprite)->SWidth * un_per_px + 8) / 16, ((sprite)->SHeight * un_per_px + 8) / 16, cmap, draw_flags)
 
 TbResult LbHugeSpriteDraw(const struct TbHugeSprite * spr, long sp_len,
     unsigned char *r, int r_row_delta, int r_height, short xshift, short yshift, int units_per_px);

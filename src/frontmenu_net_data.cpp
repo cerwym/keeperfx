@@ -170,7 +170,7 @@ void frontnet_draw_session_selected(struct GuiButton *gbtn)
     spr = get_frontend_sprite(GFS_largearea_xts_cor_l);
     for (i=0; i < 6; i++)
     {
-        LbSpriteDrawResized(pos_x, pos_y, fs_units_per_px, spr);
+        LbSpriteDrawResized(pos_x, pos_y, fs_units_per_px, spr, lbDisplay.DrawFlags);
         pos_x += spr->SWidth * fs_units_per_px / 16;
         spr++;
     }

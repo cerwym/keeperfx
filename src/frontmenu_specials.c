@@ -160,7 +160,7 @@ void draw_resurrect_creature(struct GuiButton *gbtn)
         {
             y = gbtn->scr_pos_y - (19 * tx_units_per_px / 32);
         }
-        LbSpriteDrawResized(x, y, tx_units_per_px, spr);
+        LbSpriteDrawResized(x, y, tx_units_per_px, spr, lbDisplay.DrawFlags);
         int h = scale_ui_value_lofi(gbtn->height) / 16;
         int w = scale_ui_value_lofi(spr->SWidth + 2);
         LbTextDrawResizedFmt(w, h, tx_units_per_px, Lb_TEXT_HALIGN_LEFT, "%s", get_string(crconf->namestr_idx));
@@ -244,7 +244,7 @@ void draw_transfer_creature(struct GuiButton *gbtn)
         {
             y = gbtn->scr_pos_y - (19 * tx_units_per_px / 32);
         }
-        LbSpriteDrawResized(x, y, tx_units_per_px, spr);
+        LbSpriteDrawResized(x, y, tx_units_per_px, spr, lbDisplay.DrawFlags);
         int h = scale_ui_value_lofi(gbtn->height)/16;
         int w = scale_ui_value_lofi(spr->SWidth + 2);
         LbTextDrawResizedFmt(w, h, tx_units_per_px, Lb_TEXT_HALIGN_LEFT, "%s", get_string(crconf->namestr_idx));

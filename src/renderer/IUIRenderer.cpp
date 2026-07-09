@@ -151,7 +151,7 @@ void IUIRenderer::SubmitPanelSprite(int32_t x, int32_t y, int units_per_px,
     unsigned int saved = lbDisplay.DrawFlags;
     lbDisplay.DrawFlags = effective_flags;
     ScopedSpriteSubmitGuard guard;
-    LbSpriteDrawResized(x, y, units_per_px, it->second);
+    LbSpriteDrawResized(x, y, units_per_px, it->second, lbDisplay.DrawFlags);
     lbDisplay.DrawFlags = saved;
 }
 
@@ -174,7 +174,7 @@ void IUIRenderer::SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px,
     unsigned int saved = lbDisplay.DrawFlags;
     lbDisplay.DrawFlags = state.flags;
     LbSpriteDrawResizedRemap(x, y, units_per_px, it->second,
-                             &pixmap.fade_tables[remap_row * 256]);
+                             &pixmap.fade_tables[remap_row * 256], lbDisplay.DrawFlags);
     lbDisplay.DrawFlags = saved;
 }
 
@@ -196,7 +196,7 @@ void IUIRenderer::SubmitPanelSpriteColored(int32_t x, int32_t y, int units_per_p
     ScopedSpriteSubmitGuard guard;
     unsigned int saved = lbDisplay.DrawFlags;
     lbDisplay.DrawFlags = state.flags;
-    LbSpriteDrawResizedOneColour(x, y, units_per_px, it->second, color_idx);
+    LbSpriteDrawResizedOneColour(x, y, units_per_px, it->second, color_idx, lbDisplay.DrawFlags);
     lbDisplay.DrawFlags = saved;
 }
 
