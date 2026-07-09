@@ -134,7 +134,7 @@ static void draw_creature_view_icons(struct Thing* creatng)
             snprintf(text, sizeof(text), "%u", (cctrl->timebomb_countdown / turns_per_second));
             LbTextDrawResized(0, 0, tx_units_per_px, text, Lb_TEXT_HALIGN_CENTER);
         }
-        draw_gui_panel_sprite_left(x, y, ps_units_per_px, spridx, lbDisplay.DrawFlags);
+        draw_gui_panel_sprite_left(x, y, ps_units_per_px, spridx, 0);
         x += scale_ui_value_lofi(spr->SWidth);
     }
     if ( (cctrl->dragtng_idx != 0) && ((creatng->alloc_flags & TAlF_IsDragged) == 0) )
@@ -177,7 +177,7 @@ static void draw_creature_view_icons(struct Thing* creatng)
                 break;
             }
         }
-        draw_gui_panel_sprite_left(x, y, ps_units_per_px, spr_idx, lbDisplay.DrawFlags);
+        draw_gui_panel_sprite_left(x, y, ps_units_per_px, spr_idx, 0);
     }
     else
     {
@@ -188,7 +188,7 @@ static void draw_creature_view_icons(struct Thing* creatng)
             {
                 x = RendererGetScreenWidth() - (scale_value_by_horizontal_resolution(148) / 4);
                 struct InstanceInfo* inst_inf = creature_instance_info_get(cctrl->active_instance_id % game.conf.crtr_conf.instances_count);
-                draw_gui_panel_sprite_left(x, y, ps_units_per_px, inst_inf->symbol_spridx, lbDisplay.DrawFlags);
+                draw_gui_panel_sprite_left(x, y, ps_units_per_px, inst_inf->symbol_spridx, 0);
             }
         }
     }
