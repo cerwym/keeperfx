@@ -105,8 +105,8 @@ void frontbirthday_draw(void)
     if ( name != NULL )
     {
         unsigned short line_pos = LbTextLineHeight();
-        LbTextDraw(0, 170-line_pos, get_string(GUIStr_HappyBirthday));
-        LbTextDraw(0, 170, name);
+        LbTextDraw(0, 170-line_pos, get_string(GUIStr_HappyBirthday), lbDisplay.DrawFlags);
+        LbTextDraw(0, 170, name, lbDisplay.DrawFlags);
     } else
     {
         frontend_set_state(FeSt_INTRO);
@@ -220,12 +220,12 @@ void draw_eastegg(void)
         pos = get_gameturn() - i;
         lbDisplay.DrawColour = pos;
         LbTextDrawResized(scale_fixed_DK_value((LbCosL(16*(long)pos) / 512 + skeksis_x_offset) / pixel_size),
-          scale_fixed_DK_value((LbSinL(32*(long)pos) / 512 + skeksis_y_offset) / pixel_size), ee_units_per_px, text);
+          scale_fixed_DK_value((LbSinL(32*(long)pos) / 512 + skeksis_y_offset) / pixel_size), ee_units_per_px, text, lbDisplay.DrawFlags);
       }
       clear_flag(lbDisplay.DrawFlags, Lb_TEXT_ONE_COLOR);
       pos=get_gameturn();
       LbTextDrawResized(scale_fixed_DK_value((LbCosL(16*(long)pos) / 512 + skeksis_x_offset) / pixel_size),
-          scale_fixed_DK_value((LbSinL(32*(long)pos) / 512 + skeksis_y_offset) / pixel_size), ee_units_per_px, text);
+          scale_fixed_DK_value((LbSinL(32*(long)pos) / 512 + skeksis_y_offset) / pixel_size), ee_units_per_px, text, lbDisplay.DrawFlags);
       if (eastegg_skeksis_cntr >= 255)
         eastegg_skeksis_cntr = 0;
   }
@@ -263,7 +263,7 @@ void draw_eastegg(void)
     }
     if (RendererIsScreenLocked())
     {
-      LbTextDrawResized(scale_fixed_DK_value(px[i]/pixel_size), scale_fixed_DK_value(py[i]/pixel_size), ee_units_per_px, text);
+      LbTextDrawResized(scale_fixed_DK_value(px[i]/pixel_size), scale_fixed_DK_value(py[i]/pixel_size), ee_units_per_px, text, lbDisplay.DrawFlags);
     }
     play_non_3d_sample_no_overlap(snd_alarm);
   }
@@ -303,7 +303,7 @@ void draw_eastegg(void)
     }
     if (RendererIsScreenLocked())
     {
-        LbTextDrawResized(scale_fixed_DK_value(px[i]/pixel_size), scale_fixed_DK_value(py[i]/pixel_size), ee_units_per_px, text);
+        LbTextDrawResized(scale_fixed_DK_value(px[i]/pixel_size), scale_fixed_DK_value(py[i]/pixel_size), ee_units_per_px, text, lbDisplay.DrawFlags);
     }
     play_non_3d_sample_no_overlap(snd_alarm);
   }

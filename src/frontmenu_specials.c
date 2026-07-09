@@ -166,15 +166,15 @@ void draw_resurrect_creature(struct GuiButton *gbtn)
         LbSpriteDrawResized(x, y, tx_units_per_px, spr);
         int h = scale_ui_value_lofi(gbtn->height) / 16;
         int w = scale_ui_value_lofi(spr->SWidth + 2);
-        LbTextDrawResizedFmt(w, h, tx_units_per_px, "%s", get_string(crconf->namestr_idx));
+        LbTextDrawResizedFmt(w, h, tx_units_per_px, lbDisplay.DrawFlags, "%s", get_string(crconf->namestr_idx));
         lbDisplay.DrawFlags = Lb_TEXT_HALIGN_RIGHT;
         if ( (RendererGetScreenHeight() < 400) && (dbc_language != 0) )
         {
-            LbTextDrawResizedFmt(0, h, tx_units_per_px, "%u", (cstore->exp_level+1));
+            LbTextDrawResizedFmt(0, h, tx_units_per_px, lbDisplay.DrawFlags, "%u", (cstore->exp_level+1));
         }
         else
         {
-            LbTextDrawResizedFmt(0, h, tx_units_per_px, " %s %u", get_string(GUIStr_MnuLevel), (cstore->exp_level+1));
+            LbTextDrawResizedFmt(0, h, tx_units_per_px, lbDisplay.DrawFlags, " %s %u", get_string(GUIStr_MnuLevel), (cstore->exp_level+1));
         }
     }
     lbDisplay.DrawFlags = flg_mem;
@@ -255,15 +255,15 @@ void draw_transfer_creature(struct GuiButton *gbtn)
         LbSpriteDrawResized(x, y, tx_units_per_px, spr);
         int h = scale_ui_value_lofi(gbtn->height)/16;
         int w = scale_ui_value_lofi(spr->SWidth + 2);
-        LbTextDrawResizedFmt(w, h, tx_units_per_px, "%s", get_string(crconf->namestr_idx));
+        LbTextDrawResizedFmt(w, h, tx_units_per_px, lbDisplay.DrawFlags, "%s", get_string(crconf->namestr_idx));
         lbDisplay.DrawFlags = Lb_TEXT_HALIGN_RIGHT;
         if ( (RendererGetScreenHeight() < 400) && (dbc_language !=0 ) )
         {
-            LbTextDrawResizedFmt(0, h, tx_units_per_px, "%u", (cctrl->exp_level+1));
+            LbTextDrawResizedFmt(0, h, tx_units_per_px, lbDisplay.DrawFlags, "%u", (cctrl->exp_level+1));
         }
         else
         {
-            LbTextDrawResizedFmt(0, h, tx_units_per_px, " %s %u", get_string(GUIStr_MnuLevel), (cctrl->exp_level+1));
+            LbTextDrawResizedFmt(0, h, tx_units_per_px, lbDisplay.DrawFlags, " %s %u", get_string(GUIStr_MnuLevel), (cctrl->exp_level+1));
         }
     }
     lbDisplay.DrawFlags = flgmem;

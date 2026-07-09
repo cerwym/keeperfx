@@ -488,7 +488,7 @@ void draw_button_string(struct GuiButton *gbtn, int base_width, const char *text
             }
         }
     }
-    LbTextDrawResized(w, h, tx_units_per_px, dtext);
+    LbTextDrawResized(w, h, tx_units_per_px, dtext, lbDisplay.DrawFlags);
     LbTextSetJustifyWindow(0, 0, RendererScreenWidth());
     LbTextSetClipWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
     LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
@@ -607,7 +607,7 @@ TbBool draw_text_box(const char *text)
             line_count++;
         }
     }
-    return LbTextDrawResized(0, (box_height - line_count * n) / 2, tx_units_per_px, text);
+    return LbTextDrawResized(0, (box_height - line_count * n) / 2, tx_units_per_px, text, lbDisplay.DrawFlags);
 }
 
 TbBool draw_text_box_top(const char* text, ushort drawflags)
@@ -644,7 +644,7 @@ TbBool draw_text_box_top(const char* text, ushort drawflags)
     int tx_units_per_px = ((box_height / 4) * 13 / 11) * 16 / LbTextLineHeight();
     LbTextSetWindow(startx, starty, box_width, box_height);
     n = LbTextLineHeight() * tx_units_per_px / 16;
-    return LbTextDrawResized(tx_units_per_px/2, 0, tx_units_per_px, text);
+    return LbTextDrawResized(tx_units_per_px/2, 0, tx_units_per_px, text, lbDisplay.DrawFlags);
 }
 
 int scroll_box_get_units_per_px(struct GuiButton *gbtn)
@@ -765,7 +765,7 @@ void draw_string64k(long x, long y, int units_per_px, const char * text)
 {
     unsigned short drwflags_mem = lbDisplay.DrawFlags;
     lbDisplay.DrawFlags &= ~Lb_TEXT_ONE_COLOR;
-    LbTextDrawResized(x, y, units_per_px, text);
+    LbTextDrawResized(x, y, units_per_px, text, lbDisplay.DrawFlags);
     lbDisplay.DrawFlags = drwflags_mem;
 }
 

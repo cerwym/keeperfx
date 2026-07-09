@@ -1189,7 +1189,7 @@ void frontend_draw_text(struct GuiButton *gbtn)
     int tx_units_per_px;
     tx_units_per_px = gbtn->height * 16 / LbTextLineHeight();
     LbTextSetWindow(gbtn->scr_pos_x, gbtn->scr_pos_y, gbtn->width, gbtn->height);
-    LbTextDrawResized(0, 0, tx_units_per_px, frontend_button_caption_text(gbtn));
+    LbTextDrawResized(0, 0, tx_units_per_px, frontend_button_caption_text(gbtn), lbDisplay.DrawFlags);
 }
 
 void frontend_change_state(struct GuiButton *gbtn)
@@ -1228,7 +1228,7 @@ void frontend_draw_enter_text(struct GuiButton *gbtn)
     int tx_units_per_px;
     tx_units_per_px = gbtn->height * 16 / LbTextLineHeight();
     LbTextSetWindow(gbtn->scr_pos_x, gbtn->scr_pos_y, (240 + LbTextCharWidth('_')) * tx_units_per_px / 16, gbtn->height);
-    LbTextDrawResized(0, 0, tx_units_per_px, text);
+    LbTextDrawResized(0, 0, tx_units_per_px, text, lbDisplay.DrawFlags);
 }
 
 void frontend_draw_small_menu_button(struct GuiButton *gbtn)
@@ -1266,9 +1266,9 @@ void frontend_draw_computer_players(struct GuiButton *gbtn)
     ln_height = LbTextLineHeight() * tx_units_per_px / 16;
     LbTextSetWindow(gbtn->scr_pos_x, gbtn->scr_pos_y, gbtn->width, ln_height);
     lbDisplay.DrawFlags = Lb_TEXT_HALIGN_LEFT;
-    LbTextDrawResized(0, 0, tx_units_per_px, frontend_button_caption_text(gbtn));
+    LbTextDrawResized(0, 0, tx_units_per_px, frontend_button_caption_text(gbtn), lbDisplay.DrawFlags);
     lbDisplay.DrawFlags = Lb_TEXT_HALIGN_RIGHT;
-    LbTextDrawResized(0, 0, tx_units_per_px, text);
+    LbTextDrawResized(0, 0, tx_units_per_px, text, lbDisplay.DrawFlags);
     lbDisplay.DrawFlags = 0;
 }
 
@@ -1288,7 +1288,7 @@ void frontend_draw_mp_mappack(struct GuiButton *gbtn)
     LbTextSetWindow(gbtn->scr_pos_x, gbtn->scr_pos_y, gbtn->width, ln_height);
     
     lbDisplay.DrawFlags = Lb_TEXT_HALIGN_LEFT;
-    LbTextDrawResized(0, 0, tx_units_per_px, text);
+    LbTextDrawResized(0, 0, tx_units_per_px, text, lbDisplay.DrawFlags);
     lbDisplay.DrawFlags = 0;
 }
 
@@ -1381,7 +1381,7 @@ void draw_scrolling_button_string(struct GuiButton *gbtn, const char *text)
     scrollwnd->action = 0;
   }
   // Finally, draw the text
-  LbTextDrawResized(0, scrollwnd->start_y, tx_units_per_px, text);
+  LbTextDrawResized(0, scrollwnd->start_y, tx_units_per_px, text, lbDisplay.DrawFlags);
   // And restore default drawing options
   LbTextSetWindow(0, 0, RendererScreenHeight(), RendererScreenWidth());
   lbDisplay.DrawFlags = flg_mem;
@@ -3373,7 +3373,7 @@ void draw_debug_messages() {
     const int x = 8 / pixel_size;
     int y = 8 / pixel_size;
     for (auto message = debug_messages_head; message != nullptr; ) {
-        LbTextDraw(x, y, message->text);
+        LbTextDraw(x, y, message->text, lbDisplay.DrawFlags);
         y += 32 / pixel_size;
         const auto next = message->next;
         KfxFree(message);
@@ -3930,7 +3930,7 @@ void frontend_draw_product_version(struct GuiButton *gbtn)
     LbTextSetWindow(0, gbtn->scr_pos_y, gbtn->width, h);
     char text[128];
     snprintf(text, sizeof(text), "%s %s", PRODUCT_NAME, PRODUCT_VERSION);
-    LbTextDrawResized(0, 0, units_per_px, text);
+    LbTextDrawResized(0, 0, units_per_px, text, lbDisplay.DrawFlags);
 }
 
 /******************************************************************************/

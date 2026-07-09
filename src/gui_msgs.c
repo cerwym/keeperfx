@@ -69,7 +69,7 @@ void message_draw(void)
             long x = 148 * units_per_pixel / 16;
             LbTextSetWindow(0, 0, RendererGetScreenWidth(), RendererGetScreenHeight());
             clear_flag(lbDisplay.DrawFlags, Lb_TEXT_ONE_COLOR);
-            LbTextDrawResized(x+32*units_per_pixel/16, y, tx_units_per_px, game.messages[i].text);
+            LbTextDrawResized(x+32*units_per_pixel/16, y, tx_units_per_px, game.messages[i].text, lbDisplay.DrawFlags);
             unsigned long spr_idx = 0;
             PlayerNumber plyr_idx = game.messages[i].plyr_idx;
             switch (game.messages[i].type)

@@ -84,11 +84,11 @@ void draw_high_score_entry(int idx, long pos_x, long pos_y, int col1_width, int 
     // TODO: These were originally right-aligned, but there's a glitch that causes longer numbers to be aligned weirdly at some resolutions in dbc mode.
     lbDisplay.DrawFlags = Lb_TEXT_HALIGN_LEFT;
     int i = pos_x + col1_width;
-    LbTextNumberDraw(i, pos_y, units_per_px, idx+1, Fnt_CenterPos);
+    LbTextNumberDraw(i, pos_y, units_per_px, idx+1, Fnt_CenterPos, lbDisplay.DrawFlags);
     i += col2_width;
-    LbTextNumberDraw(i, pos_y, units_per_px, hscore->score, Fnt_LeftJustify);
+    LbTextNumberDraw(i, pos_y, units_per_px, hscore->score, Fnt_LeftJustify, lbDisplay.DrawFlags);
     i += col3_width;
-    LbTextNumberDraw(i, pos_y, units_per_px, hscore->lvnum, Fnt_LeftJustify);
+    LbTextNumberDraw(i, pos_y, units_per_px, hscore->lvnum, Fnt_LeftJustify, lbDisplay.DrawFlags);
     i += col4_width;
     if (idx == high_score_entry_input_active)
     {
@@ -104,10 +104,10 @@ void draw_high_score_entry(int idx, long pos_x, long pos_y, int col1_width, int 
                 str[len+1] = '\0';
             }
         }
-        LbTextStringDraw(i, pos_y, units_per_px, str, Fnt_LeftJustify);
+        LbTextStringDraw(i, pos_y, units_per_px, str, Fnt_LeftJustify, lbDisplay.DrawFlags);
     } else
     {
-        LbTextStringDraw(i, pos_y, units_per_px, hscore->name, Fnt_LeftJustify);
+        LbTextStringDraw(i, pos_y, units_per_px, hscore->name, Fnt_LeftJustify, lbDisplay.DrawFlags);
     }
 }
 
@@ -461,7 +461,7 @@ void frontend_draw_high_scores_mappack(struct GuiButton *gbtn)
     LbTextSetFont(frontend_font[2]);
     int tx_units_per_px = gbtn->height * 16 / LbTextLineHeight();
     LbTextSetWindow(gbtn->scr_pos_x, gbtn->scr_pos_y, gbtn->width, gbtn->height);
-    LbTextDrawResized((dbc_language > 0) ? -30 : 0, 0, tx_units_per_px, text);
+    LbTextDrawResized((dbc_language > 0) ? -30 : 0, 0, tx_units_per_px, text, lbDisplay.DrawFlags);
 }
 
 unsigned long count_high_scores()

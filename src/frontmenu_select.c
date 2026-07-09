@@ -124,11 +124,11 @@ void frontend_draw_level_select_button(struct GuiButton *gbtn)
     LbTextSetWindow(gbtn->scr_pos_x, gbtn->scr_pos_y, gbtn->width, i);
     if (lvinfo->name_stridx > 0)
     {
-        LbTextDrawResized(0, 0, tx_units_per_px, get_string(lvinfo->name_stridx));
+        LbTextDrawResized(0, 0, tx_units_per_px, get_string(lvinfo->name_stridx), lbDisplay.DrawFlags);
     }
     else
     {
-        LbTextDrawResized(0, 0, tx_units_per_px, lvinfo->name);
+        LbTextDrawResized(0, 0, tx_units_per_px, lvinfo->name, lbDisplay.DrawFlags);
     }
 }
 
@@ -204,7 +204,7 @@ void frontend_draw_level_select_mappack(struct GuiButton *gbtn)
     int tx_units_per_px;
     tx_units_per_px = gbtn->height * 16 / LbTextLineHeight();
     LbTextSetWindow(gbtn->scr_pos_x, gbtn->scr_pos_y, gbtn->width, gbtn->height);
-    LbTextDrawResized(0, 0, tx_units_per_px, text);
+    LbTextDrawResized(0, 0, tx_units_per_px, text, lbDisplay.DrawFlags);
 }
 
 void frontend_campaign_select_up(struct GuiButton *gbtn)
@@ -280,7 +280,7 @@ void frontend_draw_campaign_select_button(struct GuiButton *gbtn)
     int tx_units_per_px = (gbtn->height * 13 / 11) * 16 / LbTextLineHeight();
     i = LbTextLineHeight() * tx_units_per_px / 16;
     LbTextSetWindow(gbtn->scr_pos_x, gbtn->scr_pos_y, gbtn->width, i);
-    LbTextDrawResized(0, 0, tx_units_per_px, campgn->display_name);
+    LbTextDrawResized(0, 0, tx_units_per_px, campgn->display_name, lbDisplay.DrawFlags);
 }
 
 void frontend_campaign_select(struct GuiButton *gbtn)
@@ -534,7 +534,7 @@ void frontend_draw_mp_mappack_select_button(struct GuiButton *gbtn)
     tx_units_per_px = (gbtn->height*13/11) * 16 / LbTextLineHeight();
     i = LbTextLineHeight() * tx_units_per_px / 16;
     LbTextSetWindow(gbtn->scr_pos_x, gbtn->scr_pos_y, gbtn->width, i);
-    LbTextDrawResized(0, 0, tx_units_per_px, campgn->display_name);
+    LbTextDrawResized(0, 0, tx_units_per_px, campgn->display_name, lbDisplay.DrawFlags);
 }
 
 void frontend_draw_mappack_select_button(struct GuiButton *gbtn)
@@ -563,7 +563,7 @@ void frontend_draw_mappack_select_button(struct GuiButton *gbtn)
     tx_units_per_px = (gbtn->height*13/11) * 16 / LbTextLineHeight();
     i = LbTextLineHeight() * tx_units_per_px / 16;
     LbTextSetWindow(gbtn->scr_pos_x, gbtn->scr_pos_y, gbtn->width, i);
-    LbTextDrawResized(0, 0, tx_units_per_px, campgn->display_name);
+    LbTextDrawResized(0, 0, tx_units_per_px, campgn->display_name, lbDisplay.DrawFlags);
 }
 
 void frontend_mappack_select_update(void)

@@ -133,7 +133,7 @@ static void draw_creature_view_icons(struct Thing* creatng)
             lbDisplayEx.ShadowColour = LbTextGetFontBackColor(winfont);
             char text[16];
             snprintf(text, sizeof(text), "%u", (cctrl->timebomb_countdown / turns_per_second));
-            LbTextDrawResized(0, 0, tx_units_per_px, text);
+            LbTextDrawResized(0, 0, tx_units_per_px, text, lbDisplay.DrawFlags);
         }
         draw_gui_panel_sprite_left(x, y, ps_units_per_px, spridx);
         x += scale_ui_value_lofi(spr->SWidth);
@@ -498,17 +498,17 @@ void draw_overlay_compass(long base_x, long base_y)
     int shift_x = (-(MapDiagonalLength * 7 / 16) * LbSinL(cam->rotation_angle_x)) >> LbFPMath_TrigmBits;
     int shift_y = (-(MapDiagonalLength * 7 / 16) * LbCosL(cam->rotation_angle_x)) >> LbFPMath_TrigmBits;
     if (RendererIsScreenLocked()) {
-        LbTextDrawResized(center_x + shift_x - w, center_y + shift_y - h, tx_units_per_px, get_string(GUIStr_MapN));
+        LbTextDrawResized(center_x + shift_x - w, center_y + shift_y - h, tx_units_per_px, get_string(GUIStr_MapN), lbDisplay.DrawFlags);
     }
     shift_x = ( (MapDiagonalLength*7/16) * LbSinL(cam->rotation_angle_x)) >> LbFPMath_TrigmBits;
     shift_y = ( (MapDiagonalLength*7/16) * LbCosL(cam->rotation_angle_x)) >> LbFPMath_TrigmBits;
-    LbTextDrawResized(center_x + shift_x - w, center_y + shift_y - h, tx_units_per_px, get_string(GUIStr_MapS));
+    LbTextDrawResized(center_x + shift_x - w, center_y + shift_y - h, tx_units_per_px, get_string(GUIStr_MapS), lbDisplay.DrawFlags);
     shift_x = ( (MapDiagonalLength*7/16) * LbCosL(cam->rotation_angle_x)) >> LbFPMath_TrigmBits;
     shift_y = (-(MapDiagonalLength*7/16) * LbSinL(cam->rotation_angle_x)) >> LbFPMath_TrigmBits;
-    LbTextDrawResized(center_x + shift_x - w, center_y + shift_y - h, tx_units_per_px, get_string(GUIStr_MapE));
+    LbTextDrawResized(center_x + shift_x - w, center_y + shift_y - h, tx_units_per_px, get_string(GUIStr_MapE), lbDisplay.DrawFlags);
     shift_x = (-(MapDiagonalLength*7/16) * LbCosL(cam->rotation_angle_x)) >> LbFPMath_TrigmBits;
     shift_y = ( (MapDiagonalLength*7/16) * LbSinL(cam->rotation_angle_x)) >> LbFPMath_TrigmBits;
-    LbTextDrawResized(center_x + shift_x - w, center_y + shift_y - h, tx_units_per_px, get_string(GUIStr_MapW));
+    LbTextDrawResized(center_x + shift_x - w, center_y + shift_y - h, tx_units_per_px, get_string(GUIStr_MapW), lbDisplay.DrawFlags);
     lbDisplay.DrawFlags = flg_mem;
 }
 
@@ -938,7 +938,7 @@ void redraw_display(void)
                 pos_y = ((pos_y << 3) + ((LbTextLineHeight()*units_per_pixel/16) * (game.active_messages_count << (RendererGetScreenHeight() < 400))));
             }
         }
-        LbTextDrawResized(pos_x, pos_y, tx_units_per_px, text);
+        LbTextDrawResized(pos_x, pos_y, tx_units_per_px, text, lbDisplay.DrawFlags);
     }
     if ( draw_spell_cost )
     {
@@ -953,7 +953,7 @@ void redraw_display(void)
             snprintf(text, sizeof(text), "lv%ld", (-draw_spell_cost));
         long pos_y = GetMouseY() - (LbTextStringHeight(text) * units_per_pixel / 16) / 2 - 2 * units_per_pixel / 16;
         long pos_x = GetMouseX() - (LbTextStringWidth(text) * units_per_pixel / 16) / 2;
-        LbTextDrawResized(pos_x, pos_y, tx_units_per_px, text);
+        LbTextDrawResized(pos_x, pos_y, tx_units_per_px, text, lbDisplay.DrawFlags);
         lbDisplay.DrawFlags = drwflags_mem;
         draw_spell_cost = 0;
     }
@@ -1025,7 +1025,7 @@ void redraw_display(void)
           UIRenderer_BeginTopOverlay();
           LbTextSetWindow(text_x, pos_y, text_w, h);
           draw_slab64k(pos_x, pos_y, units_per_pixel, w, h);
-          LbTextDrawResized(0, 0, tx_units_per_px, text);
+          LbTextDrawResized(0, 0, tx_units_per_px, text, lbDisplay.DrawFlags);
           UIRenderer_EndTopOverlay();
           LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
     }
@@ -1058,7 +1058,7 @@ void redraw_display(void)
         UIRenderer_BeginTopOverlay();
         LbTextSetWindow(pos_x, pos_y, w, h);
         draw_slab64k(pos_x, pos_y, units_per_pixel, w, h);
-        LbTextDrawResized(0, 0, tx_units_per_px, text);
+        LbTextDrawResized(0, 0, tx_units_per_px, text, lbDisplay.DrawFlags);
         UIRenderer_EndTopOverlay();
         LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
     }

@@ -83,7 +83,7 @@ void frontstory_draw(void)
     LbTextSetFont(frontstory_font);
     lbDisplay.DrawFlags = Lb_TEXT_HALIGN_CENTER;
     int tx_units_per_px = (26 * units_per_pixel) / LbTextLineHeight();
-    LbTextDrawResized(0, 0, tx_units_per_px, get_string(frontstory_text_no));
+    LbTextDrawResized(0, 0, tx_units_per_px, get_string(frontstory_text_no), lbDisplay.DrawFlags);
 }
 
 short frontstory_input(void)
@@ -128,7 +128,7 @@ void frontcredits_draw(void)
                 text = "";
                 break;
             }
-            LbTextDrawResized(0, h, units_per_pixel, text);
+            LbTextDrawResized(0, h, units_per_pixel, text, lbDisplay.DrawFlags);
             did_draw = 1;
         }
         h += ln_height + 2 * units_per_pixel / 16;

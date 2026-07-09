@@ -324,7 +324,7 @@ static void draw_netmap_players_hands(void)
             y += 32;
             x += 32;
             LbDrawBox(scale_value_landview(x-4), scale_value_landview(y), scale_value_landview(w+8), scale_value_landview(h), colr, lbDisplay.DrawFlags);
-            LbTextDrawResized(scale_value_landview(x), scale_value_landview(y), units_per_pixel_landview, plyr_nam);
+            LbTextDrawResized(scale_value_landview(x), scale_value_landview(y), units_per_pixel_landview, plyr_nam, lbDisplay.DrawFlags);
         }
     }
 }

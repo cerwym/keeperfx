@@ -551,7 +551,7 @@ void draw_tooltip_slab64k(char *tttext, long pos_x, long pos_y, long ttwidth, lo
                 tx = scale_ui_value_lofi(render_tooltip_scroll_offset);
                 ty = -scale_ui_value_lofi(2);
             }
-            LbTextDrawResized(tx, ty, tx_units_per_px, tttext);
+            LbTextDrawResized(tx, ty, tx_units_per_px, tttext, lbDisplay.DrawFlags);
         }
     }
     LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());

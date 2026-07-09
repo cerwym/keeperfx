@@ -803,7 +803,7 @@ void gui_draw_box(struct GuiBox *gbox)
             lbDisplay.DrawColour = colours[0][0][0];
           else
             lbDisplay.DrawColour = colours[3][3][3];
-          LbTextDrawResized(pos_x/pixel_size, pos_y/pixel_size, 16, goptn->label);
+          LbTextDrawResized(pos_x/pixel_size, pos_y/pixel_size, 16, goptn->label, lbDisplay.DrawFlags);
           goptn++;
           pos_y += lnheight;
         }
@@ -826,7 +826,7 @@ void gui_draw_box(struct GuiBox *gbox)
               lbDisplay.DrawColour = colours[15][15][15];
             else
               lbDisplay.DrawColour = colours[9][9][9];
-            LbTextDrawResized(pos_x/pixel_size, pos_y/pixel_size, 16, goptn->label);
+            LbTextDrawResized(pos_x/pixel_size, pos_y/pixel_size, 16, goptn->label, lbDisplay.DrawFlags);
             goptn++;
             pos_y += lnheight;
         }
