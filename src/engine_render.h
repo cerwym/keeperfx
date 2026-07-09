@@ -187,14 +187,12 @@ int floor_height_for_volume_box(PlayerNumber plyr_idx, MapSlabCoord slb_x, MapSl
 void frame_wibble_generate(void);
 void setup_rotate_stuff(long a1, long a2, long a3, long a4, long a5, long a6, long a7, long a8);
 
-void process_keeper_sprite(short x, short y, unsigned short a3, short kspr_angle, unsigned char a5, long a6);
+void process_keeper_sprite(short x, short y, unsigned short kspr_base, short kspr_angle,
+                           unsigned char sprgroup, long scale,
+                           TbDrawFlagsMask draw_flags, unsigned char alpha);
 
-/** process_keeper_sprite wrapper that sets draw globals to specified values,
- *  calls process_keeper_sprite, then restores them.
- *  Allows renderer code to replay captured draw state without touching lbDisplay
- *  or EngineSpriteDrawUsingAlpha directly.
- *  @param draw_flags  lbDisplay.DrawFlags value to set during the call.
- *  @param alpha       EngineSpriteDrawUsingAlpha value to set during the call. */
+/** Thin alias for process_keeper_sprite with explicit draw_flags and alpha.
+ *  Kept for call sites that already have the flags as named variables. */
 void process_keeper_sprite_ex(short x, short y, unsigned short kspr_base,
                                short kspr_angle, unsigned char sprgroup, long scale,
                                unsigned int draw_flags, unsigned char alpha);

@@ -18,10 +18,9 @@
 
 #include "bflib_basics.h"
 #include "bflib_sprite.h"      // TbSprite
-#include "bflib_video.h"       // lbDisplay
 #include "bflib_sprfnt.h"      // scale_ui_value_lofi
 #include "bflib_vidraw.h"      // LbSpriteDrawUsingScalingUpDataSolidLR, LbSpriteSetScaling*
-#include "engine_render.h"     // process_keeper_sprite
+#include "engine_render.h"     // process_keeper_sprite_ex
 #include "globals.h"
 #include "renderer/RendererManager.h"
 
@@ -108,11 +107,7 @@ void SWCursorLayer::SubmitKeeperHandSprite(short x, short y,
                                            int32_t scale,
                                            TbDrawFlagsMask draw_flags)
 {
-    // Software renderer has no frame-setup concept — execute immediately.
-    // process_keeper_sprite still reads lbDisplay.DrawFlags; bridge through the global.
-    lbDisplay.DrawFlags = draw_flags;
-    process_keeper_sprite(x, y, kspr_base, angle, sprgroup, scale);
-    lbDisplay.DrawFlags = 0;
+    process_keeper_sprite_ex(x, y, kspr_base, angle, sprgroup, scale, draw_flags, 0);
 }
 
 void SWCursorLayer::Draw()

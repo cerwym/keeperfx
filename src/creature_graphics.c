@@ -293,10 +293,6 @@ void get_keepsprite_unscaled_dimensions(long kspr_anim, long angle, long frame, 
         val_in_range = 0;
     else
         val_in_range = 1;
-    if ( val_in_range )
-      lbDisplay.DrawFlags |= Lb_SPRITE_FLIP_HORIZ;
-    else
-      lbDisplay.DrawFlags &= ~Lb_SPRITE_FLIP_HORIZ;
     if (kspr->Rotable == 0)
     {
         kspr += frame;
