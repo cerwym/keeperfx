@@ -64,6 +64,9 @@ long vec_window_width;
 
 /** Set to 1 while a renderer submit is in-flight to prevent recursive submit re-entry. */
 int lb_in_sprite_submit = 0;
+/** Active draw flags for the current rasteriser call — replaces direct reads of lb_draw_flags
+ *  inside the software renderer pipeline.  Set by every Lb* entry point. */
+TbDrawFlagsMask lb_draw_flags = 0;
 long vec_window_height;
 unsigned char *dither_map;
 unsigned char *dither_end;
@@ -142,7 +145,7 @@ void LbDrawHVLine(long xpos1, long ypos1, long xpos2, long ypos2, TbPixel colour
   if ( xpos2 == xpos1 )
   {//Vertical line
     long idx = ypos2 - ypos1 + 1;
-    if (lbDisplay.DrawFlags & Lb_SPRITE_TRANSPAR4)
+    if (lb_draw_flags & Lb_SPRITE_TRANSPAR4)
     {
       unsigned short glass_idx = (unsigned char)colour << 8;
       do {
@@ -154,7 +157,7 @@ void LbDrawHVLine(long xpos1, long ypos1, long xpos2, long ypos2, TbPixel colour
       } while ( idx>0 );
     } else
     {
-      if (lbDisplay.DrawFlags & Lb_SPRITE_TRANSPAR8)
+      if (lb_draw_flags & Lb_SPRITE_TRANSPAR8)
       {
         unsigned short glass_idx = (unsigned char)colour;
         do
@@ -181,7 +184,7 @@ void LbDrawHVLine(long xpos1, long ypos1, long xpos2, long ypos2, TbPixel colour
   } else
   {//Horizontal line
     long idx = xpos2 - xpos1 + 1;
-    if (lbDisplay.DrawFlags & Lb_SPRITE_TRANSPAR4)
+    if (lb_draw_flags & Lb_SPRITE_TRANSPAR4)
     {
       unsigned short glass_idx = (unsigned char)colour << 8;
       do
@@ -196,7 +199,7 @@ void LbDrawHVLine(long xpos1, long ypos1, long xpos2, long ypos2, TbPixel colour
     }
     else
     {
-      if (lbDisplay.DrawFlags & Lb_SPRITE_TRANSPAR8)
+      if (lb_draw_flags & Lb_SPRITE_TRANSPAR8)
       {
         unsigned short glass_idx = (unsigned char)colour;
         do
@@ -235,6 +238,7 @@ void LbDrawHVLine(long xpos1, long ypos1, long xpos2, long ypos2, TbPixel colour
  */
 void LbDrawBoxClip(long x, long y, unsigned long width, unsigned long height, TbPixel colour)
 {
+  lb_draw_flags = lbDisplay.DrawFlags;
   assert(!RendererHasGPURenderPath() && "LbDrawBoxClip: CPU pixel write in GL mode");
   long ypos = y;
   //Checking and clipping coordinates
@@ -268,7 +272,7 @@ void LbDrawBoxClip(long x, long y, unsigned long width, unsigned long height, Tb
   unsigned long idxh = height;
   //Space between lines in video buffer
   unsigned long screen_delta = RendererScreenWidth() - width;
-  if ( lbDisplay.DrawFlags & Lb_SPRITE_TRANSPAR4 )
+  if ( lb_draw_flags & Lb_SPRITE_TRANSPAR4 )
   {
       unsigned short glass_idx = (unsigned char)colour << 8;
       do {
@@ -286,7 +290,7 @@ void LbDrawBoxClip(long x, long y, unsigned long width, unsigned long height, Tb
           idxh--;
       } while ( idxh>0 );
   } else
-  if ( lbDisplay.DrawFlags & Lb_SPRITE_TRANSPAR8 )
+  if ( lb_draw_flags & Lb_SPRITE_TRANSPAR8 )
   {
       unsigned short glass_idx = (unsigned char)colour;
       do {
@@ -331,11 +335,12 @@ void LbDrawBoxClip(long x, long y, unsigned long width, unsigned long height, Tb
  */
 TbResult LbDrawBox(long x, long y, unsigned long width, unsigned long height, TbPixel colour)
 {
-    if (lbDisplay.DrawFlags & Lb_SPRITE_OUTLINE)
+    lb_draw_flags = lbDisplay.DrawFlags;
+    if (lb_draw_flags & Lb_SPRITE_OUTLINE)
     {
         UIRenderer_SubmitOutlineBox((int32_t)x, (int32_t)y, (int32_t)width, (int32_t)height, colour);
     }
-    else if (lbDisplay.DrawFlags & (Lb_SPRITE_TRANSPAR4 | Lb_SPRITE_TRANSPAR8))
+    else if (lb_draw_flags & (Lb_SPRITE_TRANSPAR4 | Lb_SPRITE_TRANSPAR8))
     {
         UIRenderer_SubmitSolidBoxAlpha((int32_t)x, (int32_t)y, (int32_t)width, (int32_t)height, colour, 0.333f);
     }
@@ -423,7 +428,7 @@ static inline TbResult LbSpriteDrawPrepare(struct TbSpriteDrawData *spd, long x,
         return Lb_OK;
       btm = sprHt - delta;
     }
-    if ((lbDisplay.DrawFlags & Lb_SPRITE_FLIP_VERTIC) != 0)
+    if ((lb_draw_flags & Lb_SPRITE_FLIP_VERTIC) != 0)
     {
         spd->r = &RendererGetWScreen()[x + (y+btm-1)*RendererScreenWidth() + left];
         spd->nextRowDelta = -RendererScreenWidth();
@@ -460,7 +465,7 @@ static inline TbResult LbSpriteDrawPrepare(struct TbSpriteDrawData *spd, long x,
         }
     }
     SYNCDBG(19,"Drawing sprite of size (%d,%d)",(int)spd->Ht,(int)spd->Wd);
-    if ((lbDisplay.DrawFlags & Lb_SPRITE_FLIP_HORIZ) != 0)
+    if ((lb_draw_flags & Lb_SPRITE_FLIP_HORIZ) != 0)
     {
         spd->r += spd->Wd - 1;
         spd->mirror = true;
@@ -571,7 +576,7 @@ static inline void LbDrawBufferTranspr(unsigned char **buf_out,const char *buf_i
   unsigned int val;
   if ( mirror )
   {
-    if ((lbDisplay.DrawFlags & Lb_SPRITE_TRANSPAR4) != 0)
+    if ((lb_draw_flags & Lb_SPRITE_TRANSPAR4) != 0)
     {
         for (i=0; i<buf_len; i++ )
         {
@@ -592,7 +597,7 @@ static inline void LbDrawBufferTranspr(unsigned char **buf_out,const char *buf_i
     }
   } else
   {
-    if ( lbDisplay.DrawFlags & Lb_SPRITE_TRANSPAR4 )
+    if ( lb_draw_flags & Lb_SPRITE_TRANSPAR4 )
     {
         for (i=0; i<buf_len; i++ )
         {
@@ -659,7 +664,7 @@ static inline void LbDrawBufferOneColour(unsigned char **buf_out,const TbPixel c
     int i;
     if ( mirror )
     {
-        if ( lbDisplay.DrawFlags & Lb_SPRITE_TRANSPAR4 )
+        if ( lb_draw_flags & Lb_SPRITE_TRANSPAR4 )
         {
             for (i=0; i<buf_len; i++ )
             {
@@ -676,7 +681,7 @@ static inline void LbDrawBufferOneColour(unsigned char **buf_out,const TbPixel c
         }
     } else
     {
-        if ( lbDisplay.DrawFlags & Lb_SPRITE_TRANSPAR4 )
+        if ( lb_draw_flags & Lb_SPRITE_TRANSPAR4 )
         {
             for (i=0; i<buf_len; i++ )
             {
@@ -1013,22 +1018,23 @@ static inline TbResult LbSpriteDrawFastCpy(const char *sp,short sprWd,short sprH
 
 TbResult LbSpriteDraw(long x, long y, const struct TbSprite *spr)
 {
+    lb_draw_flags = lbDisplay.DrawFlags;
     struct TbSpriteDrawData spd;
     TbResult ret;
     SYNCDBG(19,"At (%ld,%ld)",x,y);
     if (!lb_in_sprite_submit) {
         lb_in_sprite_submit = 1;
-        ret = UIRenderer_SubmitRawSprite(x, y, spr, lbDisplay.DrawFlags);
+        ret = UIRenderer_SubmitRawSprite(x, y, spr, lb_draw_flags);
         lb_in_sprite_submit = 0;
         if (ret == Lb_OK) return ret;
     }
     ret = LbSpriteDrawPrepare(&spd, x, y, spr);
     if (ret != Lb_SUCCESS)
         return ret;
-    if ((lbDisplay.DrawFlags & (Lb_SPRITE_TRANSPAR4|Lb_SPRITE_TRANSPAR8)) != 0)
+    if ((lb_draw_flags & (Lb_SPRITE_TRANSPAR4|Lb_SPRITE_TRANSPAR8)) != 0)
         return LbSpriteDrawTranspr(spd.sp,spd.Wd,spd.Ht,spd.r,spd.nextRowDelta,spd.startShift,spd.mirror);
     else
-    if ((lbDisplay.DrawFlags & Lb_SPRITE_FLIP_HORIZ) != 0)
+    if ((lb_draw_flags & Lb_SPRITE_FLIP_HORIZ) != 0)
         return LbSpriteDrawSolid(spd.sp,spd.Wd,spd.Ht,spd.r,spd.nextRowDelta,spd.startShift,spd.mirror);
     else
         return LbSpriteDrawFastCpy(spd.sp,spd.Wd,spd.Ht,spd.r,spd.nextRowDelta,spd.startShift,spd.mirror);
@@ -1307,22 +1313,23 @@ static inline TbResult LbSpriteDrawFCOneColour(const char *sp,short sprWd,short 
 
 TbResult LbSpriteDrawOneColour(long x, long y, const struct TbSprite *spr, const TbPixel colour)
 {
+    lb_draw_flags = lbDisplay.DrawFlags;
     struct TbSpriteDrawData spd;
     TbResult ret;
     SYNCDBG(19,"At (%ld,%ld)",x,y);
     if (!lb_in_sprite_submit) {
         lb_in_sprite_submit = 1;
-        ret = UIRenderer_SubmitRawSpriteOneColour(x, y, spr, colour, lbDisplay.DrawFlags);
+        ret = UIRenderer_SubmitRawSpriteOneColour(x, y, spr, colour, lb_draw_flags);
         lb_in_sprite_submit = 0;
         if (ret == Lb_OK) return ret;
     }
     ret = LbSpriteDrawPrepare(&spd, x, y, spr);
     if (ret != Lb_SUCCESS)
         return ret;
-    if ((lbDisplay.DrawFlags & (Lb_SPRITE_TRANSPAR4|Lb_SPRITE_TRANSPAR8)) != 0) {
+    if ((lb_draw_flags & (Lb_SPRITE_TRANSPAR4|Lb_SPRITE_TRANSPAR8)) != 0) {
         return LbSpriteDrawTrOneColour(spd.sp,spd.Wd,spd.Ht,spd.r,colour,spd.nextRowDelta,spd.startShift,spd.mirror);
     } else
-    if ((lbDisplay.DrawFlags & Lb_SPRITE_FLIP_HORIZ) != 0) {
+    if ((lb_draw_flags & Lb_SPRITE_FLIP_HORIZ) != 0) {
         return LbSpriteDrawSlOneColour(spd.sp,spd.Wd,spd.Ht,spd.r,colour,spd.nextRowDelta,spd.startShift,spd.mirror);
     } else {
         return LbSpriteDrawFCOneColour(spd.sp,spd.Wd,spd.Ht,spd.r,colour,spd.nextRowDelta,spd.startShift,spd.mirror);
@@ -1587,6 +1594,7 @@ void LbSpriteSetScalingData(long x, long y, long swidth, long sheight, long dwid
 
 TbResult LbSpriteDrawScaled(long xpos, long ypos, const struct TbSprite *sprite, long dest_width, long dest_height)
 {
+    lb_draw_flags = lbDisplay.DrawFlags;
     SYNCDBG(19,"At (%ld,%ld) size (%ld,%ld)",xpos,ypos,dest_width,dest_height);
     if ((dest_width <= 0) || (dest_height <= 0))
       return 1;
@@ -1594,7 +1602,7 @@ TbResult LbSpriteDrawScaled(long xpos, long ypos, const struct TbSprite *sprite,
         UIRenderer_SubmitScaledSprite((int32_t)xpos, (int32_t)ypos, (int32_t)dest_width, (int32_t)dest_height, sprite);
         return Lb_SUCCESS;
     }
-    if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLNSHADOW) != 0)
+    if ((lb_draw_flags & Lb_TEXT_UNDERLNSHADOW) != 0)
         lbSpriteReMapPtr = pixmap.fade_tables;
     LbSpriteSetScalingData(xpos, ypos, sprite->SWidth, sprite->SHeight, dest_width, dest_height);
     const struct TbSourceBuffer buffer = {
@@ -1608,10 +1616,11 @@ TbResult LbSpriteDrawScaled(long xpos, long ypos, const struct TbSprite *sprite,
 
 TbResult LbSpriteDrawScaledOneColour(long xpos, long ypos, const struct TbSprite *sprite, long dest_width, long dest_height, const TbPixel colour)
 {
+    lb_draw_flags = lbDisplay.DrawFlags;
     SYNCDBG(19,"At (%ld,%ld) size (%ld,%ld)",xpos,ypos,dest_width,dest_height);
     if ((dest_width <= 0) || (dest_height <= 0))
       return 1;
-    if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLNSHADOW) != 0)
+    if ((lb_draw_flags & Lb_TEXT_UNDERLNSHADOW) != 0)
         lbSpriteReMapPtr = pixmap.fade_tables;
     LbSpriteSetScalingData(xpos, ypos, sprite->SWidth, sprite->SHeight, dest_width, dest_height);
     return LbSpriteDrawOneColourUsingScalingData(0, 0, sprite, colour);
@@ -1619,16 +1628,17 @@ TbResult LbSpriteDrawScaledOneColour(long xpos, long ypos, const struct TbSprite
 
 int LbSpriteDrawScaledRemap(long xpos, long ypos, const struct TbSprite *sprite, long dest_width, long dest_height, const unsigned char *cmap)
 {
+    lb_draw_flags = lbDisplay.DrawFlags;
     SYNCDBG(19,"At (%ld,%ld) size (%ld,%ld)",xpos,ypos,dest_width,dest_height);
     if ((dest_width <= 0) || (dest_height <= 0))
       return 1;
     if (!lb_in_sprite_submit) {
         lb_in_sprite_submit = 1;
-        TbResult ret = UIRenderer_SubmitRawSpriteRemap(xpos, ypos, sprite, cmap, lbDisplay.DrawFlags);
+        TbResult ret = UIRenderer_SubmitRawSpriteRemap(xpos, ypos, sprite, cmap, lb_draw_flags);
         lb_in_sprite_submit = 0;
         if (ret == Lb_OK) return ret;
     }
-    if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLNSHADOW) != 0)
+    if ((lb_draw_flags & Lb_TEXT_UNDERLNSHADOW) != 0)
         lbSpriteReMapPtr = pixmap.fade_tables;
     LbSpriteSetScalingData(xpos, ypos, sprite->SWidth, sprite->SHeight, dest_width, dest_height);
     const struct TbSourceBuffer buffer = {
@@ -1795,6 +1805,7 @@ TbResult LbHugeSpriteDraw(const struct TbHugeSprite * spr, long sp_len,
  */
 void LbTiledSpriteDraw(long start_x, long start_y, long units_per_px, struct TiledSprite *bigspr)
 {
+    lb_draw_flags = lbDisplay.DrawFlags;
     long x;
     long y;
     int delta_x;
@@ -1862,12 +1873,12 @@ void LbDrawPixelClip(long x, long y, TbPixel colour)
     int val;
     buf = RendererGetGraphicsWindowPtr() + RendererScreenWidth() * y + x;
     val = 0;
-    if ((lbDisplay.DrawFlags & Lb_SPRITE_TRANSPAR4) != 0)
+    if ((lb_draw_flags & Lb_SPRITE_TRANSPAR4) != 0)
     {
         val = (colour << 8) + (*buf);
         *buf = pixmap.ghost[val];
     } else
-    if ((lbDisplay.DrawFlags & Lb_SPRITE_TRANSPAR8) != 0)
+    if ((lb_draw_flags & Lb_SPRITE_TRANSPAR8) != 0)
     {
         val = ((*buf) << 8) + colour;
         *buf = pixmap.ghost[val];
@@ -1982,7 +1993,7 @@ void LbDrawCircleOutline(long x, long y, long radius, TbPixel colour)
     int na;
     int nb;
     int n;
-    if ((lbDisplay.DrawFlags & Lb_SPRITE_TRANSPAR4) != 0)
+    if ((lb_draw_flags & Lb_SPRITE_TRANSPAR4) != 0)
     {
         nb = radius;
         n = 3 - 2 * radius;
@@ -2022,7 +2033,7 @@ void LbDrawCircleOutline(long x, long y, long radius, TbPixel colour)
             LbDrawPixelClipOpaq1(x + nb, y + na, colour);
         }
     } else
-    if ((lbDisplay.DrawFlags & Lb_SPRITE_TRANSPAR8) != 0)
+    if ((lb_draw_flags & Lb_SPRITE_TRANSPAR8) != 0)
     {
         nb = radius;
         n = 3 - 2 * radius;
@@ -2107,7 +2118,8 @@ void LbDrawCircleOutline(long x, long y, long radius, TbPixel colour)
 
 void LbDrawCircle(long x, long y, long radius, TbPixel colour)
 {
-    if ((lbDisplay.DrawFlags & Lb_SPRITE_OUTLINE) != 0)
+    lb_draw_flags = lbDisplay.DrawFlags;
+    if ((lb_draw_flags & Lb_SPRITE_OUTLINE) != 0)
         LbDrawCircleOutline(x, y, radius, colour);
     else
         LbDrawCircleFilled(x, y, radius, colour);
@@ -2120,10 +2132,10 @@ void setup_steps(long posx, long posy, const struct TbSourceBuffer * src_buf, in
     sposx = posx;
     sposy = posy;
     (*scanline) = RendererScreenWidth();
-    if ((lbDisplay.DrawFlags & Lb_SPRITE_FLIP_HORIZ) != 0) {
+    if ((lb_draw_flags & Lb_SPRITE_FLIP_HORIZ) != 0) {
         sposx = src_buf->width + posx - 1;
     }
-    if ((lbDisplay.DrawFlags & Lb_SPRITE_FLIP_VERTIC) != 0) {
+    if ((lb_draw_flags & Lb_SPRITE_FLIP_VERTIC) != 0) {
         sposy = src_buf->height + posy - 1;
         (*scanline) = -RendererScreenWidth();
     }
@@ -2136,10 +2148,10 @@ void setup_outbuf(const int32_t *xstep, const int32_t *ystep, uchar **outbuf, in
     int gspos_x;
     int gspos_y;
     gspos_y = ystep[0];
-    if ((lbDisplay.DrawFlags & Lb_SPRITE_FLIP_VERTIC) != 0)
+    if ((lb_draw_flags & Lb_SPRITE_FLIP_VERTIC) != 0)
         gspos_y += ystep[1] - 1;
     gspos_x = xstep[0];
-    if ((lbDisplay.DrawFlags & Lb_SPRITE_FLIP_HORIZ) != 0)
+    if ((lb_draw_flags & Lb_SPRITE_FLIP_HORIZ) != 0)
         gspos_x += xstep[1] - 1;
     (*outbuf) = &RendererGetGraphicsWindowPtr()[gspos_x + RendererScreenWidth() * gspos_y];
     (*outheight) = RendererScreenHeight();
