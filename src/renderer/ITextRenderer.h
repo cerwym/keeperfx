@@ -93,7 +93,6 @@ public:
                               TbDrawFlagsMask draw_flags) = 0;
 
     /** Set the draw colour used for one-colour and underline text rendering.
-     *  Replaces the former lbDisplay.DrawColour ambient global.
      *  Callers must set this before calling DrawTextResized/DrawTextAt when
      *  Lb_TEXT_ONE_COLOR or underline flags are in use. */
     virtual void SetDrawColour(uint8_t colour) = 0;
@@ -101,8 +100,7 @@ public:
     /** Return the current draw colour. */
     virtual uint8_t GetDrawColour() const = 0;
 
-    /** Set the shadow/underline colour used for Lb_TEXT_UNDERLNSHADOW rendering.
-     *  Replaces the former lbDisplayEx.ShadowColour ambient global. */
+    /** Set the shadow/underline colour used for Lb_TEXT_UNDERLNSHADOW rendering. */
     virtual void SetShadowColour(uint8_t colour) = 0;
 
     /** Return the current shadow colour. */

@@ -67,7 +67,7 @@ SDL_Color lbPaletteColors[PALETTE_COLORS];
 char lbDrawAreaTitle[128] = "Bullfrog Shell";
 volatile unsigned long lbIconIndex = 0;
 
-/** Active screen-mode index (formerly lbDisplay.ScreenMode). */
+/** Active screen-mode index. */
 static unsigned short lbScreenMode;
 
 

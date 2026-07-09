@@ -129,8 +129,7 @@ public:
     /**
      * Submit a solid-color rectangle.
      * CPU default: direct LbDrawBox software rasterisation.
-     * @param state  Per-call draw descriptor (only Lb_SPRITE_OUTLINE is consulted
-     *               here); replaces the former ambient lbDisplay.DrawFlags read.
+     * @param state  Per-call draw descriptor (only Lb_SPRITE_OUTLINE is consulted here).
      */
     virtual void SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx, KfxDrawState state);
  

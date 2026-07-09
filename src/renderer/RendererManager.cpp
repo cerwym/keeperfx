@@ -81,7 +81,7 @@ static IMapFadePass*        s_mapFadePass         = nullptr;
 static ITextRenderer*       s_textRenderer        = nullptr;
 static IUIRenderer*         s_uiRenderer          = nullptr;
 
-// Renderer-private screen dimensions (formerly lbDisplay.PhysicalScreen*/GraphicsScreenHeight).
+// Renderer-private screen dimensions.
 static TbScreenCoord        s_physicalScreenWidth  = 0;
 static TbScreenCoord        s_physicalScreenHeight = 0;
 static TbScreenCoord        s_graphicsScreenWidth  = 0;
@@ -89,7 +89,7 @@ static TbScreenCoord        s_graphicsScreenHeight = 0;
 static unsigned char*       s_wscreen              = NULL;
 static unsigned char*       s_graphicsWindowPtr    = NULL;
 
-// Renderer-private graphics/clip window rect (formerly lbDisplay.GraphicsWindow*).
+// Renderer-private graphics/clip window rect.
 static long                 s_graphicsWindowX      = 0;
 static long                 s_graphicsWindowY      = 0;
 static long                 s_graphicsWindowWidth  = 0;

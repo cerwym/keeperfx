@@ -120,8 +120,8 @@ extern volatile TbBool lbMouseGrabbed; // whether the mouse is current grabbed b
 extern short lbMouseMoveRatio; // mouse sensitivity ratio (8.8 fixed point)
 extern const struct TbSprite *lbMouseSprite; // current mouse cursor sprite
 
-/** Mouse input state (position, buttons, clip window) — formerly embedded in
- *  lbDisplay/TbDisplayStruct.  X/Y = button-down pos, MX/MY = move pos,
+/** Mouse input state (position, buttons, clip window).
+ *  X/Y = button-down pos, MX/MY = move pos,
  *  RX/RY = release pos; M*Button = move-time button state, R*Button = release. */
 struct TbMouseState {
     long          MouseWindowX;

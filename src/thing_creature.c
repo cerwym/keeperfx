@@ -5982,7 +5982,7 @@ void process_creature_leave_footsteps(struct Thing *thing)
         }
     } else
     {
-        // Tileset footprints, formerly Snow footprints.
+        // Tileset footprints.
         ThingModel footprint = get_footstep_effect_element(thing);
         if (footprint != TngEffElm_None)
         {

@@ -42,7 +42,7 @@ extern "C" {
 
 volatile TbBool lbMouseGrab = true;
 volatile TbBool lbMouseGrabbed = true;
-/** Mouse sensitivity ratio in 8.8 fixed point (formerly lbDisplay.MouseMoveRatio). */
+/** Mouse sensitivity ratio in 8.8 fixed point. */
 short lbMouseMoveRatio;
 volatile struct MouseWheelState lbMouseWheel;
 /******************************************************************************/
