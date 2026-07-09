@@ -440,7 +440,6 @@ void draw_overhead_map(const struct TbRect *map_area, long block_size, PlayerNum
             map_area->right - map_area->left, map_area->bottom - map_area->top))
         {
             KfxFree(tile_buf);
-            lbDisplay.DrawFlags = 0;
             return;
         }
         KfxFree(tile_buf);
@@ -472,7 +471,6 @@ void draw_overhead_map(const struct TbRect *map_area, long block_size, PlayerNum
         dstline += RendererScreenWidth();
         line++;
     }
-    lbDisplay.DrawFlags = 0;
 }
 
 void draw_overhead_room_icons(const struct TbRect *map_area, long block_size, PlayerNumber plyr_idx)
@@ -798,7 +796,6 @@ void draw_map_level_name(void)
     get_parchment_background_area_rect(&bkgnd_area);
     // Set position
     LbTextSetFont(winfont);
-    lbDisplay.DrawFlags = 0;
     int x = bkgnd_area.left;
     int y = bkgnd_area.top;
     int w = bkgnd_area.right - bkgnd_area.left;
@@ -808,7 +805,7 @@ void draw_map_level_name(void)
     {
         LbTextSetWindow(x, y, w, h);
         int tx_units_per_px = ( (RendererGetScreenHeight() < 400) && (dbc_language > 0) ) ? scale_ui_value(32) : (22 * units_per_pixel) / LbTextLineHeight();
-        LbTextDrawResized((w-LbTextStringWidth(lv_name)*units_per_pixel/16)/2, h/10 - 8*units_per_pixel/16, tx_units_per_px, lv_name, lbDisplay.DrawFlags);
+        LbTextDrawResized((w-LbTextStringWidth(lv_name)*units_per_pixel/16)/2, h/10 - 8*units_per_pixel/16, tx_units_per_px, lv_name, 0);
     }
 }
 
@@ -928,7 +925,6 @@ void draw_zoom_box_terrain(long scrtop_x, long scrtop_y, int stl_x, int stl_y, P
     }
 
     // Software path: direct pixel write via the SW rasteriser.
-    lbDisplay.DrawFlags = 0;
     setup_vecs(RendererGetWScreen(), NULL, (unsigned int)RendererScreenWidth(), (unsigned int)RendererScreenWidth(), (unsigned int)RendererScreenHeight());
     int scr_y = scrtop_y;
     for (int map_dy = 0; map_dy < draw_tiles_y; map_dy++)
@@ -944,15 +940,13 @@ void draw_zoom_box_terrain(long scrtop_x, long scrtop_y, int stl_x, int stl_y, P
                 draw_texture(scr_x, scr_y, subtile_size, subtile_size, k, 0, -1);
             } else
           {
-            LbDrawBox(scr_x, scr_y, subtile_size, subtile_size, 1, lbDisplay.DrawFlags);
+            LbDrawBox(scr_x, scr_y, subtile_size, subtile_size, 1, 0);
           }
           scr_x += subtile_size;
       }
       scr_y += subtile_size;
     }
-    lbDisplay.DrawFlags |= Lb_SPRITE_OUTLINE;
-    LbDrawBox(scrtop_x, scrtop_y, draw_tiles_x*subtile_size, draw_tiles_y*subtile_size, 0, lbDisplay.DrawFlags);
-    lbDisplay.DrawFlags &= ~Lb_SPRITE_OUTLINE;
+    LbDrawBox(scrtop_x, scrtop_y, draw_tiles_x*subtile_size, draw_tiles_y*subtile_size, 0, Lb_SPRITE_OUTLINE);
 }
 
 void draw_zoom_box_things(long scrtop_x, long scrtop_y, int stl_x, int stl_y, PlayerNumber plyr_idx, long draw_tiles_x, long draw_tiles_y, int subtile_size)

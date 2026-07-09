@@ -100,13 +100,12 @@ void frontbirthday_draw(void)
     frontend_copy_background();
     LbTextSetWindow(70, 70, 500, 340);
     LbTextSetFont(frontstory_font);
-    lbDisplay.DrawFlags = Lb_SPRITE_OUTLINE;
     const char *name=get_team_birthday();
     if ( name != NULL )
     {
         unsigned short line_pos = LbTextLineHeight();
-        LbTextDraw(0, 170-line_pos, get_string(GUIStr_HappyBirthday), lbDisplay.DrawFlags);
-        LbTextDraw(0, 170, name, lbDisplay.DrawFlags);
+        LbTextDraw(0, 170-line_pos, get_string(GUIStr_HappyBirthday), Lb_SPRITE_OUTLINE);
+        LbTextDraw(0, 170, name, Lb_SPRITE_OUTLINE);
     } else
     {
         frontend_set_state(FeSt_INTRO);
@@ -213,19 +212,17 @@ void draw_eastegg(void)
       eastegg_skeksis_cntr++;
       LbTextSetFont(winfont);
       const char * text = "Dene says a big 'Hello' to Goth Buns, Tarts and Barbies";
-      lbDisplay.DrawFlags = Lb_TEXT_ONE_COLOR;
       unsigned char pos;
       for (i = 0; i < 30; i += 2)
       {
         pos = get_gameturn() - i;
         lbDisplay.DrawColour = pos;
         LbTextDrawResized(scale_fixed_DK_value((LbCosL(16*(long)pos) / 512 + skeksis_x_offset) / pixel_size),
-          scale_fixed_DK_value((LbSinL(32*(long)pos) / 512 + skeksis_y_offset) / pixel_size), ee_units_per_px, text, lbDisplay.DrawFlags);
+          scale_fixed_DK_value((LbSinL(32*(long)pos) / 512 + skeksis_y_offset) / pixel_size), ee_units_per_px, text, Lb_TEXT_ONE_COLOR);
       }
-      clear_flag(lbDisplay.DrawFlags, Lb_TEXT_ONE_COLOR);
       pos=get_gameturn();
       LbTextDrawResized(scale_fixed_DK_value((LbCosL(16*(long)pos) / 512 + skeksis_x_offset) / pixel_size),
-          scale_fixed_DK_value((LbSinL(32*(long)pos) / 512 + skeksis_y_offset) / pixel_size), ee_units_per_px, text, lbDisplay.DrawFlags);
+          scale_fixed_DK_value((LbSinL(32*(long)pos) / 512 + skeksis_y_offset) / pixel_size), ee_units_per_px, text, 0);
       if (eastegg_skeksis_cntr >= 255)
         eastegg_skeksis_cntr = 0;
   }
@@ -233,7 +230,6 @@ void draw_eastegg(void)
   if (game.eastegg01_cntr >= eastegg_feckoff_codes.length)
   {
     LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
-    lbDisplay.DrawFlags &= ~Lb_TEXT_ONE_COLOR;
     LbTextSetFont(winfont);
     i = 0;
     const char * text = "Simon says Hi to everyone he knows...";
@@ -263,7 +259,7 @@ void draw_eastegg(void)
     }
     if (RendererIsScreenLocked())
     {
-      LbTextDrawResized(scale_fixed_DK_value(px[i]/pixel_size), scale_fixed_DK_value(py[i]/pixel_size), ee_units_per_px, text, lbDisplay.DrawFlags);
+      LbTextDrawResized(scale_fixed_DK_value(px[i]/pixel_size), scale_fixed_DK_value(py[i]/pixel_size), ee_units_per_px, text, 0);
     }
     play_non_3d_sample_no_overlap(snd_alarm);
   }
@@ -273,7 +269,6 @@ void draw_eastegg(void)
   if (game.eastegg02_cntr >= eastegg_jlw_codes.length)
   {
     LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
-    lbDisplay.DrawFlags &= ~Lb_TEXT_ONE_COLOR;
     LbTextSetFont(winfont);
     i = 1;
     const char * text = "Alex, hopefully lying on a beach with Jo, says Hi";
@@ -303,7 +298,7 @@ void draw_eastegg(void)
     }
     if (RendererIsScreenLocked())
     {
-        LbTextDrawResized(scale_fixed_DK_value(px[i]/pixel_size), scale_fixed_DK_value(py[i]/pixel_size), ee_units_per_px, text, lbDisplay.DrawFlags);
+        LbTextDrawResized(scale_fixed_DK_value(px[i]/pixel_size), scale_fixed_DK_value(py[i]/pixel_size), ee_units_per_px, text, 0);
     }
     play_non_3d_sample_no_overlap(snd_alarm);
   }
