@@ -15,7 +15,7 @@
 #include "bflib_basics.h"
 #include "bflib_sprite.h"       // TbSprite
 #include "engine_render.h"      // render_fade_tables
-#include "bflib_video.h"        // lbDisplay.DrawColour (DrawFlags only via display_draw_state for TiledSprite)
+#include "bflib_video.h"        // lbDisplay.DrawColour
 #include "gui_draw.h"           // get_panel_sprite, gui_slab, GUI_SLAB_DIMENSION, TiledSprite
 #include "config_spritecolors.h" // get_player_colored_icon_idx
 #include "custom_sprites.h"     // get_button_sprite_for_player, get_button_sprite
@@ -25,11 +25,11 @@
 
 /******************************************************************************/
 
-// Transitional helper: build a KfxDrawState from the still-live lbDisplay draw
-// globals.  Only used by UIRenderer_SubmitTiledSprite until that is converted.
+// Transitional helper: build a KfxDrawState from lbDisplay.DrawColour.
+// DrawFlags is always 0 here — all callers operate on opaque UI elements.
 static inline KfxDrawState display_draw_state(void)
 {
-    return draw_state_make((unsigned int)lbDisplay.DrawFlags, (unsigned char)lbDisplay.DrawColour);
+    return draw_state_make(0, (unsigned char)lbDisplay.DrawColour);
 }
 
 void UIRenderer_SubmitSlabSelector(int x1, int y1, int x2, int y2, unsigned char color, float z_depth)

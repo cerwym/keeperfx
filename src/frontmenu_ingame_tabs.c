@@ -2590,7 +2590,6 @@ void draw_gold_total(PlayerNumber plyr_idx, int32_t scr_x, int32_t scr_y, int32_
 static void draw_status_background(int fs_units_per_px)
 {
     lbDisplay.DrawColour = colours[15][15][15];
-    lbDisplay.DrawFlags = 0;
     UIRenderer_SubmitTiledSprite(0, 0, fs_units_per_px, &status_panel);
 }
 
