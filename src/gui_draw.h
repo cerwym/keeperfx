@@ -25,6 +25,7 @@
 #include "bflib_sprite.h"
 #include "globals.h"
 #include "vidmode.h"
+#include "renderer/DrawState.h"  /* TbDrawFlagsMask */
 
 // Sprites
 // Maybe "Count + 1"? there is no sprite#517

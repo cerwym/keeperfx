@@ -21,13 +21,13 @@
 #define BFLIB_VIDRAW_H
 
 #include "bflib_video.h"
+#include "renderer/DrawState.h"  /* TbDrawFlagsMask */
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 /******************************************************************************/
 #define MAX_SUPPORTED_SPRITE_DIM 256
-
 #define NUM_DRAWITEMS 238
 #define SPRITE_SCALING_XSTEPS max(MAX_SUPPORTED_SPRITE_DIM,MAX_SUPPORTED_SCREEN_WIDTH)
 #define SPRITE_SCALING_YSTEPS max(MAX_SUPPORTED_SPRITE_DIM,MAX_SUPPORTED_SCREEN_HEIGHT)

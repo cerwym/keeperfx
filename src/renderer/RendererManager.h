@@ -15,6 +15,7 @@
 #pragma once
 
 #include "bflib_video.h"          /* TbPixel */
+#include "renderer/DrawState.h"   /* TbDrawFlagsMask */
 #include "renderer/RendererSettings.h" /* RendererSettings, g_renderer_settings */
 #include "renderer/BackendCapabilities.h" /* struct BackendCapabilities */
 #include <stdint.h>                /* int32_t */

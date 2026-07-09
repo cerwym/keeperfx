@@ -23,7 +23,6 @@
 #include "bflib_basics.h"
 
 #include "globals.h"
-#include "renderer/DrawState.h"  // TbDrawFlagsMask
 
 #ifdef __cplusplus
 extern "C" {
@@ -154,14 +153,7 @@ struct ScreenModeInfo {
 };
 typedef struct ScreenModeInfo TbScreenModeInfo;
 
-struct DisplayStruct {
-        /** Currently active colour palette.
-         *  LbPaletteGet() should be used to retrieve a copy of the palette. */
-        uchar *Palette;
-};
-typedef struct DisplayStruct TbDisplayStruct;
-
-/** Extensions to DisplayStruct - will be later integrated into it. */
+/** Extended display state (mouse wheel, shadow colour). */
 struct DisplayStructEx {
     short WhellPosition;
     ushort WhellMoveUp;
@@ -231,7 +223,6 @@ extern unsigned short units_per_pixel;
 
 extern unsigned short display_id;
 
-extern TbDisplayStruct lbDisplay;
 /******************************************************************************/
 TbBool LbScreenIsModeAvailable(TbScreenMode mode, unsigned short display);
 TbScreenMode LbRecogniseVideoModeString(const char *desc);

@@ -23,6 +23,7 @@
 #include "globals.h"
 #include "game_legacy.h"
 #include "bflib_render_types.h"  /* PolyPoint, GtBlock */
+#include "renderer/DrawState.h"  /* TbDrawFlagsMask */
 #include "bflib_sprite.h"
 #include "engine_lenses.h"
 

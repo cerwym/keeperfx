@@ -59,15 +59,13 @@ volatile TbBool lbHasSecondSurface;
 TbBool lbDoubleBufferingRequested;
 /** Name of the video driver to be used. Must be set before LbScreenInitialize().
  * Under Win32 and with SDL, choises are windib or directx. */
-/** Colour palette buffer, to be used inside lbDisplay. */
+/** Colour palette buffer. */
 unsigned char lbPalette[PALETTE_SIZE];
 /** Driver-specific colour palette buffer. */
 SDL_Color lbPaletteColors[PALETTE_COLORS];
 
 char lbDrawAreaTitle[128] = "Bullfrog Shell";
 volatile unsigned long lbIconIndex = 0;
-
-TbDisplayStruct lbDisplay;
 
 /** Active screen-mode index (formerly lbDisplay.ScreenMode). */
 static unsigned short lbScreenMode;
@@ -643,7 +641,6 @@ TbResult LbPaletteSet(unsigned char *palette)
             SDL_SetPaletteColors(pal, lbPaletteColors, 0, PALETTE_COLORS);
     }
     //KfxFree(destColors);
-    lbDisplay.Palette = lbPalette;
     return ret;
 }
 
@@ -657,9 +654,7 @@ TbResult LbPaletteGet(unsigned char *palette)
     SYNCDBG(12,"Starting");
     if ((!lbScreenInitialised) || (lbDrawSurface == NULL))
       return Lb_FAIL;
-    if (lbDisplay.Palette == NULL)
-        return Lb_FAIL;
-    memcpy(palette,lbDisplay.Palette,PALETTE_SIZE);
+    memcpy(palette,lbPalette,PALETTE_SIZE);
 /*  // Getting the palette in SDL way may sometimes lead to problems.
     // Instead, we will remember palette which was set the last time.
     //
