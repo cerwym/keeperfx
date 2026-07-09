@@ -248,7 +248,7 @@ void IUIRenderer::SubmitSolidBoxAlpha(int32_t x, int32_t y, int32_t w, int32_t h
         m_ui_write_cmds->solid_boxes.Append(cmd);
         return;
     }
-    TbDrawFlagsMask box_flags = lbDisplay.DrawFlags & ~(Lb_SPRITE_TRANSPAR4 | Lb_SPRITE_TRANSPAR8);
+    TbDrawFlagsMask box_flags = 0;
     if (alpha < 0.75f)
         box_flags |= Lb_SPRITE_TRANSPAR4;
     else if (alpha < 0.9f)

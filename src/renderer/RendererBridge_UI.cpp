@@ -15,7 +15,7 @@
 #include "bflib_basics.h"
 #include "bflib_sprite.h"       // TbSprite
 #include "engine_render.h"      // render_fade_tables
-#include "bflib_video.h"        // lbDisplay.DrawFlags
+#include "bflib_video.h"        // lbDisplay.DrawColour (DrawFlags only via display_draw_state for TiledSprite)
 #include "gui_draw.h"           // get_panel_sprite, gui_slab, GUI_SLAB_DIMENSION, TiledSprite
 #include "config_spritecolors.h" // get_player_colored_icon_idx
 #include "custom_sprites.h"     // get_button_sprite_for_player, get_button_sprite
@@ -26,7 +26,7 @@
 /******************************************************************************/
 
 // Transitional helper: build a KfxDrawState from the still-live lbDisplay draw
-// globals.
+// globals.  Only used by UIRenderer_SubmitTiledSprite until that is converted.
 static inline KfxDrawState display_draw_state(void)
 {
     return draw_state_make((unsigned int)lbDisplay.DrawFlags, (unsigned char)lbDisplay.DrawColour);
@@ -106,18 +106,14 @@ void UIRenderer_SubmitPanelSpriteRaw(int32_t x, int32_t y, int units_per_px, con
 void RendererSubmitButton(const RendererUIButtonDesc* desc)
 {
     if (!desc) return;
-    // Background segment strip -> UI node.  Each raw submit reads the ambient
-    // lbDisplay.DrawFlags, matching the old inline path where the segments were
-    // drawn before the label's flags were set.
+    // Background segment strip -> UI node. Segments pass 0 draw_flags (opaque).
     for (int i = 0; i < desc->segment_count && i < RENDERER_BUTTON_MAX_SEGMENTS; ++i) {
         const struct TbSprite* spr = desc->segments[i].spr;
         if (spr)
             UIRenderer_SubmitPanelSpriteRaw(desc->segments[i].x, desc->segments[i].y,
                                             desc->units_per_px, spr, 0);
     }
-    // Label -> text node (not the LbText* globals).  The text path reads
-    // lbDisplay.DrawFlags, so set it here exactly as the old code did before
-    // LbTextDrawResized.
+    // Label -> text node; draw_flags passed explicitly via label_draw_flags.
     if (desc->text && desc->font) {
         TextRenderer_SetFont(desc->font);
         TextRenderer_SetWindow(desc->text_x, desc->text_y, desc->text_w, desc->text_h);
