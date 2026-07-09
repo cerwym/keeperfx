@@ -918,7 +918,7 @@ void frontend_draw_scroll_tab(struct GuiButton *gbtn, long scroll_offset, long f
         n = 0;
     else
         n = (scroll_offset * (k << 8) / (i - 1)) >> 8;
-    LbSpriteDrawResized(gbtn->scr_pos_x, n+gbtn->scr_pos_y, units_per_px, spr, lbDisplay.DrawFlags);
+    LbSpriteDrawResized(gbtn->scr_pos_x, n+gbtn->scr_pos_y, units_per_px, spr, 0);
 }
 
 long frontend_scroll_tab_to_offset(struct GuiButton *gbtn, long scr_pos, long first_elem, long last_elem)
@@ -967,19 +967,19 @@ void draw_slider64k(long scr_x, long scr_y, int units_per_px, long width)
     int cur_y = base_y;
     // int end_x = base_x + base_w - 64*units_per_px/16;
     const struct TbSprite *spr = get_button_sprite(GBS_borders_bar_std_l);
-    LbSpriteDrawResized(cur_x, cur_y, units_per_px, spr, lbDisplay.DrawFlags);
+    LbSpriteDrawResized(cur_x, cur_y, units_per_px, spr, 0);
     cur_x += spr->SWidth*units_per_px/16;
     spr = get_button_sprite(GBS_borders_bar_std_c);
     while (cur_x < end_x)
     {
-        LbSpriteDrawResized(cur_x, cur_y, units_per_px, spr, lbDisplay.DrawFlags);
+        LbSpriteDrawResized(cur_x, cur_y, units_per_px, spr, 0);
         cur_x += spr->SWidth*units_per_px/16;
     }
     cur_x = end_x;
-    LbSpriteDrawResized(cur_x/pixel_size, cur_y/pixel_size, units_per_px, spr, lbDisplay.DrawFlags);
+    LbSpriteDrawResized(cur_x/pixel_size, cur_y/pixel_size, units_per_px, spr, 0);
     cur_x += spr->SWidth*units_per_px/16;
     spr = get_button_sprite(GBS_borders_bar_std_r);
-    LbSpriteDrawResized(cur_x/pixel_size, cur_y/pixel_size, units_per_px, spr, lbDisplay.DrawFlags);
+    LbSpriteDrawResized(cur_x/pixel_size, cur_y/pixel_size, units_per_px, spr, 0);
 }
 
 void gui_area_slider(struct GuiButton *gbtn)
@@ -1002,7 +1002,7 @@ void gui_area_slider(struct GuiButton *gbtn)
     } else {
         spr = get_button_sprite(GBS_guisymbols_jewel_off);
     }
-    LbSpriteDrawResized(gbtn->scr_pos_x + shift_x + 24*units_per_px/16, gbtn->scr_pos_y + 6*units_per_px/16, bs_units_per_px, spr, lbDisplay.DrawFlags);
+    LbSpriteDrawResized(gbtn->scr_pos_x + shift_x + 24*units_per_px/16, gbtn->scr_pos_y + 6*units_per_px/16, bs_units_per_px, spr, 0);
 }
 
 void frontend_draw_icon(struct GuiButton *gbtn)
@@ -1010,7 +1010,7 @@ void frontend_draw_icon(struct GuiButton *gbtn)
     int units_per_px;
     units_per_px = simple_frontend_sprite_width_units_per_px(gbtn, gbtn->sprite_idx, 100);
     const struct TbSprite *spr = get_frontend_sprite(gbtn->sprite_idx);
-    LbSpriteDrawResized(gbtn->scr_pos_x, gbtn->scr_pos_y, units_per_px, spr, lbDisplay.DrawFlags);
+    LbSpriteDrawResized(gbtn->scr_pos_x, gbtn->scr_pos_y, units_per_px, spr, 0);
 }
 
 void frontend_draw_slider(struct GuiButton *gbtn)
@@ -1022,18 +1022,18 @@ void frontend_draw_slider(struct GuiButton *gbtn)
     const float scale = float(fs_units_per_px) / 16;
 
     const auto left_sprite = get_frontend_sprite(GFS_slider_horiz_l); // 40 units wide
-    LbSpriteDrawResized(gbtn->scr_pos_x, gbtn->scr_pos_y, fs_units_per_px, left_sprite, lbDisplay.DrawFlags);
+    LbSpriteDrawResized(gbtn->scr_pos_x, gbtn->scr_pos_y, fs_units_per_px, left_sprite, 0);
 
     // Draw center sprite draw as many times as necessary
     const auto center_sprite = get_frontend_sprite(GFS_slider_horiz_c); // 110 units wide
     const int right_sprite_x = (gbtn->scr_pos_x + gbtn->width) - (40 * scale);
     for (int x = gbtn->scr_pos_x + (40 * scale); x < right_sprite_x; x += (110 * scale))
     {
-        LbSpriteDrawResized(x, gbtn->scr_pos_y, fs_units_per_px, center_sprite, lbDisplay.DrawFlags);
+        LbSpriteDrawResized(x, gbtn->scr_pos_y, fs_units_per_px, center_sprite, 0);
     }
 
     const auto right_sprite = get_frontend_sprite(GFS_slider_horiz_r); // 40 units wide
-    LbSpriteDrawResized(right_sprite_x, gbtn->scr_pos_y, fs_units_per_px, right_sprite, lbDisplay.DrawFlags);
+    LbSpriteDrawResized(right_sprite_x, gbtn->scr_pos_y, fs_units_per_px, right_sprite, 0);
 
     const int knob_position = gbtn->slide_val * (gbtn->width - int(64 * scale)) >> 8;
     const auto knob_sprite = (gbtn->button_state_left_pressed != 0) ?
@@ -1043,7 +1043,7 @@ void frontend_draw_slider(struct GuiButton *gbtn)
         (gbtn->scr_pos_y + (3 * scale)) / pixel_size,
         fs_units_per_px,
         knob_sprite
-    , lbDisplay.DrawFlags);
+    , 0);
 }
 
 void frontend_draw_small_slider(struct GuiButton *gbtn)
@@ -1059,13 +1059,13 @@ void frontend_draw_small_slider(struct GuiButton *gbtn)
     scr_y = gbtn->scr_pos_y;
     const struct TbSprite *spr;
     spr = get_frontend_sprite(GFS_slider_horiz_l);
-    LbSpriteDrawResized(scr_x, scr_y, fs_units_per_px, spr, lbDisplay.DrawFlags);
+    LbSpriteDrawResized(scr_x, scr_y, fs_units_per_px, spr, 0);
     scr_x += spr->SWidth * fs_units_per_px / 16;
     spr = get_frontend_sprite(GFS_slider_horiz_c);
-    LbSpriteDrawResized(scr_x, scr_y, fs_units_per_px, spr, lbDisplay.DrawFlags);
+    LbSpriteDrawResized(scr_x, scr_y, fs_units_per_px, spr, 0);
     scr_x += spr->SWidth * fs_units_per_px / 16;
     spr = get_frontend_sprite(GFS_slider_horiz_r);
-    LbSpriteDrawResized(scr_x, scr_y, fs_units_per_px, spr, lbDisplay.DrawFlags);
+    LbSpriteDrawResized(scr_x, scr_y, fs_units_per_px, spr, 0);
     int val;
     val = gbtn->slide_val * (gbtn->width - 64*fs_units_per_px/16) >> 8;
     if (gbtn->button_state_left_pressed != 0) {
@@ -1073,7 +1073,7 @@ void frontend_draw_small_slider(struct GuiButton *gbtn)
     } else {
         spr = get_frontend_sprite(GFS_slider_indicator_std);
     }
-    LbSpriteDrawResized((gbtn->scr_pos_x + val + 24*fs_units_per_px/16) / pixel_size, (gbtn->scr_pos_y + 3*fs_units_per_px/16) / pixel_size, fs_units_per_px, spr, lbDisplay.DrawFlags);
+    LbSpriteDrawResized((gbtn->scr_pos_x + val + 24*fs_units_per_px/16) / pixel_size, (gbtn->scr_pos_y + 3*fs_units_per_px/16) / pixel_size, fs_units_per_px, spr, 0);
 }
 
 void gui_area_text(struct GuiButton *gbtn)
@@ -3267,7 +3267,7 @@ void spangle_button(struct GuiButton *gbtn)
     y = gbtn->pos_y + (gbtn->height >> 1) - ((spr->SHeight*bs_units_per_px/16) / 2);
     i = GBS_guisymbols_new_function_1+((get_gameturn() >> 1) & 7);
     spr = get_button_sprite(i);
-    LbSpriteDrawResized(x, y, bs_units_per_px, spr, lbDisplay.DrawFlags);
+    LbSpriteDrawResized(x, y, bs_units_per_px, spr, 0);
 }
 
 void draw_menu_spangle(struct GuiMenu *gmnu)
