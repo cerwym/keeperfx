@@ -3160,18 +3160,11 @@ void draw_active_menus_buttons(void)
         //SYNCMSG("DRAW menu %d, fields %d, %d",menu_num,gmnu->visual_state,gmnu->is_turned_on);
         if ((gmnu->visual_state != 0) && (gmnu->is_turned_on))
         {
-            if ((gmnu->visual_state != 2) && (gmnu->fade_time > 0))
-            {
-              if (gmnu->menu_init != NULL)
-                if (gmnu->menu_init->fade_time)
-                  lbDisplay.DrawFlags |= Lb_SPRITE_TRANSPAR4;
-            }
             callback = gmnu->draw_cb;
             if (callback != NULL)
               callback(gmnu);
             if (gmnu->visual_state == 2)
               draw_menu_buttons(gmnu);
-            lbDisplay.DrawFlags &= ~Lb_SPRITE_TRANSPAR4;
         }
     }
     // Debug: draw collision boxes for all active GUI buttons
