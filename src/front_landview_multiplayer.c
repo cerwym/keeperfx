@@ -319,12 +319,11 @@ static void draw_netmap_players_hands(void)
         LbSpriteDrawResized(scale_value_landview(x), scale_value_landview(y), units_per_pixel_landview, spr);
         w = LbTextStringWidth(plyr_nam);
         if (w > 0) {
-            lbDisplay.DrawFlags = 0;
             h = LbTextHeight(level_name);
             y += 32;
             x += 32;
-            LbDrawBox(scale_value_landview(x-4), scale_value_landview(y), scale_value_landview(w+8), scale_value_landview(h), colr, lbDisplay.DrawFlags);
-            LbTextDrawResized(scale_value_landview(x), scale_value_landview(y), units_per_pixel_landview, plyr_nam, lbDisplay.DrawFlags);
+            LbDrawBox(scale_value_landview(x-4), scale_value_landview(y), scale_value_landview(w+8), scale_value_landview(h), colr, 0);
+            LbTextDrawResized(scale_value_landview(x), scale_value_landview(y), units_per_pixel_landview, plyr_nam, 0);
         }
     }
 }
@@ -448,7 +447,6 @@ TbBool frontnetmap_load(void)
     set_pointer_graphic_none();
     LbMouseSetPosition(RendererPhysicalWidth()/2, RendererPhysicalHeight()/2);
     map_sound_fade = FULL_LOUDNESS;
-    lbDisplay.DrawFlags = 0;
     set_music_volume(settings.music_volume);
     frontmap_start_music();
     if (fe_network_active) {

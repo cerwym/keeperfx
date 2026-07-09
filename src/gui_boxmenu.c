@@ -369,7 +369,6 @@ long gfa_is_creature(struct GuiBox *gbox, struct GuiBoxOption *goptn, int32_t *t
 void gui_draw_all_boxes(void)
 {
   SYNCDBG(5,"Starting");
-  lbDisplay.DrawFlags = Lb_TEXT_ONE_COLOR;
   LbTextSetFont(font_sprites);
   struct GuiBox* gbox = gui_get_lowest_priority_box();
   while (gbox != NULL)
@@ -803,7 +802,7 @@ void gui_draw_box(struct GuiBox *gbox)
             lbDisplay.DrawColour = colours[0][0][0];
           else
             lbDisplay.DrawColour = colours[3][3][3];
-          LbTextDrawResized(pos_x/pixel_size, pos_y/pixel_size, 16, goptn->label, lbDisplay.DrawFlags);
+          LbTextDrawResized(pos_x/pixel_size, pos_y/pixel_size, 16, goptn->label, Lb_TEXT_ONE_COLOR);
           goptn++;
           pos_y += lnheight;
         }
@@ -826,7 +825,7 @@ void gui_draw_box(struct GuiBox *gbox)
               lbDisplay.DrawColour = colours[15][15][15];
             else
               lbDisplay.DrawColour = colours[9][9][9];
-            LbTextDrawResized(pos_x/pixel_size, pos_y/pixel_size, 16, goptn->label, lbDisplay.DrawFlags);
+            LbTextDrawResized(pos_x/pixel_size, pos_y/pixel_size, 16, goptn->label, Lb_TEXT_ONE_COLOR);
             goptn++;
             pos_y += lnheight;
         }

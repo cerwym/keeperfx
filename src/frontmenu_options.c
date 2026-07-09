@@ -149,14 +149,12 @@ void frontend_draw_define_key(struct GuiButton *gbtn)
     } else {
         LbTextSetFont(frontend_font[1]);
     }
-    lbDisplay.DrawFlags = Lb_TEXT_HALIGN_LEFT;
     // This text is a bit condensed - button size is smaller than text height
     int tx_units_per_px = ((RendererGetScreenHeight() < 400) && (dbc_language > 0)) ? scale_value_menu(32) : scale_value_menu(16);
     LbTextSetWindow(gbtn->scr_pos_x, gbtn->scr_pos_y, gbtn->width, gbtn->height);
     int height = LbTextLineHeight() * tx_units_per_px / 14;
-    LbTextDrawResized(0, (gbtn->height - height) / 2, tx_units_per_px, get_string(game_key_settings[key_id].string_id), lbDisplay.DrawFlags);
+    LbTextDrawResized(0, (gbtn->height - height) / 2, tx_units_per_px, get_string(game_key_settings[key_id].string_id), Lb_TEXT_HALIGN_LEFT);
     unsigned char mods = settings.kbkeys[key_id].mods;
-    lbDisplay.DrawFlags = Lb_TEXT_HALIGN_RIGHT;
 
     char text[255];
     text[0] = '\0';
@@ -228,7 +226,7 @@ void frontend_draw_define_key(struct GuiButton *gbtn)
     }
     str_append(text, sizeof(text), keytext);
     height = LbTextLineHeight() * tx_units_per_px / 14;
-    LbTextDrawResized(0, (gbtn->height - height) / 2, tx_units_per_px, text, lbDisplay.DrawFlags);
+    LbTextDrawResized(0, (gbtn->height - height) / 2, tx_units_per_px, text, Lb_TEXT_HALIGN_RIGHT);
 }
 
 void gui_video_shadows(struct GuiButton *gbtn)
@@ -358,7 +356,7 @@ void frontend_draw_invert_mouse(struct GuiButton *gbtn)
     } else {
         text = get_string(GUIStr_Off);
     }
-    LbTextDrawResized(0, 0, tx_units_per_px, text, lbDisplay.DrawFlags);
+    LbTextDrawResized(0, 0, tx_units_per_px, text, 0);
 }
 
 /**
