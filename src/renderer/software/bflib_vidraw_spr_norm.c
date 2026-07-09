@@ -1240,9 +1240,9 @@ TbResult LbSpriteDrawUsingScalingDownDataSolidLR(uchar *outbuf, int scanline, in
  * @return Gives 0 on success.
  * @see LbSpriteSetScalingData()
  */
-TbResult LbSpriteDrawUsingScalingData(long posx, long posy, const struct TbSourceBuffer * src_buf)
+TbResult LbSpriteDrawUsingScalingData(long posx, long posy, const struct TbSourceBuffer * src_buf, TbDrawFlagsMask draw_flags)
 {
-    lb_draw_flags = lbDisplay.DrawFlags;
+    lb_draw_flags = draw_flags;
     assert(!RendererHasGPURenderPath() && "LbSpriteDrawUsingScalingData: CPU pixel write in GL mode");
     SYNCDBG(17,"Drawing at (%ld,%ld)",posx,posy);
     unsigned char* render_ghost = pixmap.ghost; // ghost (50%) transparency LUT, owned by vidmode
@@ -1412,9 +1412,9 @@ TbResult LbSpriteDrawUsingScalingData(long posx, long posy, const struct TbSourc
  * @return Gives 0 on success.
  * @see LbSpriteSetScalingData()
  */
-TbResult DrawAlphaSpriteUsingScalingData(long posx, long posy, const struct TbSourceBuffer * src_buf)
+TbResult DrawAlphaSpriteUsingScalingData(long posx, long posy, const struct TbSourceBuffer * src_buf, TbDrawFlagsMask draw_flags)
 {
-    lb_draw_flags = lbDisplay.DrawFlags;
+    lb_draw_flags = draw_flags;
     assert(!RendererHasGPURenderPath() && "DrawAlphaSpriteUsingScalingData: CPU pixel write in GL mode");
     SYNCDBG(17,"Drawing at (%ld,%ld)",posx,posy);
     unsigned char* render_alpha = (unsigned char*)&alpha_sprite_table; // alpha LUT, owned by vidmode
@@ -1422,7 +1422,7 @@ TbResult DrawAlphaSpriteUsingScalingData(long posx, long posy, const struct TbSo
     // Check if alpha transparency table is available
     if (render_alpha == NULL) {
         WARNLOG("render_alpha transparency table not initialized, falling back to solid rendering");
-        return LbSpriteDrawUsingScalingData(posx, posy, src_buf);
+        return LbSpriteDrawUsingScalingData(posx, posy, src_buf, draw_flags);
     }
 
     int32_t *xstep;

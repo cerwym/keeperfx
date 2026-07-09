@@ -944,14 +944,14 @@ void draw_zoom_box_terrain(long scrtop_x, long scrtop_y, int stl_x, int stl_y, P
                 draw_texture(scr_x, scr_y, subtile_size, subtile_size, k, 0, -1);
             } else
           {
-            LbDrawBox(scr_x, scr_y, subtile_size, subtile_size, 1);
+            LbDrawBox(scr_x, scr_y, subtile_size, subtile_size, 1, lbDisplay.DrawFlags);
           }
           scr_x += subtile_size;
       }
       scr_y += subtile_size;
     }
     lbDisplay.DrawFlags |= Lb_SPRITE_OUTLINE;
-    LbDrawBox(scrtop_x, scrtop_y, draw_tiles_x*subtile_size, draw_tiles_y*subtile_size, 0);
+    LbDrawBox(scrtop_x, scrtop_y, draw_tiles_x*subtile_size, draw_tiles_y*subtile_size, 0, lbDisplay.DrawFlags);
     lbDisplay.DrawFlags &= ~Lb_SPRITE_OUTLINE;
 }
 

@@ -7824,9 +7824,9 @@ static void draw_keepersprite(long x, long y, const struct KeeperSprite * kspr, 
         kspr->SWidth,
     };
     if ( EngineSpriteDrawUsingAlpha ) {
-        DrawAlphaSpriteUsingScalingData(x, y, &buffer);
+        DrawAlphaSpriteUsingScalingData(x, y, &buffer, lbDisplay.DrawFlags);
     } else {
-        LbSpriteDrawUsingScalingData(x, y, &buffer);
+        LbSpriteDrawUsingScalingData(x, y, &buffer, lbDisplay.DrawFlags);
     }
     SYNCDBG(18,"Finished");
 }

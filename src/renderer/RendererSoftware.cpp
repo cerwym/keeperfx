@@ -454,14 +454,14 @@ void RendererSoftware::SubmitZoomBoxTiles(const uint16_t* tile_block_ids, int ti
             if (block != 0xFFFF)
                 draw_texture(scr_x, scr_y, tile_w, tile_h, block, 0, -1);
             else
-                LbDrawBox(scr_x, scr_y, tile_w, tile_h, 1);
+                LbDrawBox(scr_x, scr_y, tile_w, tile_h, 1, lbDisplay.DrawFlags);
             scr_x += tile_w;
         }
         scr_y += tile_h;
     }
 
     lbDisplay.DrawFlags |= Lb_SPRITE_OUTLINE;
-    LbDrawBox(dst_x, dst_y, tiles_x * tile_w, tiles_y * tile_h, 0);
+    LbDrawBox(dst_x, dst_y, tiles_x * tile_w, tiles_y * tile_h, 0, lbDisplay.DrawFlags);
     lbDisplay.DrawFlags &= ~Lb_SPRITE_OUTLINE;
 }
 

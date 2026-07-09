@@ -217,7 +217,7 @@ void IUIRenderer::SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h,
     ScopedSpriteSubmitGuard guard;
     unsigned int saved = lbDisplay.DrawFlags;
     lbDisplay.DrawFlags = state.flags;
-    LbSpriteDrawScaled(x, y, it->second, w, h);
+    LbSpriteDrawScaled(x, y, it->second, w, h, state.flags);
     lbDisplay.DrawFlags = saved;
 }
 
@@ -236,19 +236,17 @@ void IUIRenderer::SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, uin
     if (state.flags & Lb_SPRITE_OUTLINE)
     {
         if (w < 1 || h < 1) return;
-        unsigned short saved_flags = lbDisplay.DrawFlags;
-        lbDisplay.DrawFlags &= ~Lb_SPRITE_OUTLINE;
-        LbDrawBoxClip(x, y, (unsigned long)w, 1, color_idx);
-        LbDrawBoxClip(x, y + h - 1, (unsigned long)w, 1, color_idx);
+        TbDrawFlagsMask box_flags = state.flags & ~Lb_SPRITE_OUTLINE;
+        LbDrawBoxClip(x, y, (unsigned long)w, 1, color_idx, box_flags);
+        LbDrawBoxClip(x, y + h - 1, (unsigned long)w, 1, color_idx, box_flags);
         if (h > 2)
         {
-            LbDrawBoxClip(x, y + 1, 1, (unsigned long)(h - 2), color_idx);
-            LbDrawBoxClip(x + w - 1, y + 1, 1, (unsigned long)(h - 2), color_idx);
+            LbDrawBoxClip(x, y + 1, 1, (unsigned long)(h - 2), color_idx, box_flags);
+            LbDrawBoxClip(x + w - 1, y + 1, 1, (unsigned long)(h - 2), color_idx, box_flags);
         }
-        lbDisplay.DrawFlags = saved_flags;
         return;
     }
-    LbDrawBoxClip(x, y, (unsigned long)w, (unsigned long)h, color_idx);
+    LbDrawBoxClip(x, y, (unsigned long)w, (unsigned long)h, color_idx, state.flags);
 }
  
 void IUIRenderer::SubmitSolidBoxAlpha(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx, float alpha)
@@ -262,25 +260,20 @@ void IUIRenderer::SubmitSolidBoxAlpha(int32_t x, int32_t y, int32_t w, int32_t h
         m_ui_write_cmds->solid_boxes.Append(cmd);
         return;
     }
-    unsigned short saved_flags = lbDisplay.DrawFlags;
-    lbDisplay.DrawFlags &= ~(Lb_SPRITE_TRANSPAR4 | Lb_SPRITE_TRANSPAR8);
+    TbDrawFlagsMask box_flags = lbDisplay.DrawFlags & ~(Lb_SPRITE_TRANSPAR4 | Lb_SPRITE_TRANSPAR8);
     if (alpha < 0.75f)
-        lbDisplay.DrawFlags |= Lb_SPRITE_TRANSPAR4;
+        box_flags |= Lb_SPRITE_TRANSPAR4;
     else if (alpha < 0.9f)
-        lbDisplay.DrawFlags |= Lb_SPRITE_TRANSPAR8;
-    LbDrawBoxClip(x, y, (unsigned long)w, (unsigned long)h, color_idx);
-    lbDisplay.DrawFlags = saved_flags;
+        box_flags |= Lb_SPRITE_TRANSPAR8;
+    LbDrawBoxClip(x, y, (unsigned long)w, (unsigned long)h, color_idx, box_flags);
 }
 
 TbResult IUIRenderer::SubmitRawSprite(long x, long y, const struct TbSprite* spr,
                                       KfxDrawState state)
 {
     if (!spr) return Lb_FAIL;
-    unsigned int saved_flags = lbDisplay.DrawFlags;
-    lbDisplay.DrawFlags = state.flags;
     ScopedSpriteSubmitGuard guard;
-    TbResult ret = LbSpriteDraw(x, y, spr);
-    lbDisplay.DrawFlags = saved_flags;
+    TbResult ret = LbSpriteDraw(x, y, spr, state.flags);
     return ret;
 }
 
@@ -288,11 +281,8 @@ TbResult IUIRenderer::SubmitRawSpriteOneColour(long x, long y, const struct TbSp
                                                unsigned char colour, KfxDrawState state)
 {
     if (!spr) return Lb_FAIL;
-    unsigned int saved_flags = lbDisplay.DrawFlags;
-    lbDisplay.DrawFlags = state.flags;
     ScopedSpriteSubmitGuard guard;
-    TbResult ret = LbSpriteDrawOneColour(x, y, spr, colour);
-    lbDisplay.DrawFlags = saved_flags;
+    TbResult ret = LbSpriteDrawOneColour(x, y, spr, colour, state.flags);
     return ret;
 }
 
@@ -300,11 +290,8 @@ TbResult IUIRenderer::SubmitRawSpriteRemap(long x, long y, const struct TbSprite
                                            const unsigned char* cmap, KfxDrawState state)
 {
     if (!spr || !cmap) return Lb_FAIL;
-    unsigned int saved_flags = lbDisplay.DrawFlags;
-    lbDisplay.DrawFlags = state.flags;
     ScopedSpriteSubmitGuard guard;
-    TbResult ret = LbSpriteDrawScaledRemap(x, y, spr, spr->SWidth, spr->SHeight, cmap);
-    lbDisplay.DrawFlags = saved_flags;
+    TbResult ret = LbSpriteDrawScaledRemap(x, y, spr, spr->SWidth, spr->SHeight, cmap, state.flags);
     return ret;
 }
 

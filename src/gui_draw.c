@@ -241,11 +241,11 @@ void draw_round_slab64k(long pos_x, long pos_y, int units_per_px, long width, lo
     lbDisplay.DrawFlags &= ~Lb_SPRITE_OUTLINE;
     if (style_type == ROUNDSLAB64K_LIGHT) {
         lbDisplay.DrawFlags |= Lb_SPRITE_TRANSPAR4;
-        LbDrawBox(pos_x + scale_ui_value_lofi(4), pos_y + scale_ui_value_lofi(4), width - scale_ui_value_lofi(8), height - scale_ui_value_lofi(8), 1);
+        LbDrawBox(pos_x + scale_ui_value_lofi(4), pos_y + scale_ui_value_lofi(4), width - scale_ui_value_lofi(8), height - scale_ui_value_lofi(8), 1, lbDisplay.DrawFlags);
         lbDisplay.DrawFlags &= ~Lb_SPRITE_TRANSPAR4;
     } else {
         lbDisplay.DrawFlags |= Lb_SPRITE_TRANSPAR8;
-        LbDrawBox(pos_x + scale_ui_value_lofi(4), pos_y + scale_ui_value_lofi(4), width - scale_ui_value_lofi(8), height - scale_ui_value_lofi(8), 1);
+        LbDrawBox(pos_x + scale_ui_value_lofi(4), pos_y + scale_ui_value_lofi(4), width - scale_ui_value_lofi(8), height - scale_ui_value_lofi(8), 1, lbDisplay.DrawFlags);
         lbDisplay.DrawFlags &= ~Lb_SPRITE_TRANSPAR8;
     }
     int x;

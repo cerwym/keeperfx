@@ -1268,9 +1268,9 @@ TbResult LbSpriteDrawOneColourUsingScalingDownDataSolidLR(uchar *outbuf, int sca
  * @return Gives 0 on success.
  * @see LbSpriteSetScalingData()
  */
-TbResult LbSpriteDrawOneColourUsingScalingData(long posx, long posy, const struct TbSprite *sprite, TbPixel colour)
+TbResult LbSpriteDrawOneColourUsingScalingData(long posx, long posy, const struct TbSprite *sprite, TbPixel colour, TbDrawFlagsMask draw_flags)
 {
-    lb_draw_flags = lbDisplay.DrawFlags;
+    lb_draw_flags = draw_flags;
     SYNCDBG(17,"Drawing at (%ld,%ld)",posx,posy);
     unsigned char* render_ghost = pixmap.ghost; // ghost transparency LUT, owned by vidmode
     int32_t *xstep;

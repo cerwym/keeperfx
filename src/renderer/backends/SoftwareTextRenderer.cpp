@@ -496,11 +496,10 @@ void SoftwareTextRenderer::PutDownSimpleSprites(const char* sbuf, const char* eb
             const struct TbSprite* spr = LbFontCharSprite(m_font, chr);
             if (spr != nullptr)
             {
-                lbDisplay.DrawFlags = m_text_draw_flags;   // sync working flags to the rasteriser
                 if ((m_text_draw_flags & Lb_TEXT_ONE_COLOR) != 0)
-                    LbSpriteDrawOneColour(x, y, spr, m_text_draw_colour);
+                    LbSpriteDrawOneColour(x, y, spr, m_text_draw_colour, m_text_draw_flags);
                 else
-                    LbSpriteDraw(x, y, spr);
+                    LbSpriteDraw(x, y, spr, m_text_draw_flags);
                 int32_t w = spr->SWidth;
                 if ((m_text_draw_flags & Lb_TEXT_UNDERLINE) != 0)
                 {

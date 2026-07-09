@@ -181,20 +181,20 @@ extern int32_t ysteps_array[2*SPRITE_SCALING_YSTEPS];
 #pragma pack()
 
 /******************************************************************************/
-void LbDrawBoxClip(long x, long y, unsigned long width, unsigned long height, TbPixel colour);
-TbResult LbDrawBox(long x, long y, unsigned long width, unsigned long height, TbPixel colour);
+void LbDrawBoxClip(long x, long y, unsigned long width, unsigned long height, TbPixel colour, TbDrawFlagsMask draw_flags);
+TbResult LbDrawBox(long x, long y, unsigned long width, unsigned long height, TbPixel colour, TbDrawFlagsMask draw_flags);
 void LbDrawHVLine(long xpos1, long ypos1, long xpos2, long ypos2, TbPixel colour);
 
 void LbDrawPixel(long x, long y, TbPixel colour);
-void LbDrawCircle(long x, long y, long radius, TbPixel colour);
+void LbDrawCircle(long x, long y, long radius, TbPixel colour, TbDrawFlagsMask draw_flags);
 
 void setup_vecs(unsigned char *screenbuf, unsigned char *nvec_map,
         unsigned int line_len, unsigned int width, unsigned int height);
 void setup_steps(long posx, long posy, const struct TbSourceBuffer * src_buf, int32_t **xstep, int32_t **ystep, int *scanline);
 void setup_outbuf(const int32_t *xstep, const int32_t *ystep, uchar **outbuf, int *outheight);
-TbResult LbSpriteDrawUsingScalingData(long posx, long posy, const struct TbSourceBuffer *);
-TbResult LbSpriteDrawRemapUsingScalingData(long posx, long posy, const struct TbSourceBuffer *, const TbPixel *cmap);
-TbResult LbSpriteDrawOneColourUsingScalingData(long posx, long posy, const struct TbSprite *sprite, TbPixel colour);
+TbResult LbSpriteDrawUsingScalingData(long posx, long posy, const struct TbSourceBuffer *, TbDrawFlagsMask draw_flags);
+TbResult LbSpriteDrawRemapUsingScalingData(long posx, long posy, const struct TbSourceBuffer *, const TbPixel *cmap, TbDrawFlagsMask draw_flags);
+TbResult LbSpriteDrawOneColourUsingScalingData(long posx, long posy, const struct TbSprite *sprite, TbPixel colour, TbDrawFlagsMask draw_flags);
 void LbSpriteSetScalingData(long x, long y, long swidth, long sheight, long dwidth, long dheight);
 /** Last parameters saved by LbSpriteSetScalingData \u2014 read by the GPU keeper-sprite hook. */
 extern long g_sprite_scale_dst_x;
@@ -203,25 +203,25 @@ extern long g_sprite_scale_dst_w;
 extern long g_sprite_scale_dst_h;
 extern long g_sprite_scale_src_w;
 extern long g_sprite_scale_src_h;
-TbResult DrawAlphaSpriteUsingScalingData(long posx, long posy, const struct TbSourceBuffer *);
+TbResult DrawAlphaSpriteUsingScalingData(long posx, long posy, const struct TbSourceBuffer *, TbDrawFlagsMask draw_flags);
 void LbSpriteSetScalingWidthSimpleArray(int32_t * xsteps_arr, long x, long swidth, long dwidth);
 void LbSpriteSetScalingWidthClippedArray(int32_t * xsteps_arr, long x, long swidth, long dwidth, long gwidth);
 void LbSpriteSetScalingHeightSimpleArray(int32_t * ysteps_arr, long y, long sheight, long dheight);
 void LbSpriteSetScalingHeightClippedArray(int32_t * ysteps_arr, long y, long sheight, long dheight, long gheight);
 
-TbResult LbSpriteDraw(long x, long y, const struct TbSprite *spr);
-TbResult LbSpriteDrawOneColour(long x, long y, const struct TbSprite *spr, const TbPixel colour);
+TbResult LbSpriteDraw(long x, long y, const struct TbSprite *spr, TbDrawFlagsMask draw_flags);
+TbResult LbSpriteDrawOneColour(long x, long y, const struct TbSprite *spr, const TbPixel colour, TbDrawFlagsMask draw_flags);
 
-TbResult LbSpriteDrawScaled(long xpos, long ypos, const struct TbSprite *sprite, long dest_width, long dest_height);
-TbResult LbSpriteDrawScaledOneColour(long xpos, long ypos, const struct TbSprite *sprite, long dest_width, long dest_height, const TbPixel colour);
-int LbSpriteDrawScaledRemap(long xpos, long ypos, const struct TbSprite *sprite, long dest_width, long dest_height, const unsigned char *cmap);
-#define LbSpriteDrawResized(xpos, ypos, un_per_px, sprite) LbSpriteDrawScaled(xpos, ypos, sprite, ((sprite)->SWidth * un_per_px + 8) / 16, ((sprite)->SHeight * un_per_px + 8) / 16)
-#define LbSpriteDrawResizedOneColour(xpos, ypos, un_per_px, sprite, colour) LbSpriteDrawScaledOneColour(xpos, ypos, sprite, ((sprite)->SWidth * un_per_px + 8) / 16, ((sprite)->SHeight * un_per_px + 8) / 16, colour)
-#define LbSpriteDrawResizedRemap(xpos, ypos, un_per_px, sprite, cmap) LbSpriteDrawScaledRemap(xpos, ypos, sprite, ((sprite)->SWidth * un_per_px + 8) / 16, ((sprite)->SHeight * un_per_px + 8) / 16, cmap)
+TbResult LbSpriteDrawScaled(long xpos, long ypos, const struct TbSprite *sprite, long dest_width, long dest_height, TbDrawFlagsMask draw_flags);
+TbResult LbSpriteDrawScaledOneColour(long xpos, long ypos, const struct TbSprite *sprite, long dest_width, long dest_height, const TbPixel colour, TbDrawFlagsMask draw_flags);
+int LbSpriteDrawScaledRemap(long xpos, long ypos, const struct TbSprite *sprite, long dest_width, long dest_height, const unsigned char *cmap, TbDrawFlagsMask draw_flags);
+#define LbSpriteDrawResized(xpos, ypos, un_per_px, sprite) LbSpriteDrawScaled(xpos, ypos, sprite, ((sprite)->SWidth * un_per_px + 8) / 16, ((sprite)->SHeight * un_per_px + 8) / 16, lbDisplay.DrawFlags)
+#define LbSpriteDrawResizedOneColour(xpos, ypos, un_per_px, sprite, colour) LbSpriteDrawScaledOneColour(xpos, ypos, sprite, ((sprite)->SWidth * un_per_px + 8) / 16, ((sprite)->SHeight * un_per_px + 8) / 16, colour, lbDisplay.DrawFlags)
+#define LbSpriteDrawResizedRemap(xpos, ypos, un_per_px, sprite, cmap) LbSpriteDrawScaledRemap(xpos, ypos, sprite, ((sprite)->SWidth * un_per_px + 8) / 16, ((sprite)->SHeight * un_per_px + 8) / 16, cmap, lbDisplay.DrawFlags)
 
 TbResult LbHugeSpriteDraw(const struct TbHugeSprite * spr, long sp_len,
     unsigned char *r, int r_row_delta, int r_height, short xshift, short yshift, int units_per_px);
-void LbTiledSpriteDraw(long x, long y, long units_per_px, struct TiledSprite *bigspr);
+void LbTiledSpriteDraw(long x, long y, long units_per_px, struct TiledSprite *bigspr, TbDrawFlagsMask draw_flags);
 int LbTiledSpriteHeight(struct TiledSprite *bigspr);
 
 // mspointer needs this for some reason

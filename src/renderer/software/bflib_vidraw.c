@@ -236,9 +236,9 @@ void LbDrawHVLine(long xpos1, long ypos1, long xpos2, long ypos2, TbPixel colour
  * @param height
  * @param colour
  */
-void LbDrawBoxClip(long x, long y, unsigned long width, unsigned long height, TbPixel colour)
+void LbDrawBoxClip(long x, long y, unsigned long width, unsigned long height, TbPixel colour, TbDrawFlagsMask draw_flags)
 {
-  lb_draw_flags = lbDisplay.DrawFlags;
+  lb_draw_flags = draw_flags;
   assert(!RendererHasGPURenderPath() && "LbDrawBoxClip: CPU pixel write in GL mode");
   long ypos = y;
   //Checking and clipping coordinates
@@ -333,9 +333,9 @@ void LbDrawBoxClip(long x, long y, unsigned long width, unsigned long height, Tb
  * @param colour Colour index used to draw the box.
  * @return If wrong dimensions gives Lb_FAIL. On success gives Lb_SUCCESS.
  */
-TbResult LbDrawBox(long x, long y, unsigned long width, unsigned long height, TbPixel colour)
+TbResult LbDrawBox(long x, long y, unsigned long width, unsigned long height, TbPixel colour, TbDrawFlagsMask draw_flags)
 {
-    lb_draw_flags = lbDisplay.DrawFlags;
+    lb_draw_flags = draw_flags;
     if (lb_draw_flags & Lb_SPRITE_OUTLINE)
     {
         UIRenderer_SubmitOutlineBox((int32_t)x, (int32_t)y, (int32_t)width, (int32_t)height, colour);
@@ -1016,9 +1016,9 @@ static inline TbResult LbSpriteDrawFastCpy(const char *sp,short sprWd,short sprH
     return Lb_SUCCESS;
 }
 
-TbResult LbSpriteDraw(long x, long y, const struct TbSprite *spr)
+TbResult LbSpriteDraw(long x, long y, const struct TbSprite *spr, TbDrawFlagsMask draw_flags)
 {
-    lb_draw_flags = lbDisplay.DrawFlags;
+    lb_draw_flags = draw_flags;
     struct TbSpriteDrawData spd;
     TbResult ret;
     SYNCDBG(19,"At (%ld,%ld)",x,y);
@@ -1311,9 +1311,9 @@ static inline TbResult LbSpriteDrawFCOneColour(const char *sp,short sprWd,short 
     return Lb_SUCCESS;
 }
 
-TbResult LbSpriteDrawOneColour(long x, long y, const struct TbSprite *spr, const TbPixel colour)
+TbResult LbSpriteDrawOneColour(long x, long y, const struct TbSprite *spr, const TbPixel colour, TbDrawFlagsMask draw_flags)
 {
-    lb_draw_flags = lbDisplay.DrawFlags;
+    lb_draw_flags = draw_flags;
     struct TbSpriteDrawData spd;
     TbResult ret;
     SYNCDBG(19,"At (%ld,%ld)",x,y);
@@ -1592,9 +1592,9 @@ void LbSpriteSetScalingData(long x, long y, long swidth, long sheight, long dwid
     }
 }
 
-TbResult LbSpriteDrawScaled(long xpos, long ypos, const struct TbSprite *sprite, long dest_width, long dest_height)
+TbResult LbSpriteDrawScaled(long xpos, long ypos, const struct TbSprite *sprite, long dest_width, long dest_height, TbDrawFlagsMask draw_flags)
 {
-    lb_draw_flags = lbDisplay.DrawFlags;
+    lb_draw_flags = draw_flags;
     SYNCDBG(19,"At (%ld,%ld) size (%ld,%ld)",xpos,ypos,dest_width,dest_height);
     if ((dest_width <= 0) || (dest_height <= 0))
       return 1;
@@ -1611,24 +1611,24 @@ TbResult LbSpriteDrawScaled(long xpos, long ypos, const struct TbSprite *sprite,
         sprite->SHeight,
         sprite->SWidth,
     };
-    return LbSpriteDrawUsingScalingData(0, 0, &buffer);
+    return LbSpriteDrawUsingScalingData(0, 0, &buffer, draw_flags);
 }
 
-TbResult LbSpriteDrawScaledOneColour(long xpos, long ypos, const struct TbSprite *sprite, long dest_width, long dest_height, const TbPixel colour)
+TbResult LbSpriteDrawScaledOneColour(long xpos, long ypos, const struct TbSprite *sprite, long dest_width, long dest_height, const TbPixel colour, TbDrawFlagsMask draw_flags)
 {
-    lb_draw_flags = lbDisplay.DrawFlags;
+    lb_draw_flags = draw_flags;
     SYNCDBG(19,"At (%ld,%ld) size (%ld,%ld)",xpos,ypos,dest_width,dest_height);
     if ((dest_width <= 0) || (dest_height <= 0))
       return 1;
     if ((lb_draw_flags & Lb_TEXT_UNDERLNSHADOW) != 0)
         lbSpriteReMapPtr = pixmap.fade_tables;
     LbSpriteSetScalingData(xpos, ypos, sprite->SWidth, sprite->SHeight, dest_width, dest_height);
-    return LbSpriteDrawOneColourUsingScalingData(0, 0, sprite, colour);
+    return LbSpriteDrawOneColourUsingScalingData(0, 0, sprite, colour, draw_flags);
 }
 
-int LbSpriteDrawScaledRemap(long xpos, long ypos, const struct TbSprite *sprite, long dest_width, long dest_height, const unsigned char *cmap)
+int LbSpriteDrawScaledRemap(long xpos, long ypos, const struct TbSprite *sprite, long dest_width, long dest_height, const unsigned char *cmap, TbDrawFlagsMask draw_flags)
 {
-    lb_draw_flags = lbDisplay.DrawFlags;
+    lb_draw_flags = draw_flags;
     SYNCDBG(19,"At (%ld,%ld) size (%ld,%ld)",xpos,ypos,dest_width,dest_height);
     if ((dest_width <= 0) || (dest_height <= 0))
       return 1;
@@ -1647,7 +1647,7 @@ int LbSpriteDrawScaledRemap(long xpos, long ypos, const struct TbSprite *sprite,
         sprite->SHeight,
         sprite->SWidth,
     };
-    return LbSpriteDrawRemapUsingScalingData(0, 0, &buffer, cmap);
+    return LbSpriteDrawRemapUsingScalingData(0, 0, &buffer, cmap, draw_flags);
 }
 
 
@@ -1803,9 +1803,9 @@ TbResult LbHugeSpriteDraw(const struct TbHugeSprite * spr, long sp_len,
  * @param sprite
  * @note originally named DrawBigSprite()
  */
-void LbTiledSpriteDraw(long start_x, long start_y, long units_per_px, struct TiledSprite *bigspr)
+void LbTiledSpriteDraw(long start_x, long start_y, long units_per_px, struct TiledSprite *bigspr, TbDrawFlagsMask draw_flags)
 {
-    lb_draw_flags = lbDisplay.DrawFlags;
+    lb_draw_flags = draw_flags;
     long x;
     long y;
     int delta_x;
@@ -1825,7 +1825,7 @@ void LbTiledSpriteDraw(long start_x, long start_y, long units_per_px, struct Til
             delta_y = sprite->SHeight * units_per_px / 16;
             if (spr_idx)
             {
-                LbSpriteDrawScaled(x, y, sprite, delta_x, delta_y);
+                LbSpriteDrawScaled(x, y, sprite, delta_x, delta_y, draw_flags);
             } else
             {
                 unsigned short prev_spr_idx = (spr_idx - 10);
@@ -2116,9 +2116,9 @@ void LbDrawCircleOutline(long x, long y, long radius, TbPixel colour)
 
 }
 
-void LbDrawCircle(long x, long y, long radius, TbPixel colour)
+void LbDrawCircle(long x, long y, long radius, TbPixel colour, TbDrawFlagsMask draw_flags)
 {
-    lb_draw_flags = lbDisplay.DrawFlags;
+    lb_draw_flags = draw_flags;
     if ((lb_draw_flags & Lb_SPRITE_OUTLINE) != 0)
         LbDrawCircleOutline(x, y, radius, colour);
     else

@@ -1246,9 +1246,9 @@ TbResult LbSpriteDrawRemapUsingScalingDownDataSolidLR(uchar *outbuf, int scanlin
  * @return Gives 0 on success.
  * @see LbSpriteSetScalingData()
  */
-TbResult LbSpriteDrawRemapUsingScalingData(long posx, long posy, const struct TbSourceBuffer * src_buf, const TbPixel *cmap)
+TbResult LbSpriteDrawRemapUsingScalingData(long posx, long posy, const struct TbSourceBuffer * src_buf, const TbPixel *cmap, TbDrawFlagsMask draw_flags)
 {
-    lb_draw_flags = lbDisplay.DrawFlags;
+    lb_draw_flags = draw_flags;
     SYNCDBG(17,"Drawing at (%ld,%ld)",posx,posy);
     unsigned char* render_ghost = pixmap.ghost; // ghost transparency LUT, owned by vidmode
     int32_t *xstep;

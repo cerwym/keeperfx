@@ -227,8 +227,8 @@ void draw_out_of_sync_box(long a1, long a2, long box_width)
         long text_x = x + 100 * units_per_px / 16 - max_width;
         long text_y = y + 58 * units_per_px / 16;
         LbTextDrawResized(0, 50*units_per_px/16 - text_h, tx_units_per_px, get_string(GUIStr_NetResyncing));
-        LbDrawBox(text_x, text_y, 2*max_width, 16*units_per_px/16, 0);
-        LbDrawBox(text_x, text_y, 2*min_width, 16*units_per_px/16, 133);
+        LbDrawBox(text_x, text_y, 2*max_width, 16*units_per_px/16, 0, lbDisplay.DrawFlags);
+        LbDrawBox(text_x, text_y, 2*min_width, 16*units_per_px/16, 133, lbDisplay.DrawFlags);
         RendererUnlockScreen();
         RendererPresentFrame();
     }

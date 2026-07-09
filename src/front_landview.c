@@ -1257,7 +1257,7 @@ void draw_map_level_descriptions(void)
     long x = lvinfo->ensign_x - (long)map_info.screen_shift_x;
     long y = lvinfo->ensign_y - (long)map_info.screen_shift_y - 8;
     long h = LbTextHeight(level_name);
-    LbDrawBox(scale_value_landview(x-4), scale_value_landview(y), scale_value_landview(w+8), scale_value_landview(h), 0);
+    LbDrawBox(scale_value_landview(x-4), scale_value_landview(y), scale_value_landview(w+8), scale_value_landview(h), 0, lbDisplay.DrawFlags);
     LbTextDrawResized(scale_value_landview(x), scale_value_landview(y), units_per_pixel_landview, level_name);
   }
 }
