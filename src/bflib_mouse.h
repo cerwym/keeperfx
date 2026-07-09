@@ -145,6 +145,16 @@ struct TbMouseState {
     unsigned char RRightButton;
 };
 extern struct TbMouseState lbMouse;
+
+/** Mouse wheel scroll state — position counter and per-frame move counts.
+ *  Written by the SDL event handler (bflib_mouse.cpp); read and cleared by
+ *  kjm_input.c each frame to derive wheel_scrolled_up/down. */
+struct MouseWheelState {
+    short  WheelPosition;
+    ushort WheelMoveUp;
+    ushort WheelMoveDown;
+};
+extern volatile struct MouseWheelState lbMouseWheel;
 /******************************************************************************/
 TbResult LbMouseChangeSpriteAndHotspot(const struct TbSprite *mouseSprite, long hot_x, long hot_y);
 TbResult LbMouseSetup(struct TbSprite *mouseSprite);

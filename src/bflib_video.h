@@ -153,14 +153,6 @@ struct ScreenModeInfo {
 };
 typedef struct ScreenModeInfo TbScreenModeInfo;
 
-/** Extended display state (mouse wheel position and movement). */
-struct DisplayStructEx {
-    short WhellPosition;
-    ushort WhellMoveUp;
-    ushort WhellMoveDown;
-};
-typedef struct DisplayStructEx TbDisplayStructEx;
-
 struct SDL_Surface;
 
 /** The software renderer's off-screen draw surface.
@@ -181,7 +173,6 @@ void LbScreenFreeDrawSurface(void);
 /******************************************************************************/
 extern volatile TbBool lbScreenInitialised;
 extern volatile TbBool lbUseSdk;
-extern volatile TbDisplayStructEx lbDisplayEx;
 extern unsigned char lbPalette[PALETTE_SIZE];
 
 #define VGA6_MAX                                63.0f // VGA 6-bit palette component range (0–63)

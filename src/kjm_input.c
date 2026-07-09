@@ -435,8 +435,8 @@ void update_right_button_clicked(void)
 
 void update_wheel_scrolled(void)
 {
-    wheel_scrolled_up = (lbDisplayEx.WhellMoveUp > 0);
-    wheel_scrolled_down = (lbDisplayEx.WhellMoveDown > 0);
+    wheel_scrolled_up = (lbMouseWheel.WheelMoveUp > 0);
+    wheel_scrolled_down = (lbMouseWheel.WheelMoveDown > 0);
 }
 
 /**
@@ -474,8 +474,8 @@ void update_mouse(void)
   update_wheel_scrolled();
   lbMouse.LeftButton = 0;
   lbMouse.RightButton = 0;
-  lbDisplayEx.WhellMoveUp = 0;
-  lbDisplayEx.WhellMoveDown = 0;
+  lbMouseWheel.WheelMoveUp = 0;
+  lbMouseWheel.WheelMoveDown = 0;
   // [mouse buttons as keybinds - quick fix]
   lbKeyOn[KC_MOUSE3] = lbMouse.MiddleButton;
   lbKeyOn[KC_MOUSEWHEEL_UP] = wheel_scrolled_up;
