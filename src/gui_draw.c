@@ -251,24 +251,24 @@ void draw_round_slab64k(long pos_x, long pos_y, int units_per_px, long width, lo
     {
         x = pos_x + i + scale_ui_value_lofi(34);
         y = pos_y;
-        UIRenderer_SubmitPanelSprite(x, y, ps_units_per_spr, GPS_message_frame_thin_hex_ct, lbDisplay.DrawFlags);
+        UIRenderer_SubmitPanelSprite(x, y, ps_units_per_spr, GPS_message_frame_thin_hex_ct, 0);
         y += height - scale_ui_value_lofi(4);
-        UIRenderer_SubmitPanelSprite(x, y, ps_units_per_spr, GPS_message_frame_thin_hex_cb, lbDisplay.DrawFlags);
+        UIRenderer_SubmitPanelSprite(x, y, ps_units_per_spr, GPS_message_frame_thin_hex_cb, 0);
     }
     for (i = 0; i < height - scale_ui_value_lofi(56); i += scale_ui_value_lofi(20))
     {
         x = pos_x;
         y = pos_y + i + scale_ui_value_lofi(28);
-        UIRenderer_SubmitPanelSprite(x, y, ps_units_per_spr, GPS_message_frame_thin_hex_cr, lbDisplay.DrawFlags);
+        UIRenderer_SubmitPanelSprite(x, y, ps_units_per_spr, GPS_message_frame_thin_hex_cr, 0);
         x += width - scale_ui_value_lofi(4);
-        UIRenderer_SubmitPanelSprite(x, y, ps_units_per_spr, GPS_message_frame_thin_hex_cl, lbDisplay.DrawFlags);
+        UIRenderer_SubmitPanelSprite(x, y, ps_units_per_spr, GPS_message_frame_thin_hex_cl, 0);
     }
     x = pos_x + width - scale_ui_value_lofi(34);
     y = pos_y + height - scale_ui_value_lofi(28);
-    UIRenderer_SubmitPanelSprite(pos_x, pos_y, ps_units_per_spr, GPS_message_frame_thin_hex_tl, lbDisplay.DrawFlags);
-    UIRenderer_SubmitPanelSprite(x,     pos_y, ps_units_per_spr, GPS_message_frame_thin_hex_tr, lbDisplay.DrawFlags);
-    UIRenderer_SubmitPanelSprite(pos_x, y,     ps_units_per_spr, GPS_message_frame_thin_hex_bl, lbDisplay.DrawFlags);
-    UIRenderer_SubmitPanelSprite(x,     y,     ps_units_per_spr, GPS_message_frame_thin_hex_br, lbDisplay.DrawFlags);
+    UIRenderer_SubmitPanelSprite(pos_x, pos_y, ps_units_per_spr, GPS_message_frame_thin_hex_tl, 0);
+    UIRenderer_SubmitPanelSprite(x,     pos_y, ps_units_per_spr, GPS_message_frame_thin_hex_tr, 0);
+    UIRenderer_SubmitPanelSprite(pos_x, y,     ps_units_per_spr, GPS_message_frame_thin_hex_bl, 0);
+    UIRenderer_SubmitPanelSprite(x,     y,     ps_units_per_spr, GPS_message_frame_thin_hex_br, 0);
 }
 
 /**
@@ -496,13 +496,13 @@ void draw_message_box_at(long startx, long starty, long box_width, long box_heig
     long y = starty;
     {
         spr = get_frontend_sprite(GFS_hugearea_thn_cor_tl);
-        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr, lbDisplay.DrawFlags);
+        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr, 0);
         x += spr->SWidth * units_per_pixel / 16;
     }
     for (n=0; n < spritesx; n++)
     {
         spr = get_frontend_sprite((n % 4) + GFS_hugearea_thn_tx1_tc);
-        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr, lbDisplay.DrawFlags);
+        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr, 0);
         x += spr->SWidth * units_per_pixel / 16;
     }
     x = startx;
@@ -513,12 +513,12 @@ void draw_message_box_at(long startx, long starty, long box_width, long box_heig
     for (n=0; n < spritesx; n++)
     {
         spr = get_frontend_sprite((n % 4) + GFS_hugearea_thn_tx1_tc);
-        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr, lbDisplay.DrawFlags);
+        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr, 0);
         x += spr->SWidth * units_per_pixel / 16;
     }
     {
         spr = get_frontend_sprite(GFS_hugearea_thn_cor_tr);
-        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr, lbDisplay.DrawFlags);
+        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr, 0);
     }
     // Draw centered line of sprites
     spr = get_frontend_sprite(GFS_hugearea_thn_cor_tl);
@@ -526,18 +526,18 @@ void draw_message_box_at(long startx, long starty, long box_width, long box_heig
     y += spr->SHeight * units_per_pixel / 16;
     {
         spr = get_frontend_sprite(GFS_hugearea_thc_cor_ml);
-        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr, lbDisplay.DrawFlags);
+        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr, 0);
         x += spr->SWidth * units_per_pixel / 16;
     }
     for (n=0; n < spritesx; n++)
     {
         spr = get_frontend_sprite((n % 4) + GFS_hugearea_thc_tx1_mc);
-        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr, lbDisplay.DrawFlags);
+        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr, 0);
         x += spr->SWidth * units_per_pixel / 16;
     }
     {
         spr = get_frontend_sprite(GFS_hugearea_thc_cor_mr);
-        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr, lbDisplay.DrawFlags);
+        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr, 0);
     }
     // Draw bottom line of sprites
     spr = get_frontend_sprite(GFS_hugearea_thc_cor_ml);
@@ -545,18 +545,18 @@ void draw_message_box_at(long startx, long starty, long box_width, long box_heig
     y += spr->SHeight * units_per_pixel / 16;
     {
         spr = get_frontend_sprite(GFS_hugearea_thn_cor_bl);
-        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr, lbDisplay.DrawFlags);
+        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr, 0);
         x += spr->SWidth * units_per_pixel / 16;
     }
     for (n=0; n < spritesx; n++)
     {
         spr = get_frontend_sprite((n % 4) + GFS_hugearea_thn_tx1_bc);
-        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr, lbDisplay.DrawFlags);
+        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr, 0);
         x += spr->SWidth * units_per_pixel / 16;
     }
     {
         spr = get_frontend_sprite(GFS_hugearea_thn_cor_br);
-        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr, lbDisplay.DrawFlags);
+        UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_pixel, spr, 0);
     }
 }
 
@@ -654,14 +654,13 @@ void draw_scroll_box(struct GuiButton *gbtn, int units_per_px, int num_rows)
     const struct TbSprite *spr;
     int pos_x;
     int i;
-    lbDisplay.DrawFlags = 0;
     int pos_y = gbtn->scr_pos_y;
     { // First row
         pos_x = gbtn->scr_pos_x;
         spr = get_frontend_sprite(GFS_hugearea_thn_cor_tl);
         for (i = 6; i > 0; i--)
         {
-            UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, units_per_px, spr, lbDisplay.DrawFlags);
+            UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, units_per_px, spr, 0);
             pos_x += spr->SWidth * units_per_px / 16;
             spr++;
         }
@@ -678,7 +677,7 @@ void draw_scroll_box(struct GuiButton *gbtn, int units_per_px, int num_rows)
         pos_x = gbtn->scr_pos_x;
         for (i = 6; i > 0; i--)
         {
-            UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, units_per_px, spr, lbDisplay.DrawFlags);
+            UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, units_per_px, spr, 0);
             pos_x += spr->SWidth * units_per_px / 16;
             spr++;
         }
@@ -694,7 +693,7 @@ void draw_scroll_box(struct GuiButton *gbtn, int units_per_px, int num_rows)
     pos_x = gbtn->scr_pos_x;
     for (i = 6; i > 0; i--)
     {
-        UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, units_per_px, spr, lbDisplay.DrawFlags);
+        UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, units_per_px, spr, 0);
         pos_x += spr->SWidth * units_per_px / 16;
         spr++;
     }
@@ -741,13 +740,13 @@ void draw_button_sprite_left(long x, long y, int units_per_px, long spridx)
 void draw_button_sprite_rmleft(long x, long y, int units_per_px, long spridx, unsigned long remap)
 {
     const struct TbSprite* spr = get_button_sprite_for_player(spridx, my_player_number);
-    UIRenderer_SubmitPanelSpriteRemap(x, y, units_per_px, spr, (int)remap, lbDisplay.DrawFlags);
+    UIRenderer_SubmitPanelSpriteRemap(x, y, units_per_px, spr, (int)remap, 0);
 }
 
 void draw_frontend_sprite_left(long x, long y, int units_per_px, long spridx)
 {
     const struct TbSprite* spr = get_frontend_sprite(spridx);
-    UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_px, spr, lbDisplay.DrawFlags);
+    UIRenderer_SubmitPanelSpriteRaw(x, y, units_per_px, spr, 0);
 }
 
 void draw_string64k(long x, long y, int units_per_px, const char * text)

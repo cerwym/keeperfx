@@ -502,18 +502,15 @@ void draw_overhead_room_icons(const struct TbRect *map_area, long block_size, Pl
                     // In GL mode draw via UIRenderer; dimmed rooms are skipped (binary blink vs TRANSPAR4 dim).
                     // In software mode set DrawFlags so LbSpriteDrawResized respects the dimming effect.
                     if (!dimmed) {
-                        UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, ps_units_per_px, spr, lbDisplay.DrawFlags);
+                        UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, ps_units_per_px, spr, 0);
                     } else {
-                        lbDisplay.DrawFlags |= Lb_SPRITE_TRANSPAR4;
-                        UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, ps_units_per_px, spr, lbDisplay.DrawFlags);
-                        lbDisplay.DrawFlags &= ~Lb_SPRITE_TRANSPAR4;
+                        UIRenderer_SubmitPanelSpriteRaw(pos_x, pos_y, ps_units_per_px, spr, Lb_SPRITE_TRANSPAR4);
                     }
                 }
             }
           }
         }
     }
-    lbDisplay.DrawFlags &= ~Lb_SPRITE_TRANSPAR4;
 }
 
 int draw_overhead_call_to_arms(const struct TbRect *map_area, long block_size, PlayerNumber plyr_idx)
@@ -842,10 +839,10 @@ void draw_zoom_box_things_on_mapblk(struct Map *mapblk,unsigned short subtile_si
                 if ((get_gameturn() % (8 * gui_blink_rate)) >= 4 * gui_blink_rate)
                 {
                     TbPixel color = get_player_path_colour(thing->owner);
-                    draw_gui_panel_sprite_occentered(scr_x + spos_x, scr_y + spos_y - 13*units_per_pixel/16, ps_units_per_px, spridx, color, lbDisplay.DrawFlags);
+                    draw_gui_panel_sprite_occentered(scr_x + spos_x, scr_y + spos_y - 13*units_per_pixel/16, ps_units_per_px, spridx, color, 0);
                 } else
                 {
-                    draw_gui_panel_sprite_centered(scr_x + spos_x, scr_y + spos_y - 13*units_per_pixel/16, ps_units_per_px, spridx, lbDisplay.DrawFlags);
+                    draw_gui_panel_sprite_centered(scr_x + spos_x, scr_y + spos_y - 13*units_per_pixel/16, ps_units_per_px, spridx, 0);
                 }
                 draw_status_sprites(spos_x + scr_x, scr_y + spos_y - 12*units_per_pixel/16, thing);
                 break;
@@ -857,8 +854,8 @@ void draw_zoom_box_things_on_mapblk(struct Map *mapblk,unsigned short subtile_si
                     break;
                 struct ManufactureData* manufctr = get_manufacture_data(get_manufacture_data_index_for_thing(thing->class_id, thing->model));
                 spridx = manufctr->medsym_sprite_idx;
-                //This line and all cases below used to be: draw_gui_panel_sprite_centered(scr_x + spos_x, scr_y + spos_y - 13*units_per_pixel/16, ps_units_per_px, spridx, lbDisplay.DrawFlags);
-                draw_gui_panel_sprite_centered(scr_x + (spos_x * 3 / 2), scr_y - (spos_y /2), ps_units_per_px, spridx, lbDisplay.DrawFlags);
+                //This line and all cases below used to be: draw_gui_panel_sprite_centered(scr_x + spos_x, scr_y + spos_y - 13*units_per_pixel/16, ps_units_per_px, spridx, 0);
+                draw_gui_panel_sprite_centered(scr_x + (spos_x * 3 / 2), scr_y - (spos_y /2), ps_units_per_px, spridx, 0);
                 break;
             }
             case TCls_Object:
@@ -876,7 +873,7 @@ void draw_zoom_box_things_on_mapblk(struct Map *mapblk,unsigned short subtile_si
                 }
                 if (spridx > 0)
                 {
-                    draw_gui_panel_sprite_centered(spos_x + scr_x, scr_y + spos_y - 6 * units_per_pixel / 16, ps_units_per_px, spridx, lbDisplay.DrawFlags);
+                    draw_gui_panel_sprite_centered(spos_x + scr_x, scr_y + spos_y - 6 * units_per_pixel / 16, ps_units_per_px, spridx, 0);
                 }
                 break;
             default:

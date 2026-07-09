@@ -150,13 +150,13 @@ void message_draw(void)
             {
                 case MsgType_Player:
                 {
-                    draw_gui_panel_sprite_left_player(x, y, ps_units_per_px, spr_idx, plyr_idx, lbDisplay.DrawFlags);
+                    draw_gui_panel_sprite_left_player(x, y, ps_units_per_px, spr_idx, plyr_idx, 0);
                     break;
                 }
                 case MsgType_Creature:
                 {
                     spr = get_panel_sprite(spr_idx);
-                    UIRenderer_SubmitPanelSpriteRaw(x, y, ps_units_per_px, spr, lbDisplay.DrawFlags);
+                    UIRenderer_SubmitPanelSpriteRaw(x, y, ps_units_per_px, spr, 0);
                     break;
                 }
                 case MsgType_CreatureSpell:
@@ -166,7 +166,7 @@ void message_draw(void)
                 case MsgType_CreatureInstance:
                 {
                     spr = get_panel_sprite(spr_idx);
-                    UIRenderer_SubmitPanelSpriteRaw(x, y, ps_units_per_px, spr, lbDisplay.DrawFlags);
+                    UIRenderer_SubmitPanelSpriteRaw(x, y, ps_units_per_px, spr, 0);
                     break;
                 }
             }

@@ -148,11 +148,8 @@ void IUIRenderer::SubmitPanelSprite(int32_t x, int32_t y, int units_per_px,
     if (it == m_handle_to_sprite.end()) return;
     unsigned int effective_flags = state.flags;
     if (flip_horiz) effective_flags |= Lb_SPRITE_FLIP_HORIZ;
-    unsigned int saved = lbDisplay.DrawFlags;
-    lbDisplay.DrawFlags = effective_flags;
     ScopedSpriteSubmitGuard guard;
     LbSpriteDrawResized(x, y, units_per_px, it->second, effective_flags);
-    lbDisplay.DrawFlags = saved;
 }
 
 void IUIRenderer::SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px,
@@ -171,11 +168,8 @@ void IUIRenderer::SubmitPanelSpriteRemap(int32_t x, int32_t y, int units_per_px,
     auto it = m_handle_to_sprite.find(spr);
     if (it == m_handle_to_sprite.end()) return;
     ScopedSpriteSubmitGuard guard;
-    unsigned int saved = lbDisplay.DrawFlags;
-    lbDisplay.DrawFlags = state.flags;
     LbSpriteDrawResizedRemap(x, y, units_per_px, it->second,
                              &pixmap.fade_tables[remap_row * 256], state.flags);
-    lbDisplay.DrawFlags = saved;
 }
 
 void IUIRenderer::SubmitPanelSpriteColored(int32_t x, int32_t y, int units_per_px,
@@ -194,10 +188,7 @@ void IUIRenderer::SubmitPanelSpriteColored(int32_t x, int32_t y, int units_per_p
     auto it = m_handle_to_sprite.find(spr);
     if (it == m_handle_to_sprite.end()) return;
     ScopedSpriteSubmitGuard guard;
-    unsigned int saved = lbDisplay.DrawFlags;
-    lbDisplay.DrawFlags = state.flags;
     LbSpriteDrawResizedOneColour(x, y, units_per_px, it->second, color_idx, state.flags);
-    lbDisplay.DrawFlags = saved;
 }
 
 void IUIRenderer::SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h,
@@ -215,10 +206,7 @@ void IUIRenderer::SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h,
     auto it = m_handle_to_sprite.find(spr);
     if (it == m_handle_to_sprite.end()) return;
     ScopedSpriteSubmitGuard guard;
-    unsigned int saved = lbDisplay.DrawFlags;
-    lbDisplay.DrawFlags = state.flags;
     LbSpriteDrawScaled(x, y, it->second, w, h, state.flags);
-    lbDisplay.DrawFlags = saved;
 }
 
 void IUIRenderer::SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, uint8_t color_idx, KfxDrawState state)
