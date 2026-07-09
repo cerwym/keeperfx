@@ -103,12 +103,12 @@ TbBool is_wide_charcode(unsigned long chr)
  * @param draw_colr
  * @param shadow_colr
  */
-void LbDrawCharUnderline(long pos_x, long pos_y, long width, long height, uchar draw_colr, uchar shadow_colr)
+void LbDrawCharUnderline(long pos_x, long pos_y, long width, long height, uchar draw_colr, uchar shadow_colr, TbDrawFlagsMask draw_flags)
 {
     long h = height;
     long w = width;
     // Draw shadow
-    if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLNSHADOW) != 0) {
+    if ((draw_flags & Lb_TEXT_UNDERLNSHADOW) != 0) {
         long shadow_x = pos_x + 1;
         if (height > 2*DOUBLE_UNDERLINE_BOUND)
             shadow_x++;
@@ -447,12 +447,12 @@ skip_sprite_draw:
 
 TbBool LbTextDraw(int posx, int posy, const char *text)
 {
-    return TextRenderer_DrawTextResized(posx, posy, 16, text);
+    return TextRenderer_DrawTextResized(posx, posy, 16, text, lbDisplay.DrawFlags);
 }
 
 TbBool LbTextDrawResized(int posx, int posy, int units_per_px, const char *text)
 {
-    return TextRenderer_DrawTextResized(posx, posy, units_per_px, text);
+    return TextRenderer_DrawTextResized(posx, posy, units_per_px, text, lbDisplay.DrawFlags);
 }
 
 TbBool LbTextDrawResizedFmt(int posx, int posy, int units_per_px, const char *fmt, ...)
@@ -463,7 +463,7 @@ TbBool LbTextDrawResizedFmt(int posx, int posy, int units_per_px, const char *fm
     va_start(val, fmt);
     vsnprintf(text, TEXT_DRAW_MAX_LEN, fmt, val);
     va_end(val);
-    TbBool result = TextRenderer_DrawTextResized(posx, posy, units_per_px, text);
+    TbBool result = TextRenderer_DrawTextResized(posx, posy, units_per_px, text, lbDisplay.DrawFlags);
     KfxFree(text);
     return result;
 }

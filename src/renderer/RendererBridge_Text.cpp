@@ -55,17 +55,17 @@ void TextRenderer_GetClipWindow(int32_t* x, int32_t* y, int32_t* w, int32_t* h)
     if (tr) tr->GetClipWindow(x, y, w, h);
 }
 
-TbBool TextRenderer_DrawTextResized(int32_t posx, int32_t posy, int32_t units_per_px, const char* text)
+TbBool TextRenderer_DrawTextResized(int32_t posx, int32_t posy, int32_t units_per_px, const char* text, TbDrawFlagsMask draw_flags)
 {
     ITextRenderer* tr = RendererGetTextRenderer();
-    if (tr) return tr->DrawTextResized(posx, posy, units_per_px, text);
+    if (tr) return tr->DrawTextResized(posx, posy, units_per_px, text, draw_flags);
     return false;
 }
 
-TbBool TextRenderer_DrawTextAt(int32_t screen_x, int32_t screen_y, int32_t units_per_px, const char* text)
+TbBool TextRenderer_DrawTextAt(int32_t screen_x, int32_t screen_y, int32_t units_per_px, const char* text, TbDrawFlagsMask draw_flags)
 {
     ITextRenderer* tr = RendererGetTextRenderer();
-    if (tr) return tr->DrawTextAt(screen_x, screen_y, units_per_px, text);
+    if (tr) return tr->DrawTextAt(screen_x, screen_y, units_per_px, text, draw_flags);
     return false;
 }
 

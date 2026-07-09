@@ -283,7 +283,7 @@ void GLTextRenderer::SetScreenSize(int width, int height)
     m_screen_height = height;
 }
 
-TbBool GLTextRenderer::DrawTextResized(int32_t posx, int32_t posy, int32_t units_per_px, const char* text)
+TbBool GLTextRenderer::DrawTextResized(int32_t posx, int32_t posy, int32_t units_per_px, const char* text, TbDrawFlagsMask draw_flags)
 {
     if (!text)
         return false;
@@ -299,7 +299,7 @@ TbBool GLTextRenderer::DrawTextResized(int32_t posx, int32_t posy, int32_t units
         cmd.units_per_px = units_per_px;
         cmd.absolute     = 0;
         cmd.draw_colour  = lbDisplay.DrawColour;
-        cmd.draw_flags   = lbDisplay.DrawFlags;
+        cmd.draw_flags   = draw_flags;
         cmd.justify_x    = m_justify_window.x;
         cmd.justify_y    = m_justify_window.y;
         cmd.justify_w    = m_justify_window.width;
@@ -326,7 +326,7 @@ TbBool GLTextRenderer::DrawTextResized(int32_t posx, int32_t posy, int32_t units
         m_pending_fallback.push_back({ posx, posy, units_per_px,
                               m_justify_window.x, m_justify_window.y, m_justify_window.width,
                               m_clip_window.x, m_clip_window.y, m_clip_window.width, m_clip_window.height,
-                              lbDisplay.DrawColour, lbDisplay.DrawFlags,
+                              lbDisplay.DrawColour, draw_flags,
                               text,
                               m_font,
                               m_dbc_font,
@@ -336,9 +336,9 @@ TbBool GLTextRenderer::DrawTextResized(int32_t posx, int32_t posy, int32_t units
     return true;
 }
 
-TbBool GLTextRenderer::DrawTextAt(int32_t screen_x, int32_t screen_y, int32_t units_per_px, const char* text)
+TbBool GLTextRenderer::DrawTextAt(int32_t screen_x, int32_t screen_y, int32_t units_per_px, const char* text, TbDrawFlagsMask draw_flags)
 {
-    return DrawTextResized(screen_x, screen_y, units_per_px, text);
+    return DrawTextResized(screen_x, screen_y, units_per_px, text, draw_flags);
 }
 
 void GLTextRenderer::SetTextCommandBuffers(TextCommandBuffers* cmds)
@@ -963,7 +963,7 @@ void GLTextRenderer::AppendUnderlineRects(float x0, float x1, float screen_y, fl
     const float DUB = 16.0f;
     float h = line_h;
 
-    if ((lbDisplay.DrawFlags & Lb_TEXT_UNDERLNSHADOW) != 0)
+    if ((m_text_draw_flags & Lb_TEXT_UNDERLNSHADOW) != 0)
     {
         float sx = (line_h > 2.0f * DUB) ? 2.0f : 1.0f;
         float pi  = (float)(unsigned char)lbDisplayEx.ShadowColour;

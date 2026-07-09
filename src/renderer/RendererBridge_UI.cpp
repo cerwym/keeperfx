@@ -119,10 +119,9 @@ void RendererSubmitButton(const RendererUIButtonDesc* desc)
     // lbDisplay.DrawFlags, so set it here exactly as the old code did before
     // LbTextDrawResized.
     if (desc->text && desc->font) {
-        lbDisplay.DrawFlags = desc->label_draw_flags;
         TextRenderer_SetFont(desc->font);
         TextRenderer_SetWindow(desc->text_x, desc->text_y, desc->text_w, desc->text_h);
-        TextRenderer_DrawTextResized(0, 0, desc->units_per_px, desc->text);
+        TextRenderer_DrawTextResized(0, 0, desc->units_per_px, desc->text, desc->label_draw_flags);
     }
 }
 

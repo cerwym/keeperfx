@@ -35,8 +35,8 @@ public:
     void GetClipWindow(int32_t* x, int32_t* y, int32_t* w, int32_t* h) const override;
 
     // Drawing
-    TbBool DrawTextResized(int32_t posx, int32_t posy, int32_t units_per_px, const char* text) override;
-    TbBool DrawTextAt(int32_t screen_x, int32_t screen_y, int32_t units_per_px, const char* text) override;
+    TbBool DrawTextResized(int32_t posx, int32_t posy, int32_t units_per_px, const char* text, TbDrawFlagsMask draw_flags) override;
+    TbBool DrawTextAt(int32_t screen_x, int32_t screen_y, int32_t units_per_px, const char* text, TbDrawFlagsMask draw_flags) override;
 
     // ── Software IR executor ──────────────────────────────────────────────────
     /** Open/close the text IR write window (software deferral). When set, the
@@ -66,7 +66,8 @@ private:
     /** Snapshot current font/window/draw state into an IRTextDrawCmd and append
      *  it to m_write_cmds (software deferral).  Stamps the shared seq. */
     void AppendTextCmd(int32_t x, int32_t y, int32_t units_per_px,
-                       bool absolute, const char* text);
+                       bool absolute, const char* text,
+                       TbDrawFlagsMask draw_flags);
 
     /** Segment callback for paragraph layout — dispatches to PutDownSprites. */
     static void SwDrawSegment(const char* sbuf, const char* ebuf,

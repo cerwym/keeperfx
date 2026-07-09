@@ -22,6 +22,7 @@
 #pragma once
 
 #include "bflib_basics.h"
+#include "renderer/DrawState.h"
 #include "renderer/TextLayoutContext.h"
 #include <stdint.h>
 
@@ -81,13 +82,15 @@ public:
      *  Applies word-wrap and justification via the layout engine.
      *  GPU backends may defer the actual draw until Draw(). */
     virtual TbBool DrawTextResized(int32_t posx, int32_t posy,
-                                   int32_t units_per_px, const char* text) = 0;
+                                   int32_t units_per_px, const char* text,
+                                   TbDrawFlagsMask draw_flags) = 0;
 
     /** Draw text at absolute screen coordinates.  No text window setup needed.
      *  Single line, no word-wrap, no justification.
      *  GPU backends may defer the actual draw until Draw(). */
     virtual TbBool DrawTextAt(int32_t screen_x, int32_t screen_y,
-                              int32_t units_per_px, const char* text) = 0;
+                              int32_t units_per_px, const char* text,
+                              TbDrawFlagsMask draw_flags) = 0;
 
     /** Draw all deferred text to the framebuffer.
      *  Called at end-of-frame after the staging-buffer blit.

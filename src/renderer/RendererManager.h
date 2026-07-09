@@ -446,11 +446,11 @@ void TextRenderer_GetClipWindow(int32_t* x, int32_t* y, int32_t* w, int32_t* h);
 
 /** Draw text at (posx, posy) relative to the text window with word-wrap.
  *  GPU backends queue the draw; call TextRenderer_Draw() to emit it. */
-TbBool TextRenderer_DrawTextResized(int32_t posx, int32_t posy, int32_t units_per_px, const char* text);
+TbBool TextRenderer_DrawTextResized(int32_t posx, int32_t posy, int32_t units_per_px, const char* text, TbDrawFlagsMask draw_flags);
 
 /** Draw text at absolute screen coordinates. No window setup needed.
  *  GPU backends queue the draw; call TextRenderer_Draw() to emit it. */
-TbBool TextRenderer_DrawTextAt(int32_t screen_x, int32_t screen_y, int32_t units_per_px, const char* text);
+TbBool TextRenderer_DrawTextAt(int32_t screen_x, int32_t screen_y, int32_t units_per_px, const char* text, TbDrawFlagsMask draw_flags);
 
 /** Draw all deferred text to the framebuffer.
  *  Must be called after the staging-buffer blit quad and before buffer swap. */

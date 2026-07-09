@@ -43,8 +43,8 @@ public:
     void GetClipWindow(int32_t* x, int32_t* y, int32_t* w, int32_t* h) const override;
 
     // ITextRenderer interface — Drawing
-    TbBool DrawTextResized(int32_t posx, int32_t posy, int32_t units_per_px, const char* text) override;
-    TbBool DrawTextAt(int32_t screen_x, int32_t screen_y, int32_t units_per_px, const char* text) override;
+    TbBool DrawTextResized(int32_t posx, int32_t posy, int32_t units_per_px, const char* text, TbDrawFlagsMask draw_flags) override;
+    TbBool DrawTextAt(int32_t screen_x, int32_t screen_y, int32_t units_per_px, const char* text, TbDrawFlagsMask draw_flags) override;
     void   Draw() override;         // Flush all queued text draws
 
     // ── IR (Intermediate Representation) path ─────────────────────────────────

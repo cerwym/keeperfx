@@ -22,6 +22,7 @@
 
 #include "bflib_basics.h"
 #include "globals.h"
+#include "renderer/DrawState.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -398,7 +399,7 @@ void LbTextUseByteCoding(TbBool is_enabled);
 long text_string_height(int units_per_px, const char *text);
 int LbTextStringPartWidthM(const char *text, int part, long units_per_px);
 void LbDrawCharUnderline(long pos_x, long pos_y, long width, long height,
-    unsigned char draw_colr, unsigned char shadow_colr);
+    unsigned char draw_colr, unsigned char shadow_colr, TbDrawFlagsMask draw_flags);
 int get_bit_to_array(unsigned char *arrD, int iX, int iY, int iMax);
 void set_bit_to_array(unsigned char *arrD, int iX, int iY, int iMax, int iValue);
 
