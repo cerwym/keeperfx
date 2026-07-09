@@ -48,6 +48,8 @@ public:
     void   Draw() override;         // Flush all queued text draws
     void   SetDrawColour(uint8_t colour) override { m_text_draw_colour = colour; }
     uint8_t GetDrawColour() const override        { return m_text_draw_colour; }
+    void   SetShadowColour(uint8_t colour) override { m_text_shadow_colour = colour; }
+    uint8_t GetShadowColour() const override        { return m_text_shadow_colour; }
 
     // ── IR (Intermediate Representation) path ─────────────────────────────────
 
@@ -149,6 +151,7 @@ private:
     // DrawColour save/restore pattern — no global writes during rendering.
     uint32_t         m_text_draw_flags  = 0;
     uint8_t          m_text_draw_colour = 0;
+    uint8_t          m_text_shadow_colour = 0;
     
     // Shader uniform locations
     int              m_loc_viewport;     // u_viewport uniform

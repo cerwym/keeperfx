@@ -474,7 +474,7 @@ void SoftwareTextRenderer::PutDownSimpleSprites(const char* sbuf, const char* eb
             if ((m_text_draw_flags & Lb_TEXT_UNDERLINE) != 0)
             {
                 int32_t h = LineHeight();
-                LbDrawCharUnderline(x, y, w, h, m_text_draw_colour, lbDisplayEx.ShadowColour, m_text_draw_flags);
+                LbDrawCharUnderline(x, y, w, h, m_text_draw_colour, m_text_shadow_colour, m_text_draw_flags);
             }
             x += w;
             c++;
@@ -485,7 +485,7 @@ void SoftwareTextRenderer::PutDownSimpleSprites(const char* sbuf, const char* eb
             if ((m_text_draw_flags & Lb_TEXT_UNDERLINE) != 0)
             {
                 int32_t h = LineHeight();
-                LbDrawCharUnderline(x, y, w, h, m_text_draw_colour, lbDisplayEx.ShadowColour, m_text_draw_flags);
+                LbDrawCharUnderline(x, y, w, h, m_text_draw_colour, m_text_shadow_colour, m_text_draw_flags);
             }
             x += w;
         }
@@ -502,7 +502,7 @@ void SoftwareTextRenderer::PutDownSimpleSprites(const char* sbuf, const char* eb
                 if ((m_text_draw_flags & Lb_TEXT_UNDERLINE) != 0)
                 {
                     int32_t h = LineHeight();
-                    LbDrawCharUnderline(x, y, w, h, m_text_draw_colour, lbDisplayEx.ShadowColour, m_text_draw_flags);
+                    LbDrawCharUnderline(x, y, w, h, m_text_draw_colour, m_text_shadow_colour, m_text_draw_flags);
                 }
                 x += w;
             }
@@ -513,7 +513,7 @@ void SoftwareTextRenderer::PutDownSimpleSprites(const char* sbuf, const char* eb
             if ((m_text_draw_flags & Lb_TEXT_UNDERLINE) != 0)
             {
                 int32_t h = LineHeight();
-                LbDrawCharUnderline(x, y, w, h, m_text_draw_colour, lbDisplayEx.ShadowColour, m_text_draw_flags);
+                LbDrawCharUnderline(x, y, w, h, m_text_draw_colour, m_text_shadow_colour, m_text_draw_flags);
             }
             x += w;
         }
@@ -548,7 +548,7 @@ void SoftwareTextRenderer::PutDownSimpleSpritesResized(const char* sbuf, const c
             if ((m_text_draw_flags & Lb_TEXT_UNDERLINE) != 0)
             {
                 int32_t h = LineHeight() * units_per_px / 16;
-                LbDrawCharUnderline(x, y, w, h, m_text_draw_colour, lbDisplayEx.ShadowColour, m_text_draw_flags);
+                LbDrawCharUnderline(x, y, w, h, m_text_draw_colour, m_text_shadow_colour, m_text_draw_flags);
             }
             x += w;
             c++;
@@ -559,7 +559,7 @@ void SoftwareTextRenderer::PutDownSimpleSpritesResized(const char* sbuf, const c
             if ((m_text_draw_flags & Lb_TEXT_UNDERLINE) != 0)
             {
                 int32_t h = LineHeight() * units_per_px / 16;
-                LbDrawCharUnderline(x, y, w, h, m_text_draw_colour, lbDisplayEx.ShadowColour, m_text_draw_flags);
+                LbDrawCharUnderline(x, y, w, h, m_text_draw_colour, m_text_shadow_colour, m_text_draw_flags);
             }
             x += w;
         }
@@ -578,7 +578,7 @@ void SoftwareTextRenderer::PutDownSimpleSpritesResized(const char* sbuf, const c
                 if ((m_text_draw_flags & Lb_TEXT_UNDERLINE) != 0)
                 {
                     int32_t h = LineHeight() * units_per_px / 16;
-                    LbDrawCharUnderline(x, y, w, h, m_text_draw_colour, lbDisplayEx.ShadowColour, m_text_draw_flags);
+                    LbDrawCharUnderline(x, y, w, h, m_text_draw_colour, m_text_shadow_colour, m_text_draw_flags);
                 }
                 x += w;
             }
@@ -589,7 +589,7 @@ void SoftwareTextRenderer::PutDownSimpleSpritesResized(const char* sbuf, const c
             if ((m_text_draw_flags & Lb_TEXT_UNDERLINE) != 0)
             {
                 int32_t h = LineHeight() * units_per_px / 16;
-                LbDrawCharUnderline(x, y, w, h, m_text_draw_colour, lbDisplayEx.ShadowColour, m_text_draw_flags);
+                LbDrawCharUnderline(x, y, w, h, m_text_draw_colour, m_text_shadow_colour, m_text_draw_flags);
             }
             x += w;
         }
@@ -641,7 +641,7 @@ void SoftwareTextRenderer::PutDownDbcSprites(const char* sbuf, const char* ebuf,
             if ((m_text_draw_flags & Lb_TEXT_UNDERLINE) != 0)
             {
                 int32_t h = static_cast<int32_t>(dbc_char_height(' '));
-                LbDrawCharUnderline(x, y, w, h, m_text_draw_colour, lbDisplayEx.ShadowColour, m_text_draw_flags);
+                LbDrawCharUnderline(x, y, w, h, m_text_draw_colour, m_text_shadow_colour, m_text_draw_flags);
             }
             x += w;
         }
@@ -651,7 +651,7 @@ void SoftwareTextRenderer::PutDownDbcSprites(const char* sbuf, const char* ebuf,
             if ((m_text_draw_flags & Lb_TEXT_UNDERLINE) != 0)
             {
                 int32_t h = static_cast<int32_t>(dbc_char_height(' '));
-                LbDrawCharUnderline(x, y, w, h, m_text_draw_colour, lbDisplayEx.ShadowColour, m_text_draw_flags);
+                LbDrawCharUnderline(x, y, w, h, m_text_draw_colour, m_text_shadow_colour, m_text_draw_flags);
             }
             x += w;
         }
@@ -686,7 +686,7 @@ void SoftwareTextRenderer::PutDownDbcSprites(const char* sbuf, const char* ebuf,
                 if ((m_text_draw_flags & Lb_TEXT_UNDERLINE) != 0)
                 {
                     int32_t h = adraw.bits_height;
-                    LbDrawCharUnderline(x, y, w, h, colour, lbDisplayEx.ShadowColour, m_text_draw_flags);
+                    LbDrawCharUnderline(x, y, w, h, colour, m_text_shadow_colour, m_text_draw_flags);
                 }
                 x += w;
                 if (x >= awind.width)
@@ -728,7 +728,7 @@ void SoftwareTextRenderer::PutDownDbcSpritesResized(const char* sbuf, const char
             if ((m_text_draw_flags & Lb_TEXT_UNDERLINE) != 0)
             {
                 int32_t h = static_cast<int32_t>(dbc_char_height(' ')) * units_per_px / 16;
-                LbDrawCharUnderline(x, y, w, h, m_text_draw_colour, lbDisplayEx.ShadowColour, m_text_draw_flags);
+                LbDrawCharUnderline(x, y, w, h, m_text_draw_colour, m_text_shadow_colour, m_text_draw_flags);
             }
             x += w;
         }
@@ -738,7 +738,7 @@ void SoftwareTextRenderer::PutDownDbcSpritesResized(const char* sbuf, const char
             if ((m_text_draw_flags & Lb_TEXT_UNDERLINE) != 0)
             {
                 int32_t h = static_cast<int32_t>(dbc_char_height(' ')) * units_per_px / 16;
-                LbDrawCharUnderline(x, y, w, h, m_text_draw_colour, lbDisplayEx.ShadowColour, m_text_draw_flags);
+                LbDrawCharUnderline(x, y, w, h, m_text_draw_colour, m_text_shadow_colour, m_text_draw_flags);
             }
             x += w;
         }
@@ -802,7 +802,7 @@ void SoftwareTextRenderer::PutDownDbcSpritesResized(const char* sbuf, const char
                 if ((m_text_draw_flags & Lb_TEXT_UNDERLINE) != 0)
                 {
                     int32_t h = adraw.bits_height * units_per_px / 16;
-                    LbDrawCharUnderline(x, y, w, h, colour, lbDisplayEx.ShadowColour, m_text_draw_flags);
+                    LbDrawCharUnderline(x, y, w, h, colour, m_text_shadow_colour, m_text_draw_flags);
                 }
                 x += w;
                 if (x >= awind.width)

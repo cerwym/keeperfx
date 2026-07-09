@@ -39,6 +39,8 @@ public:
     TbBool DrawTextAt(int32_t screen_x, int32_t screen_y, int32_t units_per_px, const char* text, TbDrawFlagsMask draw_flags) override;
     void   SetDrawColour(uint8_t colour) override { m_text_draw_colour = colour; }
     uint8_t GetDrawColour() const override        { return m_text_draw_colour; }
+    void   SetShadowColour(uint8_t colour) override { m_text_shadow_colour = colour; }
+    uint8_t GetShadowColour() const override        { return m_text_shadow_colour; }
 
     // ── Software IR executor ──────────────────────────────────────────────────
     /** Open/close the text IR write window (software deferral). When set, the
@@ -109,6 +111,7 @@ private:
     /**************************************************************************/
     unsigned int                m_text_draw_flags  = 0;
     unsigned char               m_text_draw_colour = 0;
+    unsigned char               m_text_shadow_colour = 0;
 
     /**************************************************************************/
     /* Text windows                                                           */

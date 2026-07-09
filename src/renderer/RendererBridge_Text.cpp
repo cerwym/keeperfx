@@ -82,6 +82,19 @@ unsigned char TextRenderer_GetDrawColour(void)
     return 0;
 }
 
+void TextRenderer_SetShadowColour(unsigned char colour)
+{
+    ITextRenderer* tr = RendererGetTextRenderer();
+    if (tr) tr->SetShadowColour(colour);
+}
+
+unsigned char TextRenderer_GetShadowColour(void)
+{
+    ITextRenderer* tr = RendererGetTextRenderer();
+    if (tr) return tr->GetShadowColour();
+    return 0;
+}
+
 void TextRenderer_Draw(void)
 {
     ITextRenderer* tr = RendererGetTextRenderer();

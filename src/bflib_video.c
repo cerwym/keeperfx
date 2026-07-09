@@ -544,7 +544,7 @@ TbResult LbScreenSetup(TbScreenMode mode, TbScreenCoord width, TbScreenCoord hei
     }
     lbHasSecondSurface = true;
 
-    lbDisplayEx.ShadowColour = 0;
+    lbDisplayEx.WhellPosition = 0;
     RendererSetPhysicalDimensions(mdinfo->Width, mdinfo->Height);
     lbScreenMode = mode;
     // The graphics screen size should be really taken after screen is locked, but it seem just getting in now will work too

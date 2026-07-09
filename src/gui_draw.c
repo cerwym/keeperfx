@@ -398,7 +398,7 @@ void draw_button_string(struct GuiButton *gbtn, int base_width, const char *text
           cursor_pos = input_field_pos;
         LbLocTextStringConcat(dtext, " ", TEXT_BUFFER_LENGTH);
         TextRenderer_SetDrawColour(LbTextGetFontFaceColor(TextRenderer_GetFont()));
-        lbDisplayEx.ShadowColour = LbTextGetFontBackColor(TextRenderer_GetFont());
+        TextRenderer_SetShadowColour(LbTextGetFontBackColor(TextRenderer_GetFont()));
     }
     TbBool low_res = ( (RendererGetScreenHeight() < 400) && (dbc_language > 0) );
     int width = gbtn->width;

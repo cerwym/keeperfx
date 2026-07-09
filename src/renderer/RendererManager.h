@@ -464,6 +464,13 @@ void TextRenderer_SetDrawColour(unsigned char colour);
 /** Return the current text draw colour. */
 unsigned char TextRenderer_GetDrawColour(void);
 
+/** Set the shadow colour for Lb_TEXT_UNDERLNSHADOW rendering.
+ *  Replaces the former lbDisplayEx.ShadowColour = x pattern. */
+void TextRenderer_SetShadowColour(unsigned char colour);
+
+/** Return the current text shadow colour. */
+unsigned char TextRenderer_GetShadowColour(void);
+
 /** Height of one line of text in the current font (unscaled). */
 int32_t TextRenderer_LineHeight(void);
 

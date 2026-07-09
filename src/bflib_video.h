@@ -153,13 +153,11 @@ struct ScreenModeInfo {
 };
 typedef struct ScreenModeInfo TbScreenModeInfo;
 
-/** Extended display state (mouse wheel, shadow colour). */
+/** Extended display state (mouse wheel position and movement). */
 struct DisplayStructEx {
     short WhellPosition;
     ushort WhellMoveUp;
     ushort WhellMoveDown;
-    /** Colour index used for drawing shadow. */
-    uchar ShadowColour;
 };
 typedef struct DisplayStructEx TbDisplayStructEx;
 

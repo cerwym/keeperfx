@@ -966,7 +966,7 @@ void GLTextRenderer::AppendUnderlineRects(float x0, float x1, float screen_y, fl
     if ((m_text_draw_flags & Lb_TEXT_UNDERLNSHADOW) != 0)
     {
         float sx = (line_h > 2.0f * DUB) ? 2.0f : 1.0f;
-        float pi  = (float)(unsigned char)lbDisplayEx.ShadowColour;
+        float pi  = (float)(unsigned char)m_text_shadow_colour;
         AppendUnderlineRect(x0 + sx, x1 + sx, screen_y + h, screen_y + h + 1.0f, pi);
         h -= 1.0f;
         if (line_h > DUB) {

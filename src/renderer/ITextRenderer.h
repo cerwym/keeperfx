@@ -101,6 +101,13 @@ public:
     /** Return the current draw colour. */
     virtual uint8_t GetDrawColour() const = 0;
 
+    /** Set the shadow/underline colour used for Lb_TEXT_UNDERLNSHADOW rendering.
+     *  Replaces the former lbDisplayEx.ShadowColour ambient global. */
+    virtual void SetShadowColour(uint8_t colour) = 0;
+
+    /** Return the current shadow colour. */
+    virtual uint8_t GetShadowColour() const = 0;
+
     /** Draw all deferred text to the framebuffer.
      *  Called at end-of-frame after the staging-buffer blit.
      *  Software backends may leave this as a no-op. */
