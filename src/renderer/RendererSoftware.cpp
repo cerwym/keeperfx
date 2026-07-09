@@ -488,7 +488,6 @@ void RendererSoftware::DrawSwipeOverlay(struct TbSpriteSheet* sprites, int frame
 
     if (draw_lr)
     {
-        lbDisplay.DrawFlags = Lb_SPRITE_TRANSPAR4;
         int delta_y = sprlist[1].SHeight;
         for (int i = 0; i < SPRITES_X * SPRITES_Y; i += SPRITES_X)
         {
@@ -496,7 +495,7 @@ void RendererSoftware::DrawSwipeOverlay(struct TbSpriteSheet* sprites, int frame
             int scrpos_x = ((m_screenW + (2 * engine_window_x)) * 16 / units_per_px - allwidth) / 2;
             for (int n = 0; n < SPRITES_X; n++)
             {
-                LbSpriteDrawResized(scrpos_x * units_per_px / 16, scrpos_y * units_per_px / 16, units_per_px, spr, lbDisplay.DrawFlags);
+                LbSpriteDrawResized(scrpos_x * units_per_px / 16, scrpos_y * units_per_px / 16, units_per_px, spr, Lb_SPRITE_TRANSPAR4);
                 scrpos_x += spr->SWidth;
                 spr++;
             }
@@ -505,7 +504,6 @@ void RendererSoftware::DrawSwipeOverlay(struct TbSpriteSheet* sprites, int frame
     }
     else
     {
-        lbDisplay.DrawFlags = Lb_SPRITE_TRANSPAR4 | Lb_SPRITE_FLIP_HORIZ;
         for (int i = 0; i < SPRITES_X * SPRITES_Y; i += SPRITES_X)
         {
             const struct TbSprite* spr = &sprlist[SPRITES_X + i];
@@ -513,14 +511,13 @@ void RendererSoftware::DrawSwipeOverlay(struct TbSpriteSheet* sprites, int frame
             int scrpos_x = (m_screenW * 16 / units_per_px - allwidth) / 2;
             for (int n = 0; n < SPRITES_X; n++)
             {
-                LbSpriteDrawResized(scrpos_x * units_per_px / 16, scrpos_y * units_per_px / 16, units_per_px, spr, lbDisplay.DrawFlags);
+                LbSpriteDrawResized(scrpos_x * units_per_px / 16, scrpos_y * units_per_px / 16, units_per_px, spr, Lb_SPRITE_TRANSPAR4 | Lb_SPRITE_FLIP_HORIZ);
                 scrpos_x += spr->SWidth;
                 spr--;
             }
             scrpos_y += delta_y;
         }
     }
-    lbDisplay.DrawFlags = 0;
 }
 
 void RendererSoftware::BeginLensCapture()

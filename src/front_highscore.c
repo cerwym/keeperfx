@@ -436,16 +436,16 @@ void frontend_draw_highscores_scroll_box_tab(struct GuiButton *gbtn)
     // Since this tab is attachable from top, it is important to keep bottom position without variation
     int pos_y = gbtn->scr_pos_y + gbtn->height - spr->SHeight * fs_units_per_px / 16;
     spr = get_frontend_sprite(GFS_hugearea_thc_cor_tl);
-    LbSpriteDrawResized(pos_x, pos_y, fs_units_per_px, spr, lbDisplay.DrawFlags);
+    LbSpriteDrawResized(pos_x, pos_y, fs_units_per_px, spr, 0);
     pos_x += spr->SWidth * fs_units_per_px / 16;
     spr = get_frontend_sprite(GFS_hugearea_thc_tx1_tc);
     for (int i = 3; i > 0; i--)
     {
-        LbSpriteDrawResized(pos_x, pos_y, fs_units_per_px, spr, lbDisplay.DrawFlags);
+        LbSpriteDrawResized(pos_x, pos_y, fs_units_per_px, spr, 0);
         pos_x += spr->SWidth * fs_units_per_px / 16;
     }
     spr = get_frontend_sprite(GFS_hugearea_thc_cor_tr);
-    LbSpriteDrawResized(pos_x, pos_y, fs_units_per_px, spr, lbDisplay.DrawFlags);
+    LbSpriteDrawResized(pos_x, pos_y, fs_units_per_px, spr, 0);
 }
 
 void frontend_draw_high_scores_mappack(struct GuiButton *gbtn)
