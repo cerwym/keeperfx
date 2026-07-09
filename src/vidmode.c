@@ -628,7 +628,6 @@ TbScreenMode setup_screen_mode(TbScreenMode nmode, TbBool failsafe)
   }
   TbBool hi_res = ((RendererScreenHeight() < 400) ? false : true);
   long lens_mem = game.applied_lens_type;
-  unsigned int flg_mem = lbDisplay.DrawFlags;
   TbBool was_minimal_res = (MinimalResolutionSetup || force_video_mode_reset);
   set_pointer_graphic_none();
   if (RendererScreenHeight() < 200)
@@ -702,7 +701,6 @@ TbScreenMode setup_screen_mode(TbScreenMode nmode, TbBool failsafe)
   if (parchment_loaded)
     reload_parchment_file(hi_res);
   reinitialise_eye_lens(lens_mem);
-  lbDisplay.DrawFlags = flg_mem;
   setup_heap_manager();
   force_video_mode_reset = false;
   SYNCDBG(8,"Finished");
@@ -817,7 +815,6 @@ TbScreenMode setup_screen_mode_minimal(TbScreenMode nmode)
     }
   }
   TbBool hi_res = ((RendererScreenHeight() < 400) ? false : true);
-  TbDrawFlagsMask flg_mem = lbDisplay.DrawFlags;
   if (RendererScreenHeight() < 200)
   {
     WARNLOG("Unhandled previous Screen Mode %d, Reset skipped",(int)old_mode);
@@ -881,7 +878,6 @@ TbScreenMode setup_screen_mode_minimal(TbScreenMode nmode)
   RendererClearScreen(0);
   RendererPresentFrame();
   update_screen_mode_data(new_mdinfo->Width, new_mdinfo->Height);
-  lbDisplay.DrawFlags = flg_mem;
   force_video_mode_reset = false;
   return nmode;
 }

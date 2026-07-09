@@ -440,7 +440,7 @@ void RendererSoftware::SubmitZoomBoxTiles(const uint16_t* tile_block_ids, int ti
 {
     if (!tile_block_ids || tiles_x <= 0 || tiles_y <= 0) return;
 
-    lbDisplay.DrawFlags = 0;
+    TbDrawFlagsMask tile_flags = 0;
     setup_vecs(RendererGetWScreen(), NULL, (unsigned int)RendererScreenWidth(),
                (unsigned int)RendererScreenWidth(), (unsigned int)RendererScreenHeight());
 
@@ -454,15 +454,13 @@ void RendererSoftware::SubmitZoomBoxTiles(const uint16_t* tile_block_ids, int ti
             if (block != 0xFFFF)
                 draw_texture(scr_x, scr_y, tile_w, tile_h, block, 0, -1);
             else
-                LbDrawBox(scr_x, scr_y, tile_w, tile_h, 1, lbDisplay.DrawFlags);
+                LbDrawBox(scr_x, scr_y, tile_w, tile_h, 1, tile_flags);
             scr_x += tile_w;
         }
         scr_y += tile_h;
     }
 
-    lbDisplay.DrawFlags |= Lb_SPRITE_OUTLINE;
-    LbDrawBox(dst_x, dst_y, tiles_x * tile_w, tiles_y * tile_h, 0, lbDisplay.DrawFlags);
-    lbDisplay.DrawFlags &= ~Lb_SPRITE_OUTLINE;
+    LbDrawBox(dst_x, dst_y, tiles_x * tile_w, tiles_y * tile_h, 0, tile_flags | Lb_SPRITE_OUTLINE);
 }
 
 void RendererSoftware::DrawSwipeOverlay(struct TbSpriteSheet* sprites, int frame,

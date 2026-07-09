@@ -5077,9 +5077,7 @@ static void draw_engine_number(struct BucketKindFloatingGoldText *num)
     // 1st argument: the scale when fully zoomed out. 2nd argument: the scale at base level zoom
     float scale_by_zoom = LbLerp(0.15, 1.00, hud_scale);
 
-    flg_mem = lbDisplay.DrawFlags;
     player = get_my_player();
-    lbDisplay.DrawFlags &= ~Lb_SPRITE_FLIP_HORIZ;
     spr = get_button_sprite(GBS_fontchars_number_dig0);
     w = scale_ui_value(spr->SWidth) * scale_by_zoom;
     h = scale_ui_value(spr->SHeight) * scale_by_zoom;
@@ -5090,12 +5088,10 @@ static void draw_engine_number(struct BucketKindFloatingGoldText *num)
     ) {
         UIRenderer_SubmitDigitSprites(num->x, num->y - h, w, h, num->lvl);
     }
-    lbDisplay.DrawFlags = flg_mem;
 }
 
 static void draw_engine_room_flagpole(struct BucketKindRoomFlag *rflg)
 {
-    lbDisplay.DrawFlags &= ~Lb_SPRITE_FLIP_HORIZ;
 
     struct Room *room = room_get(rflg->lvl);
     if (!room_exists(room) || !room_can_have_ensign(room->kind)) {
@@ -5171,7 +5167,6 @@ void fill_status_sprite_indexes(struct Thing *thing, struct CreatureControl *cct
     (*health_spridx) = choose_health_sprite(thing);
     if (is_my_player_number(thing->owner))
     {
-        lbDisplay.DrawFlags |= Lb_SPRITE_TRANSPAR4;
         if (get_gameturn() - cctrl->thought_bubble_last_turn_drawn == 1)
         {
             if (cctrl->thought_bubble_display_timer < 40) {
@@ -5286,16 +5281,11 @@ void draw_status_sprites(long scrpos_x, long scrpos_y, struct Thing *thing)
         return; // Do not draw if camera is 1st person.
     }
 
-    unsigned short flg_mem;
-
-    flg_mem = lbDisplay.DrawFlags;
-    lbDisplay.DrawFlags = 0;
 
     struct CreatureControl *cctrl;
     cctrl = creature_control_get_from_thing(thing);
     if ((cctrl->force_health_flower_hidden == true) || flag_is_set(get_creature_model_flags(thing), CMF_NoHealthFlower)) {
-        lbDisplay.DrawFlags = flg_mem;
-        return;
+            return;
     }
     if (flag_is_set(game.mode_flags,MFlg_NoHeroHealthFlower))
     {
@@ -5346,8 +5336,6 @@ void draw_status_sprites(long scrpos_x, long scrpos_y, struct Thing *thing)
         UIRenderer_SubmitScaledSprite(scrpos_x - w / 2, scrpos_y - h, w, h, spr);
     }
 
-    lbDisplay.DrawFlags &= ~Lb_SPRITE_TRANSPAR8;
-    lbDisplay.DrawFlags &= ~Lb_SPRITE_TRANSPAR4;
     if (((get_gameturn() % (8 * gui_blink_rate)) < 4 * gui_blink_rate) && (anger_spridx > 0))
     {
         spr = get_button_sprite(anger_spridx);
@@ -5434,7 +5422,6 @@ void draw_status_sprites(long scrpos_x, long scrpos_y, struct Thing *thing)
             UIRenderer_SubmitScaledSprite(scrpos_x - w / 2, scrpos_y - h - h_add, w, h, spr);
         }
     }
-    lbDisplay.DrawFlags = flg_mem;
 }
 
 static void draw_iso_only_fastview_mapwho(struct Camera *cam, struct BucketKindJontySprite *spr)
@@ -5446,8 +5433,6 @@ static void draw_iso_only_fastview_mapwho(struct Camera *cam, struct BucketKindJ
 #define ROOM_FLAG_PROGRESS_BAR_WIDTH 10
 static void draw_room_flag_top(long x, long y, int units_per_px, const struct Room *room)
 {
-    unsigned long flg_mem;
-    flg_mem = lbDisplay.DrawFlags;
     int bar_fill;
     int bar_empty;
     const struct TbSprite *spr;
@@ -5497,13 +5482,11 @@ static void draw_room_flag_top(long x, long y, int units_per_px, const struct Ro
     }
     bar_width = (2 * bar_empty * units_per_px + 8) / 16;
     UIRenderer_SubmitSolidBox(barpos_x - bar_width, y + (24 * units_per_px + 8) / 16, bar_width, bar_height, colours[0][0][0]);
-    lbDisplay.DrawFlags = flg_mem;
 }
 #undef ROOM_FLAG_PROGRESS_BAR_WIDTH
 
 static void draw_engine_room_flag_top(struct BucketKindRoomFlag *rflg)
 {
-    lbDisplay.DrawFlags &= ~Lb_SPRITE_FLIP_HORIZ;
 
     struct Room *room = room_get(rflg->lvl);
     if (!room_exists(room) || !room_can_have_ensign(room->kind)) {
@@ -7756,7 +7739,7 @@ static long heap_manage_keepersprite(unsigned short kspr_idx)
     return result;
 }
 
-static void draw_keepersprite(long x, long y, const struct KeeperSprite * kspr, long kspr_idx)
+static void draw_keepersprite(long x, long y, const struct KeeperSprite * kspr, long kspr_idx, TbDrawFlagsMask draw_flags)
 {
     if ((kspr_idx < 0)
         || ((kspr_idx >= KEEPSPRITE_LENGTH) && (kspr_idx < KEEPERSPRITE_ADD_OFFSET))
@@ -7802,7 +7785,7 @@ static void draw_keepersprite(long x, long y, const struct KeeperSprite * kspr, 
         }
         // Fold EngineSpriteDrawUsingAlpha into draw_flags so the GPU path can
         // choose the correct blend (Lb_SPRITE_ALPHA_ADDITIVE = glow/fire additive).
-        unsigned int gpu_flags = lbDisplay.DrawFlags;
+        unsigned int gpu_flags = draw_flags;
         if (EngineSpriteDrawUsingAlpha) gpu_flags |= Lb_SPRITE_ALPHA_ADDITIVE;
         if (try_submit_keepersprite_to_render_system(screen_x, screen_y, screen_w, screen_h,
                                                      *sprite_data_ptr, kspr->SWidth, clipped_height,
@@ -7817,9 +7800,9 @@ static void draw_keepersprite(long x, long y, const struct KeeperSprite * kspr, 
         kspr->SWidth,
     };
     if ( EngineSpriteDrawUsingAlpha ) {
-        DrawAlphaSpriteUsingScalingData(x, y, &buffer, lbDisplay.DrawFlags);
+        DrawAlphaSpriteUsingScalingData(x, y, &buffer, draw_flags);
     } else {
-        LbSpriteDrawUsingScalingData(x, y, &buffer, lbDisplay.DrawFlags);
+        LbSpriteDrawUsingScalingData(x, y, &buffer, draw_flags);
     }
     SYNCDBG(18,"Finished");
 }
@@ -7831,7 +7814,7 @@ static void set_thing_pointed_at(struct Thing *thing)
     }
 }
 
-static void draw_single_keepersprite_omni_xflip(long kspos_x, long kspos_y, struct KeeperSprite *kspr, long kspr_idx, long scale)
+static void draw_single_keepersprite_omni_xflip(long kspos_x, long kspos_y, struct KeeperSprite *kspr, long kspr_idx, long scale, TbDrawFlagsMask draw_flags)
 {
     long src_dy = (long)kspr->FrameHeight;
     long src_dx = (long)kspr->FrameWidth;
@@ -7850,10 +7833,10 @@ static void draw_single_keepersprite_omni_xflip(long kspos_x, long kspos_y, stru
           }
       }
     }
-    draw_keepersprite(x, y, kspr, kspr_idx);
+    draw_keepersprite(x, y, kspr, kspr_idx, draw_flags);
 }
 
-static void draw_single_keepersprite_omni(long kspos_x, long kspos_y, struct KeeperSprite *kspr, long kspr_idx, long scale)
+static void draw_single_keepersprite_omni(long kspos_x, long kspos_y, struct KeeperSprite *kspr, long kspr_idx, long scale, TbDrawFlagsMask draw_flags)
 {
     long src_dy = (long)kspr->FrameHeight;
     long src_dx = (long)kspr->FrameWidth;
@@ -7872,10 +7855,10 @@ static void draw_single_keepersprite_omni(long kspos_x, long kspos_y, struct Kee
           }
       }
     }
-    draw_keepersprite(x, y, kspr, kspr_idx);
+    draw_keepersprite(x, y, kspr, kspr_idx, draw_flags);
 }
 
-static void draw_single_keepersprite_xflip(long kspos_x, long kspos_y, struct KeeperSprite *kspr, long kspr_idx, long scale)
+static void draw_single_keepersprite_xflip(long kspos_x, long kspos_y, struct KeeperSprite *kspr, long kspr_idx, long scale, TbDrawFlagsMask draw_flags)
 {
     SYNCDBG(18,"Starting");
     long src_dy = (long)kspr->SHeight;
@@ -7897,11 +7880,11 @@ static void draw_single_keepersprite_xflip(long kspos_x, long kspos_y, struct Ke
           }
       }
     }
-    draw_keepersprite(0, 0, kspr, kspr_idx);
+    draw_keepersprite(0, 0, kspr, kspr_idx, draw_flags);
     SYNCDBG(18,"Finished");
 }
 
-static void draw_single_keepersprite(long kspos_x, long kspos_y, struct KeeperSprite *kspr, long kspr_idx, long scale)
+static void draw_single_keepersprite(long kspos_x, long kspos_y, struct KeeperSprite *kspr, long kspr_idx, long scale, TbDrawFlagsMask draw_flags)
 {
     SYNCDBG(18,"Starting");
     long src_dy = (long)kspr->SHeight;
@@ -7923,7 +7906,7 @@ static void draw_single_keepersprite(long kspos_x, long kspos_y, struct KeeperSp
             }
         }
     }
-    draw_keepersprite(0, 0, kspr, kspr_idx);
+    draw_keepersprite(0, 0, kspr, kspr_idx, draw_flags);
     SYNCDBG(18,"Finished");
 }
 
@@ -7966,10 +7949,11 @@ void process_keeper_sprite(short x, short y, unsigned short kspr_base, short ksp
     else
         needs_xflip = 1;
 
+    TbDrawFlagsMask work_flags;
     if ( needs_xflip )
-      lbDisplay.DrawFlags = draw_flags | Lb_SPRITE_FLIP_HORIZ;
+      work_flags = draw_flags | Lb_SPRITE_FLIP_HORIZ;
     else
-      lbDisplay.DrawFlags = draw_flags & ~Lb_SPRITE_FLIP_HORIZ;
+      work_flags = draw_flags & ~Lb_SPRITE_FLIP_HORIZ;
     EngineSpriteDrawUsingAlpha = alpha;
     sprite_group = sprgroup;
     lltemp = 4 - ((((long)kspr_angle + DEGREES_22_5) & ANGLE_MASK) >> 8);
@@ -8030,10 +8014,10 @@ void process_keeper_sprite(short x, short y, unsigned short kspr_base, short ksp
         draw_idx = sprite_group + kspr_idx;
         if ( needs_xflip )
         {
-            draw_single_keepersprite_omni_xflip(scaled_x, scaled_y, kspr, draw_idx, scale);
+            draw_single_keepersprite_omni_xflip(scaled_x, scaled_y, kspr, draw_idx, scale, work_flags);
         } else
         {
-            draw_single_keepersprite_omni(scaled_x, scaled_y, kspr, draw_idx, scale);
+            draw_single_keepersprite_omni(scaled_x, scaled_y, kspr, draw_idx, scale, work_flags);
         }
     } else
     if (creature_sprites->Rotable == 2)
@@ -8046,15 +8030,15 @@ void process_keeper_sprite(short x, short y, unsigned short kspr_base, short ksp
         draw_idx = sprite_group + sprite_rot * (long)kspr->FramesCount + kspr_idx;
         if ( needs_xflip )
         {
-            draw_single_keepersprite_xflip(scaled_x, scaled_y, kspr, draw_idx, scale);
+            draw_single_keepersprite_xflip(scaled_x, scaled_y, kspr, draw_idx, scale, work_flags);
         } else
         {
-            draw_single_keepersprite(scaled_x, scaled_y, kspr, draw_idx, scale);
+            draw_single_keepersprite(scaled_x, scaled_y, kspr, draw_idx, scale, work_flags);
         }
     }
 }
 
-static void prepare_jonty_remap_and_scale(int32_t *scale, const struct BucketKindJontySprite *jspr)
+static TbDrawFlagsMask prepare_jonty_remap_and_scale(int32_t *scale, const struct BucketKindJontySprite *jspr)
 {
     long i;
     struct Thing *thing;
@@ -8105,20 +8089,22 @@ static void prepare_jonty_remap_and_scale(int32_t *scale, const struct BucketKin
 
     shade_factor = shade >> 8;
     *scale = (thelens * (long)thing->sprite_size) / fade;
+    TbDrawFlagsMask flags = 0;
     if ((thing->rendering_flags & (TRF_Tint_1|TRF_Tint_2)) != 0)
     {
-        lbDisplay.DrawFlags |= Lb_TEXT_UNDERLNSHADOW;
+        flags |= Lb_TEXT_UNDERLNSHADOW;
         shade_factor = thing->tint_colour;
         lbSpriteReMapPtr = &pixmap.ghost[256 * shade_factor];
     } else
     if (shade_factor == 32)
     {
-        lbDisplay.DrawFlags &= ~Lb_TEXT_UNDERLNSHADOW;
+        /* no UNDERLNSHADOW — fully lit */
     } else
     {
-        lbDisplay.DrawFlags |= Lb_TEXT_UNDERLNSHADOW;
+        flags |= Lb_TEXT_UNDERLNSHADOW;
         lbSpriteReMapPtr = &pixmap.fade_tables[256 * shade_factor];
     }
+    return flags;
 }
 
 static void draw_mapwho_ariadne_path(struct Thing *thing)
@@ -8165,7 +8151,7 @@ static void draw_jonty_mapwho(struct BucketKindJontySprite *jspr)
     long angle;
     int32_t scaled_size;
     struct ObjectConfigStats* objst;
-    TbDrawFlagsMask work_flags = 0;
+    TbDrawFlagsMask work_flags;
     unsigned char work_alpha = 0;
     animation_sprite = get_render_animation_sprite(thing->anim_sprite);
     current_frame = thing->current_frame;
@@ -8176,7 +8162,7 @@ static void draw_jonty_mapwho(struct BucketKindJontySprite *jspr)
     }
     else
       angle = thing->move_angle_xy;
-    prepare_jonty_remap_and_scale(&scaled_size, jspr);
+    work_flags = prepare_jonty_remap_and_scale(&scaled_size, jspr);
     switch (thing->rendering_flags & (TRF_Transpar_Flags))
     {
     case TRF_Transpar_8:

@@ -155,9 +155,6 @@ struct ScreenModeInfo {
 typedef struct ScreenModeInfo TbScreenModeInfo;
 
 struct DisplayStruct {
-        TbDrawFlagsMask DrawFlags;
-        /** Selected drawing colour index. */
-        uchar DrawColour;
         /** Currently active colour palette.
          *  LbPaletteGet() should be used to retrieve a copy of the palette. */
         uchar *Palette;

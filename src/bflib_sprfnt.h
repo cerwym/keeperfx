@@ -362,7 +362,7 @@ extern struct AsianFont *active_dbcfont;
 #pragma pack()
 /******************************************************************************/
 TbBool LbTextDraw(int posx, int posy, const char *text, TbDrawFlagsMask draw_flags);
-#define LbTextDrawFmt(posx, posy, fmt, ...) LbTextDrawResizedFmt(posx, posy, 16, lbDisplay.DrawFlags, fmt, ##__VA_ARGS__)
+#define LbTextDrawFmt(posx, posy, fmt, ...) LbTextDrawResizedFmt(posx, posy, 16, 0, fmt, ##__VA_ARGS__)
 TbBool LbTextDrawResized(int posx, int posy, int units_per_px, const char *text, TbDrawFlagsMask draw_flags);
 TbBool LbTextDrawResizedFmt(int posx, int posy, int units_per_px, TbDrawFlagsMask draw_flags, const char *fmt, ...);
 int LbTextHeight(const char *text);

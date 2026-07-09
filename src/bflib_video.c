@@ -546,7 +546,6 @@ TbResult LbScreenSetup(TbScreenMode mode, TbScreenCoord width, TbScreenCoord hei
     }
     lbHasSecondSurface = true;
 
-    lbDisplay.DrawFlags = 0;
     lbDisplayEx.ShadowColour = 0;
     RendererSetPhysicalDimensions(mdinfo->Width, mdinfo->Height);
     lbScreenMode = mode;

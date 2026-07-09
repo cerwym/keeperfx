@@ -818,7 +818,6 @@ TbBool initial_setup(void)
     load_pointer_file(0);
     update_screen_mode_data(320, 200);
     clear_game();
-    lbDisplay.DrawFlags |= 0x4000u;
     return true;
 }
 
@@ -3039,11 +3038,7 @@ void engine(struct PlayerInfo *player, struct Camera *cam)
 {
     TbGraphicsWindow grwnd;
     TbGraphicsWindow ewnd;
-    unsigned short flg_mem;
-
     SYNCDBG(9,"Starting");
-
-    flg_mem = lbDisplay.DrawFlags;
     update_engine_settings(player);
     mx = cam->mappos.x.val;
     my = cam->mappos.y.val;
@@ -3062,7 +3057,6 @@ void engine(struct PlayerInfo *player, struct Camera *cam)
     UIRenderer_SetGameViewport(ewnd.x, ewnd.y, ewnd.width, ewnd.height);
     camera_zoom = scale_camera_zoom_to_screen(cam->zoom);
     draw_view(cam, 0);
-    lbDisplay.DrawFlags = flg_mem;
     thing_being_displayed = 0;
     RendererLoadViewport(&grwnd);
 }
