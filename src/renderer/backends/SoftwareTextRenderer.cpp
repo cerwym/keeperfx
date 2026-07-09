@@ -399,7 +399,7 @@ void SoftwareTextRenderer::AppendTextCmd(int32_t x, int32_t y, int32_t units_per
     cmd.units_per_px = units_per_px;
     cmd.absolute     = absolute ? 1 : 0;
     cmd.draw_colour  = lbDisplay.DrawColour;
-    cmd.draw_flags   = (uint16_t)lbDisplay.DrawFlags;
+    cmd.draw_flags   = lbDisplay.DrawFlags;
     cmd.justify_x    = m_justify_window.x;
     cmd.justify_y    = m_justify_window.y;
     cmd.justify_w    = m_justify_window.width;

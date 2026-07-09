@@ -34,7 +34,7 @@ struct IRTextDrawCmd
     int32_t  units_per_px   = 16;    /**< 16 = 100% scale. */
     uint8_t  absolute       = 0;     /**< 1 = DrawTextAt (no window/wrap). */
     uint8_t  draw_colour    = 0;     /**< Snapshot of lbDisplay.DrawColour. */
-    uint16_t draw_flags     = 0;     /**< Snapshot of lbDisplay.DrawFlags. */
+    uint32_t draw_flags     = 0;     /**< Snapshot of lbDisplay.DrawFlags (TbDrawFlagsMask). */
 
     /* Window / clipping state snapshot (for Resized path). */
     int32_t  justify_x      = 0;

@@ -23,6 +23,7 @@
 #include "bflib_basics.h"
 
 #include "globals.h"
+#include "renderer/DrawState.h"  // TbDrawFlagsMask
 
 #ifdef __cplusplus
 extern "C" {
@@ -154,7 +155,7 @@ struct ScreenModeInfo {
 typedef struct ScreenModeInfo TbScreenModeInfo;
 
 struct DisplayStruct {
-        ushort DrawFlags;
+        TbDrawFlagsMask DrawFlags;
         /** Selected drawing colour index. */
         uchar DrawColour;
         /** Currently active colour palette.

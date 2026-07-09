@@ -101,7 +101,7 @@ private:
         int wnd_x, wnd_y, wnd_width;        // lbTextJustifyWindow captured at queue time
         int clip_x, clip_y, clip_w, clip_h; // lbTextClipWindow captured at queue time
         unsigned char  draw_colour;         // lbDisplay.DrawColour at queue time
-        unsigned short draw_flags;          // lbDisplay.DrawFlags  at queue time
+        uint32_t       draw_flags;          // lbDisplay.DrawFlags  at queue time
         std::string text;
         const struct TbSpriteSheet* font;   // Active font captured at call time
         const struct AsianFont* dbc_font;   // DBC font (nullptr when DBC off)
@@ -145,7 +145,7 @@ private:
     // Per-draw draw-state: set in Draw() before each TextLayout call, mutated
     // in-place by FlushSegment control codes.  Replaces the lbDisplay.DrawFlags/
     // DrawColour save/restore pattern — no global writes during rendering.
-    uint16_t         m_text_draw_flags  = 0;
+    uint32_t         m_text_draw_flags  = 0;
     uint8_t          m_text_draw_colour = 0;
     
     // Shader uniform locations

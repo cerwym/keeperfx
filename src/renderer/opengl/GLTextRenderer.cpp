@@ -569,7 +569,7 @@ void GLTextRenderer::Draw()
 
     // Save globals that FlushSegment control codes will overwrite
     unsigned char               saved_colour     = m_text_draw_colour;
-    unsigned short              saved_draw_flags = m_text_draw_flags;
+    TbDrawFlagsMask             saved_draw_flags = m_text_draw_flags;
 
     // CRITICAL FIX: Sort pending draws by font pointer to minimize atlas rebinding.
     // Main menu uses 3 different fonts (36BC0DC8, 36BC0E18, 36BC1368) and without

@@ -39,7 +39,7 @@
 typedef struct {
     struct TbSpriteSheet** font_ptr; /* &winfont, &frontend_font[N], etc. */
     int           ups_pct;           /* 100 = base size, 125 = 25% larger  */
-    unsigned short draw_flags;
+    TbDrawFlagsMask draw_flags;
 } RendMenuTextStyle;
 
 /* Roles — add new ones here as the menu grows */
@@ -470,7 +470,7 @@ void RendMenu_Draw(void)
     const struct TbSpriteSheet* save_font = TextRenderer_GetFont();
     int save_cx, save_cy, save_cw, save_ch;
     int save_jx, save_jy, save_jw;
-    unsigned short save_draw_flags = lbDisplay.DrawFlags;
+    TbDrawFlagsMask save_draw_flags = lbDisplay.DrawFlags;
     LbTextGetClipWindow(&save_cx, &save_cy, &save_cw, &save_ch);
     LbTextGetJustifyWindow(&save_jx, &save_jy, &save_jw);
 

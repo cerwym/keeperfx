@@ -817,7 +817,7 @@ TbScreenMode setup_screen_mode_minimal(TbScreenMode nmode)
     }
   }
   TbBool hi_res = ((RendererScreenHeight() < 400) ? false : true);
-  ushort flg_mem = lbDisplay.DrawFlags;
+  TbDrawFlagsMask flg_mem = lbDisplay.DrawFlags;
   if (RendererScreenHeight() < 200)
   {
     WARNLOG("Unhandled previous Screen Mode %d, Reset skipped",(int)old_mode);
