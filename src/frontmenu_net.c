@@ -232,7 +232,7 @@ void frontnet_draw_net_session_players(struct GuiButton *gbtn)
         i = height - spr->SHeight * fs_units_per_px / 16;
         LbSpriteDrawResized(gbtn->scr_pos_x, gbtn->scr_pos_y + shift_y + abs(i)/2, fs_units_per_px, spr);
         LbTextSetWindow(gbtn->scr_pos_x, shift_y + gbtn->scr_pos_y, gbtn->width - spr->SWidth * fs_units_per_px / 16, height);
-        LbTextDrawResized(spr->SWidth * fs_units_per_px / 16, 0, tx_units_per_px, text, lbDisplay.DrawFlags);
+        LbTextDrawResized(spr->SWidth * fs_units_per_px / 16, 0, tx_units_per_px, text, 0);
     }
 }
 
@@ -383,7 +383,7 @@ void frontnet_draw_net_start_players(struct GuiButton *gbtn)
         }
 
         LbTextSetWindow(gbtn->scr_pos_x + spr->SWidth * fs_units_per_px / 16, gbtn->scr_pos_y + shift_y, gbtn->width - spr->SWidth * fs_units_per_px / 16, height);
-        LbTextDrawResized(0, 0, tx_units_per_px, player_text, lbDisplay.DrawFlags);
+        LbTextDrawResized(0, 0, tx_units_per_px, player_text, 0);
     }
 }
 
@@ -534,12 +534,11 @@ void frontnet_draw_scroll_selection_box(struct GuiButton *gbtn, long font_idx, c
     if (text != NULL)
     {
         LbTextSetFont(frontend_font[font_idx]);
-        lbDisplay.DrawFlags = 0;
         int tx_units_per_px;
         tx_units_per_px = (gbtn->height*13/14) * 16 / LbTextLineHeight();
         height = LbTextLineHeight() * tx_units_per_px / 16;
         LbTextSetWindow(gbtn->scr_pos_x + 13*fs_units_per_px/16, gbtn->scr_pos_y, gbtn->width - 26*fs_units_per_px/16, height);
-        LbTextDrawResized(0, 0, tx_units_per_px, text, lbDisplay.DrawFlags);
+        LbTextDrawResized(0, 0, tx_units_per_px, text, 0);
     }
 }
 
@@ -576,7 +575,6 @@ void frontnet_draw_messages(struct GuiButton *gbtn)
     int font_idx;
     font_idx = frontend_button_caption_font(gbtn, 0);
     LbTextSetFont(frontend_font[font_idx]);
-    lbDisplay.DrawFlags = 0;
     // While setting scale, aim for 4 lines of text
     int tx_units_per_px;
     tx_units_per_px = gbtn->height * 16 / (4*LbTextLineHeight());
@@ -610,7 +608,7 @@ void frontnet_draw_messages(struct GuiButton *gbtn)
         LbSpriteDrawResized(gbtn->scr_pos_x, y + gbtn->scr_pos_y + (i >> 1), fs_units_per_px, spr);
 
         LbTextSetWindow(gbtn->scr_pos_x, y + gbtn->scr_pos_y, gbtn->width, min(font_height, gbtn->height-y));
-        LbTextDrawResized(spr->SWidth * fs_units_per_px / 16, 0, tx_units_per_px, nmsg->text, lbDisplay.DrawFlags);
+        LbTextDrawResized(spr->SWidth * fs_units_per_px / 16, 0, tx_units_per_px, nmsg->text, 0);
 
         y += font_height;
     }
@@ -682,14 +680,13 @@ void frontnet_draw_service_button(struct GuiButton *gbtn)
   int font_idx;
   font_idx = frontend_button_caption_font(gbtn,frontend_mouse_over_button);
   LbTextSetFont(frontend_font[font_idx]);
-  lbDisplay.DrawFlags = Lb_TEXT_HALIGN_LEFT;
   // Set drawing window and draw the text
   int tx_units_per_px;
   tx_units_per_px = gbtn->height * 16 / LbTextLineHeight();
   int height;
   height = LbTextLineHeight() * tx_units_per_px / 16;
   LbTextSetWindow(gbtn->scr_pos_x, gbtn->scr_pos_y, gbtn->width, height);
-  LbTextDrawResized(0, 0, tx_units_per_px, net_service[srvidx], lbDisplay.DrawFlags);
+  LbTextDrawResized(0, 0, tx_units_per_px, net_service[srvidx], Lb_TEXT_HALIGN_LEFT);
 }
 
 void frontnet_service_select(struct GuiButton *gbtn)
