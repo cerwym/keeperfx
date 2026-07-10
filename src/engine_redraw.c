@@ -49,6 +49,7 @@
 #include "ui_init.h"
 #include "frontmenu_ingame_tabs.h"
 #include "kfx/engine/cameras.h"
+#include "kfx/imgui/DevTools.h"
 #include "kfx/ui/GameUI.h"
 #include "frontmenu_ingame_evnt.h"
 #include "frontmenu_ingame_map.h"
@@ -841,6 +842,11 @@ void process_pointer_graphic(void)
 {
     struct PlayerInfo* player = get_my_player();
     SYNCDBG(6,"Starting for view %d, player state %s, instance %d",(int)player->view_type,player_state_code_name(player->work_state),(int)player->instance_num);
+    if (KfxDevTools_WantCaptureMouse())
+    {
+        set_pointer_graphic(MousePG_Invisible);
+        return;
+    }
     switch (player->view_type)
     {
     case PVT_DungeonTop:
@@ -849,7 +855,7 @@ void process_pointer_graphic(void)
         break;
     case PVT_CreatureContrl:
     case PVT_CreaturePasngr:
-        if (cheat_menu_is_active() || a_menu_window_is_active())
+        if (a_menu_window_is_active())
           set_pointer_graphic(MousePG_Arrow);
         else
           set_pointer_graphic(MousePG_Invisible);
@@ -872,6 +878,9 @@ void process_pointer_graphic(void)
 void redraw_display(void)
 {
     SYNCDBG(5,"Starting");
+    // Service the debug creature-sprite cache on the game thread (safe file I/O
+    // + read-only config access). Cheap no-op unless the viewer requested a load.
+    KfxDevTools_ServiceGameThread();
     struct PlayerInfo* player = get_my_player();
     player->display_flags &= ~PlaF6_DisplayNeedsUpdate;
     if (game.game_kind == GKind_NonInteractiveState)

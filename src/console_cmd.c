@@ -73,6 +73,7 @@
 #include <math.h>
 #include "lua_base.h"
 #include "renderer/RendererManager.h"
+#include "kfx/imgui/DevTools.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -2846,40 +2847,16 @@ TbBool cmd_cheat_menu(PlayerNumber plyr_idx, char * args)
         return false;
     }
 
-    if (menu_type != 1)
+    if (menu_type == 0)
     {
-        close_main_cheat_menu();
-    }
-    if (menu_type != 2)
-    {
-        close_creature_cheat_menu();
-    }
-    if (menu_type != 3)
-    {
-        close_instance_cheat_menu();
-    }
-    if (menu_type != 4)
-    {
-        close_secondary_cheat_menu();
+        KfxDevTools_CloseCheatMenu();
+        return true;
     }
 
-    if (menu_type == 1)
-    {
-        toggle_main_cheat_menu();
+    KfxDevTools_SetCheatMenuSection(menu_type);
+    if (!KfxDevTools_IsCheatMenuVisible()) {
+        KfxDevTools_ToggleCheatMenu();
     }
-    else if (menu_type == 2)
-    {
-        toggle_creature_cheat_menu();
-    }
-    else if (menu_type == 3)
-    {
-        toggle_instance_cheat_menu();
-    }
-    else if (menu_type == 4)
-    {
-        toggle_secondary_cheat_menu();
-    }
-
     return true;
 }
 
@@ -3456,4 +3433,3 @@ static char get_door_number_for_command(char* msg)
 #ifdef __cplusplus
 }
 #endif
-

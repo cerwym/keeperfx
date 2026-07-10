@@ -77,6 +77,7 @@
 #include "map_blocks.h"
 #include "local_camera.h"
 #include "kfx/engine/cameras.h"
+#include "kfx/imgui/DevTools.h"
 #include "packets.h"
 #include "console_cmd.h"
 #include "engine_redraw.h"
@@ -1230,42 +1231,6 @@ static TbBool get_dungeon_control_pausable_action_inputs(void)
     {
         toggle_tooltips();
     }
-    if (is_game_key_pressed(Gkey_CheatMenu1, true, false))
-    {
-        if (!close_instance_cheat_menu())
-        {
-            toggle_main_cheat_menu();
-        }
-    }
-
-    if (is_game_key_pressed(Gkey_CheatMenu2, true, false))
-    {
-		if ( (player->continue_work_state == PSt_CreatrQuery) || (player->continue_work_state == PSt_QueryAll) )
-		{
-			struct Thing *creatng = thing_get(player->controlled_thing_idx);
-			if (thing_is_creature(creatng))
-			{
-				if (!close_secondary_cheat_menu()) // Note that we're using "close", not "toggle". Menu can't be opened here.
-				{
-					toggle_creature_cheat_menu();
-				}
-			}
-			else
-			{
-				if (!close_creature_cheat_menu())
-				{
-					toggle_secondary_cheat_menu();
-				}
-			}
-		}
-		else
-		{
-			if (!close_creature_cheat_menu()) // Note that we're using "close", not "toggle". Menu can't be opened here.
-			{
-				toggle_secondary_cheat_menu();
-			}
-		}
-    }
     if (player->view_mode == PVM_IsoWibbleView || player->view_mode == PVM_IsoStraightView)
     {
       if (is_key_pressed(KC_TAB, !KMod_CONTROL))
@@ -1645,20 +1610,6 @@ static short get_creature_control_action_inputs(void)
         return 1;
     if ( ((game.operation_flags & GOF_Paused) == 0) || ((game.operation_flags & GOF_WorldInfluence) != 0))
         get_gui_inputs(1);
-    if (is_game_key_pressed(Gkey_CheatMenu1, true, false))
-    {
-        if (!close_main_cheat_menu()) // Note that we're using "close", not "toggle". Menu can't be opened here.
-        {
-            toggle_instance_cheat_menu();
-        }
-    }
-    if (is_game_key_pressed(Gkey_CheatMenu2, true, false))
-    {
-        if (!close_secondary_cheat_menu()) // Note that we're using "close", not "toggle". Menu can't be opened here.
-		{
-			toggle_creature_cheat_menu();
-		}
-    }
     if (is_key_pressed(KC_ESCAPE, KMod_DONTCARE))
     {
         if (a_menu_window_is_active())
@@ -2147,10 +2098,6 @@ static short get_map_action_inputs(void)
       {
           toggle_tooltips();
       }
-      if (is_game_key_pressed(Gkey_CheatMenu1, true, false))
-      {
-          toggle_main_cheat_menu();
-      }
       if (is_game_key_pressed(Gkey_SwitchToMap, true, false))
       {
           turn_off_all_window_menus();
@@ -2625,7 +2572,8 @@ static void get_creature_control_nonaction_inputs(void)
     long y = GetMouseY();
     struct Thing* thing = thing_get(player->controlled_thing_idx);
     TRACE_THING(thing);
-    TbBool cheat_menu_active = cheat_menu_is_active();
+    TbBool cheat_menu_active = (KfxDevTools_IsCheatMenuVisible() != 0) &&
+        (KfxDevTools_WantCaptureMouse() != 0);
     if (((RendererGetScreenWidth() >> 1) != x) || ((RendererGetScreenHeight() >> 1) != y))
     {
         if (!cheat_menu_active && !a_menu_window_is_active())

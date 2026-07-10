@@ -41,7 +41,7 @@
 #include "platform/PlatformManager.h"
 #include "platform/IWindowSystem.h"
 #include "platform/WindowSystemSDL.h"
-#include "debug/DebugOverlay.hpp"
+#include "kfx/imgui/DevTools.h"
 #include "input/InputManager.hpp"
 #include "renderer/RendMenuOverlay.h"
 #include <SDL3/SDL.h>
@@ -60,9 +60,9 @@ unsigned char last_used_input_device = 0;
 static TbBool isMouseActive = true;
 static TbBool isMouseActivated = false;
 static TbBool firstTimeMouseInit = true;
-#ifdef KEEPERFX_IMGUI_ENABLED
 static TbBool s_overlay_pre_grab = false; // mouse grab state before overlay opened
-#endif
+static TbBool s_cheat_pre_grab = false; // mouse grab state before cheat panel opened
+static TbBool s_cheat_ungrab_active = false;
 
 static char lbTextInputBuffer[256];
 static int lbTextInputLength = 0;
@@ -72,6 +72,38 @@ std::map<int, TbKeyCode> keymap_sdl_to_bf;
 //defined here instead of bflib_joyst.h to avoid making header depend on SDL
 void JEvent(const SDL_Event *ev);
 /******************************************************************************/
+
+static void sync_cheat_menu_mouse_grab(void)
+{
+    if (!kfx::DevTools::available()) {
+        return;
+    }
+
+    auto& devtools = kfx::DevTools::instance();
+    const TbBool cheat_open = devtools.isCheatMenuVisible() ? true : false;
+    IWindowSystem* ws = PlatformManager::Get()->GetWindowSystem();
+
+    if (cheat_open)
+    {
+        if (!s_cheat_ungrab_active)
+        {
+            s_cheat_pre_grab = lbMouseGrabbed;
+            s_cheat_ungrab_active = true;
+        }
+        // Keep forcing ungrab while panel is open, because other gameplay
+        // paths (eg. possession/pause focus handlers) may re-grab it.
+        if (lbMouseGrabbed)
+        {
+            LbSetMouseGrab(false);
+        }
+        ws->SetCursorVisible(true);
+    }
+    else if (s_cheat_ungrab_active)
+    {
+        LbSetMouseGrab(s_cheat_pre_grab);
+        s_cheat_ungrab_active = false;
+    }
+}
 
 /**
  * Converts an SDL mouse button event type and the corresponding mouse button to a Win32 API message.
@@ -302,24 +334,35 @@ static void process_event(const SDL_Event *ev)
     switch (ev->type)
     {
     case SDL_EVENT_KEY_DOWN:
+    {
         x = keyboard_keys_mapping(&ev->key);
-#ifdef KEEPERFX_IMGUI_ENABLED
-        if (x == KC_F3)
+        auto& devtools = kfx::DevTools::instance();
+        auto sync_debug_ui_context = [&](bool before, bool after)
         {
-            DebugOverlay_Toggle();
-            if (DebugOverlay_IsVisible())
+            if (!before && after)
             {
                 s_overlay_pre_grab = lbMouseGrabbed;
                 InputManager_PushContext(3 /* Context::Debug */);
                 LbSetMouseGrab(false);
             }
-            else
+            else if (before && !after)
             {
                 InputManager_PopContext();
                 LbSetMouseGrab(s_overlay_pre_grab);
             }
+        };
+        if (x == KC_F3 && kfx::DevTools::available())
+        {
+            const bool before = devtools.isOverlayVisible() || devtools.isCheatMenuVisible();
+            devtools.toggleOverlay();
+            const bool after = devtools.isOverlayVisible() || devtools.isCheatMenuVisible();
+            sync_debug_ui_context(before, after);
         }
-#endif
+        if (x == KC_F12 && kfx::DevTools::available())
+        {
+            devtools.toggleCheatMenu();
+            break;
+        }
         if (x == KC_F9)
         {
             RendMenu_ToggleOpen();
@@ -332,18 +375,20 @@ static void process_event(const SDL_Event *ev)
                 RendMenu_HandleKey(x);
                 break;
             }
-#ifdef KEEPERFX_IMGUI_ENABLED
-            if (!DebugOverlay_IsVisible())
-#endif
+            const bool ui_captures_keyboard =
+                devtools.isOverlayVisible() ||
+                (devtools.isCheatMenuVisible() && devtools.wantCaptureKeyboard());
+            if (!ui_captures_keyboard)
             // SDL3: pass ev->key.key (was ev->key.keysym.sym)
             keyboardControl(KActn_KEYDOWN,x,keyboard_mods_mapping(&ev->key), ev->key.key);
         }
         last_used_input_device = ID_Keyboard_Mouse;
         break;
+    }
 
     case SDL_EVENT_KEY_UP:
         x = keyboard_keys_mapping(&ev->key);
-        if (x == KC_F9 || RendMenu_IsOpen())
+        if (x == KC_F9 || x == KC_F12 || RendMenu_IsOpen())
         {
             /* consume key-up events while menu is open */
             last_used_input_device = ID_Keyboard_Mouse;
@@ -351,9 +396,11 @@ static void process_event(const SDL_Event *ev)
         }
         if (x != KC_UNASSIGNED)
         {
-#ifdef KEEPERFX_IMGUI_ENABLED
-            if (!DebugOverlay_IsVisible())
-#endif
+            auto& devtools = kfx::DevTools::instance();
+            const bool ui_captures_keyboard =
+                devtools.isOverlayVisible() ||
+                (devtools.isCheatMenuVisible() && devtools.wantCaptureKeyboard());
+            if (!ui_captures_keyboard)
             keyboardControl(KActn_KEYUP,x,keyboard_mods_mapping(&ev->key), ev->key.key);
         }
         last_used_input_device = ID_Keyboard_Mouse;
@@ -364,9 +411,7 @@ static void process_event(const SDL_Event *ev)
         {
           return;
         }
-#ifdef KEEPERFX_IMGUI_ENABLED
-        if (DebugOverlay_IsVisible()) return;
-#endif
+        if (kfx::DevTools::instance().isOverlayVisible()) return;
         if (lbMouseGrabbed && lbMouseMoveRatio > 0)
         {
             // SDL3: xrel/yrel are float
@@ -399,9 +444,11 @@ static void process_event(const SDL_Event *ev)
     case SDL_EVENT_MOUSE_BUTTON_DOWN:
     case SDL_EVENT_MOUSE_BUTTON_UP:
         last_used_input_device = ID_Keyboard_Mouse;
-#ifdef KEEPERFX_IMGUI_ENABLED
-        if (DebugOverlay_IsVisible()) return;
-#endif
+        {
+            auto& devtools = kfx::DevTools::instance();
+            if (devtools.isOverlayVisible() ||
+                (devtools.isCheatMenuVisible() && devtools.wantCaptureMouse())) return;
+        }
 
         if(ev->button.button == SDL_BUTTON_LEFT || ev->button.button == SDL_BUTTON_RIGHT || ev->button.button == SDL_BUTTON_MIDDLE)
         {
@@ -431,6 +478,11 @@ static void process_event(const SDL_Event *ev)
 
     case SDL_EVENT_MOUSE_WHEEL:
         last_used_input_device = ID_Keyboard_Mouse;
+        {
+            auto& devtools = kfx::DevTools::instance();
+            if (devtools.isOverlayVisible() ||
+                (devtools.isCheatMenuVisible() && devtools.wantCaptureMouse())) return;
+        }
         mouseDelta.x = 0;
         mouseDelta.y = 0;
         // SDL3: wheel.y is float
@@ -538,15 +590,15 @@ TbBool LbPollInputs(void)
     // Let the platform window system inject any non-SDL input (e.g. Vita
     // virtual cursor from analog stick / touch) before processing events.
     PlatformManager::Get()->GetWindowSystem()->PollInput();
+    sync_cheat_menu_mouse_grab();
 
     SDL_Event ev;
     //process events until event queue is empty
     while (SDL_PollEvent(&ev)) {
-#ifdef KEEPERFX_IMGUI_ENABLED
-        DebugOverlay_QueueEvent(&ev);
-#endif
+        kfx::DevTools::instance().queueEvent(&ev);
         process_event(&ev);
     }
+    sync_cheat_menu_mouse_grab();
 
     return (lbUserQuit < 1);
 }
