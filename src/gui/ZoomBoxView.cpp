@@ -84,7 +84,8 @@ void ZoomBoxView::draw(const DrawContext&    ctx,
     const float clip_radius = (float)((base_clip_radius * ctx.units_per_pixel + 8) / 16);
     RendererSetZoomBoxClipRadius(clip_radius);
 
-    if (m_mode == ZBM_ISOMETRIC && RendererHasGPURenderPath())
+    const BackendCapabilities caps = RendererGetCapabilities();
+    if (m_mode == ZBM_ISOMETRIC && caps.hasGPURenderPath)
         drawIsometric(ctx, view, player,
                       scr_x + content_offset_x, scr_y + content_offset_y,
                       stl_x, stl_y, draw_tiles_x, draw_tiles_y, subtile_size);
