@@ -16,6 +16,7 @@
 #include "bflib_sprite.h"
 #include "renderer/RendererSettings.h"
 #include "renderer/RendererManager.h"
+#include "kfx/assets/FxSprSheet.h"
 #include "kfx/profiling/KfxProfiling.h"
 #include "post_inc.h"
 
@@ -107,14 +108,18 @@ void GLSpriteAtlas::Free_Internal()
     m_rgba.clear();
     m_sprite_to_handle.clear();
     m_handle_uvs.clear();
+    m_handle_rgba_from_fxspr.clear();
     m_next_handle = 0;
 }
 
 /******************************************************************************/
 
 
-bool GLSpriteAtlas::pack_sprite(const struct TbSprite* spr, SpriteUV& out)
+bool GLSpriteAtlas::pack_sprite(const struct TbSprite* spr, SpriteUV& out,
+                                const kfx::FxSprSheet* fxspr, long index,
+                                bool& rgba_from_fxspr)
 {
+    rgba_from_fxspr = false;
     const int w = spr->SWidth;
     const int h = spr->SHeight;
     if (w <= 0 || h <= 0) return false;
@@ -143,14 +148,33 @@ bool GLSpriteAtlas::pack_sprite(const struct TbSprite* spr, SpriteUV& out)
         LbSpriteDecode(dst, k_atlas_w, spr);
     }
 
-    // Mirror the just-decoded region into the RGBA atlas (truecolour mode).
+    // Fill the parallel RGBA atlas (truecolour mode).  Prefer the .fxspr
+    // companion's real RGBA (palette-independent truecolour); fall back to
+    // materialising from the just-decoded palette indices.
     if (m_rgba_enabled && !m_rgba.empty()) {
-        for (int y = 0; y < h; ++y) {
-            const uint8_t* src_row = m_pixels.data()
-                                   + (size_t)(m_shelf_y + y) * k_atlas_w + m_cursor_x;
-            uint8_t* dst_row = m_rgba.data()
-                             + (((size_t)(m_shelf_y + y) * k_atlas_w + m_cursor_x) * 4);
-            materialise_row(dst_row, src_row, w, m_pal_snapshot);
+        kfx::FxSprSprite fs;
+        const bool have_fxspr =
+            fxspr && fxspr->valid() && index >= 0 &&
+            fxspr->sprite((int)index, fs) &&
+            fs.rgba != nullptr && fs.width == w && fs.height == h;
+
+        if (have_fxspr) {
+            // Straight copy: parity contract guarantees matching dimensions.
+            for (int y = 0; y < h; ++y) {
+                const uint8_t* src_row = fs.rgba + (size_t)y * w * 4;
+                uint8_t* dst_row = m_rgba.data()
+                                 + (((size_t)(m_shelf_y + y) * k_atlas_w + m_cursor_x) * 4);
+                memcpy(dst_row, src_row, (size_t)w * 4);
+            }
+            rgba_from_fxspr = true;
+        } else {
+            for (int y = 0; y < h; ++y) {
+                const uint8_t* src_row = m_pixels.data()
+                                       + (size_t)(m_shelf_y + y) * k_atlas_w + m_cursor_x;
+                uint8_t* dst_row = m_rgba.data()
+                                 + (((size_t)(m_shelf_y + y) * k_atlas_w + m_cursor_x) * 4);
+                materialise_row(dst_row, src_row, w, m_pal_snapshot);
+            }
         }
     }
 
@@ -257,7 +281,8 @@ void GLSpriteAtlas::FlushPendingGL()
 }
 void GLSpriteAtlas::Rebuild(const struct TbSpriteSheet* const* sheets,
                              const char* const*                 names,
-                             int                                count)
+                             int                                count,
+                             const kfx::FxSprSheet* const*      fxspr)
 {
     std::unique_lock<std::shared_mutex> lock(m_mutex);
     ++m_generation;
@@ -267,23 +292,29 @@ void GLSpriteAtlas::Rebuild(const struct TbSpriteSheet* const* sheets,
         return;
     }
     for (int i = 0; i < count; ++i) {
-        if (sheets[i]) AddSheet_Internal(sheets[i], names ? names[i] : nullptr);
+        if (sheets[i])
+            AddSheet_Internal(sheets[i], names ? names[i] : nullptr,
+                              fxspr ? fxspr[i] : nullptr);
     }
 }
 
-void GLSpriteAtlas::AddSheet(const struct TbSpriteSheet* sheet, const char* name)
+void GLSpriteAtlas::AddSheet(const struct TbSpriteSheet* sheet, const char* name,
+                             const kfx::FxSprSheet* fxspr)
 {
     if (!sheet) return;
     std::unique_lock<std::shared_mutex> lock(m_mutex);
-    AddSheet_Internal(sheet, name);
+    AddSheet_Internal(sheet, name, fxspr);
 }
 
-void GLSpriteAtlas::AddSheet_Internal(const struct TbSpriteSheet* sheet, const char* name)
+void GLSpriteAtlas::AddSheet_Internal(const struct TbSpriteSheet* sheet, const char* name,
+                                      const kfx::FxSprSheet* fxspr)
 {
     long n = num_sprites(sheet);
     int packed = 0;
+    int fxspr_sourced = 0;
     const char* label = name ? name : "(unknown)";
-    SYNCLOG("GLSpriteAtlas::AddSheet: Adding sheet '%s' (%p) with %ld sprites", label, sheet, n);
+    SYNCLOG("GLSpriteAtlas::AddSheet: Adding sheet '%s' (%p) with %ld sprites%s", label, sheet, n,
+            (fxspr && m_rgba_enabled) ? " [truecolour .fxspr]" : "");
 
     for (long i = 0; i < n; ++i) {
         const struct TbSprite* spr = get_sprite(sheet, i);
@@ -294,18 +325,22 @@ void GLSpriteAtlas::AddSheet_Internal(const struct TbSpriteSheet* sheet, const c
             break;
         }
         SpriteUV uv;
-        if (pack_sprite(spr, uv)) {
+        bool rgba_from_fxspr = false;
+        if (pack_sprite(spr, uv, fxspr, i, rgba_from_fxspr)) {
             SpriteHandle h = MakeSpriteHandle(m_generation, (uint16_t)m_next_handle++);
             m_sprite_to_handle[spr] = h;
             m_handle_uvs.push_back(uv);
+            m_handle_rgba_from_fxspr.push_back(rgba_from_fxspr ? 1u : 0u);
             ++packed;
+            if (rgba_from_fxspr) ++fxspr_sourced;
         }
     }
     // Do NOT call flush_dirty() here — AddSheet() may be called from the game
     // thread (without a GL context) during level load.  FlushPendingGL() will
     // do the actual upload (glTexImage2D or glTexSubImage2D) on the render thread.
-    SYNCLOG("GLSpriteAtlas::AddSheet: packed %d/%ld sprites from sheet '%s' (%p) (total handles: %d)",
-           packed, n, label, sheet, (int)m_handle_uvs.size());
+    SYNCLOG("GLSpriteAtlas::AddSheet: packed %d/%ld sprites from sheet '%s' (%p) "
+            "(%d truecolour, total handles: %d)",
+           packed, n, label, sheet, fxspr_sourced, (int)m_handle_uvs.size());
 }
 
 void GLSpriteAtlas::RemoveSheet(const struct TbSpriteSheet* sheet)
@@ -393,17 +428,31 @@ void GLSpriteAtlas::RefreshRGBAForPalette(const unsigned char* pal)
     if (memcmp(pal, m_pal_snapshot, sizeof(m_pal_snapshot)) == 0) return;
     memcpy(m_pal_snapshot, pal, sizeof(m_pal_snapshot));
 
-    // Re-materialise every packed row from the R8 index atlas through the new
-    // palette. Unused gaps hold index 0 and stay transparent.
-    const int used_h = m_shelf_y + m_shelf_h;
-    if (used_h <= 0) return;
-    for (int y = 0; y < used_h; ++y) {
-        const uint8_t* src = m_pixels.data() + (size_t)y * k_atlas_w;
-        uint8_t*       dst = m_rgba.data()   + (size_t)y * k_atlas_w * 4;
-        materialise_row(dst, src, k_atlas_w, m_pal_snapshot);
+    // Re-materialise only the palette-sourced regions from the R8 index atlas
+    // through the new palette. Regions whose RGBA came straight from a .fxspr
+    // are real truecolour (palette-independent) and MUST be left untouched.
+    int rebaked = 0;
+    for (size_t i = 0; i < m_handle_uvs.size(); ++i) {
+        if (i < m_handle_rgba_from_fxspr.size() && m_handle_rgba_from_fxspr[i])
+            continue; // .fxspr-sourced — do not re-bake
+
+        const SpriteUV& uv = m_handle_uvs[i];
+        const int w = uv.pixel_w;
+        const int h = uv.pixel_h;
+        if (w <= 0 || h <= 0) continue;
+        const int ax = (int)(uv.u0 * (float)k_atlas_w + 0.5f);
+        const int ay = (int)(uv.v0 * (float)k_atlas_h + 0.5f);
+
+        for (int y = 0; y < h; ++y) {
+            const uint8_t* src = m_pixels.data() + (size_t)(ay + y) * k_atlas_w + ax;
+            uint8_t*       dst = m_rgba.data()   + (((size_t)(ay + y) * k_atlas_w + ax) * 4);
+            materialise_row(dst, src, w, m_pal_snapshot);
+        }
+        if (ay < m_dirty_y_min)       m_dirty_y_min = ay;
+        if (ay + h > m_dirty_y_max)   m_dirty_y_max = ay + h;
+        ++rebaked;
     }
-    if (m_dirty_y_min > 0)      m_dirty_y_min = 0;
-    if (m_dirty_y_max < used_h) m_dirty_y_max = used_h;
+    if (rebaked == 0) return;
 }
 
 size_t GLSpriteAtlas::GetRegisteredCount() const

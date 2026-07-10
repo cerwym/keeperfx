@@ -27,6 +27,8 @@
 #include "renderer/SpriteHandle.h"
 #include "renderer/SpriteUV.h"
 
+namespace kfx { class FxSprSheet; }   // truecolour companion sheet (forward decl)
+
 /** One packed sprite in a read-only atlas snapshot. */
 struct AtlasEntry {
     SpriteHandle handle;
@@ -58,16 +60,24 @@ public:
     void Free();
 
     /** Decode and pack all sprites in a sheet into the atlas.
-     *  @param name  Optional debug label (e.g. "gui_panel_sprites") shown in log output. */
-    void AddSheet(const struct TbSpriteSheet* sheet, const char* name = nullptr);
+     *  @param name  Optional debug label (e.g. "gui_panel_sprites") shown in log output.
+     *  @param fxspr Optional truecolour companion (`.fxspr`) whose entry order and
+     *      per-sprite dimensions match this sheet (parity contract). When present
+     *      and truecolour is enabled, each sprite's RGBA is sourced straight from
+     *      the companion instead of being materialised from the palette. */
+    void AddSheet(const struct TbSpriteSheet* sheet, const char* name = nullptr,
+                  const kfx::FxSprSheet* fxspr = nullptr);
 
     /** Atomically rebuild the entire atlas: Free + Init + AddSheet for each
      *  provided sheet, all under a single exclusive lock so the render thread
      *  never sees a partially-rebuilt atlas.  Use instead of calling Free/Init/
-     *  AddSheet individually when replacing the entire atlas contents. */
+     *  AddSheet individually when replacing the entire atlas contents.
+     *  @param fxspr Optional array parallel to sheets[]; entry i is the truecolour
+     *      companion for sheet i, or NULL. */
     void Rebuild(const struct TbSpriteSheet* const* sheets,
                  const char* const*                 names,
-                 int                                count);
+                 int                                count,
+                 const kfx::FxSprSheet* const*      fxspr = nullptr);
 
     /** Invalidate UV entries for all sprites in a sheet. */
     void RemoveSheet(const struct TbSpriteSheet* sheet);
@@ -125,7 +135,8 @@ public:
     void FlushPendingGL();
 
 private:
-    bool pack_sprite(const struct TbSprite* spr, SpriteUV& out);
+    bool pack_sprite(const struct TbSprite* spr, SpriteUV& out,
+                     const kfx::FxSprSheet* fxspr, long index, bool& rgba_from_fxspr);
     void flush_dirty();
 
     // Unlocked variants — called only while m_mutex is already held.
@@ -133,7 +144,8 @@ private:
     bool GetUV_Unlocked(SpriteHandle h, SpriteUV& out) const;
     void Free_Internal();
     bool Init_Internal();
-    void AddSheet_Internal(const struct TbSpriteSheet* sheet, const char* name);
+    void AddSheet_Internal(const struct TbSpriteSheet* sheet, const char* name,
+                           const kfx::FxSprSheet* fxspr);
 
     /** Guards all cross-thread access to atlas data.
      *  Game thread holds exclusive lock during Free()/Init()/AddSheet()/RemoveSheet().
@@ -168,6 +180,10 @@ private:
 
     std::unordered_map<const struct TbSprite*, SpriteHandle> m_sprite_to_handle;
     std::vector<SpriteUV>                                    m_handle_uvs;  // indexed by SpriteHandleIndex(handle)
+    // Parallel to m_handle_uvs: 1 if this region's RGBA came straight from a
+    // .fxspr (real truecolour, palette-independent) and must NOT be re-baked by
+    // RefreshRGBAForPalette; 0 if it was materialised from the palette.
+    std::vector<uint8_t>                                     m_handle_rgba_from_fxspr;
     uint32_t                                                 m_next_handle = 0;
     uint16_t                                                 m_generation  = 0;
 };

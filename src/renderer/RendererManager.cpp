@@ -153,8 +153,9 @@ void RendererDrainDeferredAtlasRebuild()
     const size_t cap = mgr.RegisteredCount();
     std::vector<const TbSpriteSheet*> sheets(cap);
     std::vector<const char*>          names(cap);
-    int count = mgr.CollectActive(sheets.data(), names.data(), (int)cap);
-    s_spriteAtlas->Rebuild(sheets.data(), names.data(), count);
+    std::vector<const kfx::FxSprSheet*> fxspr(cap);
+    int count = mgr.CollectActive(sheets.data(), names.data(), (int)cap, fxspr.data());
+    s_spriteAtlas->Rebuild(sheets.data(), names.data(), count, fxspr.data());
     for (int i = 0; i < count; ++i)
         SYNCLOG("RendererDrainDeferredAtlasRebuild: packed '%s' (%d sprites)",
                 names[i], (int)num_sprites(sheets[i]));
