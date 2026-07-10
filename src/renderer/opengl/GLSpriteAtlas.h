@@ -27,6 +27,22 @@
 #include "renderer/SpriteHandle.h"
 #include "renderer/SpriteUV.h"
 
+/** One packed sprite in a read-only atlas snapshot. */
+struct AtlasEntry {
+    SpriteHandle handle;
+    SpriteUV     uv;   ///< normalised atlas rect + native pixel dims
+};
+
+/** Read-only copy of the atlas suitable for the ImGui debug viewer.  Detached
+ *  from the live atlas (plain data), so it can be held and inspected without
+ *  touching the atlas lock or aliasing any atlas-owned pointers. */
+struct AtlasSnapshot {
+    int                     width  = 0;   ///< atlas texel width  (k_atlas_w)
+    int                     height = 0;   ///< atlas texel height (k_atlas_h)
+    std::vector<uint8_t>    pixels;       ///< R8 palette indices, width*height (empty if atlas unallocated)
+    std::vector<AtlasEntry> entries;      ///< every currently-packed sprite region
+};
+
 class GLSpriteAtlas {
 public:
     static const int k_atlas_w = 4096;
@@ -74,7 +90,24 @@ public:
     uint8_t* GetSpriteMask(SpriteHandle h, int* out_w, int* out_h, int* out_stride) const;
 
     GLuint GetTexture() const;
+
+    /** Truecolour (RGBA8) atlas texture, valid only when truecolour is enabled
+     *  (see SetTruecolour).  Returns 0 in indexed mode or before the first
+     *  FlushPendingGL().  Mirrors the R8 index atlas region-for-region: the
+     *  index atlas is always built, so palette-dependent draw paths (player
+     *  colour remap, fades, colour-keyed masks) keep working unchanged. */
+    GLuint GetRGBATexture() const;
+
+    /** True when this atlas is maintaining a parallel RGBA8 texture. */
+    bool   IsRGBAEnabled() const;
+
     size_t GetRegisteredCount() const;
+
+    /** Fill out with a detached, read-only copy of the atlas: dimensions, the
+     *  full R8 pixel buffer, and an AtlasEntry for every currently-packed
+     *  sprite.  Taken under a shared lock; safe to call from the render thread.
+     *  Used by the ImGui sprite atlas debug viewer. */
+    void Snapshot(AtlasSnapshot& out) const;
 
     /** Perform all deferred GL work: delete old texture (if any), create the
      *  new GL texture and upload the pixel buffer packed by AddSheet() calls.
@@ -103,6 +136,17 @@ private:
     GLuint               m_old_texture = 0;  // saved in Free(); deleted in FlushPendingGL()
     bool                 m_gl_init_needed = false; // set by Init(); cleared by FlushPendingGL()
     std::vector<uint8_t> m_pixels;           // CPU copy, k_atlas_w × k_atlas_h
+
+    // Parallel truecolour (RGBA8) atlas.  Built alongside m_pixels when
+    // m_rgba_enabled: each packed sprite is materialised through m_pal_snapshot
+    // (idx 0 -> transparent) into m_rgba at the same shelf position.  Uploaded to
+    // m_rgba_texture in FlushPendingGL().  The R8 index atlas is still built, so
+    // indexed draw paths are unaffected.
+    bool                 m_rgba_enabled  = false;
+    std::vector<uint8_t> m_rgba;              // k_atlas_w × k_atlas_h × 4 (RGBA8)
+    GLuint               m_rgba_texture     = 0;
+    GLuint               m_old_rgba_texture = 0;
+    unsigned char        m_pal_snapshot[768] = {0}; // VGA6 palette baked at build time
 
     // Shelf packer state
     int m_cursor_x = 0;

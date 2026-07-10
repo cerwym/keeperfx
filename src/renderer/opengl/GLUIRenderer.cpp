@@ -47,12 +47,14 @@ struct SamplerBinding {
 
 GLUIRenderer::GLUIRenderer()
     : m_prog_sprite(0)
+    , m_prog_sprite_rgba(0)
     , m_prog_sprite_colored(-1)
     , m_prog_font(0)
     , m_prog_solid(0)
     , m_prog_remap(0)
     , m_prog_fbo(0)
     , m_loc_screen_sprite(-1)
+    , m_loc_screen_sprite_rgba(-1)
     , m_loc_screen_sprite_colored(-1)
     , m_loc_screen_font(-1)
     , m_loc_screen_solid(-1)
@@ -122,6 +124,7 @@ void GLUIRenderer::Shutdown()
         m_vao = 0;
     }
     if (m_prog_sprite) { glDeleteProgram(m_prog_sprite); m_prog_sprite = 0; }
+    if (m_prog_sprite_rgba) { glDeleteProgram(m_prog_sprite_rgba); m_prog_sprite_rgba = 0; }
     if (m_prog_sprite_colored) { glDeleteProgram(m_prog_sprite_colored); m_prog_sprite_colored = 0; }
     if (m_prog_font)   { glDeleteProgram(m_prog_font);   m_prog_font   = 0; }
     if (m_prog_solid)  { glDeleteProgram(m_prog_solid);  m_prog_solid  = 0; }
@@ -1455,6 +1458,19 @@ bool GLUIRenderer::CompileShaders()
         }
     }
 
+    // --- Sprite RGBA program (truecolour atlas, no palette lookup) ---
+    if (ok) {
+        GLuint frag = CompileStage(GL_FRAGMENT_SHADER, UI_SPRITE_RGBA_FRAGMENT_SHADER, "UI_SPRITE_RGBA_FRAG");
+        if (!frag) { ok = false; }
+        else {
+            SamplerBinding bindings[] = {{"u_sprite_atlas", 0}};
+            m_prog_sprite_rgba = LinkProgram(vert, frag, "UI_SPRITE_RGBA", bindings, 1);
+            glDeleteShader(frag);
+            if (!m_prog_sprite_rgba) ok = false;
+            else m_loc_screen_sprite_rgba = glGetUniformLocation(m_prog_sprite_rgba, "u_screen_size");
+        }
+    }
+
     // --- Sprite-colored program (atlas as discard mask, flat vertex colour) ---
     if (ok) {
         GLuint frag = CompileStage(GL_FRAGMENT_SHADER, UI_SPRITE_COLORED_FRAGMENT_SHADER, "UI_SPRITE_COLORED_FRAG");
@@ -1528,6 +1544,7 @@ bool GLUIRenderer::CompileShaders()
     glDeleteShader(vert);
     // Label all successfully-created shader programs (GL_KHR_debug).
     if (m_prog_sprite)         KFX_GL_LABEL(GL_PROGRAM, m_prog_sprite,         "UIR/SpriteProg");
+    if (m_prog_sprite_rgba)    KFX_GL_LABEL(GL_PROGRAM, m_prog_sprite_rgba,    "UIR/SpriteRGBAProg");
     if (m_prog_sprite_colored) KFX_GL_LABEL(GL_PROGRAM, m_prog_sprite_colored, "UIR/SpriteColoredProg");
     if (m_prog_font)           KFX_GL_LABEL(GL_PROGRAM, m_prog_font,           "UIR/FontProg");
     if (m_prog_solid)          KFX_GL_LABEL(GL_PROGRAM, m_prog_solid,          "UIR/SolidProg");
@@ -1629,15 +1646,24 @@ void GLUIRenderer::flush_quads_from(std::vector<UIQuad>& quads)
             break;
 
         case PASS_SPRITE:
-            glUseProgram(m_prog_sprite);
-            glUniform2f(m_loc_screen_sprite, (float)m_screen_width, (float)m_screen_height);
-            if (m_sprite_atlas) {
+            // Truecolour: sample the materialised RGBA atlas directly (no palette
+            // unit).  Falls back to the indexed atlas + palette otherwise.
+            if (m_sprite_atlas && m_sprite_atlas->IsRGBAEnabled() && m_prog_sprite_rgba) {
+                glUseProgram(m_prog_sprite_rgba);
+                glUniform2f(m_loc_screen_sprite_rgba, (float)m_screen_width, (float)m_screen_height);
                 glActiveTexture(GL_TEXTURE0);
-                glBindTexture(GL_TEXTURE_2D, m_sprite_atlas->GetTexture());
-            }
-            if (m_palette_texture) {
-                glActiveTexture(GL_TEXTURE1);
-                glBindTexture(m_palette_texture_target, m_palette_texture);
+                glBindTexture(GL_TEXTURE_2D, m_sprite_atlas->GetRGBATexture());
+            } else {
+                glUseProgram(m_prog_sprite);
+                glUniform2f(m_loc_screen_sprite, (float)m_screen_width, (float)m_screen_height);
+                if (m_sprite_atlas) {
+                    glActiveTexture(GL_TEXTURE0);
+                    glBindTexture(GL_TEXTURE_2D, m_sprite_atlas->GetTexture());
+                }
+                if (m_palette_texture) {
+                    glActiveTexture(GL_TEXTURE1);
+                    glBindTexture(m_palette_texture_target, m_palette_texture);
+                }
             }
             break;
 

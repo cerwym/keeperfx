@@ -14,8 +14,34 @@
 #include <cstdlib>
 #include "bflib_basics.h"
 #include "bflib_sprite.h"
+#include "renderer/RendererSettings.h"
+#include "renderer/RendererManager.h"
 #include "kfx/profiling/KfxProfiling.h"
 #include "post_inc.h"
+
+/******************************************************************************/
+
+namespace {
+// Materialise one row-segment of palette indices into RGBA8, mirroring the
+// indexed sprite shader: index 0 -> fully transparent; otherwise the VGA6
+// palette entry expanded to 8-bit (<<2) with opaque alpha.
+inline void materialise_row(uint8_t* dst_rgba, const uint8_t* src_idx, int count,
+                            const unsigned char* pal /*768 VGA6*/)
+{
+    for (int x = 0; x < count; ++x) {
+        const uint8_t idx = src_idx[x];
+        if (idx == 0) {
+            dst_rgba[0] = dst_rgba[1] = dst_rgba[2] = dst_rgba[3] = 0;
+        } else {
+            dst_rgba[0] = (uint8_t)(pal[idx * 3 + 0] << 2);
+            dst_rgba[1] = (uint8_t)(pal[idx * 3 + 1] << 2);
+            dst_rgba[2] = (uint8_t)(pal[idx * 3 + 2] << 2);
+            dst_rgba[3] = 255;
+        }
+        dst_rgba += 4;
+    }
+}
+} // namespace
 
 /******************************************************************************/
 
@@ -32,6 +58,20 @@ bool GLSpriteAtlas::Init_Internal()
     // owns the GL context after the first EndFrame().
     m_pixels.assign((size_t)k_atlas_w * k_atlas_h, 0u);
 
+    // Decide truecolour mode for this atlas generation and snapshot the palette
+    // it will be materialised against.  Baking the palette here means the RGBA
+    // atlas is rebuilt whenever palette_mode changes (RendererApplySettings
+    // schedules a rebuild), which is the intended lifecycle.
+    m_rgba_enabled = (g_renderer_settings.palette_mode == RENDERER_PALETTE_TRUECOLOUR);
+    if (m_rgba_enabled) {
+        const unsigned char* pal = RendererGetActivePalette();
+        if (pal) memcpy(m_pal_snapshot, pal, sizeof(m_pal_snapshot));
+        else     memset(m_pal_snapshot, 0, sizeof(m_pal_snapshot));
+        m_rgba.assign((size_t)k_atlas_w * k_atlas_h * 4, 0u);
+    } else {
+        m_rgba.clear();
+    }
+
     m_cursor_x    = 1; // reserve atlas texel (0,0) as a safe fallback UV
     m_shelf_y     = 0;
     m_shelf_h     = 0;
@@ -39,7 +79,8 @@ bool GLSpriteAtlas::Init_Internal()
     m_dirty_y_max = -1;
     m_gl_init_needed = true;  // signal FlushPendingGL() to create the GL texture
 
-    SYNCLOG("GLSpriteAtlas: CPU init done — GL texture deferred to render thread");
+    SYNCLOG("GLSpriteAtlas: CPU init done (%s) — GL texture deferred to render thread",
+            m_rgba_enabled ? "truecolour RGBA8" : "indexed R8");
     return true;
 }
 
@@ -57,8 +98,13 @@ void GLSpriteAtlas::Free_Internal()
         m_old_texture = m_texture;
         m_texture = 0;
     }
+    if (m_rgba_texture) {
+        m_old_rgba_texture = m_rgba_texture;
+        m_rgba_texture = 0;
+    }
     m_gl_init_needed = false;
     m_pixels.clear();
+    m_rgba.clear();
     m_sprite_to_handle.clear();
     m_handle_uvs.clear();
     m_next_handle = 0;
@@ -97,6 +143,17 @@ bool GLSpriteAtlas::pack_sprite(const struct TbSprite* spr, SpriteUV& out)
         LbSpriteDecode(dst, k_atlas_w, spr);
     }
 
+    // Mirror the just-decoded region into the RGBA atlas (truecolour mode).
+    if (m_rgba_enabled && !m_rgba.empty()) {
+        for (int y = 0; y < h; ++y) {
+            const uint8_t* src_row = m_pixels.data()
+                                   + (size_t)(m_shelf_y + y) * k_atlas_w + m_cursor_x;
+            uint8_t* dst_row = m_rgba.data()
+                             + (((size_t)(m_shelf_y + y) * k_atlas_w + m_cursor_x) * 4);
+            materialise_row(dst_row, src_row, w, m_pal_snapshot);
+        }
+    }
+
     // UV in normalised [0,1] atlas space
     out.u0 = (float) m_cursor_x       / (float)k_atlas_w;
     out.v0 = (float) m_shelf_y        / (float)k_atlas_h;
@@ -126,6 +183,15 @@ void GLSpriteAtlas::flush_dirty()
                     k_atlas_w, h,
                     GL_RED, GL_UNSIGNED_BYTE,
                     m_pixels.data() + (size_t)m_dirty_y_min * k_atlas_w);
+
+    if (m_rgba_enabled && m_rgba_texture && !m_rgba.empty()) {
+        glBindTexture(GL_TEXTURE_2D, m_rgba_texture);
+        glTexSubImage2D(GL_TEXTURE_2D, 0,
+                        0, m_dirty_y_min,
+                        k_atlas_w, h,
+                        GL_RGBA, GL_UNSIGNED_BYTE,
+                        m_rgba.data() + (size_t)m_dirty_y_min * k_atlas_w * 4);
+    }
     glBindTexture(GL_TEXTURE_2D, 0);
 
     m_dirty_y_min = k_atlas_h;
@@ -140,6 +206,10 @@ void GLSpriteAtlas::FlushPendingGL()
     if (m_old_texture) {
         glDeleteTextures(1, &m_old_texture);
         m_old_texture = 0;
+    }
+    if (m_old_rgba_texture) {
+        glDeleteTextures(1, &m_old_rgba_texture);
+        m_old_rgba_texture = 0;
     }
 
     if (m_gl_init_needed && !m_pixels.empty())
@@ -156,6 +226,23 @@ void GLSpriteAtlas::FlushPendingGL()
         glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, k_atlas_w, k_atlas_h, 0,
                      GL_RED, GL_UNSIGNED_BYTE, m_pixels.data());
         glBindTexture(GL_TEXTURE_2D, 0);
+
+        // Truecolour: create + upload the parallel RGBA8 atlas.
+        if (m_rgba_enabled && !m_rgba.empty()) {
+            glGenTextures(1, &m_rgba_texture);
+            KFX_GL_LABEL(GL_TEXTURE, m_rgba_texture, "SpriteAtlas/TexRGBA");
+            glBindTexture(GL_TEXTURE_2D, m_rgba_texture);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, k_atlas_w, k_atlas_h, 0,
+                         GL_RGBA, GL_UNSIGNED_BYTE, m_rgba.data());
+            glBindTexture(GL_TEXTURE_2D, 0);
+            SYNCLOG("GLSpriteAtlas: initialised %dx%d RGBA8 texture (tex=%u)",
+                    k_atlas_w, k_atlas_h, m_rgba_texture);
+        }
+
         m_gl_init_needed = false;
         m_dirty_y_min = k_atlas_h;  // full upload done, reset dirty range
         m_dirty_y_max = -1;
@@ -282,10 +369,40 @@ GLuint GLSpriteAtlas::GetTexture() const
     return m_texture;
 }
 
+GLuint GLSpriteAtlas::GetRGBATexture() const
+{
+    std::shared_lock<std::shared_mutex> lock(m_mutex);
+    return m_rgba_texture;
+}
+
+bool GLSpriteAtlas::IsRGBAEnabled() const
+{
+    std::shared_lock<std::shared_mutex> lock(m_mutex);
+    return m_rgba_enabled;
+}
+
 size_t GLSpriteAtlas::GetRegisteredCount() const
 {
     std::shared_lock<std::shared_mutex> lock(m_mutex);
     return m_sprite_to_handle.size();
+}
+
+void GLSpriteAtlas::Snapshot(AtlasSnapshot& out) const
+{
+    std::shared_lock<std::shared_mutex> lock(m_mutex);
+    out.width  = k_atlas_w;
+    out.height = k_atlas_h;
+    out.pixels = m_pixels;  // detached copy of the R8 buffer
+    out.entries.clear();
+    out.entries.reserve(m_handle_uvs.size());
+    // m_handle_uvs is indexed by handle index; every packed sprite lives here.
+    // All live handles share the current generation (bumped on each Rebuild).
+    for (size_t i = 0; i < m_handle_uvs.size(); ++i) {
+        AtlasEntry e;
+        e.handle = MakeSpriteHandle(m_generation, (uint16_t)i);
+        e.uv     = m_handle_uvs[i];
+        out.entries.push_back(e);
+    }
 }
 
 uint8_t* GLSpriteAtlas::GetSpriteMask(SpriteHandle h, int* out_w, int* out_h, int* out_stride) const
