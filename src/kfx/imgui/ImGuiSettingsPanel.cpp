@@ -6,7 +6,7 @@
  */
 /******************************************************************************/
 #include "pre_inc.h"
-#include "debug/ImGuiSettingsPanel.hpp"
+#include "kfx/imgui/ImGuiSettingsPanel.hpp"
 
 #ifdef KEEPERFX_IMGUI_ENABLED
 
