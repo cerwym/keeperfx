@@ -2181,8 +2181,6 @@ MenuNumber create_menu(struct GuiMenu *gmnu)
                 btn->content.ptr = &video_cluedo_mode;
             else if (btn->click_event == gui_video_gamma_correction)
                 btn->content.ptr = &video_gamma_correction;
-            else if (btn->click_event == gui_video_renderer)
-                btn->content.ptr = &video_renderer;
         }
     }
 

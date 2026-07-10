@@ -45,7 +45,6 @@ extern char video_cluedo_mode;
 extern char video_shadows;
 extern char video_textures;
 extern char video_view_distance_level;
-extern char video_renderer;
 
 #pragma pack()
 /******************************************************************************/
@@ -71,7 +70,6 @@ void gui_video_rotate_mode(struct GuiButton *gbtn);
 void gui_video_cluedo_mode(struct GuiButton *gbtn);
 void gui_video_gamma_correction(struct GuiButton *gbtn);
 void gui_video_cluedo_maintain(struct GuiButton *gbtn);
-void gui_video_renderer(struct GuiButton *gbtn);
 void gui_switch_video_mode(struct GuiButton *gbtn);
 void gui_display_current_resolution(struct GuiButton *gbtn);
 void gui_set_sound_volume(struct GuiButton *gbtn);

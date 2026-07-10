@@ -59,7 +59,6 @@ char video_cluedo_mode;
 char video_shadows;
 char video_textures;
 char video_view_distance_level;
-char video_renderer;
 /******************************************************************************/
 #ifdef __cplusplus
 }
@@ -258,15 +257,6 @@ void gui_video_gamma_correction(struct GuiButton *gbtn)
     set_players_packet_action(player, PckA_SetGammaLevel, video_gamma_correction, 0, 0, 0);
 }
 
-void gui_video_renderer(struct GuiButton *gbtn)
-{
-    // Toggle between the only two available renderers on desktop:
-    // RENDERER_SOFTWARE (1) and RENDERER_OPENGL (2)
-    RendererType current = RendererGetActiveType();
-    RendererType next = (current == RENDERER_SOFTWARE) ? RENDERER_OPENGL : RENDERER_SOFTWARE;
-    RendererSwitch(next);
-}
-
 int make_audio_slider_linear(int a)
 {
     // slider has a range of 0..255
@@ -370,8 +360,6 @@ void init_video_menu(struct GuiMenu *gmnu)
     video_textures = settings.video_textures;
     video_cluedo_mode = settings.video_cluedo_mode;
     video_gamma_correction = settings.gamma_correction;
-    // Set toggle state: 0 for Software, 1 for any GPU renderer
-    video_renderer = RendererHasGPURenderPath() ? 1 : 0;
 }
 
 /**
