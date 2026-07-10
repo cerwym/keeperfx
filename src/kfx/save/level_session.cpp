@@ -32,6 +32,9 @@ void LevelSession_ReinitGameState(void)
     init_navigation();
     reinit_packets_after_load();
     game.easter_eggs_enabled = start_params.easter_egg;
+#ifdef KEEPERFX_FORCE_ALEX
+    game.easter_eggs_enabled = true;
+#endif
     parchment_loaded = 0;
     /* View modes and panel colours — must precede tab-config calls below. */
     int i;
