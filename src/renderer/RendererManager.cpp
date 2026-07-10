@@ -746,6 +746,21 @@ ICursorLayer* RendererGetCursorLayer()
     return s_cursorLayer;
 }
 
+GLSpriteAtlas* RendererGetSpriteAtlas()
+{
+#ifdef RENDERER_OPENGL_ENABLED
+    return s_spriteAtlas;
+#else
+    return nullptr;
+#endif
+}
+
+const unsigned char* RendererGetActivePalette()
+{
+    extern unsigned char *engine_palette; // from front_simple.c — 6-bit VGA (768 bytes)
+    return engine_palette;
+}
+
 RendererType RendererGetActiveType()
 {
     return s_activeType;

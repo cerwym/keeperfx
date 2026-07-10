@@ -6,12 +6,14 @@
  */
 /******************************************************************************/
 #include "pre_inc.h"
-#include "debug/DebugOverlay.hpp"
+#include "kfx/imgui/DebugOverlay.hpp"
 
 #ifdef KEEPERFX_IMGUI_ENABLED
 
-#include "debug/ImGuiRendererPanel.hpp"
-#include "debug/ImGuiSettingsPanel.hpp"
+#include "kfx/imgui/ImGuiRendererPanel.hpp"
+#include "kfx/imgui/ImGuiSettingsPanel.hpp"
+#include "kfx/imgui/ImGuiSpriteAtlasPanel.hpp"
+#include "kfx/imgui/ImGuiCheatPanel.hpp"
 #include "globals.h"
 #include "vendors/imgui_impl_sdl3.h"
 
@@ -32,12 +34,33 @@ static std::atomic<bool> s_want_mouse{false};
 static std::atomic<bool> s_want_keyboard{false};
 static bool s_initialized = false;
 
-void DebugOverlay_Initialize(void* sdl_window, void* sdl_gl_context)
+static bool overlay_backend_ready()
+{
+    if (!s_initialized) {
+        return false;
+    }
+    if (ImGui::GetCurrentContext() == nullptr) {
+        return false;
+    }
+    ImGuiIO& io = ImGui::GetIO();
+    return (io.BackendPlatformUserData != nullptr) && (io.BackendRendererUserData != nullptr);
+}
+
+int DebugOverlay_Initialize(void* sdl_window, void* sdl_gl_context)
 {
     if (s_initialized)
-        return;
+        return 1;
     if (sdl_window == nullptr || sdl_gl_context == nullptr)
-        return;
+    {
+        static bool s_warned_null = false;
+        if (!s_warned_null)
+        {
+            WARNLOG("DebugOverlay init deferred: window=%p gl_context=%p",
+                    sdl_window, sdl_gl_context);
+            s_warned_null = true;
+        }
+        return 0;
+    }
 
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
@@ -51,6 +74,7 @@ void DebugOverlay_Initialize(void* sdl_window, void* sdl_gl_context)
 
     s_initialized = true;
     SYNCLOG("DebugOverlay initialized");
+    return 1;
 }
 
 void DebugOverlay_Shutdown(void)
@@ -76,7 +100,7 @@ void DebugOverlay_Shutdown(void)
 
 void DebugOverlay_NewFrame(void)
 {
-    if (!s_initialized)
+    if (!overlay_backend_ready())
         return;
 
     {
@@ -96,10 +120,12 @@ void DebugOverlay_NewFrame(void)
 
 void DebugOverlay_Render(void)
 {
-    if (!s_initialized)
+    if (!overlay_backend_ready())
         return;
 
-    if (!s_visible.load())
+    const bool overlay_visible = s_visible.load();
+    const bool cheat_visible = (ImGuiCheatPanel_IsVisible() != 0);
+    if (!overlay_visible && !cheat_visible)
     {
         s_want_mouse.store(false);
         s_want_keyboard.store(false);
@@ -107,7 +133,7 @@ void DebugOverlay_Render(void)
         return;
     }
 
-    if (ImGui::BeginMainMenuBar())
+    if (overlay_visible && ImGui::BeginMainMenuBar())
     {
         if (ImGui::BeginMenu("KeeperFX Debug"))
         {
@@ -115,10 +141,25 @@ void DebugOverlay_Render(void)
                 s_visible.store(false);
             ImGui::EndMenu();
         }
+        if (ImGui::BeginMenu("Windows"))
+        {
+            bool cheat_open = ImGuiCheatPanel_IsVisible() != 0;
+            if (ImGui::MenuItem("Cheat Menu", "F12", cheat_open))
+                ImGuiCheatPanel_SetVisible(cheat_open ? 0 : 1);
+            bool atlas_open = ImGuiSpriteAtlasPanel_IsVisible() != 0;
+            if (ImGui::MenuItem("Sprite Atlas Viewer", nullptr, atlas_open))
+                ImGuiSpriteAtlasPanel_SetVisible(atlas_open ? 0 : 1);
+            ImGui::EndMenu();
+        }
         ImGui::EndMainMenuBar();
     }
-    ImGuiRendererPanel_Draw();
-    ImGuiSettingsPanel_Draw();
+    if (overlay_visible)
+    {
+        ImGuiRendererPanel_Draw();
+        ImGuiSettingsPanel_Draw();
+        ImGuiSpriteAtlasPanel_Draw();
+    }
+    ImGuiCheatPanel_Draw();
 
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

@@ -41,9 +41,7 @@
 #include "engine_redraw.h"   // setup_engine_window / store_engine_window (PiP viewport)
 #include "engine_lenses.h"   // lens_mode
 #include "vidfade.h"         // g_palette_possession_tint
-#ifdef KEEPERFX_IMGUI_ENABLED
-#include "debug/DebugOverlay.hpp"
-#endif
+#include "kfx/imgui/DevTools.h"
 
 #include <glad/glad.h>
 #include <cstring>
@@ -603,9 +601,7 @@ void RendererOpenGL::Shutdown()
     if (m_swipe_vao)    { glDeleteVertexArrays(1, &m_swipe_vao); m_swipe_vao = 0; }
     if (m_swipe_vbo)    { glDeleteBuffers(1, &m_swipe_vbo); m_swipe_vbo = 0; }
 
-    #ifdef KEEPERFX_IMGUI_ENABLED
-    DebugOverlay_Shutdown();
-    #endif
+    kfx::DevTools::instance().shutdownOverlay();
 
     platform_destroy_gl_context();
 }
@@ -828,13 +824,11 @@ void RendererOpenGL::EndFrame_GL()
     // Reset the per-frame "presents captured into the map-fade FBO" flag; set by
     // FlushSceneToFBO() during a parchment fade so the main present pass skips them.
     m_rt_presents_captured = false;
-#ifdef KEEPERFX_IMGUI_ENABLED
     if (m_imgui_init_pending)
     {
         m_imgui_init_pending = false;
-        DebugOverlay_Initialize(platform_get_sdl_window(), platform_get_gl_context());
+        kfx::DevTools::instance().initOverlay(platform_get_sdl_window(), platform_get_gl_context());
     }
-#endif
 
     // Deferred tile-atlas GPU init — runs on the render thread that owns the
     // GL context.  BeginFrame() (game thread) cannot call glGenTextures /
@@ -1297,10 +1291,7 @@ void RendererOpenGL::EndFrame_GL()
     if (auto* cursor = RendererGetCursorLayer())
         cursor->ExecuteCursorFromIR(m_render_graph.GetUIBuffersRT());
 
-#ifdef KEEPERFX_IMGUI_ENABLED
-    DebugOverlay_NewFrame();
-    DebugOverlay_Render();
-#endif
+    kfx::DevTools::instance().drawOverlay();
 
     // Screenshot capture: after all draw calls, before buffer swap so that the
     // default framebuffer holds the fully-composited frame.

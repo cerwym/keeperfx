@@ -14,7 +14,7 @@
 extern "C" {
 #endif
 
-void DebugOverlay_Initialize(void* sdl_window, void* sdl_gl_context);
+int  DebugOverlay_Initialize(void* sdl_window, void* sdl_gl_context);
 void DebugOverlay_Shutdown(void);
 void DebugOverlay_NewFrame(void);
 void DebugOverlay_Render(void);
@@ -30,7 +30,7 @@ int  DebugOverlay_WantCaptureKeyboard(void);
 
 #else
 
-#define DebugOverlay_Initialize(w, ctx)      ((void)0)
+#define DebugOverlay_Initialize(w, ctx)      0
 #define DebugOverlay_Shutdown()              ((void)0)
 #define DebugOverlay_NewFrame()              ((void)0)
 #define DebugOverlay_Render()                ((void)0)
