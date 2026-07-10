@@ -38,10 +38,14 @@ if(NOT KEEPERFX_RENDERER_OPENGL)
 endif()
 
 # ImGui overlay exclusion
+# DevTools.cpp is the always-present facade (no-ops without ImGui) and must stay
+# compiled even when the tooling is off, so the rest of the engine can call it
+# unconditionally. Everything else under kfx/imgui is ImGui-dependent.
 if(NOT KEEPERFX_IMGUI)
-    list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/debug/.*\\.cpp$")
+    list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/kfx/imgui/.*\\.cpp$")
+    list(APPEND KEEPERFX_SOURCES_CXX "${CMAKE_SOURCE_DIR}/src/kfx/imgui/DevTools.cpp")
 endif()
-list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/debug/vendors/.*\\.cpp$")
+list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/kfx/imgui/vendors/.*\\.cpp$")
 
 # ━━━ Networking Exclusions ━━━
 if(NOT KEEPERFX_NETWORKING)
@@ -198,6 +202,9 @@ if(KEEPERFX_HVLOG)
 else()
     target_compile_definitions(keeperfx PUBLIC BFDEBUG_LEVEL=0)
 endif()
+if(KEEPERFX_FORCE_ALEX)
+    target_compile_definitions(keeperfx PRIVATE KEEPERFX_FORCE_ALEX=1)
+endif()
 if(WIN32)
     target_sources(keeperfx PRIVATE "res/keeperfx_stdres.rc")
 endif()
@@ -245,7 +252,7 @@ endif()
 if(KEEPERFX_IMGUI AND TARGET imgui::imgui)
     target_link_libraries(keeperfx PRIVATE imgui::imgui)
     target_sources(keeperfx PRIVATE
-        "${CMAKE_SOURCE_DIR}/src/debug/vendors/imgui_impl_sdl3.cpp"
+        "${CMAKE_SOURCE_DIR}/src/kfx/imgui/vendors/imgui_impl_sdl3.cpp"
     )
 endif()
 

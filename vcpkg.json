@@ -16,6 +16,11 @@
         "luajit",
         "zlib",
         "curl",
-        "glad"
+        "glad",
+        {
+            "name": "imgui",
+            "features": ["opengl3-binding"],
+            "platform": "!arm & !uwp"
+        }
     ]
 }
