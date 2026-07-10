@@ -21,6 +21,7 @@
 
 #include <glad/glad.h>
 #include <atomic>
+#include <array>
 #include <vector>
 #include <unordered_map>
 #include "renderer/IWorldViewRenderer.h"
@@ -306,7 +307,7 @@ private:
     static const int k_clut_rows = 128;
     GLuint m_kspr_clut_tex      = 0;
     int    m_kspr_clut_used     = 1;   // next free row (0 = identity, always allocated)
-    std::unordered_map<const uint8_t*, int> m_kspr_clut_map;
+    std::vector<std::array<uint8_t, 256>> m_kspr_clut_remaps;
     uint8_t m_kspr_clut_palette_snap[768] = {};
 
     // Flat-colour polygon GL objects (QK_PolyMode0/4/BasicPolygon — full GPU path)
@@ -439,6 +440,7 @@ private:
     std::vector<IRWorldKeeperSpriteCmd> m_pip_kspr_ir;        // GT(PiP capture):
     bool                                m_pip_capture         = false; // GT:
     bool         m_cursor_capture      = false;             // GT: redirect SubmitKeeperSprite → m_cursor_kspr_ir
+    bool         m_cursor_pass_active  = false;             // RT: force non-atlas keeper-sprite path for cursor/hand sprites
 
     // ── Cursor keeper-sprite double buffer ────────────────────────────────────
     // Game thread pre-computes cursor sprites (via process_keeper_sprite_ex) into

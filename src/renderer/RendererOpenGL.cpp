@@ -754,7 +754,7 @@ void RendererOpenGL::EndFrame()
     // Snapshot all game-thread globals that EndFrame_GL() needs.
     // Must happen here (before signalling) so the render thread never reads live
     // globals that the game thread can modify concurrently once we return.
-    std::memcpy(m_rt_frame_state.palette, lbPalette, sizeof(m_rt_frame_state.palette));
+    std::memcpy(m_rt_frame_state.palette, LbPaletteGetReadonly(), sizeof(m_rt_frame_state.palette));
     m_rt_frame_state.possession_tint = g_palette_possession_tint;
     std::memcpy(m_rt_frame_state.screen_tint, g_screen_tint, sizeof(m_rt_frame_state.screen_tint));
     m_rt_frame_state.lens_mode = lens_mode;
@@ -2379,7 +2379,7 @@ bool RendererOpenGL::compile_shaders()
 IWorldViewRenderer* RendererOpenGL::CreateGLWorldViewRenderer()
 {
     auto* glwr = new GLWorldViewRenderer(m_tile_atlas, m_texFade, m_texPalette);
-    glwr->SetPaletteSource(lbPalette);
+    glwr->SetPaletteSource(LbPaletteGetReadonly());
     SetWorldRenderer(glwr);
     return glwr;
 }
@@ -2419,7 +2419,7 @@ IUIRenderer* RendererOpenGL::CreateGLUIRenderer()
     glui->SetSpriteAtlas(m_sprite_atlas);
     glui->SetFontAtlas(m_font_atlas);
     glui->SetPaletteTexture(m_texPalette, GL_TEXTURE_2D);
-    glui->SetPaletteSource(lbPalette);
+    glui->SetPaletteSource(LbPaletteGetReadonly());
     glui->SetScreenDimensions(RendererPhysicalWidth(), RendererPhysicalHeight());
     SetGLUIRenderer(glui);
     return glui;
@@ -2523,9 +2523,9 @@ void RendererOpenGL::NotifyGameTablesReady()
     // Wire the palette source pointer into sub-renderers that cache it.
     // SetPaletteSource is just a pointer copy — safe on the game thread.
     if (auto* ui = RendererGetUIRenderer())
-        ui->SetPaletteSource(lbPalette);
+        ui->SetPaletteSource(LbPaletteGetReadonly());
     if (auto* wr = RendererGetWorldViewRenderer())
-        wr->SetPaletteSource(lbPalette);
+        wr->SetPaletteSource(LbPaletteGetReadonly());
 }
 
 bool RendererOpenGL::ScheduleScreenshot(const char* path, int fmt)

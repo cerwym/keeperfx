@@ -278,7 +278,7 @@ void GLWorldViewRenderer::ClearKeeperSpriteAtlas()
 {
     m_kspr_atlas_map.clear();
     m_kspr_atlas_used = 0;
-    m_kspr_clut_map.clear();
+    m_kspr_clut_remaps.clear();
     m_kspr_clut_used = 1;
     memset(m_kspr_clut_palette_snap, 0, sizeof(m_kspr_clut_palette_snap));
     SYNCDBG(6, "GLWorldViewRenderer: keeper-sprite atlas cleared");
@@ -388,7 +388,7 @@ void GLWorldViewRenderer::ensure_clut_valid()
     glActiveTexture(GL_TEXTURE0);  // restore active unit
 
     // Invalidate all cached remap CLUTs — they depend on the old palette values.
-    m_kspr_clut_map.clear();
+    m_kspr_clut_remaps.clear();
     m_kspr_clut_used = 1;
 
     SYNCDBG(6, "GLWorldViewRenderer: CLUT rebuilt (palette changed)");
@@ -422,7 +422,7 @@ void GLWorldViewRenderer::free_gl_resources()
     m_kspr_atlas_map.clear();
     if (m_kspr_clut_tex)         { glDeleteTextures(1, &m_kspr_clut_tex);      m_kspr_clut_tex = 0; }
     if (m_kspr_atlas_glow_shader){ glDeleteProgram(m_kspr_atlas_glow_shader);  m_kspr_atlas_glow_shader = 0; }
-    m_kspr_clut_map.clear();
+    m_kspr_clut_remaps.clear();
     m_kspr_clut_used = 1;
     memset(m_kspr_clut_palette_snap, 0, sizeof(m_kspr_clut_palette_snap));
 
@@ -977,6 +977,7 @@ void GLWorldViewRenderer::DrawCursorKeeperSprites()
 {
     ASSERT_RENDER_THREAD();
     if (m_rt_cursor_kspr_ir.empty()) return;
+    ensure_clut_valid();
 
     const int saved_draw_w   = m_draw_screen_w;
     const int saved_draw_h   = m_draw_screen_h;
@@ -991,14 +992,17 @@ void GLWorldViewRenderer::DrawCursorKeeperSprites()
     glViewport(0, 0, m_full_screen_w, m_full_screen_h);
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
+    m_cursor_pass_active = true;
 
     for (const auto& cmd : m_rt_cursor_kspr_ir)
     {
+        const unsigned char* remap = cmd.remap_enabled ? cmd.remap_table : nullptr;
         render_keepersprite_gpu(cmd.dst_x, cmd.dst_y, cmd.dst_w, cmd.dst_h,
                                 cmd.data, cmd.src_w, cmd.src_h,
-                                cmd.draw_flags, cmd.remap,
+                                cmd.draw_flags, remap,
                                 cmd.z_ndc, cmd.owner, cmd.wants_outline);
     }
+    m_cursor_pass_active = false;
 
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
@@ -1038,7 +1042,9 @@ int GLWorldViewRenderer::SubmitKeeperSprite(
         cmd.src_h         = src_h;
         cmd.draw_flags    = draw_flags;
         cmd.data          = data;
-        cmd.remap         = remap;
+        cmd.remap_enabled = (remap != nullptr) ? 1 : 0;
+        if (cmd.remap_enabled)
+            std::memcpy(cmd.remap_table, remap, sizeof(cmd.remap_table));
         cmd.z_ndc         = -1.0f;
         cmd.owner         = (int8_t)WorldViewRenderer_GetCurrentSpriteOwner();
         cmd.wants_outline = (int8_t)WorldViewRenderer_GetCurrentSpriteWantsOutline();
@@ -1058,7 +1064,9 @@ int GLWorldViewRenderer::SubmitKeeperSprite(
     cmd.src_h         = src_h;
     cmd.draw_flags    = draw_flags;
     cmd.data          = data;
-    cmd.remap         = remap;
+    cmd.remap_enabled = (remap != nullptr) ? 1 : 0;
+    if (cmd.remap_enabled)
+        std::memcpy(cmd.remap_table, remap, sizeof(cmd.remap_table));
     cmd.z_ndc         = m_current_sprite_z;
     cmd.owner         = (int8_t)WorldViewRenderer_GetCurrentSpriteOwner();
     cmd.wants_outline = (int8_t)WorldViewRenderer_GetCurrentSpriteWantsOutline();
@@ -1121,7 +1129,8 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
     // layer with no CPU decode and no GPU upload.
     const bool additive = (draw_flags & Lb_SPRITE_ALPHA_ADDITIVE) != 0;
     const bool use_remap = remap && (draw_flags & Lb_TEXT_UNDERLNSHADOW) && !additive;
-    const bool atlas_eligible = m_kspr_sprite_array && m_kspr_atlas_shader && m_kspr_clut_tex;
+    const bool atlas_eligible = !m_cursor_pass_active
+        && m_kspr_sprite_array && m_kspr_atlas_shader && m_kspr_clut_tex;
     int atlas_layer = -1;
     if (atlas_eligible)
     {
@@ -1171,14 +1180,22 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
     float clut_v = 0.5f / (float)k_clut_rows;  // row 0 centre
     if (atlas_layer >= 0 && use_remap && m_kspr_clut_tex)
     {
-        auto clut_it = m_kspr_clut_map.find(remap);
-        if (clut_it != m_kspr_clut_map.end())
+        int row_idx = -1;
+        for (size_t i = 0; i < m_kspr_clut_remaps.size(); ++i)
         {
-            clut_v = (float(clut_it->second) + 0.5f) / (float)k_clut_rows;
+            if (std::memcmp(m_kspr_clut_remaps[i].data(), remap, 256) == 0)
+            {
+                row_idx = (int)i + 1;
+                break;
+            }
+        }
+        if (row_idx >= 1)
+        {
+            clut_v = (float(row_idx) + 0.5f) / (float)k_clut_rows;
         }
         else if (m_kspr_clut_used < k_clut_rows)
         {
-            int row_idx = m_kspr_clut_used++;
+            row_idx = m_kspr_clut_used++;
             uint8_t row_data[256 * 4];
             for (int ci = 0; ci < 256; ci++) {
                 int ri = remap[ci];
@@ -1193,7 +1210,9 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
                             GL_RGBA, GL_UNSIGNED_BYTE, row_data);
             glBindTexture(GL_TEXTURE_2D, 0);
             glActiveTexture(GL_TEXTURE0);  // restore active unit before main draw setup
-            m_kspr_clut_map[remap] = row_idx;
+            std::array<uint8_t, 256> remap_copy;
+            std::memcpy(remap_copy.data(), remap, remap_copy.size());
+            m_kspr_clut_remaps.push_back(remap_copy);
             clut_v = (float(row_idx) + 0.5f) / (float)k_clut_rows;
         }
         // If CLUT is full, clut_v stays at row 0 (identity fallback — wrong colour
@@ -1414,8 +1433,9 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
 void GLWorldViewRenderer::DrawKeeperSpriteGL(const IRWorldKeeperSpriteCmd& cmd)
 {
     ASSERT_RENDER_THREAD();
+    const unsigned char* remap = cmd.remap_enabled ? cmd.remap_table : nullptr;
     render_keepersprite_gpu(cmd.dst_x, cmd.dst_y, cmd.dst_w, cmd.dst_h,
-                            cmd.data, cmd.src_w, cmd.src_h, cmd.draw_flags, cmd.remap,
+                            cmd.data, cmd.src_w, cmd.src_h, cmd.draw_flags, remap,
                             cmd.z_ndc, (int)cmd.owner, (int)cmd.wants_outline);
 }
 

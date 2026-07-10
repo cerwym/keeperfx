@@ -679,6 +679,11 @@ TbResult LbPaletteGet(unsigned char *palette)
     return Lb_SUCCESS;
 }
 
+const unsigned char *LbPaletteGetReadonly(void)
+{
+    return lbPalette;
+}
+
 TbResult LbSetTitle(const char *title)
 {
     snprintf(lbDrawAreaTitle, sizeof(lbDrawAreaTitle), "%s", title);

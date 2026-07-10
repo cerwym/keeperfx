@@ -1923,7 +1923,7 @@ void GLUIRenderer::SetupMinimapBackground(int diaglen, int panel_x, int panel_y)
 bool GLUIRenderer::GetMinimapOpaqueBlackIndex(uint8_t* idx) const
 {
     if (!idx) return false;
-    const uint8_t* pal = m_palette_data ? m_palette_data : lbPalette;
+    const uint8_t* pal = m_palette_data ? m_palette_data : LbPaletteGetReadonly();
     uint8_t black_idx = 1;
     uint32_t best_lum = UINT32_MAX;
     for (int i = 1; i < 256; i++)
