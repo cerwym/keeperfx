@@ -863,6 +863,14 @@ void RendererOpenGL::EndFrame_GL()
         if (ui) ui->FlushPendingInit();
     }
 
+    // Truecolour: re-bake the RGBA sprite atlas if the active palette changed
+    // this frame (frontend<->level, fades). Uses the game-thread palette snapshot
+    // taken in EndFrame() so it never tears against a live LbPaletteSet(). No-op
+    // in indexed mode or when the palette is unchanged. Must precede the flush
+    // below so the re-materialised region is uploaded in the same frame.
+    if (m_sprite_atlas)
+        m_sprite_atlas->RefreshRGBAForPalette(m_rt_frame_state.palette);
+
     // Flush deferred sprite-atlas GL work (glGenTextures/glTexImage2D/glDeleteTextures
     // deferred from RendererNotifySpritesReloaded, which runs on the game thread).
     RendererFlushPendingSpriteAtlas();

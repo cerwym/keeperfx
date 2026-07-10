@@ -101,6 +101,15 @@ public:
     /** True when this atlas is maintaining a parallel RGBA8 texture. */
     bool   IsRGBAEnabled() const;
 
+    /** Re-materialise the truecolour RGBA8 atlas against a new active palette.
+     *  No-op unless truecolour is enabled and `pal` (768-byte VGA6) differs from
+     *  the palette last baked in. Re-bakes the packed region from the always-present
+     *  R8 index atlas and marks it dirty for the next FlushPendingGL() upload, so
+     *  truecolour sprites follow palette changes (frontend<->level, fades) exactly
+     *  like the indexed path. Cheap (a 768-byte compare) when the palette is stable.
+     *  Call from the render thread with the frame's palette snapshot. */
+    void   RefreshRGBAForPalette(const unsigned char* pal);
+
     size_t GetRegisteredCount() const;
 
     /** Fill out with a detached, read-only copy of the atlas: dimensions, the

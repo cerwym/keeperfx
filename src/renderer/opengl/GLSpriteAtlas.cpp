@@ -381,6 +381,31 @@ bool GLSpriteAtlas::IsRGBAEnabled() const
     return m_rgba_enabled;
 }
 
+void GLSpriteAtlas::RefreshRGBAForPalette(const unsigned char* pal)
+{
+    if (!pal) return;
+    std::unique_lock<std::shared_mutex> lock(m_mutex);
+    if (!m_rgba_enabled || m_rgba.empty()) return;
+    // A full (re)build is already queued — it materialises fresh in pack_sprite,
+    // so skip the incremental re-bake to avoid doing the work twice.
+    if (m_gl_init_needed) return;
+    // Fast path: palette unchanged since the last bake.
+    if (memcmp(pal, m_pal_snapshot, sizeof(m_pal_snapshot)) == 0) return;
+    memcpy(m_pal_snapshot, pal, sizeof(m_pal_snapshot));
+
+    // Re-materialise every packed row from the R8 index atlas through the new
+    // palette. Unused gaps hold index 0 and stay transparent.
+    const int used_h = m_shelf_y + m_shelf_h;
+    if (used_h <= 0) return;
+    for (int y = 0; y < used_h; ++y) {
+        const uint8_t* src = m_pixels.data() + (size_t)y * k_atlas_w;
+        uint8_t*       dst = m_rgba.data()   + (size_t)y * k_atlas_w * 4;
+        materialise_row(dst, src, k_atlas_w, m_pal_snapshot);
+    }
+    if (m_dirty_y_min > 0)      m_dirty_y_min = 0;
+    if (m_dirty_y_max < used_h) m_dirty_y_max = used_h;
+}
+
 size_t GLSpriteAtlas::GetRegisteredCount() const
 {
     std::shared_lock<std::shared_mutex> lock(m_mutex);
