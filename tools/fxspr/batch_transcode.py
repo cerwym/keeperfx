@@ -36,8 +36,27 @@ def find_pairs(data_dir):
             yield stem, dat_path, tab_path
 
 
+def infer_scale(stem):
+    """Infer the nominal scale tier from a stem suffix like '-32' / '-64'."""
+    for tier in (128, 64, 32):
+        if stem.endswith(f"-{tier}") or stem.endswith(str(tier)):
+            return tier
+    return 0
+
+
+def infer_category(stem):
+    s = stem.lower()
+    if s.startswith("font"):
+        return "font"
+    if s.startswith("pointer") or s.startswith("points"):
+        return "pointer"
+    if s.startswith("gui"):
+        return "gui"
+    return "unknown"
+
+
 def main():
-    ap = argparse.ArgumentParser(description="batch legacy .dat/.tab -> .fxspr")
+    ap = argparse.ArgumentParser(description="batch legacy .dat/.tab -> .fxspr v2")
     ap.add_argument("--data-dir", default=".deploy/data",
                     help="directory holding the .dat/.tab pairs (default: .deploy/data)")
     ap.add_argument("--pal", default=None,
@@ -46,6 +65,8 @@ def main():
                     help="output dir for .fxspr (default: <data-dir>/fxspr)")
     ap.add_argument("--only", nargs="*", default=None,
                     help="optional list of stems to limit to (e.g. gui1-32 gui2-32)")
+    ap.add_argument("--provenance", default="bullfrog",
+                    help="provenance tag stamped into every sheet (default: bullfrog)")
     ap.add_argument("--verify", action="store_true",
                     help="run the parity self-check on each written file")
     args = ap.parse_args()
@@ -69,7 +90,11 @@ def main():
     for stem, dat_path, tab_path in pairs:
         out_path = os.path.join(out_dir, stem + ".fxspr")
         try:
-            n, payload = t.transcode(tab_path, dat_path, pal, out_path)
+            n, payload = t.transcode(
+                tab_path, dat_path, pal, out_path,
+                scale=infer_scale(stem), provenance=args.provenance,
+                colour_mode="indexed", category=infer_category(stem),
+                display_name=stem)
             if args.verify:
                 t.verify(out_path, tab_path)
             total_ok += 1
