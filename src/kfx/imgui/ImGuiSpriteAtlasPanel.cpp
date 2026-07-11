@@ -28,6 +28,7 @@
 #  include "kfx/assets/FxSprSheet.h"
 #  include "kfx/assets/VariantCatalogue.h"
 #  include "kfx/imgui/NativeFileDialog.hpp"
+#  include "kfx/imgui/FxsprAtlas.hpp"
 #  include "config.h"                 // prepare_file_path, FGrp_StdData
 #  include <map>
 #  include <utility>
@@ -327,6 +328,12 @@ std::string                     s_fxspr_status;
 std::unordered_map<int, GLuint> s_fxspr_tex;    // entry index -> RGBA texture
 char                            s_fxspr_path[256] = "fxspr/gui1-32.fxspr";
 
+// Atlas-backed grid: the loaded sheet's sprites packed into a few RGBA8 page
+// textures, plus the compact list of drawable (non-empty) entry indices used
+// to drive the virtualized grid.  Rebuilt on every successful LoadFxspr().
+kfx::FxsprAtlas                  s_fxspr_atlas;
+std::vector<int>                 s_fxspr_drawable;
+
 // ── Comparison viewer state (A7) ──────────────────────────────────────────────
 int         s_fxspr_selected = -1;      // selected entry in the current sheet
 bool        s_catalogue_loaded = false; // VariantCatalogue::loadDefaultPacks() done
@@ -459,41 +466,31 @@ void LoadFxspr()
     }
     s_fxspr_ok = s_fxspr.loadFromFile(full);
     if (s_fxspr_ok) {
-        char buf[128];
-        snprintf(buf, sizeof(buf), "Loaded: %d entries, kind %u, flags 0x%04X",
-                 s_fxspr.count(), (unsigned)s_fxspr.kind(), (unsigned)s_fxspr.flags());
+        // Pack the sheet into atlas page(s) and cache the drawable entries so
+        // the grid never creates one GL texture per sprite (9k+ for creatures).
+        s_fxspr_atlas.build(s_fxspr);
+        s_fxspr_drawable.clear();
+        const int n = s_fxspr.count();
+        s_fxspr_drawable.reserve((size_t)(n > 0 ? n : 0));
+        for (int i = 0; i < n; ++i) {
+            kfx::FxsprAtlasRegion r;
+            if (s_fxspr_atlas.region(i, r))
+                s_fxspr_drawable.push_back(i);
+        }
+        char buf[192];
+        snprintf(buf, sizeof(buf),
+                 "Loaded: %d entries, kind %u, flags 0x%04X - %d sprites, "
+                 "%d page(s) %dx%d, ~%zu MB VRAM",
+                 s_fxspr.count(), (unsigned)s_fxspr.kind(),
+                 (unsigned)s_fxspr.flags(), (int)s_fxspr_drawable.size(),
+                 s_fxspr_atlas.pageCount(), s_fxspr_atlas.pageDim(),
+                 s_fxspr_atlas.pageDim(), s_fxspr_atlas.vramBytes() >> 20);
         s_fxspr_status = buf;
     } else {
+        s_fxspr_atlas.free();
+        s_fxspr_drawable.clear();
         s_fxspr_status = "Load failed (see log). Check the path is under data/.";
     }
-}
-
-GLuint FxsprTextureForIndex(int index, int* out_w, int* out_h)
-{
-    kfx::FxSprSprite spr;
-    if (!s_fxspr.sprite(index, spr))
-        return 0;
-    if (out_w) *out_w = spr.width;
-    if (out_h) *out_h = spr.height;
-    if (spr.width == 0 || spr.height == 0 || spr.rgba == nullptr)
-        return 0;
-
-    auto it = s_fxspr_tex.find(index);
-    if (it != s_fxspr_tex.end())
-        return it->second;
-
-    GLuint tex = 0;
-    glGenTextures(1, &tex);
-    glBindTexture(GL_TEXTURE_2D, tex);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, spr.width, spr.height, 0,
-                 GL_RGBA, GL_UNSIGNED_BYTE, spr.rgba);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    s_fxspr_tex[index] = tex;
-    return tex;
 }
 
 // Draw the side-by-side variant strip for the currently selected entry.
@@ -629,51 +626,76 @@ void DrawFxsprTab()
 
     // Left: selectable sprite grid. Right: comparison strip.
     const float right_w = 360.0f;
-    ImGui::BeginChild("fxspr_grid", ImVec2(-right_w, 0), true,
-                      ImGuiWindowFlags_HorizontalScrollbar);
+    ImGui::BeginChild("fxspr_grid", ImVec2(-right_w, 0), true);
 
-    const float avail   = ImGui::GetContentRegionAvail().x;
-    const float spacing = ImGui::GetStyle().ItemSpacing.x;
-    float       line_x  = 0.0f;
-    bool        first   = true;
+    // Uniform fixed-cell grid driven by ImGuiListClipper so only on-screen rows
+    // emit widgets, and drawn from the atlas page textures via UV sub-rects so
+    // no per-sprite GL textures are ever created (scales to 9k+ creature frames).
+    const float  cell    = s_thumb_h;
+    const float  spacing = ImGui::GetStyle().ItemSpacing.x;
+    const float  avail   = ImGui::GetContentRegionAvail().x;
+    const int    cols    = (cell + spacing) > 0.0f
+                             ? (int)((avail + spacing) / (cell + spacing)) : 1;
+    const int    ncols   = (cols > 0) ? cols : 1;
+    const int    total   = (int)s_fxspr_drawable.size();
+    const int    rows    = (total + ncols - 1) / ncols;
+    const float  row_h   = cell + ImGui::GetStyle().ItemSpacing.y;
 
-    const int n = s_fxspr.count();
-    for (int i = 0; i < n; ++i) {
-        int w = 0, h = 0;
-        GLuint tex = FxsprTextureForIndex(i, &w, &h);
-        if (w <= 0 || h <= 0 || tex == 0)
-            continue;   // skip empty / sentinel entries
+    ImDrawList* dl = ImGui::GetWindowDrawList();
 
-        const float  scale = s_thumb_h / (float)h;
-        const ImVec2 sz((float)w * scale, (float)h * scale);
+    ImGuiListClipper clipper;
+    clipper.Begin(rows, row_h);
+    while (clipper.Step()) {
+        for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; ++row) {
+            for (int col = 0; col < ncols; ++col) {
+                const int k = row * ncols + col;
+                if (k >= total)
+                    break;
+                if (col > 0)
+                    ImGui::SameLine();
 
-        if (!first && line_x > 0.0f && line_x + sz.x > avail)
-            line_x = 0.0f;               // wrap to next row
-        else if (!first)
-            ImGui::SameLine();
-        first = false;
+                const int i = s_fxspr_drawable[k];
+                kfx::FxsprAtlasRegion r;
+                if (!s_fxspr_atlas.region(i, r))
+                    continue;
 
-        ImGui::PushID(i);
-        const bool  selected = (i == s_fxspr_selected);
-        const ImVec4 tint = selected ? ImVec4(1, 1, 0.5f, 1) : ImVec4(1, 1, 1, 1);
-        if (ImGui::ImageButton("fx", (ImTextureID)(intptr_t)tex, sz,
-                               ImVec2(0, 0), ImVec2(1, 1),
-                               ImVec4(0, 0, 0, 0), tint)) {
-            s_fxspr_selected = i;
+                ImGui::PushID(i);
+                const ImVec2 p0 = ImGui::GetCursorScreenPos();
+                ImGui::InvisibleButton("cell", ImVec2(cell, cell));
+                if (ImGui::IsItemClicked())
+                    s_fxspr_selected = i;
+                const bool selected = (i == s_fxspr_selected);
+
+                // Aspect-fit the sprite inside the square cell, centred.
+                const float fit  = cell / (float)((r.w > r.h) ? r.w : r.h);
+                const float dw   = (float)r.w * fit;
+                const float dh   = (float)r.h * fit;
+                const ImVec2 ip0(p0.x + (cell - dw) * 0.5f, p0.y + (cell - dh) * 0.5f);
+                const ImVec2 ip1(ip0.x + dw, ip0.y + dh);
+                const GLuint tex = s_fxspr_atlas.page(r.page);
+                if (tex != 0) {
+                    dl->AddImage((ImTextureID)(intptr_t)tex, ip0, ip1,
+                                 ImVec2(r.u0, r.v0), ImVec2(r.u1, r.v1));
+                }
+                if (selected) {
+                    dl->AddRect(p0, ImVec2(p0.x + cell, p0.y + cell),
+                                IM_COL32(255, 255, 128, 255));
+                }
+
+                if (ImGui::IsItemHovered()) {
+                    ImGui::BeginTooltip();
+                    ImGui::Text("Entry %d", i);
+                    ImGui::Text("Size %dx%d", r.w, r.h);
+                    const char* nm = s_fxspr.name(i);
+                    if (nm != nullptr && nm[0] != '\0')
+                        ImGui::Text("Name %s", nm);
+                    ImGui::EndTooltip();
+                }
+                ImGui::PopID();
+            }
         }
-        if (ImGui::IsItemHovered()) {
-            ImGui::BeginTooltip();
-            ImGui::Text("Entry %d", i);
-            ImGui::Text("Size %dx%d", w, h);
-            const char* nm = s_fxspr.name(i);
-            if (nm != nullptr && nm[0] != '\0')
-                ImGui::Text("Name %s", nm);
-            ImGui::EndTooltip();
-        }
-        ImGui::PopID();
-
-        line_x += sz.x + spacing;
     }
+    clipper.End();
 
     ImGui::EndChild();
 
