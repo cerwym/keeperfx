@@ -177,7 +177,7 @@ bool  s_anim_pivot   = true;   // honour per-frame offset_x/y for stable pivot
 //   sprite_rot = |4 - (((angle + 22.5deg) & MASK) >> 8)|      -> group 0..4
 //   xflip when angle is in the left hemisphere (1152..1918)   -> mirror groups
 constexpr int kAngleMask   = 2047; // ANGLE_MASK
-constexpr int kDegrees22_5 = 256;  // DEGREES_22_5 (2048/8)
+constexpr int kDegrees22_5 = 128;  // DEGREES_22_5 (2048/16); centres the 45deg sector
 
 int AnimRotGroup(int angle, int rotable)
 {
