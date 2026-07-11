@@ -353,8 +353,10 @@ void ClearVariantCaches()
     s_variant_sheets.clear();
 }
 
-// Strip directory, ".fxspr" and any scale suffix from the current path to get
-// the collection base (mirrors tools/fxspr/make_manifest.py split_base_scale).
+// Strip directory, ".fxspr", an optional "-tc"/"-idx" colour marker and any
+// scale suffix from the current path to get the collection base (mirrors
+// tools/fxspr/make_manifest.py split_base_scale). Works for absolute paths
+// (e.g. from the Browse dialog) as well as data-relative ones.
 std::string FxsprCurrentBase()
 {
     std::string p = s_fxspr_path;
@@ -363,6 +365,14 @@ std::string FxsprCurrentBase()
     const size_t dot = stem.rfind('.');
     if (dot != std::string::npos)
         stem = stem.substr(0, dot);
+    // Colour marker first (the colour itself is read from the file header).
+    for (const char* mk : {"-tc", "-idx"}) {
+        const size_t ml = std::strlen(mk);
+        if (stem.size() > ml && stem.compare(stem.size() - ml, ml, mk) == 0) {
+            stem = stem.substr(0, stem.size() - ml);
+            break;
+        }
+    }
     for (const char* suf : {"-128", "-64", "-32"}) {
         const size_t sl = std::strlen(suf);
         if (stem.size() > sl && stem.compare(stem.size() - sl, sl, suf) == 0)
