@@ -59,6 +59,7 @@ enum FxSprFlags {
     FxSprFlag_PayloadCompressed  = 0x0004, /**< bit2: payload is a single zlib stream */
     FxSprFlag_IndexedCache       = 0x0008, /**< bit3: precomputed R8+RLE block present (unused) */
     FxSprFlag_RichEntries        = 0x0010, /**< bit4: directory uses 32-byte FxSprEntryRich (v2) */
+    FxSprFlag_AnimBlock          = 0x0020, /**< bit5: FxSprHeaderExt3 + animation descriptor block present */
 };
 
 /** Asset kind discriminator. One container, not sub-formats. */
@@ -168,6 +169,63 @@ struct FxSprAssetInfo {
     uint32_t reserved;       /**< 0 */
 };
 
+/* -- Rotational fidelity amendment (additive, forward-compatible) -------------
+ * See docs/sprite-rotational-fidelity.md. All blocks are located by absolute
+ * byte offsets from file start and readers dispatch on `version` + flag bits, so
+ * these additions are invisible to existing v2 readers: FxSprHeaderExt3 is only
+ * read when FxSprFlag_AnimBlock is set, and old readers never look past the
+ * fixed 48-byte header+ext2 prefix before jumping to directory/payload by
+ * absolute offset. The engine can parse these but the draw path does not use
+ * them yet. */
+
+/** v2 second header extension (16 bytes). Present at file offset 48 (right after
+ *  FxSprHeaderExt2) iff FxSprFlag_AnimBlock is set. Locates the animation
+ *  descriptor block; all counts/strides live in FxSprAnimBlock (authoritative). */
+struct FxSprHeaderExt3 {
+    uint32_t animblock_off;   /**< absolute offset to FxSprAnimBlock (0 = none) */
+    uint32_t animblock_size;  /**< total bytes of the animation descriptor block */
+    uint32_t reserved0;       /**< 0 */
+    uint32_t reserved1;       /**< 0 */
+};
+
+/** Animation descriptor block header (16 bytes), at FxSprHeaderExt3.animblock_off.
+ *  Followed by anim_count * FxSprAnim, then dir_count * FxSprAnimDir. The stride
+ *  fields let future revisions grow each record without shifting existing ones:
+ *  readers advance by the stride and read only the fields they understand. */
+struct FxSprAnimBlock {
+    uint16_t version;        /**< FXSPR_ANIMBLOCK_VERSION (1) */
+    uint16_t anim_stride;    /**< bytes per FxSprAnim (>= FXSPR_ANIM_SIZE) */
+    uint16_t dir_stride;     /**< bytes per FxSprAnimDir (>= FXSPR_ANIMDIR_SIZE) */
+    uint16_t reserved;       /**< 0 */
+    uint32_t anim_count;     /**< number of FxSprAnim records */
+    uint32_t dir_count;      /**< number of FxSprAnimDir records (all anims) */
+};
+
+/** One logical animation (e.g. an IMP walk cycle). Its directions are the
+ *  dir_count records starting at dir_first in the direction array. */
+struct FxSprAnim {
+    uint32_t group_id;       /**< matches FxSprEntryRich.group_id */
+    uint32_t name_off;       /**< display name, offset into the string table (0 = none) */
+    uint16_t frames;         /**< frames per direction */
+    uint16_t dir_first;      /**< index of this anim's first FxSprAnimDir */
+    uint16_t dir_count;      /**< number of directions (>= 1) */
+    uint8_t  legacy_rotable; /**< original KeeperSprite.Rotable (0/1/2) for the legacy draw path */
+    uint8_t  view;           /**< FxSprView */
+    uint16_t fps;            /**< suggested playback rate (0 = engine default) */
+    uint16_t reserved;       /**< 0 */
+};
+
+/** One facing of one animation. A direction is either a real stored bitmap run
+ *  (mirror == 0, base_dir == self) or a horizontal mirror of another direction
+ *  of the same animation (mirror == 1, base_dir = source dir index within the
+ *  anim). Frames occupy directory entries entry_first .. entry_first+frames-1. */
+struct FxSprAnimDir {
+    uint16_t angle;          /**< 0..2047 (== 0..360deg) this bitmap represents */
+    uint8_t  mirror;         /**< 0 = as-is, 1 = horizontal mirror of base_dir */
+    uint8_t  base_dir;       /**< dir index within this anim to mirror (self if mirror==0) */
+    uint32_t entry_first;    /**< directory index of this direction's frame 0 */
+};
+
 #pragma pack(pop)
 
 /** Payload is entry_count blocks of width*height*4 bytes RGBA8, top-to-bottom,
@@ -182,11 +240,22 @@ struct FxSprAssetInfo {
 enum {
     FXSPR_HEADER_SIZE      = 24, /**< sizeof(struct FxSprHeader) with pack(1) */
     FXSPR_HEADER_EXT2_SIZE = 24, /**< sizeof(struct FxSprHeaderExt2) with pack(1) */
+    FXSPR_HEADER_EXT3_SIZE = 16, /**< sizeof(struct FxSprHeaderExt3) with pack(1) */
     FXSPR_ENTRY_SIZE       = 8,  /**< sizeof(struct FxSprEntry) with pack(1) */
     FXSPR_ENTRY_RICH_SIZE  = 32, /**< sizeof(struct FxSprEntryRich) with pack(1) */
     FXSPR_ASSETINFO_SIZE   = 12, /**< sizeof(struct FxSprAssetInfo) with pack(1) */
+    FXSPR_ANIMBLOCK_SIZE   = 16, /**< sizeof(struct FxSprAnimBlock) with pack(1) */
+    FXSPR_ANIM_SIZE        = 20, /**< sizeof(struct FxSprAnim) with pack(1) */
+    FXSPR_ANIMDIR_SIZE     = 8,  /**< sizeof(struct FxSprAnimDir) with pack(1) */
     FXSPR_BYTES_PER_PIXEL  = 4
 };
+
+/** Animation descriptor block format version (FxSprAnimBlock.version). */
+#define FXSPR_ANIMBLOCK_VERSION 1u
+
+/** File offset of FxSprHeaderExt3 when FxSprFlag_AnimBlock is set (immediately
+ *  after FxSprHeader + FxSprHeaderExt2). */
+#define FXSPR_HEADER_EXT3_OFF (FXSPR_HEADER_SIZE + FXSPR_HEADER_EXT2_SIZE)
 
 #ifdef __cplusplus
 } // extern "C"
