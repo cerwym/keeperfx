@@ -26,7 +26,12 @@
 #  include "kfx/imgui/CreatureSpriteInfo.h"
 #  include "kfx/imgui/CreatureSpriteCache.h"
 #  include "kfx/assets/FxSprSheet.h"
+#  include "kfx/assets/VariantCatalogue.h"
 #  include "config.h"                 // prepare_file_path, FGrp_StdData
+#  include <map>
+#  include <utility>
+#  include <cstring>
+#  include <cstdlib>
 #endif
 
 #include "post_inc.h"
@@ -321,6 +326,17 @@ std::string                     s_fxspr_status;
 std::unordered_map<int, GLuint> s_fxspr_tex;    // entry index -> RGBA texture
 char                            s_fxspr_path[256] = "fxspr/gui1-32.fxspr";
 
+// ── Comparison viewer state (A7) ──────────────────────────────────────────────
+int         s_fxspr_selected = -1;      // selected entry in the current sheet
+bool        s_catalogue_loaded = false; // VariantCatalogue::loadDefaultPacks() done
+char        s_fxspr_search[128] = "";
+std::vector<std::string> s_search_hits;
+
+// Lazily-loaded sheets + textures for the OTHER variant files referenced by the
+// catalogue (keyed by their FGrp_StdData-relative path / "file#entry").
+std::map<std::string, kfx::FxSprSheet> s_variant_sheets;
+std::map<std::string, GLuint>          s_variant_tex;
+
 void ClearFxsprTextures()
 {
     for (auto& kv : s_fxspr_tex)
@@ -328,12 +344,93 @@ void ClearFxsprTextures()
     s_fxspr_tex.clear();
 }
 
+void ClearVariantCaches()
+{
+    for (auto& kv : s_variant_tex)
+        if (kv.second) glDeleteTextures(1, &kv.second);
+    s_variant_tex.clear();
+    s_variant_sheets.clear();
+}
+
+// Strip directory, ".fxspr" and any scale suffix from the current path to get
+// the collection base (mirrors tools/fxspr/make_manifest.py split_base_scale).
+std::string FxsprCurrentBase()
+{
+    std::string p = s_fxspr_path;
+    const size_t slash = p.find_last_of("/\\");
+    std::string stem = (slash == std::string::npos) ? p : p.substr(slash + 1);
+    const size_t dot = stem.rfind('.');
+    if (dot != std::string::npos)
+        stem = stem.substr(0, dot);
+    for (const char* suf : {"-128", "-64", "-32"}) {
+        const size_t sl = std::strlen(suf);
+        if (stem.size() > sl && stem.compare(stem.size() - sl, sl, suf) == 0)
+            return stem.substr(0, stem.size() - sl);
+    }
+    if ((stem.rfind("pointer", 0) == 0 || stem.rfind("points", 0) == 0) &&
+        stem.size() > 2) {
+        const std::string tail = stem.substr(stem.size() - 2);
+        if (tail == "32" || tail == "64")
+            return stem.substr(0, stem.size() - 2);
+    }
+    return stem;
+}
+
+// Get (loading + caching) an RGBA texture for `entry` of the variant `file`
+// (FGrp_StdData-relative). Returns 0 if unavailable; fills out_w/out_h.
+GLuint VariantTextureFor(const std::string& file, int entry, int* out_w, int* out_h)
+{
+    if (out_w) *out_w = 0;
+    if (out_h) *out_h = 0;
+
+    auto sit = s_variant_sheets.find(file);
+    if (sit == s_variant_sheets.end()) {
+        kfx::FxSprSheet sheet;
+        const char* full = prepare_file_path(FGrp_StdData, file.c_str());
+        if (full != nullptr)
+            sheet.loadFromFile(full);
+        sit = s_variant_sheets.emplace(file, std::move(sheet)).first;
+    }
+    kfx::FxSprSheet& sheet = sit->second;
+    if (!sheet.valid())
+        return 0;
+
+    kfx::FxSprSprite spr;
+    if (!sheet.sprite(entry, spr))
+        return 0;
+    if (out_w) *out_w = spr.width;
+    if (out_h) *out_h = spr.height;
+    if (spr.width == 0 || spr.height == 0 || spr.rgba == nullptr)
+        return 0;
+
+    char key[288];
+    snprintf(key, sizeof(key), "%s#%d", file.c_str(), entry);
+    auto tit = s_variant_tex.find(key);
+    if (tit != s_variant_tex.end())
+        return tit->second;
+
+    GLuint tex = 0;
+    glGenTextures(1, &tex);
+    glBindTexture(GL_TEXTURE_2D, tex);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, spr.width, spr.height, 0,
+                 GL_RGBA, GL_UNSIGNED_BYTE, spr.rgba);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    s_variant_tex[key] = tex;
+    return tex;
+}
+
 void LoadFxspr()
 {
     ClearFxsprTextures();
+    ClearVariantCaches();
     s_fxspr = kfx::FxSprSheet();
     s_fxspr_loaded = true;
     s_fxspr_ok = false;
+    s_fxspr_selected = -1;
 
     const char* full = prepare_file_path(FGrp_StdData, s_fxspr_path);
     if (full == nullptr) {
@@ -379,13 +476,114 @@ GLuint FxsprTextureForIndex(int index, int* out_w, int* out_h)
     return tex;
 }
 
+// Draw the side-by-side variant strip for the currently selected entry.
+void DrawComparison()
+{
+    kfx::VariantCatalogue& cat = kfx::VariantCatalogue::instance();
+    const std::string base = FxsprCurrentBase();
+
+    ImGui::TextDisabled("Comparison");
+    if (s_fxspr_selected < 0) {
+        ImGui::TextWrapped("Click a sprite in the grid to compare its quality "
+                           "variants.");
+        return;
+    }
+
+    kfx::SpriteIdentity id;
+    if (!cat.resolve(base, s_fxspr_selected, id)) {
+        ImGui::TextWrapped("No catalogue entry for %s/%d. (Is spritepacks/"
+                           "base.json deployed?)", base.c_str(), s_fxspr_selected);
+        return;
+    }
+
+    ImGui::Text("ID: %s", id.id.c_str());
+    if (!id.name.empty())
+        ImGui::Text("Name: %s", id.name.c_str());
+    if (!id.category.empty())
+        ImGui::Text("Category: %s", id.category.c_str());
+    if (!id.tags.empty()) {
+        std::string tags;
+        for (const std::string& t : id.tags) {
+            if (!tags.empty()) tags += ", ";
+            tags += t;
+        }
+        ImGui::Text("Tags: %s", tags.c_str());
+    }
+    ImGui::Text("%zu variant(s)", id.variants.size());
+    ImGui::Separator();
+
+    for (const kfx::SpriteVariant& v : id.variants) {
+        int w = 0, h = 0;
+        GLuint tex = VariantTextureFor(v.file, v.entry, &w, &h);
+
+        ImGui::PushID(v.file.c_str());
+        ImGui::BeginGroup();
+        const char* colour = (v.colour == kfx::FxColourKind::Truecolour)
+                                 ? "truecolour" : "indexed";
+        if (v.scale > 0)
+            ImGui::Text("%dpx %s", v.scale, colour);
+        else
+            ImGui::Text("%s", colour);
+
+        if (tex != 0 && w > 0 && h > 0) {
+            const float target = 96.0f;
+            const float scale = (h > 0) ? (target / (float)h) : 1.0f;
+            ImGui::Image((ImTextureID)(intptr_t)tex,
+                         ImVec2((float)w * scale, (float)h * scale));
+        } else {
+            ImGui::TextDisabled("[missing]");
+        }
+        ImGui::Text("%dx%d", w, h);
+        if (!v.provenance.empty())
+            ImGui::TextDisabled("%s", v.provenance.c_str());
+        ImGui::EndGroup();
+        ImGui::PopID();
+        ImGui::SameLine();
+    }
+    ImGui::NewLine();
+}
+
 void DrawFxsprTab()
 {
+    if (!s_catalogue_loaded) {
+        kfx::VariantCatalogue::instance().loadDefaultPacks();
+        s_catalogue_loaded = true;
+    }
+
     ImGui::SetNextItemWidth(360.0f);
     ImGui::InputText("Path (under data/)", s_fxspr_path, sizeof(s_fxspr_path));
     ImGui::SameLine();
     if (ImGui::Button("Load") || !s_fxspr_loaded)
         LoadFxspr();
+
+    // Search-by-name / id across the catalogue.
+    ImGui::SetNextItemWidth(240.0f);
+    ImGui::InputText("Search", s_fxspr_search, sizeof(s_fxspr_search));
+    ImGui::SameLine();
+    if (ImGui::Button("Find"))
+        s_search_hits = kfx::VariantCatalogue::instance().search(s_fxspr_search);
+    if (!s_search_hits.empty()) {
+        ImGui::SameLine();
+        if (ImGui::Button("Clear")) s_search_hits.clear();
+        ImGui::BeginChild("fxspr_hits", ImVec2(0, 80), true);
+        for (const std::string& hit : s_search_hits) {
+            if (ImGui::Selectable(hit.c_str())) {
+                // "base/entry" -> load base's first variant + select entry.
+                const size_t sl = hit.rfind('/');
+                if (sl != std::string::npos) {
+                    kfx::SpriteIdentity id;
+                    if (kfx::VariantCatalogue::instance().resolveId(hit, id) &&
+                        !id.variants.empty()) {
+                        snprintf(s_fxspr_path, sizeof(s_fxspr_path), "%s",
+                                 id.variants.front().file.c_str());
+                        LoadFxspr();
+                        s_fxspr_selected = std::atoi(hit.substr(sl + 1).c_str());
+                    }
+                }
+            }
+        }
+        ImGui::EndChild();
+    }
 
     ImGui::TextWrapped("%s", s_fxspr_status.c_str());
     if (!s_fxspr_ok)
@@ -394,7 +592,9 @@ void DrawFxsprTab()
     ImGui::SliderFloat("Thumbnail height", &s_thumb_h, 16.0f, 128.0f, "%.0f px");
     ImGui::Separator();
 
-    ImGui::BeginChild("fxspr_grid", ImVec2(0, 0), true,
+    // Left: selectable sprite grid. Right: comparison strip.
+    const float right_w = 360.0f;
+    ImGui::BeginChild("fxspr_grid", ImVec2(-right_w, 0), true,
                       ImGuiWindowFlags_HorizontalScrollbar);
 
     const float avail   = ImGui::GetContentRegionAvail().x;
@@ -419,11 +619,20 @@ void DrawFxsprTab()
         first = false;
 
         ImGui::PushID(i);
-        ImGui::Image((ImTextureID)(intptr_t)tex, sz);
+        const bool  selected = (i == s_fxspr_selected);
+        const ImVec4 tint = selected ? ImVec4(1, 1, 0.5f, 1) : ImVec4(1, 1, 1, 1);
+        if (ImGui::ImageButton("fx", (ImTextureID)(intptr_t)tex, sz,
+                               ImVec2(0, 0), ImVec2(1, 1),
+                               ImVec4(0, 0, 0, 0), tint)) {
+            s_fxspr_selected = i;
+        }
         if (ImGui::IsItemHovered()) {
             ImGui::BeginTooltip();
             ImGui::Text("Entry %d", i);
             ImGui::Text("Size %dx%d", w, h);
+            const char* nm = s_fxspr.name(i);
+            if (nm != nullptr && nm[0] != '\0')
+                ImGui::Text("Name %s", nm);
             ImGui::EndTooltip();
         }
         ImGui::PopID();
@@ -431,6 +640,11 @@ void DrawFxsprTab()
         line_x += sz.x + spacing;
     }
 
+    ImGui::EndChild();
+
+    ImGui::SameLine();
+    ImGui::BeginChild("fxspr_compare", ImVec2(0, 0), true);
+    DrawComparison();
     ImGui::EndChild();
 }
 #endif // RENDERER_OPENGL_ENABLED
