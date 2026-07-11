@@ -29,6 +29,7 @@ struct ImGui_ImplSDL3_Data
     SDL_Renderer*   Renderer;
     Uint64          Time;
     char*           ClipboardTextData;
+    SDL_Window*     ImeWindow;
 
     Uint32          MouseWindowID;
     int             MouseButtonsDown;
@@ -64,18 +65,30 @@ static void ImGui_ImplSDL3_SetClipboardText(ImGuiContext*, const char* text)
     SDL_SetClipboardText(text);
 }
 
-// SDL3: IME data uses SDL_SetTextInputArea(window, rect, cursor)
+// SDL3: IME data uses SDL_SetTextInputArea(window, rect, cursor). Text input is
+// window-scoped and must be explicitly started for SDL_EVENT_TEXT_INPUT events to
+// be delivered, so drive SDL_StartTextInput / SDL_StopTextInput off ImGui's
+// WantVisible state (mirrors the upstream backend). Without this an ImGui
+// InputText focuses but receives no characters.
 static void ImGui_ImplSDL3_PlatformSetImeData(ImGuiContext*, ImGuiViewport*, ImGuiPlatformImeData* data)
 {
     ImGui_ImplSDL3_Data* bd = ImGui_ImplSDL3_GetBackendData();
-    if (data->WantVisible && bd->Window)
+    SDL_Window* window = bd->Window;
+    if ((!data->WantVisible || bd->ImeWindow != window) && bd->ImeWindow != nullptr)
+    {
+        SDL_StopTextInput(bd->ImeWindow);
+        bd->ImeWindow = nullptr;
+    }
+    if (data->WantVisible && window)
     {
         SDL_Rect r;
         r.x = (int)data->InputPos.x;
         r.y = (int)data->InputPos.y;
         r.w = 1;
         r.h = (int)data->InputLineHeight;
-        SDL_SetTextInputArea(bd->Window, &r, 0);
+        SDL_SetTextInputArea(window, &r, 0);
+        SDL_StartTextInput(window);
+        bd->ImeWindow = window;
     }
 }
 
