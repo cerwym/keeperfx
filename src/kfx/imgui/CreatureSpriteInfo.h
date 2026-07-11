@@ -47,6 +47,12 @@ int dbg_anim_rotable(int anim);
 /** Number of rotation groups implied by a rotable value (1, 5 or 8). */
 int dbg_anim_rot_groups(int rotable);
 
+/** Per-frame pivot offset + frame box for animation `anim`, `rel_index` frames
+ *  into its contiguous run (rel_index = group*frames + frame). Fills any non-NULL
+ *  out params. Returns 1 on success, 0 if the animation is invalid. */
+int dbg_anim_frame_offset(int anim, int rel_index,
+                          int* ox, int* oy, int* fw, int* fh);
+
 #ifdef __cplusplus
 }
 #endif

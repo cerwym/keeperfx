@@ -99,4 +99,23 @@ int dbg_anim_rot_groups(int rotable)
     // rotable 1 is not addressed by that path; treat as a single group.
     return (rotable == 2) ? 5 : 1;
 }
+
+int dbg_anim_frame_offset(int anim, int rel_index,
+                          int* ox, int* oy, int* fw, int* fh)
+{
+    if (anim < 0 || rel_index < 0)
+        return 0;
+    // keepersprite_array(anim) is the base KeeperSprite; frames of the animation
+    // (all rotation groups) are contiguous, so frame `rel_index` is base[rel_index]
+    // and its cache index is dbg_anim_base_index(anim) + rel_index.
+    struct KeeperSprite* base = keepersprite_array((unsigned short)anim);
+    if (base == NULL)
+        return 0;
+    struct KeeperSprite* k = base + rel_index;
+    if (ox) *ox = k->offset_x;
+    if (oy) *oy = k->offset_y;
+    if (fw) *fw = k->FrameWidth;
+    if (fh) *fh = k->FrameHeight;
+    return 1;
+}
 /******************************************************************************/
