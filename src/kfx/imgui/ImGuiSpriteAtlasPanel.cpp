@@ -27,6 +27,7 @@
 #  include "kfx/imgui/CreatureSpriteCache.h"
 #  include "kfx/assets/FxSprSheet.h"
 #  include "kfx/assets/VariantCatalogue.h"
+#  include "kfx/imgui/NativeFileDialog.hpp"
 #  include "config.h"                 // prepare_file_path, FGrp_StdData
 #  include <map>
 #  include <utility>
@@ -432,7 +433,16 @@ void LoadFxspr()
     s_fxspr_ok = false;
     s_fxspr_selected = -1;
 
-    const char* full = prepare_file_path(FGrp_StdData, s_fxspr_path);
+    // An absolute path (e.g. from the Browse dialog) is loaded directly;
+    // otherwise the path is treated as relative to the game's data/ folder.
+    auto is_absolute = [](const char* p) -> bool {
+        if (p == nullptr || p[0] == '\0') return false;
+        if (p[0] == '/' || p[0] == '\\') return true;
+        return (p[1] == ':' && (p[2] == '\\' || p[2] == '/')); // C:\ or C:/
+    };
+    const char* full = is_absolute(s_fxspr_path)
+                           ? s_fxspr_path
+                           : prepare_file_path(FGrp_StdData, s_fxspr_path);
     if (full == nullptr) {
         s_fxspr_status = "Could not resolve data path.";
         return;
@@ -555,6 +565,21 @@ void DrawFxsprTab()
     ImGui::SameLine();
     if (ImGui::Button("Load") || !s_fxspr_loaded)
         LoadFxspr();
+    ImGui::SameLine();
+    if (ImGui::Button("Browse...")) {
+        // Start in the game's fxspr data folder if it resolves, else data/.
+        char initial[512] = "";
+        const char* dir = prepare_file_path(FGrp_StdData, "fxspr");
+        if (dir != nullptr)
+            snprintf(initial, sizeof(initial), "%s", dir);
+        char picked[512] = "";
+        if (kfx::OpenFileDialog("Open .fxspr sprite sheet", initial,
+                                "FXSPR sprites|*.fxspr|All files|*.*",
+                                picked, sizeof(picked)) && picked[0] != '\0') {
+            snprintf(s_fxspr_path, sizeof(s_fxspr_path), "%s", picked);
+            LoadFxspr();
+        }
+    }
 
     // Search-by-name / id across the catalogue.
     ImGui::SetNextItemWidth(240.0f);
