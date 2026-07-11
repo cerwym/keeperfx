@@ -164,6 +164,38 @@ std::unordered_map<int, GLuint>              s_kspr_tex;   // kspr_index -> RGBA
 int                                          s_kspr_view_gen  = -1; // cache gen our textures reflect
 int                                          s_kspr_tex_mode  = -1; // materialise mode of our textures
 
+// ── Animation player state (Creatures tab) ────────────────────────────────────
+int   s_anim_model   = -1;     // selected creature model (-1 = none yet)
+int   s_anim_action  = 0;      // selected action/animation slot
+bool  s_anim_playing = true;   // auto-advance frames
+float s_anim_cursor  = 0.0f;   // fractional current frame (wraps at frames)
+float s_anim_fps     = 10.0f;  // playback speed
+int   s_anim_angle   = 0;      // rotation angle, 0..2047 (2048 = 360 deg)
+bool  s_anim_pivot   = true;   // honour per-frame offset_x/y for stable pivot
+
+// Engine rotation math (mirrors compute in engine_render.c draw_keepersprite):
+//   sprite_rot = |4 - (((angle + 22.5deg) & MASK) >> 8)|      -> group 0..4
+//   xflip when angle is in the left hemisphere (1152..1918)   -> mirror groups
+constexpr int kAngleMask   = 2047; // ANGLE_MASK
+constexpr int kDegrees22_5 = 256;  // DEGREES_22_5 (2048/8)
+
+int AnimRotGroup(int angle, int rotable)
+{
+    if (rotable != 2)
+        return 0;
+    const int a = (angle + kDegrees22_5) & kAngleMask;
+    int g = 4 - (a >> 8);
+    return (g < 0) ? -g : g;
+}
+
+bool AnimXFlip(int angle, int rotable)
+{
+    if (rotable != 2)
+        return false;
+    const int a = angle & kAngleMask;
+    return !(a <= 1151 || a >= 1919);
+}
+
 void ClearKeeperTextures()
 {
     for (auto& kv : s_kspr_tex)
@@ -223,6 +255,163 @@ GLuint KeeperTextureForIndex(int kspr_index, int* out_w, int* out_h)
     return tex;
 }
 
+// Interactive per-model animation player: pick creature + action, scrub/play the
+// frames, and rotate via the engine's angle->group(+mirror) mapping.
+void DrawCreatureAnimator()
+{
+    const int models  = dbg_creature_model_count();
+    const int actions = dbg_creature_action_count();
+
+    // Default to the first model that actually has graphics.
+    if (s_anim_model < 0) {
+        for (int m = 0; m < models; ++m) {
+            if (dbg_creature_has_graphics(m)) { s_anim_model = m; break; }
+        }
+    }
+
+    ImGui::TextDisabled("Animation player");
+
+    // Model selector (only models with graphics).
+    const char* cur_name = dbg_creature_name(s_anim_model);
+    ImGui::SetNextItemWidth(180.0f);
+    if (ImGui::BeginCombo("Creature", cur_name ? cur_name : "(none)")) {
+        for (int m = 0; m < models; ++m) {
+            if (!dbg_creature_has_graphics(m))
+                continue;
+            const char* nm = dbg_creature_name(m);
+            const bool sel = (m == s_anim_model);
+            if (ImGui::Selectable(nm ? nm : "?", sel)) {
+                s_anim_model  = m;
+                s_anim_cursor = 0.0f;
+            }
+            if (sel) ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
+
+    // Action selector (only assigned actions for this model).
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(160.0f);
+    const bool action_ok = (dbg_creature_action_anim(s_anim_model, s_anim_action) >= 0);
+    const char* act_label = action_ok ? dbg_action_name(s_anim_action) : "(pick)";
+    if (ImGui::BeginCombo("Action", act_label)) {
+        for (int a = 0; a < actions; ++a) {
+            if (dbg_creature_action_anim(s_anim_model, a) < 0)
+                continue;
+            const bool sel = (a == s_anim_action);
+            if (ImGui::Selectable(dbg_action_name(a), sel)) {
+                s_anim_action = a;
+                s_anim_cursor = 0.0f;
+            }
+            if (sel) ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
+
+    const int anim = dbg_creature_action_anim(s_anim_model, s_anim_action);
+    if (anim < 0) {
+        ImGui::TextWrapped("This creature has no animation for the selected "
+                           "action. Pick another action.");
+        return;
+    }
+
+    const int base   = dbg_anim_base_index(anim);
+    const int frames = dbg_anim_frames(anim);
+    const int rot    = dbg_anim_rotable(anim);
+    const int groups = dbg_anim_rot_groups(rot);
+
+    // Playback controls.
+    ImGui::Checkbox("Play", &s_anim_playing);
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(140.0f);
+    ImGui::SliderFloat("FPS", &s_anim_fps, 1.0f, 30.0f, "%.0f");
+    ImGui::SameLine();
+    ImGui::Checkbox("Pivot", &s_anim_pivot);
+
+    if (frames > 0 && s_anim_playing) {
+        s_anim_cursor += ImGui::GetIO().DeltaTime * s_anim_fps;
+        // fmod without <cmath>: wrap into [0, frames)
+        while (s_anim_cursor >= (float)frames) s_anim_cursor -= (float)frames;
+    }
+    int frame = (frames > 0) ? (int)s_anim_cursor : 0;
+    if (frame >= frames) frame = frames > 0 ? frames - 1 : 0;
+
+    ImGui::SetNextItemWidth(300.0f);
+    if (ImGui::SliderInt("Frame", &frame, 0, frames > 0 ? frames - 1 : 0)) {
+        s_anim_cursor = (float)frame;   // scrubbing pauses on the chosen frame
+        s_anim_playing = false;
+    }
+
+    // Rotation control: only meaningful for rotable==2 (directional) sprites.
+    if (rot == 2) {
+        ImGui::SetNextItemWidth(300.0f);
+        ImGui::SliderInt("Rotation", &s_anim_angle, 0, kAngleMask, "%d / 2048");
+        ImGui::SameLine();
+        ImGui::Text("%.0f deg", (float)s_anim_angle * 360.0f / 2048.0f);
+    } else {
+        ImGui::TextDisabled("Rotation: sprite is flat (rotable %d) - single view",
+                            rot);
+    }
+
+    const int group = AnimRotGroup(s_anim_angle, rot);
+    const bool xflip = AnimXFlip(s_anim_angle, rot);
+    const int rel   = group * frames + frame;
+    const int idx   = base + rel;
+
+    ImGui::Text("anim %d  base %d  frames %d  rotable %d  group %d/%d  kspr %d%s",
+                anim, base, frames, rot, group, groups, idx,
+                xflip ? "  (x-flip)" : "");
+
+    // Preview canvas. Size to the animation's max frame box so the creature does
+    // not jump around as frames change; honour per-frame pivot when requested.
+    int w = 0, h = 0;
+    GLuint tex = KeeperTextureForIndex(idx, &w, &h);
+
+    int ox = 0, oy = 0, fw = 0, fh = 0;
+    const bool have_off = dbg_anim_frame_offset(anim, rel, &ox, &oy, &fw, &fh) != 0;
+
+    const float view_scale = 2.0f;   // fixed magnification for the preview
+    int box_w = (have_off && fw > 0) ? fw : (w > 0 ? w : 64);
+    int box_h = (have_off && fh > 0) ? fh : (h > 0 ? h : 64);
+    if (box_w < w) box_w = w;
+    if (box_h < h) box_h = h;
+    const ImVec2 canvas((float)box_w * view_scale, (float)box_h * view_scale);
+
+    const ImVec2 origin = ImGui::GetCursorScreenPos();
+    ImGui::InvisibleButton("anim_canvas", canvas);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    dl->AddRectFilled(origin, ImVec2(origin.x + canvas.x, origin.y + canvas.y),
+                      IM_COL32(24, 24, 28, 255));
+
+    if (tex != 0 && w > 0 && h > 0) {
+        // Place the frame inside the box using its pivot (offset_x/offset_y are
+        // the top-left of the sprite within the frame box); centre if no pivot.
+        float px, py;
+        if (have_off && s_anim_pivot) {
+            const int draw_ox = xflip ? (box_w - w - ox) : ox;
+            px = origin.x + (float)draw_ox * view_scale;
+            py = origin.y + (float)oy * view_scale;
+        } else {
+            px = origin.x + (canvas.x - (float)w * view_scale) * 0.5f;
+            py = origin.y + (canvas.y - (float)h * view_scale) * 0.5f;
+        }
+        const ImVec2 p1(px + (float)w * view_scale, py + (float)h * view_scale);
+        const ImVec2 uv0 = xflip ? ImVec2(1, 0) : ImVec2(0, 0);
+        const ImVec2 uv1 = xflip ? ImVec2(0, 1) : ImVec2(1, 1);
+        dl->AddImage((ImTextureID)(intptr_t)tex, ImVec2(px, py), p1, uv0, uv1);
+    } else {
+        const char* msg = "frame not cached - enter a level to load";
+        dl->AddText(ImVec2(origin.x + 8, origin.y + 8),
+                    IM_COL32(200, 200, 200, 255), msg);
+    }
+
+    if (have_off)
+        ImGui::Text("size %dx%d  frame box %dx%d  offset (%d,%d)",
+                    w, h, fw, fh, ox, oy);
+    else
+        ImGui::Text("size %dx%d", w, h);
+}
+
 // Draw the frame strip for one animation (all rotation groups x frames).
 void DrawAnimationFrames(int base, int frames, int groups, int uid)
 {
@@ -269,6 +458,9 @@ void DrawCreaturesTab()
     // touches no game state.
     CreatureSpriteCache_RequestLoad();
     SyncKeeperTextures();
+
+    DrawCreatureAnimator();
+    ImGui::Separator();
 
     ImGui::TextWrapped("Creature sprites are decoded from data/creature.jty into "
                        "a self-contained debug cache. Enter a level to populate "
@@ -333,6 +525,7 @@ char                            s_fxspr_path[256] = "fxspr/gui1-32.fxspr";
 // to drive the virtualized grid.  Rebuilt on every successful LoadFxspr().
 kfx::FxsprAtlas                  s_fxspr_atlas;
 std::vector<int>                 s_fxspr_drawable;
+float                           s_fxspr_right_w = 360.0f;  // resizable compare pane width
 
 // ── Comparison viewer state (A7) ──────────────────────────────────────────────
 int         s_fxspr_selected = -1;      // selected entry in the current sheet
@@ -624,9 +817,20 @@ void DrawFxsprTab()
     ImGui::SliderFloat("Thumbnail height", &s_thumb_h, 16.0f, 128.0f, "%.0f px");
     ImGui::Separator();
 
-    // Left: selectable sprite grid. Right: comparison strip.
-    const float right_w = 360.0f;
-    ImGui::BeginChild("fxspr_grid", ImVec2(-right_w, 0), true);
+    // Left: selectable sprite grid. Right: comparison strip. A draggable splitter
+    // between them lets the user resize the two panes.
+    const float splitter_w = 6.0f;
+    const float total_w    = ImGui::GetContentRegionAvail().x;
+    const float pane_h     = ImGui::GetContentRegionAvail().y;
+    // Clamp the right pane so both panes keep a usable minimum width.
+    const float min_pane   = 120.0f;
+    if (s_fxspr_right_w > total_w - min_pane - splitter_w)
+        s_fxspr_right_w = total_w - min_pane - splitter_w;
+    if (s_fxspr_right_w < min_pane)
+        s_fxspr_right_w = min_pane;
+    const float left_w = total_w - s_fxspr_right_w - splitter_w;
+
+    ImGui::BeginChild("fxspr_grid", ImVec2(left_w, 0), true);
 
     // Uniform fixed-cell grid driven by ImGuiListClipper so only on-screen rows
     // emit widgets, and drawn from the atlas page textures via UV sub-rects so
@@ -698,6 +902,24 @@ void DrawFxsprTab()
     clipper.End();
 
     ImGui::EndChild();
+
+    // Draggable splitter: a thin invisible button whose horizontal drag adjusts
+    // the right pane width (moving left widens the comparison pane).
+    ImGui::SameLine();
+    ImGui::InvisibleButton("fxspr_vsplit", ImVec2(splitter_w, pane_h));
+    if (ImGui::IsItemHovered() || ImGui::IsItemActive())
+        ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+    if (ImGui::IsItemActive())
+        s_fxspr_right_w -= ImGui::GetIO().MouseDelta.x;
+    // Draw the grip so the splitter is visible.
+    {
+        const ImVec2 p0 = ImGui::GetItemRectMin();
+        const ImVec2 p1 = ImGui::GetItemRectMax();
+        const ImU32 col = ImGui::IsItemActive()  ? IM_COL32(130, 130, 160, 255)
+                        : ImGui::IsItemHovered() ? IM_COL32(100, 100, 120, 255)
+                                                 : IM_COL32(70, 70, 80, 255);
+        ImGui::GetWindowDrawList()->AddRectFilled(p0, p1, col);
+    }
 
     ImGui::SameLine();
     ImGui::BeginChild("fxspr_compare", ImVec2(0, 0), true);
