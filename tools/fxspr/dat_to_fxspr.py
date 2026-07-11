@@ -39,6 +39,7 @@ FXSPR_ASSETINFO = struct.Struct("<HBBII")     # scale,colour_mode,provenance,nam
 
 FXSPR_VERSION = 2
 FXSPR_KIND_SPRITESHEET = 1
+FXSPR_KIND_ANIMATION = 2
 
 FXSPR_FLAG_DIMS16 = 0x0002
 FXSPR_FLAG_PAYLOAD_COMPRESSED = 0x0004
@@ -77,9 +78,13 @@ def sprite_sizes(entries, dat_len):
     return size_by_index
 
 
-def decode_rle(dat, start, size, w, h):
+def decode_rle(dat, start, size, w, h, zero_to_one=True):
     """Return a w*h bytearray of palette indices (0 = transparent). Matches
-    LbSpriteDecode: rows zero-filled, cmd stream, index 0 -> 1 when opaque."""
+    LbSpriteDecode: rows zero-filled, cmd stream, index 0 -> 1 when opaque.
+
+    zero_to_one: remap an opaque literal index 0 -> 1 (GUI/.dat convention). The
+    creature.jty / KeeperSprite path keeps literal 0 as 0 (mirrors the engine's
+    CreatureSpriteCache), so it passes zero_to_one=False."""
     out = bytearray(w * h)
     p = start
     end = start + size
@@ -103,7 +108,7 @@ def decode_rle(dat, start, size, w, h):
                 p += 1
                 if x < w:
                     row_i = row + x
-                    out[row_i] = idx if idx else 1
+                    out[row_i] = (idx if idx else 1) if zero_to_one else idx
                 x += 1
     return out
 
@@ -151,7 +156,7 @@ class StringTable:
 
 def write_v2(out_path, sprites, scale=0, provenance="bullfrog",
              colour_mode="indexed", category="unknown", display_name=None,
-             compress=True):
+             compress=True, kind=FXSPR_KIND_SPRITESHEET):
     """Write a v2 .fxspr from a list of sprite dicts.
 
     Each sprite dict: {w, h, rgba (bytes of w*h*4, or b"" for the empty
@@ -159,6 +164,8 @@ def write_v2(out_path, sprites, scale=0, provenance="bullfrog",
     (offset_x, offset_y, shadow_offset, frame_flags, group_id, frame_index,
     rotation, view). Missing optionals default to 0; group_id defaults to the
     entry index (flat-sheet identity).
+
+    kind: FxSprKind discriminator (FXSPR_KIND_SPRITESHEET, ..._ANIMATION, ...).
 
     Returns (entry_count, on_disk_payload_size).
     """
@@ -207,7 +214,7 @@ def write_v2(out_path, sprites, scale=0, provenance="bullfrog",
         flags |= FXSPR_FLAG_PAYLOAD_COMPRESSED
 
     header = FXSPR_HEADER.pack(
-        b"FXSP", FXSPR_VERSION, flags, FXSPR_KIND_SPRITESHEET, 0,
+        b"FXSP", FXSPR_VERSION, flags, int(kind), 0,
         len(sprites), dir_off, pay_off)
     ext2 = FXSPR_EXT2.pack(
         FXSPR_ENTRY_RICH.size, FXSPR_ASSETINFO.size, assetinfo_off,
