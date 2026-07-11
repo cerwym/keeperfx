@@ -40,6 +40,7 @@ CATEGORY_BY_PREFIX = [
     ("gui", "gui"),
     ("swipe", "effect"),
     ("gmap", "gui"),
+    ("tmap", "texture"),
 ]
 
 SCALE_SUFFIX = re.compile(r"^(?P<base>.+?)-?(?P<scale>32|64|128)$")
@@ -66,6 +67,12 @@ def read_fxspr_meta(path):
 
 
 def split_base_scale(stem):
+    # optional trailing colour marker (-tc/-idx); the colour mode itself is read
+    # from the file header, so it only needs stripping to recover the base.
+    for marker in ("-tc", "-idx"):
+        if stem.endswith(marker):
+            stem = stem[: -len(marker)]
+            break
     m = SCALE_SUFFIX.match(stem)
     if m and (stem.endswith("-" + m.group("scale"))):
         return m.group("base"), int(m.group("scale"))

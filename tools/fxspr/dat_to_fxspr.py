@@ -149,40 +149,43 @@ class StringTable:
         return bytes(self._blob)
 
 
-def transcode(tab_path, dat_path, pal_path, out_path,
-              scale=0, provenance="bullfrog", colour_mode="indexed",
-              category="unknown", names=None, display_name=None, compress=True):
-    """Transcode one indexed sheet to a v2 .fxspr.
+def write_v2(out_path, sprites, scale=0, provenance="bullfrog",
+             colour_mode="indexed", category="unknown", display_name=None,
+             compress=True):
+    """Write a v2 .fxspr from a list of sprite dicts.
 
-    names: optional dict {entry_index: name} for per-sprite names.
-    display_name: optional file-level collection name.
+    Each sprite dict: {w, h, rgba (bytes of w*h*4, or b"" for the empty
+    sentinel), name (str, optional)} plus optional KeeperSprite-style fields
+    (offset_x, offset_y, shadow_offset, frame_flags, group_id, frame_index,
+    rotation, view). Missing optionals default to 0; group_id defaults to the
+    entry index (flat-sheet identity).
+
+    Returns (entry_count, on_disk_payload_size).
     """
-    entries = read_tab(tab_path)
-    dat = open(dat_path, "rb").read()
-    pal = load_palette(pal_path)
-    sizes = sprite_sizes(entries, len(dat))
-
-    names = names or {}
     cat_id = CATEGORY.get(str(category).lower(), 0)
-
     strtab = StringTable()
     display_name_off = strtab.intern(display_name or "")
 
-    # Build the (uncompressed) payload and the rich directory in tandem.
     directory = bytearray()
     payload = bytearray()
-    for i, (off, w, h) in enumerate(entries):
+    for i, sp in enumerate(sprites):
+        w = int(sp.get("w", 0))
+        h = int(sp.get("h", 0))
+        rgba = sp.get("rgba", b"") or b""
         data_off = len(payload)
-        if w > 0 and h > 0:
-            idx_px = decode_rle(dat, off, sizes[i], w, h)
-            payload += indices_to_rgba(idx_px, w, h, pal)
-        name_off = strtab.intern(names.get(i, names.get(str(i), "")))
+        if w > 0 and h > 0 and rgba:
+            if len(rgba) != w * h * 4:
+                raise ValueError(f"sprite {i}: rgba {len(rgba)} != {w*h*4}")
+            payload += rgba
+        name_off = strtab.intern(sp.get("name", "") or "")
         directory += FXSPR_ENTRY_RICH.pack(
             data_off, w, h,
-            0, 0, 0, 0,          # offset_x, offset_y, shadow_offset, frame_flags
-            i,                    # group_id = index (flat sheet identity)
-            0, 0, FXSPR_VIEW_TOPDOWN,  # frame_index, rotation, view
-            name_off, cat_id, 0)  # name_off, category, reserved
+            int(sp.get("offset_x", 0)), int(sp.get("offset_y", 0)),
+            int(sp.get("shadow_offset", 0)), int(sp.get("frame_flags", 0)),
+            int(sp.get("group_id", i)),
+            int(sp.get("frame_index", 0)), int(sp.get("rotation", 0)),
+            int(sp.get("view", FXSPR_VIEW_TOPDOWN)),
+            name_off, cat_id, 0)
 
     raw_payload = bytes(payload)
     payload_raw_size = len(raw_payload)
@@ -192,9 +195,8 @@ def transcode(tab_path, dat_path, pal_path, out_path,
     strtab_blob = strtab.bytes()
 
     # Layout: header, ext2, assetinfo, stringtable, directory, payload.
-    header_size = FXSPR_HEADER.size          # 24
-    ext2_off = header_size                    # 24
-    assetinfo_off = ext2_off + FXSPR_EXT2.size  # 48
+    ext2_off = FXSPR_HEADER.size                       # 24
+    assetinfo_off = ext2_off + FXSPR_EXT2.size          # 48
     stringtable_off = assetinfo_off + FXSPR_ASSETINFO.size  # 60
     stringtable_size = len(strtab_blob)
     dir_off = stringtable_off + stringtable_size
@@ -206,7 +208,7 @@ def transcode(tab_path, dat_path, pal_path, out_path,
 
     header = FXSPR_HEADER.pack(
         b"FXSP", FXSPR_VERSION, flags, FXSPR_KIND_SPRITESHEET, 0,
-        len(entries), dir_off, pay_off)
+        len(sprites), dir_off, pay_off)
     ext2 = FXSPR_EXT2.pack(
         FXSPR_ENTRY_RICH.size, FXSPR_ASSETINFO.size, assetinfo_off,
         stringtable_off, stringtable_size, payload_size, payload_raw_size)
@@ -221,7 +223,37 @@ def transcode(tab_path, dat_path, pal_path, out_path,
         f.write(strtab_blob)
         f.write(directory)
         f.write(on_disk_payload)
-    return len(entries), payload_size
+    return len(sprites), payload_size
+
+
+def transcode(tab_path, dat_path, pal_path, out_path,
+              scale=0, provenance="bullfrog", colour_mode="indexed",
+              category="unknown", names=None, display_name=None, compress=True):
+    """Transcode one indexed sheet to a v2 .fxspr.
+
+    names: optional dict {entry_index: name} for per-sprite names.
+    display_name: optional file-level collection name.
+    """
+    entries = read_tab(tab_path)
+    dat = open(dat_path, "rb").read()
+    pal = load_palette(pal_path)
+    sizes = sprite_sizes(entries, len(dat))
+
+    names = names or {}
+
+    sprites = []
+    for i, (off, w, h) in enumerate(entries):
+        rgba = b""
+        if w > 0 and h > 0:
+            idx_px = decode_rle(dat, off, sizes[i], w, h)
+            rgba = bytes(indices_to_rgba(idx_px, w, h, pal))
+        sprites.append({"w": w, "h": h, "rgba": rgba,
+                        "name": names.get(i, names.get(str(i), "")),
+                        "group_id": i})
+
+    return write_v2(out_path, sprites, scale=scale, provenance=provenance,
+                    colour_mode=colour_mode, category=category,
+                    display_name=display_name, compress=compress)
 
 
 def _parse_v2(blob):
