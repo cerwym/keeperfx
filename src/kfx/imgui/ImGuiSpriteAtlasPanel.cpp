@@ -172,6 +172,19 @@ float s_anim_cursor  = 0.0f;   // fractional current frame (wraps at frames)
 float s_anim_fps     = 10.0f;  // playback speed
 int   s_anim_angle   = 0;      // rotation angle, 0..2047 (2048 = 360 deg)
 bool  s_anim_pivot   = true;   // honour per-frame offset_x/y for stable pivot
+float s_anim_scale   = 2.0f;   // animation preview magnification
+
+// Two-pane Creatures tab: animation player (left) | creature selector (right).
+float s_cre_right_w  = 340.0f; // resizable selector pane width
+int   s_cre_cols     = 3;      // selector grid columns (user-adjustable)
+
+// Cached pivot-space envelope of the current animation, so the preview canvas is
+// fixed and the creature stays put while playing/rotating. offset_x/offset_y are
+// the bitmap top-left relative to the creature's base anchor (usually negative).
+int  s_env_anim = -1;
+int  s_env_gen  = -1;
+int  s_env_minx = 0, s_env_miny = 0, s_env_maxx = 0, s_env_maxy = 0;
+bool s_env_ok   = false;
 
 // Engine rotation math (mirrors compute in engine_render.c draw_keepersprite):
 //   sprite_rot = |4 - (((angle + 22.5deg) & MASK) >> 8)|      -> group 0..4
@@ -194,6 +207,52 @@ bool AnimXFlip(int angle, int rotable)
         return false;
     const int a = angle & kAngleMask;
     return !(a <= 1151 || a >= 1919);
+}
+
+// Compute the pivot-space bounding box of an animation across all its stored
+// rotation groups and frames, in the engine's placement convention: each bitmap's
+// top-left sits at the base anchor + (offset_x, offset_y), and the x-flip mirror
+// (top-left at -(FrameWidth + offset_x)) is folded in for rotable==2. Cached per
+// anim + cache generation so the preview canvas doesn't resize as frames/rotation
+// change. Returns false when nothing is cached yet.
+bool ComputeAnimEnvelope(int anim, int base, int frames, int rotable)
+{
+    const int gen = CreatureSpriteCache_GetGeneration();
+    if (anim == s_env_anim && gen == s_env_gen)
+        return s_env_ok;
+    s_env_anim = anim;
+    s_env_gen  = gen;
+    s_env_ok   = false;
+
+    const int groups = dbg_anim_rot_groups(rotable);
+    int minx = 1 << 30, miny = 1 << 30, maxx = -(1 << 30), maxy = -(1 << 30);
+    for (int g = 0; g < groups; ++g) {
+        for (int f = 0; f < frames; ++f) {
+            const int rel = g * frames + f;
+            int w = 0, h = 0;
+            if (!CreatureSpriteCache_GetFrame(base + rel, nullptr, 0, &w, &h)
+                || w <= 0 || h <= 0)
+                continue;
+            int ox = 0, oy = 0, fw = 0, fh = 0;
+            if (!dbg_anim_frame_offset(anim, rel, &ox, &oy, &fw, &fh))
+                continue;
+            if (ox < minx) minx = ox;
+            if (oy < miny) miny = oy;
+            if (ox + w > maxx) maxx = ox + w;
+            if (oy + h > maxy) maxy = oy + h;
+            if (rotable == 2) {
+                const int flx = -(fw + ox);   // x-flip mirrors around the anchor
+                if (flx < minx) minx = flx;
+                if (flx + w > maxx) maxx = flx + w;
+            }
+        }
+    }
+    if (minx <= maxx && miny <= maxy) {
+        s_env_minx = minx; s_env_miny = miny;
+        s_env_maxx = maxx; s_env_maxy = maxy;
+        s_env_ok = true;
+    }
+    return s_env_ok;
 }
 
 void ClearKeeperTextures()
@@ -362,20 +421,26 @@ void DrawCreatureAnimator()
                 anim, base, frames, rot, group, groups, idx,
                 xflip ? "  (x-flip)" : "");
 
-    // Preview canvas. Size to the animation's max frame box so the creature does
-    // not jump around as frames change; honour per-frame pivot when requested.
+    // Stable preview canvas. Fix it to the animation's whole pivot-space envelope
+    // so the creature stays put as frames/rotation change, and place each frame at
+    // (pivot + offset)*scale, matching the engine's draw convention (offset_x/
+    // offset_y are the bitmap top-left relative to the base anchor, usually
+    // negative — which is why a naive origin+offset drew it off-canvas).
     int w = 0, h = 0;
     GLuint tex = KeeperTextureForIndex(idx, &w, &h);
 
     int ox = 0, oy = 0, fw = 0, fh = 0;
     const bool have_off = dbg_anim_frame_offset(anim, rel, &ox, &oy, &fw, &fh) != 0;
 
-    const float view_scale = 2.0f;   // fixed magnification for the preview
-    int box_w = (have_off && fw > 0) ? fw : (w > 0 ? w : 64);
-    int box_h = (have_off && fh > 0) ? fh : (h > 0 ? h : 64);
-    if (box_w < w) box_w = w;
-    if (box_h < h) box_h = h;
-    const ImVec2 canvas((float)box_w * view_scale, (float)box_h * view_scale);
+    const float scale  = s_anim_scale;
+    const bool  env_ok = ComputeAnimEnvelope(anim, base, frames, rot);
+    const float pad    = 6.0f;
+    int env_w = env_ok ? (s_env_maxx - s_env_minx) : (w > 0 ? w : 64);
+    int env_h = env_ok ? (s_env_maxy - s_env_miny) : (h > 0 ? h : 64);
+    if (env_w < 1) env_w = 1;
+    if (env_h < 1) env_h = 1;
+    const ImVec2 canvas((float)env_w * scale + pad * 2.0f,
+                        (float)env_h * scale + pad * 2.0f);
 
     const ImVec2 origin = ImGui::GetCursorScreenPos();
     ImGui::InvisibleButton("anim_canvas", canvas);
@@ -384,27 +449,31 @@ void DrawCreatureAnimator()
                       IM_COL32(24, 24, 28, 255));
 
     if (tex != 0 && w > 0 && h > 0) {
-        // Place the frame inside the box using its pivot (offset_x/offset_y are
-        // the top-left of the sprite within the frame box); centre if no pivot.
-        float px, py;
-        if (have_off && s_anim_pivot) {
-            const int draw_ox = xflip ? (box_w - w - ox) : ox;
-            px = origin.x + (float)draw_ox * view_scale;
-            py = origin.y + (float)oy * view_scale;
+        // Map pivot-space env_min to the padded canvas top-left, then place this
+        // frame at its offset. When honouring pivot, use the engine placement
+        // (x-flip mirrors around the anchor via FrameWidth); else centre it.
+        float local_x, local_y;
+        if (have_off && s_anim_pivot && env_ok) {
+            const int draw_ox = xflip ? -(fw + ox) : ox;
+            local_x = (float)(draw_ox - s_env_minx) * scale + pad;
+            local_y = (float)(oy - s_env_miny) * scale + pad;
         } else {
-            px = origin.x + (canvas.x - (float)w * view_scale) * 0.5f;
-            py = origin.y + (canvas.y - (float)h * view_scale) * 0.5f;
+            local_x = (canvas.x - (float)w * scale) * 0.5f;
+            local_y = (canvas.y - (float)h * scale) * 0.5f;
         }
-        const ImVec2 p1(px + (float)w * view_scale, py + (float)h * view_scale);
+        const ImVec2 p0(origin.x + local_x, origin.y + local_y);
+        const ImVec2 p1(p0.x + (float)w * scale, p0.y + (float)h * scale);
         const ImVec2 uv0 = xflip ? ImVec2(1, 0) : ImVec2(0, 0);
         const ImVec2 uv1 = xflip ? ImVec2(0, 1) : ImVec2(1, 1);
-        dl->AddImage((ImTextureID)(intptr_t)tex, ImVec2(px, py), p1, uv0, uv1);
+        dl->AddImage((ImTextureID)(intptr_t)tex, p0, p1, uv0, uv1);
     } else {
-        const char* msg = "frame not cached - enter a level to load";
         dl->AddText(ImVec2(origin.x + 8, origin.y + 8),
-                    IM_COL32(200, 200, 200, 255), msg);
+                    IM_COL32(200, 200, 200, 255),
+                    "frame not cached - enter a level to load");
     }
 
+    ImGui::SetNextItemWidth(160.0f);
+    ImGui::SliderFloat("Preview zoom", &s_anim_scale, 1.0f, 6.0f, "%.1fx");
     if (have_off)
         ImGui::Text("size %dx%d  frame box %dx%d  offset (%d,%d)",
                     w, h, fw, fh, ox, oy);
@@ -412,43 +481,83 @@ void DrawCreatureAnimator()
         ImGui::Text("size %dx%d", w, h);
 }
 
-// Draw the frame strip for one animation (all rotation groups x frames).
-void DrawAnimationFrames(int base, int frames, int groups, int uid)
+// Pick a representative "portrait" frame for a creature model: group 0 / frame 0
+// (front-facing) of its first action that has graphics. Returns -1 if none.
+int PortraitKsprForModel(int m)
 {
-    const float ph_h = s_thumb_h;
-    for (int g = 0; g < groups; ++g) {
-        if (groups > 1)
-            ImGui::Text("  dir %d", g);
-        for (int f = 0; f < frames; ++f) {
-            const int idx = base + g * frames + f;
-            int w = 0, h = 0;
-            GLuint tex = KeeperTextureForIndex(idx, &w, &h);
-
-            if (f > 0) ImGui::SameLine();
-            ImGui::PushID(uid * 4096 + g * 64 + f);
-            if (tex != 0 && h > 0) {
-                const float scale = ph_h / (float)h;
-                ImGui::Image((ImTextureID)(intptr_t)tex,
-                             ImVec2((float)w * scale, ph_h));
-                if (ImGui::IsItemHovered()) {
-                    ImGui::BeginTooltip();
-                    ImGui::Text("kspr index %d", idx);
-                    ImGui::Text("frame %d / %d", f, frames);
-                    ImGui::Text("size %dx%d", w, h);
-                    ImGui::EndTooltip();
-                }
-            } else {
-                ImGui::Dummy(ImVec2(ph_h, ph_h));
-                if (ImGui::IsItemHovered()) {
-                    ImGui::BeginTooltip();
-                    ImGui::Text("kspr index %d", idx);
-                    ImGui::TextUnformatted("not cached\n(enter a level to load)");
-                    ImGui::EndTooltip();
-                }
-            }
-            ImGui::PopID();
-        }
+    const int actions = dbg_creature_action_count();
+    for (int a = 0; a < actions; ++a) {
+        const int anim = dbg_creature_action_anim(m, a);
+        if (anim < 0 || dbg_anim_frames(anim) <= 0)
+            continue;
+        return dbg_anim_base_index(anim);   // group 0, frame 0 = front facing
     }
+    return -1;
+}
+
+// Right pane: a grid of creature "portraits" (each creature's front-facing stand
+// frame) that selects which creature the animation player on the left shows.
+void DrawCreatureSelectorGrid()
+{
+    ImGui::TextDisabled("Creatures");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(120.0f);
+    ImGui::SliderInt("Columns", &s_cre_cols, 1, 8);
+    if (s_cre_cols < 1) s_cre_cols = 1;
+    ImGui::Separator();
+
+    ImGui::BeginChild("cre_select", ImVec2(0, 0), false);
+    const int   models  = dbg_creature_model_count();
+    const int   cols    = s_cre_cols;
+    const float spacing = ImGui::GetStyle().ItemSpacing.x;
+    const float avail   = ImGui::GetContentRegionAvail().x;
+    float       cell    = (avail - spacing * (float)(cols - 1)) / (float)cols;
+    if (cell < 16.0f) cell = 16.0f;
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+
+    int shown = 0;
+    for (int m = 0; m < models; ++m) {
+        if (!dbg_creature_has_graphics(m))
+            continue;
+        const int pidx = PortraitKsprForModel(m);
+
+        if ((shown % cols) != 0)
+            ImGui::SameLine();
+        ++shown;
+
+        ImGui::PushID(m);
+        const ImVec2 p0 = ImGui::GetCursorScreenPos();
+        ImGui::InvisibleButton("cre", ImVec2(cell, cell));
+        if (ImGui::IsItemClicked()) {
+            s_anim_model  = m;
+            s_anim_cursor = 0.0f;
+        }
+        const bool selected = (m == s_anim_model);
+
+        dl->AddRectFilled(p0, ImVec2(p0.x + cell, p0.y + cell),
+                          IM_COL32(20, 20, 24, 255));
+
+        int w = 0, h = 0;
+        GLuint tex = (pidx >= 0) ? KeeperTextureForIndex(pidx, &w, &h) : 0;
+        if (tex != 0 && w > 0 && h > 0) {
+            const float fit = (cell - 6.0f) / (float)((w > h) ? w : h);
+            const float dw = (float)w * fit, dh = (float)h * fit;
+            const ImVec2 ip0(p0.x + (cell - dw) * 0.5f, p0.y + (cell - dh) * 0.5f);
+            dl->AddImage((ImTextureID)(intptr_t)tex, ip0,
+                         ImVec2(ip0.x + dw, ip0.y + dh));
+        }
+        dl->AddRect(p0, ImVec2(p0.x + cell, p0.y + cell),
+                    selected ? IM_COL32(255, 255, 128, 255)
+                             : IM_COL32(70, 70, 80, 255));
+        if (ImGui::IsItemHovered()) {
+            ImGui::BeginTooltip();
+            const char* nm = dbg_creature_name(m);
+            ImGui::TextUnformatted(nm ? nm : "?");
+            ImGui::EndTooltip();
+        }
+        ImGui::PopID();
+    }
+    ImGui::EndChild();
 }
 
 void DrawCreaturesTab()
@@ -459,50 +568,53 @@ void DrawCreaturesTab()
     CreatureSpriteCache_RequestLoad();
     SyncKeeperTextures();
 
-    DrawCreatureAnimator();
-    ImGui::Separator();
-
-    ImGui::TextWrapped("Creature sprites are decoded from data/creature.jty into "
-                       "a self-contained debug cache. Enter a level to populate "
-                       "this view \u2014 no creature needs to be on screen.");
-
     const int count = CreatureSpriteCache_GetCount();
-    ImGui::Text("%d creature sprite frames cached", count);
-    ImGui::SliderFloat("Frame height", &s_thumb_h, 16.0f, 128.0f, "%.0f px");
-    ImGui::Separator();
-
     if (count == 0) {
-        ImGui::TextWrapped("No creature sprites cached yet. Enter a level; the "
-                           "cache loads automatically within a frame or two.");
+        ImGui::TextWrapped("Creature sprites are decoded from data/creature.jty "
+                           "into a self-contained debug cache. Enter a level to "
+                           "populate this view \u2014 no creature needs to be on "
+                           "screen; the cache loads within a frame or two.");
         return;
     }
 
-    ImGui::BeginChild("creature_list", ImVec2(0, 0), true);
-    const int models  = dbg_creature_model_count();
-    const int actions = dbg_creature_action_count();
-    for (int m = 0; m < models; ++m) {
-        if (!dbg_creature_has_graphics(m))
-            continue;
-        const char* name = dbg_creature_name(m);
-        ImGui::PushID(m);
-        if (ImGui::CollapsingHeader(name ? name : "?")) {
-            for (int a = 0; a < actions; ++a) {
-                const int anim = dbg_creature_action_anim(m, a);
-                if (anim < 0)
-                    continue;
-                const int base   = dbg_anim_base_index(anim);
-                const int frames = dbg_anim_frames(anim);
-                const int rot    = dbg_anim_rotable(anim);
-                const int groups = dbg_anim_rot_groups(rot);
-                ImGui::Text("%-12s  anim %d  frames %d  rotable %d",
-                            dbg_action_name(a), anim, frames, rot);
-                if (frames > 0)
-                    DrawAnimationFrames(base, frames, groups, m * 64 + a);
-                ImGui::Separator();
-            }
-        }
-        ImGui::PopID();
+    ImGui::Text("%d creature sprite frames cached", count);
+    ImGui::Separator();
+
+    // Two panes: animation player (left) | creature selector grid (right), with a
+    // draggable splitter between them.
+    const float splitter_w = 6.0f;
+    const float total_w    = ImGui::GetContentRegionAvail().x;
+    const float pane_h     = ImGui::GetContentRegionAvail().y;
+    const float min_pane   = 160.0f;
+    if (s_cre_right_w > total_w - min_pane - splitter_w)
+        s_cre_right_w = total_w - min_pane - splitter_w;
+    if (s_cre_right_w < min_pane)
+        s_cre_right_w = min_pane;
+    const float left_w = total_w - s_cre_right_w - splitter_w;
+
+    ImGui::BeginChild("cre_left", ImVec2(left_w, 0), true);
+    DrawCreatureAnimator();
+    ImGui::EndChild();
+
+    // Draggable splitter (drag left widens the selector pane).
+    ImGui::SameLine();
+    ImGui::InvisibleButton("cre_vsplit", ImVec2(splitter_w, pane_h));
+    if (ImGui::IsItemHovered() || ImGui::IsItemActive())
+        ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+    if (ImGui::IsItemActive())
+        s_cre_right_w -= ImGui::GetIO().MouseDelta.x;
+    {
+        const ImVec2 gp0 = ImGui::GetItemRectMin();
+        const ImVec2 gp1 = ImGui::GetItemRectMax();
+        const ImU32 col = ImGui::IsItemActive()  ? IM_COL32(130, 130, 160, 255)
+                        : ImGui::IsItemHovered() ? IM_COL32(100, 100, 120, 255)
+                                                 : IM_COL32(70, 70, 80, 255);
+        ImGui::GetWindowDrawList()->AddRectFilled(gp0, gp1, col);
     }
+
+    ImGui::SameLine();
+    ImGui::BeginChild("cre_right", ImVec2(0, 0), true);
+    DrawCreatureSelectorGrid();
     ImGui::EndChild();
 }
 
