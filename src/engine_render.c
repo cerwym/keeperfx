@@ -56,6 +56,7 @@
 #include "front_simple.h"
 #include "frontend.h"
 #include "kfx/sprite_resources.h"
+#include "kfx/assets/FxSprAnimSelect.h"
 #include "game_lghtshdw.h"
 #include "gui_draw.h"
 #include "keeperfx.hpp"
@@ -7927,6 +7928,7 @@ void process_keeper_sprite(short x, short y, unsigned short kspr_base, short ksp
     long scaled_x;
     long scaled_y;
     TbBool needs_xflip;
+    int selected_mirror;
     long long lltemp;
     long sprite_group;
     long sprite_rot;
@@ -7944,20 +7946,20 @@ void process_keeper_sprite(short x, short y, unsigned short kspr_base, short ksp
         sprgroup = creature_sprites->FramesCount - 1;
     }
 
-    if (((kspr_angle & ANGLE_MASK) <= 1151) || ((kspr_angle & ANGLE_MASK) >= 1919) || (creature_sprites->Rotable != 2) )
-        needs_xflip = 0;
-    else
-        needs_xflip = 1;
-
     TbDrawFlagsMask work_flags;
+    needs_xflip = 0;
+    selected_mirror = 0;
+    sprite_rot = 0;
+    if (creature_sprites->Rotable == 2) {
+        sprite_rot = kfx_anim_select_dir_group((int)kspr_angle, &selected_mirror);
+        needs_xflip = (selected_mirror != 0) ? 1 : 0;
+    }
     if ( needs_xflip )
-      work_flags = draw_flags | Lb_SPRITE_FLIP_HORIZ;
+        work_flags = draw_flags | Lb_SPRITE_FLIP_HORIZ;
     else
-      work_flags = draw_flags & ~Lb_SPRITE_FLIP_HORIZ;
+        work_flags = draw_flags & ~Lb_SPRITE_FLIP_HORIZ;
     EngineSpriteDrawUsingAlpha = alpha;
     sprite_group = sprgroup;
-    lltemp = 4 - ((((long)kspr_angle + DEGREES_22_5) & ANGLE_MASK) >> 8);
-    sprite_rot = llabs(lltemp);
     kspr_idx = keepersprite_index(kspr_base);
     global_scaler = scale;
     if (needs_xflip)
@@ -8433,6 +8435,7 @@ void draw_keepsprite_unscaled_in_buffer(unsigned short kspr_n, short angle, unsi
     int fill_w;
     int fill_h;
     TbBool flip_range;
+    int selected_mirror = 0;
     short quarter;
     int i;
     if ( ((angle & ANGLE_MASK) <= 1151) || ((angle & ANGLE_MASK) >= 1919) )
@@ -8504,6 +8507,8 @@ void draw_keepsprite_unscaled_in_buffer(unsigned short kspr_n, short angle, unsi
     }
     else if (kspr_arr->Rotable == 2)
     {
+        quarter = (short)kfx_anim_select_dir_group((int)angle, &selected_mirror);
+        flip_range = (selected_mirror != 0) ? true : false;
         if (!heap_manage_keepersprite(kspr_idx))
         {
             return;

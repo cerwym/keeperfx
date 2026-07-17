@@ -128,6 +128,8 @@ extern const struct NamedCommand tag_modes[];
 extern int cfg_renderer_type;
 /** If non-zero, the game is paused when the renderer settings menu is open. Default: 1. */
 extern TbBool cfg_renderer_menu_pause;
+/** If non-zero, creature directional group selection uses FxSprAnimTable::selectDir path. Default: 0 (legacy). */
+extern TbBool cfg_fxspr_anim_select_dir;
 extern char cmd_char;
 extern short api_enabled;
 extern uint16_t api_port;

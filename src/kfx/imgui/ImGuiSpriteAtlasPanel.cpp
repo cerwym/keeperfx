@@ -667,7 +667,7 @@ void ClearVariantCaches()
 
 // Strip directory, ".fxspr", an optional "-tc"/"-idx" colour marker and any
 // scale suffix from the current path to get the collection base (mirrors
-// tools/fxspr/make_manifest.py split_base_scale). Works for absolute paths
+// build/tools/fxspr/make_manifest.py split_base_scale). Works for absolute paths
 // (e.g. from the Browse dialog) as well as data-relative ones.
 std::string FxsprCurrentBase()
 {

@@ -35,6 +35,7 @@
 #include "vidfade.h"
 #include "keeperfx.hpp"
 #include "engine_render.h"
+#include "kfx/assets/FxSprAnimSelect.h"
 #include "player_instances.h"
 #include "post_inc.h"
 
@@ -266,6 +267,8 @@ static struct KeeperSprite* sprite_by_frame(long kspr_frame)
 void get_keepsprite_unscaled_dimensions(long kspr_anim, long angle, long frame, short *orig_w, short *orig_h, short *unsc_w, short *unsc_h)
 {
     TbBool val_in_range;
+    int selected_mirror = 0;
+    int selected_dir_group = 0;
     struct KeeperSprite* kspr = sprite_by_frame(kspr_anim);
     if (kspr == NULL)
     {
@@ -311,7 +314,9 @@ void get_keepsprite_unscaled_dimensions(long kspr_anim, long angle, long frame, 
     }
     else if (kspr->Rotable == 2)
     {
-        kspr += frame + labs(4 - (((angle + DEGREES_22_5) & ANGLE_MASK) >> 8)) * kspr->FramesCount;
+        selected_dir_group = kfx_anim_select_dir_group((int)angle, &selected_mirror);
+        val_in_range = (selected_mirror != 0) ? 1 : 0;
+        kspr += frame + selected_dir_group * kspr->FramesCount;
         *orig_w = kspr->SWidth;
         *orig_h = kspr->SHeight;
         if ( val_in_range )

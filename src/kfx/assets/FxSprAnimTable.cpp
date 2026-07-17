@@ -8,8 +8,10 @@
 /******************************************************************************/
 #include "pre_inc.h"
 #include "kfx/assets/FxSprAnimTable.h"
+#include "kfx/assets/FxSprAnimSelect.h"
 
 #include "kfx/assets/FxSprFormat.h"
+#include "config_keeperfx.h"
 
 #include <cstring>
 
@@ -217,3 +219,15 @@ bool FxSprAnimTable::parse(const uint8_t* blob, size_t size)
 }
 
 } // namespace kfx
+
+extern "C" int kfx_anim_select_dir_group(int angle, int* out_mirror)
+{
+    if (cfg_fxspr_anim_select_dir != 0) {
+        // Hook point for future runtime .fxspr anim-table consumption. Until
+        // the runtime path supplies per-animation tables, this intentionally
+        // resolves through selectDir's legacy fallback.
+        static kfx::FxSprAnimTable s_anim_table;
+        return s_anim_table.selectDir(nullptr, angle, out_mirror);
+    }
+    return kfx::fxspr_legacy_rot_group(angle, out_mirror);
+}

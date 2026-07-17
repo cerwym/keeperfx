@@ -5,7 +5,7 @@
  *     Sprite identity + quality-variant catalogue (engine side).
  *
  *     Loads the JSON sprite-pack manifests under FGrp_FxData/spritepacks/*.json
- *     (see tools/fxspr/make_manifest.py + docs/sprite-asset-unification.md) and
+ *     (see build/tools/fxspr/make_manifest.py + docs/sprite-asset-unification.md) and
  *     answers the questions the comparison viewer and (later) the runtime
  *     hot-swap need:
  *       - given a sheet base + entry index, what is the sprite's stable id, name

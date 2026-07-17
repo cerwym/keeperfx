@@ -206,6 +206,8 @@ void DrawDisplayTab(KfxConfig& cfg, KfxConfigManager& mgr)
         mgr.markDirty(KfxField_RendererTileFilter);
     if (ImGui::Checkbox("Menu Pause", &cfg.menu_pause))
         mgr.markDirty(KfxField_RendererMenuPause);
+    if (ImGui::Checkbox("FxSpr Anim SelectDir", &cfg.fxspr_anim_select_dir))
+        mgr.markDirty(KfxField_FxSprAnimSelectDir);
     if (DrawResizeMoviesField(cfg))
         mgr.markDirty(KfxField_ResizeMovies);
     if (ImGui::DragInt("Display Number", &cfg.display_id, 1.0f, 0, SHRT_MAX))
