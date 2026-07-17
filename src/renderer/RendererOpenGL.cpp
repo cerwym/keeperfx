@@ -35,6 +35,7 @@
 
 #include "bflib_video.h"    // lbDisplay, RendererGetScreenWidth()/Height
 #include "bflib_sprite.h"   // TbSpriteSheet, get_sprite
+#include "kfx/assets/SpriteSheetManager.h" // deferred atlas rebuild drain
 #include "platform.h"       // platform_create_gl_context / swap / destroy
 #include "engine_textures.h" // update_animating_texture_maps()
 #include "engine_render.h"   // draw_view()
@@ -611,15 +612,33 @@ void RendererOpenGL::ClearScreen(uint8_t colour_index)
     m_clearColourIndex = colour_index;
 }
 
+void RendererOpenGL::drain_deferred_atlas_rebuild()
+{
+    auto& mgr = SpriteSheetManager::Get();
+    if (!mgr.RebuildPending() || !m_sprite_atlas)
+        return;
+    mgr.ClearRebuildPending();
+
+    const size_t cap = mgr.RegisteredCount();
+    std::vector<const TbSpriteSheet*>   sheets(cap);
+    std::vector<const char*>            names(cap);
+    std::vector<const kfx::FxSprSheet*> fxspr(cap);
+    int count = mgr.CollectActive(sheets.data(), names.data(), (int)cap, fxspr.data());
+    m_sprite_atlas->Rebuild(sheets.data(), names.data(), count, fxspr.data());
+    for (int i = 0; i < count; ++i)
+        SYNCLOG("drain_deferred_atlas_rebuild: packed '%s' (%d sprites)",
+                names[i], (int)num_sprites(sheets[i]));
+}
+
 bool RendererOpenGL::BeginFrame()
 {
     // Idempotent: multiple RendererLockScreen calls per frame must not clear the UI queue again.
     if (m_frame_begun) return true;
 
-    if (RendererHasDeferredAtlasRebuild())
+    if (SpriteSheetManager::Get().RebuildPending())
     {
         m_render_thread.WaitForCompletion();
-        RendererDrainDeferredAtlasRebuild();
+        drain_deferred_atlas_rebuild();
     }
 
     m_frame_begun = true;
@@ -685,7 +704,7 @@ void RendererOpenGL::EndFrame()
 {
     m_render_thread.WaitForCompletion();
 
-    RendererDrainDeferredAtlasRebuild();
+    drain_deferred_atlas_rebuild();
 
     // Lazily start the render thread on the first EndFrame() call.
     // All sub-renderer GL initialisation (GLWorldViewRenderer, GLTextRenderer,
@@ -873,7 +892,8 @@ void RendererOpenGL::EndFrame_GL()
 
     // Flush deferred sprite-atlas GL work (glGenTextures/glTexImage2D/glDeleteTextures
     // deferred from RendererNotifySpritesReloaded, which runs on the game thread).
-    RendererFlushPendingSpriteAtlas();
+    if (m_sprite_atlas)
+        m_sprite_atlas->FlushPendingGL();
     SYNCDBG(0, "EndFrame_GL step 1: sprite atlas flush done");
 
     // Upload animated tile strips if BeginFrame() detected a game-tick animation

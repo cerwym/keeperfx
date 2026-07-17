@@ -6,8 +6,6 @@
  * @par Purpose:
  *     The IUIRenderer virtual interface uses SpriteHandle instead of bflib
  *     TbSprite pointers, keeping the interface free of platform-specific types.
- *     The RendererManager C bridge is the only place that resolves TbSprite*
- *     to SpriteHandle before crossing the C/C++ boundary.
  *
  *     The value UINT32_MAX is reserved as the invalid/sentinel handle.
  */

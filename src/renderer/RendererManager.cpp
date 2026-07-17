@@ -33,7 +33,7 @@
 #include "bflib_basics.h"
 #include "bflib_datetm.h"
 #include "globals.h"
-#include "bflib_video.h"
+
 #include "bflib_vidraw.h"      // LbSpriteDrawResized
 #include "bflib_mouse.h"       // LbMouseOnBeginSwap / LbMouseOnEndSwap
 #include "bflib_sprite.h"      // TbSprite
@@ -94,14 +94,7 @@ static long                 s_graphicsWindowX      = 0;
 static long                 s_graphicsWindowY      = 0;
 static long                 s_graphicsWindowWidth  = 0;
 static long                 s_graphicsWindowHeight = 0;
-static SoftwareUIRenderer*  s_softwareUIRenderer  = nullptr;  // non-null only in software mode
 static ICursorLayer*        s_cursorLayer         = nullptr;
-#ifdef RENDERER_OPENGL_ENABLED
-static GLSpriteAtlas*       s_spriteAtlas         = nullptr;  // non-null only in GL mode
-#endif
-// Software-mode sprite handle registry (GL mode uses s_spriteAtlas->GetHandle instead)
-static std::unordered_map<const TbSprite*, SpriteHandle> s_sprite_to_handle;
-static uint32_t             s_software_next_handle = 0;
 
 /******************************************************************************/
 
@@ -127,49 +120,20 @@ void RendererNotifySpritesReloaded()
     SpriteSheetManager::Get().MarkGUIDirty();
     FontManager::Get().BumpGeneration();
 #ifdef RENDERER_OPENGL_ENABLED
-    SYNCLOG("RendererNotifySpritesReloaded: gui dirty set, font gen=%u (atlas=%p)",
-            FontManager::Get().GetGeneration(), (void*)s_spriteAtlas);
+    SYNCLOG("RendererNotifySpritesReloaded: gui dirty set, font gen=%u",
+            FontManager::Get().GetGeneration());
     UIRenderer_SetSlabTexture();
 #endif
 }
 
-bool RendererHasDeferredAtlasRebuild()
-{
-#ifdef RENDERER_OPENGL_ENABLED
-    return SpriteSheetManager::Get().RebuildPending();
-#else
-    return false;
-#endif
-}
-
-void RendererDrainDeferredAtlasRebuild()
-{
-#ifdef RENDERER_OPENGL_ENABLED
-    auto& mgr = SpriteSheetManager::Get();
-    if (!mgr.RebuildPending() || !s_spriteAtlas)
-        return;
-    mgr.ClearRebuildPending();
-
-    const size_t cap = mgr.RegisteredCount();
-    std::vector<const TbSpriteSheet*> sheets(cap);
-    std::vector<const char*>          names(cap);
-    std::vector<const kfx::FxSprSheet*> fxspr(cap);
-    int count = mgr.CollectActive(sheets.data(), names.data(), (int)cap, fxspr.data());
-    s_spriteAtlas->Rebuild(sheets.data(), names.data(), count, fxspr.data());
-    for (int i = 0; i < count; ++i)
-        SYNCLOG("RendererDrainDeferredAtlasRebuild: packed '%s' (%d sprites)",
-                names[i], (int)num_sprites(sheets[i]));
-#endif
-}
-
-static void register_sheet_software(const struct TbSpriteSheet* sheet); // fwd
-
 /** Notify that map_flag was loaded.  GL: atlas rebuild is scheduled by the
- *  SpriteSheetMgr_Load() at the callsite.  Software: register handle table entries
- *  so SubmitPanelSprite falls back to LbSpriteDrawResized correctly. */
+ *  SpriteSheetMgr_Load() at the callsite (RegisterSpriteSheet is a no-op).
+ *  Software: register handle table entries so SubmitPanelSprite falls back to
+ *  LbSpriteDrawResized correctly. */
 void RendererNotifyLandviewFlagLoaded()
 {
-    register_sheet_software(map_flag);
+    if (s_uiRenderer)
+        s_uiRenderer->RegisterSpriteSheet(map_flag);
 }
 
 void RendererNotifyGameTablesReady()
@@ -285,68 +249,12 @@ void RendererSchedulePiPRender(struct Camera* cam, int x, int y, int w, int h)
 
 /******************************************************************************/
 
-/** Resolve a TbSprite pointer to its registered SpriteHandle.
- *  In GL mode: queries the sprite atlas.  In software mode: queries the
- *  RendererManager-owned handle table populated by register_sheet_software(). */
-static SpriteHandle resolve_sprite_handle(const TbSprite* spr)
-{
-    if (!spr) return kInvalidSpriteHandle;
-#ifdef RENDERER_OPENGL_ENABLED
-    if (s_spriteAtlas) {
-        // Zero-dimension sprites are sentinel/placeholder entries that can never
-        // be packed into the atlas.  Skip silently — not an error.
-        if (spr->SWidth == 0 || spr->SHeight == 0)
-            return kInvalidSpriteHandle;
-        SpriteHandle h = s_spriteAtlas->GetHandle(spr);
-        if (h == kInvalidSpriteHandle) {
-            static int s_miss_count = 0;
-            if (s_miss_count < 20) {
-                SYNCLOG("resolve_sprite_handle: spr %p not in atlas (miss #%d, atlas size=%u, w=%d h=%d data=%p)",
-                        (void*)spr, ++s_miss_count,
-                        (unsigned)s_spriteAtlas->GetRegisteredCount(),
-                        (int)spr->SWidth, (int)spr->SHeight, (void*)spr->Data);
-            }
-        }
-        return h;
-    }
-#endif
-    auto it = s_sprite_to_handle.find(spr);
-    if (it != s_sprite_to_handle.end())
-        return it->second;
-    // Software: lazily register any not-yet-seen sprite so EVERY valid sprite
-    // resolves.  Only a few sheets are eagerly registered (gui_panel/button/
-    // map_flag); the menu's frontend_sprite and most others are not, so without
-    // this they resolve to kInvalidSpriteHandle and never draw.  Software is
-    // single-threaded here, so mutating the tables is safe.
-    if (s_softwareUIRenderer && spr->Data && spr->SWidth > 0 && spr->SHeight > 0) {
-        SpriteHandle h = s_software_next_handle++;
-        s_sprite_to_handle[spr] = h;
-        s_softwareUIRenderer->RegisterSpriteHandle(h, spr);
-        return h;
-    }
-    return kInvalidSpriteHandle;
-}
-
+// Sprite -> handle resolution lives on the active UI renderer: the software
+// (base) renderer lazily mints and registers handles; the GL renderer looks them
+// up in its atlas.  The manager just forwards to whichever is active.
 SpriteHandle RendererResolveSprite(const TbSprite* spr)
 {
-    return resolve_sprite_handle(spr);
-}
-
-/** Register all valid sprites in a sheet into the software-mode handle table.
- *  Calls SoftwareUIRenderer::RegisterSpriteHandle so the renderer can reverse-
- *  resolve handles back to TbSprite* for CPU blitting. */
-static void register_sheet_software(const struct TbSpriteSheet* sheet)
-{
-    if (!sheet || !s_softwareUIRenderer) return;
-    int32_t n = num_sprites(sheet);
-    for (int32_t i = 0; i < n; ++i) {
-        const struct TbSprite* spr = get_sprite(sheet, i);
-        if (!spr || !spr->Data || spr->SWidth == 0 || spr->SHeight == 0) continue;
-        if (s_sprite_to_handle.count(spr)) continue;
-        SpriteHandle h = s_software_next_handle++;
-        s_sprite_to_handle[spr] = h;
-        s_softwareUIRenderer->RegisterSpriteHandle(h, spr);
-    }
+    return s_uiRenderer ? s_uiRenderer->ResolveSprite(spr) : kInvalidSpriteHandle;
 }
 
 /** Allocates a new backend instance for the requested type.
@@ -456,9 +364,6 @@ static IUIRenderer* create_ui_renderer(RendererType type)
             IUIRenderer* glui = ogl->CreateGLUIRenderer();
             if (glui)
             {
-                s_spriteAtlas = ogl->GetSpriteAtlas();
-                s_softwareUIRenderer = nullptr;
-                // All sheets registered via SpriteSheetManager — drain on next BeginFrame
                 SpriteSheetManager::Get().ScheduleRebuild();
                 return glui;
             }
@@ -469,12 +374,8 @@ static IUIRenderer* create_ui_renderer(RendererType type)
 #endif
     (void)type;
     auto* swui = new SoftwareUIRenderer();
-#ifdef RENDERER_OPENGL_ENABLED
-    s_spriteAtlas = nullptr;
-#endif
-    s_softwareUIRenderer = swui;
-    register_sheet_software(gui_panel_sprites);
-    register_sheet_software(button_sprites);
+    swui->RegisterSpriteSheet(gui_panel_sprites);
+    swui->RegisterSpriteSheet(button_sprites);
     return swui;
 }
 
@@ -686,13 +587,7 @@ void RendererShutdown()
     {
         delete s_uiRenderer;
         s_uiRenderer = nullptr;
-        s_softwareUIRenderer = nullptr;  // owned by s_uiRenderer above
     }
-#ifdef RENDERER_OPENGL_ENABLED
-    s_spriteAtlas = nullptr;  // owned by RendererOpenGL
-#endif
-    s_sprite_to_handle.clear();
-    s_software_next_handle = 0;
     FontManager::Get().BumpGeneration();
     if (s_textRenderer)
     {
@@ -750,10 +645,10 @@ ICursorLayer* RendererGetCursorLayer()
 GLSpriteAtlas* RendererGetSpriteAtlas()
 {
 #ifdef RENDERER_OPENGL_ENABLED
-    return s_spriteAtlas;
-#else
-    return nullptr;
+    if (s_activeType == RENDERER_OPENGL)
+        return static_cast<RendererOpenGL*>(s_activeRenderer)->GetSpriteAtlas();
 #endif
+    return nullptr;
 }
 
 const unsigned char* RendererGetActivePalette()
@@ -894,21 +789,7 @@ void RendererPresentFrame(void)
         if (s_warn++ < 5)
             WARNLOG("RendererPresentFrame: LbMouseOnBeginSwap failed (ret=%d), rendering continued", (int)ret);
     }
-#if defined(VITA_PERF_LOG)
-    {
-        static TbClockMSec _ef_accum = 0;
-        static int    _ef_cnt   = 0;
-        TbClockMSec _ef_t0 = LbTimerClock();
-        RendererEndFrame();
-        _ef_accum += LbTimerClock() - _ef_t0;
-        if (++_ef_cnt >= 60) {
-            JUSTLOG("[perf] EndFrame   avg %d ms/frame (60-frame window)", (int)(_ef_accum / 60));
-            _ef_accum = 0; _ef_cnt = 0;
-        }
-    }
-#else
     RendererEndFrame();
-#endif
     LbMouseOnEndSwap();
 }
 
@@ -1169,14 +1050,6 @@ void WorldViewRenderer_PreloadKeeperSpriteAtlas(void)
 {
     if (s_worldViewRenderer)
         s_worldViewRenderer->PreloadKeeperSpriteAtlas();
-}
-
-void RendererFlushPendingSpriteAtlas(void)
-{
-#ifdef RENDERER_OPENGL_ENABLED
-    if (s_spriteAtlas)
-        s_spriteAtlas->FlushPendingGL();
-#endif
 }
 
 uint32_t RendererGetTextFontGeneration(void)

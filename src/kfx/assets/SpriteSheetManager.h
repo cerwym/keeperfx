@@ -52,8 +52,6 @@ public:
      *  custom sheet construction that bypasses Load()). */
     void ScheduleRebuild();
 
-    // ── Atlas drain interface — queried by RendererManager::RendererDrainDeferredAtlasRebuild ──
-
     bool RebuildPending()      const { return m_rebuild_pending; }
     void ClearRebuildPending()       { m_rebuild_pending = false; }
     size_t RegisteredCount()   const { return m_entries.size(); }

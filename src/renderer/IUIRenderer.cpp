@@ -60,6 +60,28 @@ private:
 void IUIRenderer::RegisterSpriteHandle(SpriteHandle h, const struct TbSprite* spr)
 {
     m_handle_to_sprite[h] = spr;
+    m_sprite_to_handle[spr] = h;
+}
+
+SpriteHandle IUIRenderer::ResolveSprite(const struct TbSprite* spr)
+{
+    // Zero-dimension / dataless sprites are sentinel entries that never draw.
+    if (!spr || !spr->Data || spr->SWidth == 0 || spr->SHeight == 0)
+        return kInvalidSpriteHandle;
+    auto it = m_sprite_to_handle.find(spr);
+    if (it != m_sprite_to_handle.end())
+        return it->second;
+    SpriteHandle h = m_next_handle++;
+    RegisterSpriteHandle(h, spr);
+    return h;
+}
+
+void IUIRenderer::RegisterSpriteSheet(const struct TbSpriteSheet* sheet)
+{
+    if (!sheet) return;
+    const long n = num_sprites(sheet);
+    for (long i = 0; i < n; ++i)
+        ResolveSprite(get_sprite(sheet, i));
 }
 
 // ---------------------------------------------------------------------------

@@ -171,6 +171,12 @@ private:
     bool init_tile_atlas();
     bool init_fade_table_texture();
 
+    /** Drain a pending deferred atlas rebuild (game thread).  Re-packs every
+     *  active sprite sheet registered with SpriteSheetManager into m_sprite_atlas;
+     *  no-op when no rebuild is pending or the atlas is absent.  Called from
+     *  BeginFrame()/EndFrame() with the render thread idle. */
+    void drain_deferred_atlas_rebuild();
+
 private:
 
     // Screen dimensions — set in Init() once, used throughout EndFrame() for viewport sizing.

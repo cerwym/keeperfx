@@ -187,6 +187,15 @@ public:
     /** IUIRenderer override: delegate to GLSpriteAtlas::GetSpriteMask(). */
     virtual uint8_t* QuerySpriteMask(SpriteHandle h, int* out_w, int* out_h, int* out_stride) override;
 
+    /** IUIRenderer override: resolve via the sprite atlas.  Lookup-only — the
+     *  sprite must already have been packed by GLSpriteAtlas::Rebuild(); a miss
+     *  returns kInvalidSpriteHandle. */
+    virtual SpriteHandle ResolveSprite(const struct TbSprite* spr) override;
+
+    /** IUIRenderer override: no-op.  GL registration happens eagerly via the
+     *  atlas Rebuild path, not per-sprite here. */
+    virtual void RegisterSpriteSheet(const struct TbSpriteSheet* /*sheet*/) override {}
+
     /** Set font atlas for text rendering.
      *  @param atlas Font atlas for floating text
      *  @return true if successful */
