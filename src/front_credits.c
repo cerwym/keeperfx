@@ -39,10 +39,6 @@
 #include "config_strings.h"
 #include "config_campaigns.h"
 
-#if FUNCTESTING
-#include "ftests/ftest.h"
-#endif
-
 #include "post_inc.h"
 
 /******************************************************************************/
@@ -64,9 +60,6 @@ void frontstory_load(void)
         LbDataLoadSetModifyFilenameFunction(defaultModifyDataLoadFilename);
         RendererPaletteSet(frontend_palette);
         srand(LbTimerClock());
-#if FUNCTESTING
-        ftest_srand();
-#endif // FUNCTESTING
         frontstory_text_no = GUIStr_EasterPoems + rand() % 26;
     }
 }

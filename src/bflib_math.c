@@ -27,9 +27,6 @@
 #include <intrin.h>
 #endif // _MSC_VER
 
-#ifdef FUNCTESTING
-  #include "ftests/ftest.h"
-#endif
 #include <math.h>
 #include "post_inc.h"
 
@@ -758,9 +755,6 @@ unsigned long LbRandomSeries(unsigned long range, uint32_t *seed, const char *fu
   if (range == 0)
     return 0;
   unsigned long i = 9377 * (*seed) + 9439;
-#ifndef FUNCTESTING // don't modify seeds when functional testing is enabled
-  *seed = (i >> 13) | (i << ((sizeof(int32_t) * 8) - 13));
-#endif // FUNCTESTING
   i = (*seed) % range;
   return i;
 }

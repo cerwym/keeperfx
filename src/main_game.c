@@ -59,11 +59,6 @@
 #include "gui_boxmenu.h"
 #include "sounds.h"
 #include "api.h"
-#include "net_resync.h"
-
-#ifdef FUNCTESTING
-  #include "ftests/ftest.h"
-#endif
 
 #include "platform/kfx_breadcrumb.h"
 #include "post_inc.h"
@@ -421,10 +416,6 @@ static CoroutineLoopState startup_network_game_tail(CoroutineLoop *context)
     post_init_packets();
     set_selected_level_number(0);
 
-#ifdef FUNCTESTING
-    set_flag(start_params.functest_flags, FTF_LevelLoaded);
-#endif
-
     return CLS_CONTINUE;
 }
 
@@ -507,13 +498,6 @@ void clear_complete_game(void)
 
 void init_seeds()
 {
-#if FUNCTESTING
-    if (flag_is_set(start_params.functest_flags, FTF_Enabled))
-    {
-        ftest_srand();
-    }
-    else
-#endif
     {
         // Unsynced seeds - these values will be different per-player in multiplayer
         unsigned long calender_time = (unsigned long)LbTimeSec();

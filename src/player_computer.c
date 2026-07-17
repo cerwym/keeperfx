@@ -1597,9 +1597,6 @@ void setup_computer_players2(void)
   // random results aren't used in the same order every time.
   srand((unsigned) time(NULL));
 
-#ifdef FUNCTESTING
-  ftest_srand();
-#endif
   struct PlayerInfo* player = INVALID_PLAYER;
   for (i=0; i < PLAYERS_COUNT; i++)
   {
