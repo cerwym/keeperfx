@@ -9,8 +9,6 @@
 #include "pre_inc.h"
 #include "renderer/RendererHelper.h"
 
-#ifndef PLATFORM_3DS
-
 #include <SDL3/SDL.h>
 
 #include <string.h>
@@ -83,5 +81,3 @@ bool RendererHelper_SaveRGBAImage(const uint8_t* pixels, int w, int h, int pitch
     SDL_DestroySurface(surf);
     return ok;
 }
-
-#endif // PLATFORM_3DS

@@ -11,7 +11,7 @@
 /******************************************************************************/
 #include "pre_inc.h"
 
-#if defined(PLATFORM_VITA) || defined(PLATFORM_3DS) || defined(PLATFORM_SWITCH)
+#if defined(PLATFORM_VITA) || defined(PLATFORM_SWITCH)
 
 #include <stdint.h>
 #include "api.h"
@@ -196,6 +196,6 @@ void cmd_auto_completion(PlayerNumber plyr_idx, char *cmd_str, size_t cmd_size) 
 TbBool cmd_exec(PlayerNumber plyr_idx, char *msg) { (void)plyr_idx; (void)msg; return 0; }
 #endif // !KEEPERFX_LUA_AVAILABLE
 
-#endif // PLATFORM_VITA || PLATFORM_3DS || PLATFORM_SWITCH
+#endif // PLATFORM_VITA || PLATFORM_SWITCH
 
 #include "post_inc.h"

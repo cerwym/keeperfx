@@ -37,7 +37,6 @@ enum RendererType {
     RENDERER_SOFTWARE = 1,  /**< CPU software renderer, SDL2 display output */
     RENDERER_OPENGL   = 2,  /**< OpenGL backend — framebuffer blit + GPU world geometry */
     RENDERER_VITA     = 3,  /**< PS Vita — vitaGL over GXM */
-    RENDERER_3DS      = 4,  /**< Nintendo 3DS — citro3d/PICA200 */
 };
 
 /******************************************************************************/

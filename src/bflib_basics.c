@@ -356,7 +356,7 @@ int LbErrorLogClose(void)
 TbFileHandle file = NULL;
 
 void write_log_to_array_for_live_viewing(const char* fmt_str, va_list args, const char* add_log_prefix) {
-#if defined(PLATFORM_VITA) || defined(PLATFORM_3DS) || defined(PLATFORM_SWITCH)
+#if defined(PLATFORM_VITA) || defined(PLATFORM_SWITCH)
   (void)fmt_str;
   (void)args;
   (void)add_log_prefix;

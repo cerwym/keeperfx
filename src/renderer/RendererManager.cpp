@@ -26,9 +26,6 @@
 #ifdef PLATFORM_VITA
 #  include "renderer/RendererVita.h"
 #endif
-#ifdef PLATFORM_3DS
-#  include "renderer/Renderer3DS.h"
-#endif
 
 #include "bflib_basics.h"
 #include "bflib_datetm.h"
@@ -276,11 +273,6 @@ static IRenderer* create_renderer(RendererType type)
             return new RendererVita();
 #endif
 
-#ifdef PLATFORM_3DS
-        case RENDERER_3DS:
-            return new Renderer3DS();
-#endif
-
         default:
             return nullptr;
     }
@@ -385,8 +377,6 @@ static RendererType resolve_auto()
 {
 #ifdef PLATFORM_VITA
     return RENDERER_VITA;
-#elif defined(PLATFORM_3DS)
-    return RENDERER_3DS;
 #elif defined(RENDERER_OPENGL_ENABLED)
     return RENDERER_OPENGL;
 #else
