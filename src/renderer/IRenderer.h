@@ -27,6 +27,7 @@ class IMapFadePass;
 struct TbSpriteSheet;
 class ITextRenderer;
 class IUIRenderer;
+class ICursorLayer;
 
 /******************************************************************************/
 
@@ -263,6 +264,10 @@ public:
     /** Returns the UI renderer managed by this backend.
      *  Each renderer type creates the appropriate implementation internally. */
     virtual class IUIRenderer* GetUIRenderer() = 0;
+
+    /** Returns the cursor layer managed by this backend.
+     *  Each renderer type creates the appropriate implementation internally. */
+    virtual class ICursorLayer* GetCursorLayer() = 0;
 
     // -------------------------------------------------------------------------
     // Lifecycle notifications from the game thread

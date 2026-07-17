@@ -533,6 +533,29 @@ bool RendererOpenGL::Init()
     }
 #endif // DEBUG
 
+    // Create and own the sub-renderers now that all GPU resources (tile/sprite/font
+    // atlases, palette + fade textures) exist.  No software fallback: if a GL
+    // sub-renderer fails to initialise, this whole backend fails and the manager
+    // retries with RendererSoftware (see main.cpp).
+    CreateGLWorldViewRenderer();
+    CreateGLMapFadePass();
+    if (!CreateGLTextRenderer())
+    {
+        ERRORLOG("RendererOpenGL::Init: GLTextRenderer initialisation failed");
+        return false;
+    }
+    if (!CreateGLUIRenderer())
+    {
+        ERRORLOG("RendererOpenGL::Init: GLUIRenderer initialisation failed");
+        return false;
+    }
+    CreateGLCursorLayer();
+    if (!CompileSubRendererShaders())
+    {
+        ERRORLOG("RendererOpenGL::Init: sub-renderer shader compilation failed");
+        return false;
+    }
+
     return true;
 }
 
@@ -546,6 +569,17 @@ void RendererOpenGL::Shutdown()
         m_render_thread.Stop();
         platform_gl_acquire_context();
     }
+
+    // Destroy the owned sub-renderers while the GL context is still current and
+    // before the atlases they reference are freed.  Cursor first — it holds
+    // non-owning pointers to the world/UI renderers and the sprite atlas.  Their
+    // destructors call Shutdown(), so their GL resources are released here (the
+    // old manager-side teardown deleted them after the context was gone, leaking).
+    delete m_cursor;          m_cursor          = nullptr;
+    delete m_gl_ui_renderer;  m_gl_ui_renderer  = nullptr;
+    delete m_textRenderer;    m_textRenderer    = nullptr;
+    delete m_world_renderer;  m_world_renderer  = nullptr;
+    delete m_gl_mapfade;      m_gl_mapfade      = nullptr;
 
     delete m_tile_atlas;
     m_tile_atlas = nullptr;
@@ -2305,22 +2339,27 @@ const char* RendererOpenGL::GetName() const
 
 IWorldViewRenderer* RendererOpenGL::GetWorldViewRenderer()
 {
-    return RendererGetWorldViewRenderer();
+    return m_world_renderer;
 }
 
 IMapFadePass* RendererOpenGL::GetMapFadePass()
 {
-    return RendererGetMapFadePass();
+    return m_gl_mapfade;
 }
 
 ITextRenderer* RendererOpenGL::GetTextRenderer()
 {
-    return RendererGetTextRenderer();
+    return m_textRenderer;
 }
 
 IUIRenderer* RendererOpenGL::GetUIRenderer()
 {
-    return RendererGetUIRenderer();
+    return m_gl_ui_renderer;
+}
+
+ICursorLayer* RendererOpenGL::GetCursorLayer()
+{
+    return m_cursor;
 }
 
 /******************************************************************************/
@@ -2446,6 +2485,7 @@ ICursorLayer* RendererOpenGL::CreateGLCursorLayer()
     glcur->SetWorldViewRenderer(m_world_renderer);
     glcur->SetSpriteAtlas(m_sprite_atlas);
     glcur->SetGLUIRenderer(m_gl_ui_renderer);
+    m_cursor = glcur;
     return glcur;
 }
 

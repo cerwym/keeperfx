@@ -17,6 +17,7 @@
 #include "renderer/backends/SoftwareMapFadePass.h"
 #include "renderer/backends/SoftwareTextRenderer.h"
 #include "renderer/backends/SoftwareUIRenderer.h"
+#include "renderer/backends/SWCursorLayer.h"
 
 #include "bflib_video.h"
 #include "bflib_render.h"
@@ -126,6 +127,7 @@ bool RendererSoftware::Init()
     m_mapFadePass = new SoftwareMapFadePass();
     m_textRenderer = new SoftwareTextRenderer();
     m_uiRenderer = new SoftwareUIRenderer();
+    m_cursorLayer = new SWCursorLayer();
 
     return true;
 }
@@ -152,6 +154,8 @@ void RendererSoftware::Shutdown()
     m_textRenderer = nullptr;
     delete m_uiRenderer;
     m_uiRenderer = nullptr;
+    delete m_cursorLayer;
+    m_cursorLayer = nullptr;
 }
 
 bool RendererSoftware::BeginFrame()
@@ -176,10 +180,9 @@ bool RendererSoftware::BeginFrame()
     m_frame_seq = 0;
     m_render_graph.GetUIBuffers().shared_seq   = &m_frame_seq;
     m_render_graph.GetTextBuffers().shared_seq = &m_frame_seq;
-    // Open the write window on the MANAGER's sub-renderers — the ones the game
-    // actually submits to via RendererGetUIRenderer()/RendererGetTextRenderer()
-    // and on which the sprite sheets are registered.  (RendererSoftware's own
-    // m_uiRenderer/m_textRenderer are a separate, unused pair.)
+    // Open the write window on this backend's own UI/text renderers — the ones
+    // the game submits to via RendererGetUIRenderer()/RendererGetTextRenderer()
+    // (which now resolve here) and on which the sprite sheets are registered.
     if (IUIRenderer* ui = RendererGetUIRenderer())
         ui->SetUICommandBuffers(&m_render_graph.GetUIBuffers());
     if (ITextRenderer* text = RendererGetTextRenderer())
@@ -592,6 +595,11 @@ ITextRenderer* RendererSoftware::GetTextRenderer()
 IUIRenderer* RendererSoftware::GetUIRenderer()
 {
     return m_uiRenderer;
+}
+
+ICursorLayer* RendererSoftware::GetCursorLayer()
+{
+    return m_cursorLayer;
 }
 
 bool RendererSoftware::ScheduleScreenshot(const char* path, int fmt)

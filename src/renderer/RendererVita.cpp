@@ -26,6 +26,11 @@
 #include "globals.h"
 #include "renderer/IPostProcessPass.h"
 #include "kfx/lense/LensManager.h"
+#include "renderer/backends/SoftwareWorldViewRenderer.h"
+#include "renderer/backends/SoftwareMapFadePass.h"
+#include "renderer/backends/SoftwareTextRenderer.h"
+#include "renderer/backends/SoftwareUIRenderer.h"
+#include "renderer/backends/SWCursorLayer.h"
 
 #include <psp2/io/stat.h>    // sceIoMkdir
 #include <psp2/kernel/sysmem.h>  // sceKernelAllocMemBlock probe
@@ -126,6 +131,13 @@ bool RendererVita::Init()
         glDisable(GL_DEPTH_TEST);
         glDisable(GL_BLEND);
 
+        // Own the software sub-renderers (CPU staging path for UI/text/world/fade).
+        m_worldViewRenderer = new SoftwareWorldViewRenderer();
+        m_mapFadePass       = new SoftwareMapFadePass();
+        m_textRenderer      = new SoftwareTextRenderer();
+        m_uiRenderer        = new SoftwareUIRenderer();
+        m_cursorLayer       = new SWCursorLayer();
+
         m_initialized = true;
         SYNCLOG("RendererVita: vitaGL palette shader initialised (%dx%d -> 960x544)", k_gameW, k_gameH);
         return true;
@@ -148,6 +160,12 @@ void RendererVita::Shutdown()
     del_fbo(m_scene_fbo,  m_scene_tex);
     del_fbo(m_pass_fbo_a, m_pass_tex_a);
     del_fbo(m_pass_fbo_b, m_pass_tex_b);
+
+    delete m_worldViewRenderer; m_worldViewRenderer = nullptr;
+    delete m_mapFadePass;       m_mapFadePass       = nullptr;
+    delete m_textRenderer;      m_textRenderer      = nullptr;
+    delete m_uiRenderer;        m_uiRenderer        = nullptr;
+    delete m_cursorLayer;       m_cursorLayer       = nullptr;
 
     m_initialized = false;
 }
