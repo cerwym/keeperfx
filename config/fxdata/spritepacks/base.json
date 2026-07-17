@@ -1,0 +1,354 @@
+{
+  "pack": {
+    "name": "base",
+    "provenance": "bullfrog",
+    "priority": 0
+  },
+  "collections": [
+    {
+      "base": "font1",
+      "category": "font",
+      "entries": 97,
+      "variants": [
+        {
+          "scale": 32,
+          "colour": "indexed",
+          "file": "fxspr/font1-32.fxspr"
+        },
+        {
+          "scale": 32,
+          "colour": "truecolour",
+          "file": "fxspr/font1-32-tc.fxspr"
+        },
+        {
+          "scale": 64,
+          "colour": "indexed",
+          "file": "fxspr/font1-64.fxspr"
+        },
+        {
+          "scale": 64,
+          "colour": "truecolour",
+          "file": "fxspr/font1-64-tc.fxspr"
+        }
+      ]
+    },
+    {
+      "base": "font2",
+      "category": "font",
+      "entries": 227,
+      "variants": [
+        {
+          "scale": 32,
+          "colour": "indexed",
+          "file": "fxspr/font2-32.fxspr"
+        },
+        {
+          "scale": 64,
+          "colour": "indexed",
+          "file": "fxspr/font2-64.fxspr"
+        }
+      ]
+    },
+    {
+      "base": "gmapbug",
+      "category": "gui",
+      "entries": 41,
+      "variants": [
+        {
+          "scale": 0,
+          "colour": "indexed",
+          "file": "fxspr/gmapbug.fxspr"
+        }
+      ]
+    },
+    {
+      "base": "gui1",
+      "category": "gui",
+      "entries": 239,
+      "variants": [
+        {
+          "scale": 32,
+          "colour": "indexed",
+          "file": "fxspr/gui1-32.fxspr"
+        },
+        {
+          "scale": 32,
+          "colour": "truecolour",
+          "file": "fxspr/gui1-32-tc.fxspr"
+        },
+        {
+          "scale": 64,
+          "colour": "indexed",
+          "file": "fxspr/gui1-64.fxspr"
+        },
+        {
+          "scale": 64,
+          "colour": "truecolour",
+          "file": "fxspr/gui1-64-tc.fxspr"
+        }
+      ]
+    },
+    {
+      "base": "gui2",
+      "category": "gui",
+      "entries": 849,
+      "variants": [
+        {
+          "scale": 32,
+          "colour": "indexed",
+          "file": "fxspr/gui2-32.fxspr"
+        },
+        {
+          "scale": 64,
+          "colour": "indexed",
+          "file": "fxspr/gui2-64.fxspr"
+        }
+      ]
+    },
+    {
+      "base": "pointer",
+      "category": "pointer",
+      "entries": 506,
+      "variants": [
+        {
+          "scale": 64,
+          "colour": "indexed",
+          "file": "fxspr/pointer64.fxspr"
+        }
+      ]
+    },
+    {
+      "base": "points",
+      "category": "pointer",
+      "entries": 53,
+      "variants": [
+        {
+          "scale": 64,
+          "colour": "indexed",
+          "file": "fxspr/points64.fxspr"
+        }
+      ]
+    },
+    {
+      "base": "swipe01",
+      "category": "effect",
+      "entries": 31,
+      "variants": [
+        {
+          "scale": 0,
+          "colour": "indexed",
+          "file": "fxspr/swipe01.fxspr"
+        }
+      ]
+    },
+    {
+      "base": "swipe02",
+      "category": "effect",
+      "entries": 31,
+      "variants": [
+        {
+          "scale": 0,
+          "colour": "indexed",
+          "file": "fxspr/swipe02.fxspr"
+        }
+      ]
+    },
+    {
+      "base": "swipe03",
+      "category": "effect",
+      "entries": 31,
+      "variants": [
+        {
+          "scale": 0,
+          "colour": "indexed",
+          "file": "fxspr/swipe03.fxspr"
+        }
+      ]
+    },
+    {
+      "base": "swipe04",
+      "category": "effect",
+      "entries": 31,
+      "variants": [
+        {
+          "scale": 0,
+          "colour": "indexed",
+          "file": "fxspr/swipe04.fxspr"
+        }
+      ]
+    },
+    {
+      "base": "swipe05",
+      "category": "effect",
+      "entries": 31,
+      "variants": [
+        {
+          "scale": 0,
+          "colour": "indexed",
+          "file": "fxspr/swipe05.fxspr"
+        }
+      ]
+    },
+    {
+      "base": "swipe06",
+      "category": "effect",
+      "entries": 31,
+      "variants": [
+        {
+          "scale": 0,
+          "colour": "indexed",
+          "file": "fxspr/swipe06.fxspr"
+        }
+      ]
+    },
+    {
+      "base": "swipe07",
+      "category": "effect",
+      "entries": 31,
+      "variants": [
+        {
+          "scale": 0,
+          "colour": "indexed",
+          "file": "fxspr/swipe07.fxspr"
+        }
+      ]
+    },
+    {
+      "base": "tmapa000",
+      "category": "texture",
+      "entries": 545,
+      "variants": [
+        {
+          "scale": 32,
+          "colour": "truecolour",
+          "file": "fxspr/tmapa000-32-tc.fxspr"
+        },
+        {
+          "scale": 128,
+          "colour": "truecolour",
+          "file": "fxspr/tmapa000-128-tc.fxspr"
+        }
+      ]
+    },
+    {
+      "base": "tmapa001",
+      "category": "texture",
+      "entries": 545,
+      "variants": [
+        {
+          "scale": 32,
+          "colour": "truecolour",
+          "file": "fxspr/tmapa001-32-tc.fxspr"
+        },
+        {
+          "scale": 128,
+          "colour": "truecolour",
+          "file": "fxspr/tmapa001-128-tc.fxspr"
+        }
+      ]
+    },
+    {
+      "base": "tmapa002",
+      "category": "texture",
+      "entries": 545,
+      "variants": [
+        {
+          "scale": 32,
+          "colour": "truecolour",
+          "file": "fxspr/tmapa002-32-tc.fxspr"
+        },
+        {
+          "scale": 128,
+          "colour": "truecolour",
+          "file": "fxspr/tmapa002-128-tc.fxspr"
+        }
+      ]
+    },
+    {
+      "base": "tmapa003",
+      "category": "texture",
+      "entries": 545,
+      "variants": [
+        {
+          "scale": 32,
+          "colour": "truecolour",
+          "file": "fxspr/tmapa003-32-tc.fxspr"
+        },
+        {
+          "scale": 128,
+          "colour": "truecolour",
+          "file": "fxspr/tmapa003-128-tc.fxspr"
+        }
+      ]
+    },
+    {
+      "base": "tmapa004",
+      "category": "texture",
+      "entries": 545,
+      "variants": [
+        {
+          "scale": 32,
+          "colour": "truecolour",
+          "file": "fxspr/tmapa004-32-tc.fxspr"
+        },
+        {
+          "scale": 128,
+          "colour": "truecolour",
+          "file": "fxspr/tmapa004-128-tc.fxspr"
+        }
+      ]
+    },
+    {
+      "base": "tmapa005",
+      "category": "texture",
+      "entries": 545,
+      "variants": [
+        {
+          "scale": 32,
+          "colour": "truecolour",
+          "file": "fxspr/tmapa005-32-tc.fxspr"
+        },
+        {
+          "scale": 128,
+          "colour": "truecolour",
+          "file": "fxspr/tmapa005-128-tc.fxspr"
+        }
+      ]
+    },
+    {
+      "base": "tmapa006",
+      "category": "texture",
+      "entries": 545,
+      "variants": [
+        {
+          "scale": 32,
+          "colour": "truecolour",
+          "file": "fxspr/tmapa006-32-tc.fxspr"
+        },
+        {
+          "scale": 128,
+          "colour": "truecolour",
+          "file": "fxspr/tmapa006-128-tc.fxspr"
+        }
+      ]
+    },
+    {
+      "base": "tmapa007",
+      "category": "texture",
+      "entries": 545,
+      "variants": [
+        {
+          "scale": 32,
+          "colour": "truecolour",
+          "file": "fxspr/tmapa007-32-tc.fxspr"
+        },
+        {
+          "scale": 128,
+          "colour": "truecolour",
+          "file": "fxspr/tmapa007-128-tc.fxspr"
+        }
+      ]
+    }
+  ],
+  "sprites": []
+}

@@ -28,6 +28,8 @@
 #ifdef __cplusplus
 #include <vector>
 
+#include "kfx/assets/FxSprSheet.h"   /* kfx::FxSprSheet — truecolour companion */
+
 class SpriteSheetManager {
 public:
     static SpriteSheetManager& Get();
@@ -57,10 +59,18 @@ public:
     size_t RegisteredCount()   const { return m_entries.size(); }
 
     /** Collect currently-loaded (non-NULL, non-empty) sheets into out arrays.
-     *  Returns the count written. */
-    int CollectActive(const TbSpriteSheet** out_sheets,
-                      const char**          out_names,
-                      int                   capacity) const;
+     *  Returns the count written.
+     *  @param out_fxspr  Optional (may be NULL). When provided, receives the
+     *      companion truecolour `.fxspr` sheet for each collected slot, or NULL
+     *      for slots with no loaded `.fxspr`. Parallel to out_sheets/out_names. */
+    int CollectActive(const TbSpriteSheet**    out_sheets,
+                      const char**             out_names,
+                      int                      capacity,
+                      const kfx::FxSprSheet**  out_fxspr = nullptr) const;
+
+    /** Companion truecolour sheet loaded alongside the indexed sheet in `slot`,
+     *  or NULL if none is loaded (no `.fxspr` on disk, or load failed). */
+    const kfx::FxSprSheet* FxSprForSlot(TbSpriteSheet** slot) const;
 
     // ── GUI dirty flag ────────────────────────────────────────────────────────
     // Set by full GUI data loads (LoadVRes256Data / LoadVResMinimal / LoadMcgaData)
@@ -73,7 +83,18 @@ public:
     bool ConsumeGUIDirty() { bool v = m_gui_dirty; m_gui_dirty = false; return v; }
 
 private:
-    struct Entry { TbSpriteSheet** slot; const char* name; };
+    struct Entry {
+        TbSpriteSheet** slot;
+        const char*     name;
+        kfx::FxSprSheet fxspr;              // companion truecolour sheet (move-only)
+        bool            fxspr_loaded = false; // true once a valid .fxspr is adopted
+    };
+
+    /** Attempt to load the `.fxspr` companion for `dat_path` into `e.fxspr`.
+     *  Derives `fxspr/<stem>.fxspr` from the dat basename and resolves it under
+     *  the standard data group. Silent no-op (leaves fxspr invalid) when the
+     *  file is absent — most sheets have no `.fxspr` yet. */
+    void LoadCompanionFxSpr(Entry& e, const char* dat_path);
 
     std::vector<Entry> m_entries;
     bool  m_rebuild_pending = false;

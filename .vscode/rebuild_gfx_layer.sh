@@ -3,7 +3,7 @@ set -euo pipefail
 
 workspace="${1:-$(pwd)}"
 deploy_dir="$workspace/.deploy"
-compose_file="$workspace/docker/compose.yml"
+compose_file="$workspace/build/docker/compose.yml"
 
 if [[ ! -d "$deploy_dir" ]]; then
   echo ".deploy does not exist. Run Init .deploy/ first."

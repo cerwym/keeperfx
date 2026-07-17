@@ -32,6 +32,8 @@ jobs:
   # ── Linux + Windows MinGW — built in Docker containers on Ubuntu ─────────────
   build-containerized:
     name: Build ${{ matrix.name }}
+    # Fork release ships x64 (MSVC) + Vita only; MinGW x86/x64 + Linux run upstream.
+    if: ${{ github.repository == 'dkfans/keeperfx' }}
     runs-on: ubuntu-latest
     needs: prepare
     container:
@@ -180,6 +182,8 @@ jobs:
   # ── macOS Universal — native macOS runner ────────────────────────────────────
   build-macos:
     name: Build macOS Universal
+    # Fork release ships x64 + Vita only; macOS builds upstream.
+    if: ${{ github.repository == 'dkfans/keeperfx' }}
     runs-on: macos-14
     needs: prepare
 
@@ -231,6 +235,8 @@ jobs:
   # ── WebAssembly — native Ubuntu, Emscripten toolchain ────────────────────────
   build-wasm:
     name: Build WebAssembly
+    # Fork release ships x64 + Vita only; wasm builds upstream.
+    if: ${{ github.repository == 'dkfans/keeperfx' }}
     runs-on: ubuntu-24.04
     needs: prepare
 
@@ -284,29 +290,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Nintendo 3DS
-            preset: 3ds-release
-            image: keeperfx-build-3ds-sdk
-            artifact-name: keeperfx-3ds
-            platform: 3ds
-
+          # 3DS / Switch / Wii U are disabled (early-stage; kept for future dev via
+          # their standalone workflow_dispatch build workflows). Vita ships on both
+          # fork and upstream.
           - name: PS Vita
             preset: vita-release
             image: build-vitasdk
             artifact-name: keeperfx-vita
             platform: vita
-
-          - name: Nintendo Switch
-            preset: switch-release
-            image: keeperfx-build-switch-sdk
-            artifact-name: keeperfx-switch
-            platform: switch
-
-          - name: Wii U
-            preset: wii-u-release
-            image: keeperfx-build-wii-u-sdk
-            artifact-name: keeperfx-wii-u
-            platform: wii-u
 
     steps:
       - name: Checkout code

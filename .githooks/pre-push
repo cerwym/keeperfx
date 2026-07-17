@@ -57,7 +57,7 @@ while read local_ref local_sha remote_ref remote_sha; do
             echo ""
             echo "  BLOCKED: You're pushing develop to upstream (dkfans)."
             echo "  develop contains your personal infra — don't push it upstream."
-            echo "  Use tools/upstream-pr.ps1 to create a clean branch for upstream PRs."
+            echo "  Use scripts/upstream-pr.ps1 to create a clean branch for upstream PRs."
             echo ""
             exit 1
         fi

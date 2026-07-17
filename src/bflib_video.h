@@ -232,6 +232,7 @@ TbPixel LbPaletteFindColour(const unsigned char *pal, unsigned char r, unsigned 
 TbResult LbScreenWaitVbi(void);
 TbResult LbPaletteSet(unsigned char *palette);
 TbResult LbPaletteGet(unsigned char *palette);
+const unsigned char *LbPaletteGetReadonly(void);
 TbResult LbPaletteDataFillBlack(unsigned char *palette);
 TbResult LbPaletteDataFillWhite(unsigned char *palette);
 

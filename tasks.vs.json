@@ -11,10 +11,10 @@
             "args": [
                 "-ExecutionPolicy", "Bypass",
                 "-Command",
-                "if (-not (Test-Path '${workspaceRoot}\\.deploy\\data\\main.pal')) { Write-Host 'ERROR: .deploy is not initialized. Run the Init .deploy/ task first.' -ForegroundColor Red; exit 1 }; cmake --build --preset x86-windows-static-debug; if ($LASTEXITCODE -ne 0) { exit 1 }; Copy-Item '${workspaceRoot}\\out\\build\\x86-windows-static-debug\\keeperfx.exe' '${workspaceRoot}\\.deploy\\keeperfx.exe' -Force; Write-Host 'keeperfx.exe deployed to .deploy/' -ForegroundColor Green"
+                "if (-not (Test-Path '${workspaceRoot}\\.deploy\\data\\main.pal')) { Write-Host 'ERROR: .deploy is not initialized. Run the Init .deploy/ task first.' -ForegroundColor Red; exit 1 }; cmake --build --preset x64-windows-static-debug; if ($LASTEXITCODE -ne 0) { exit 1 }; Copy-Item '${workspaceRoot}\\out\\build\\x64-windows-static-debug\\keeperfx.exe' '${workspaceRoot}\\.deploy\\keeperfx.exe' -Force; Write-Host 'keeperfx.exe deployed to .deploy/' -ForegroundColor Green"
             ],
             "workingDirectory": "${workspaceRoot}",
-            "output": "${workspaceRoot}\\out\\build\\x86-windows-static-debug"
+            "output": "${workspaceRoot}\\out\\build\\x64-windows-static-debug"
         },
 
         // ── PS Vita (Docker vitasdk) ──────────────────────────────────────────────
@@ -25,7 +25,7 @@
             "command": "${env.COMSPEC}",
             "args": [
                 "/c",
-                "docker compose -f docker\\compose.yml run --rm vitasdk bash -c \"cmake --preset vita-reldebug && cmake --build --preset vita-reldebug\""
+                "docker compose -f build\\docker\\compose.yml run --rm vitasdk bash -c \"cmake --preset vita-reldebug && cmake --build --preset vita-reldebug\""
             ],
             "workingDirectory": "${workspaceRoot}",
             "output": "${workspaceRoot}\\out\\build\\vita-reldebug"
@@ -37,7 +37,7 @@
             "command": "${env.COMSPEC}",
             "args": [
                 "/c",
-                "docker compose -f docker\\compose.yml run --rm vitasdk bash -c \"cmake --preset vita-release && cmake --build --preset vita-release\""
+                "docker compose -f build\\docker\\compose.yml run --rm vitasdk bash -c \"cmake --preset vita-release && cmake --build --preset vita-release\""
             ],
             "workingDirectory": "${workspaceRoot}",
             "output": "${workspaceRoot}\\out\\build\\vita-release"
@@ -49,7 +49,7 @@
             "command": "${env.COMSPEC}",
             "args": [
                 "/c",
-                "docker compose -f docker\\compose.yml run --rm vitasdk bash -c \"cmake --preset vita-debug && cmake --build --preset vita-debug\""
+                "docker compose -f build\\docker\\compose.yml run --rm vitasdk bash -c \"cmake --preset vita-debug && cmake --build --preset vita-debug\""
             ],
             "workingDirectory": "${workspaceRoot}",
             "output": "${workspaceRoot}\\out\\build\\vita-debug"
@@ -61,7 +61,7 @@
             "command": "${env.COMSPEC}",
             "args": [
                 "/c",
-                "bash tools/vita-companion.sh deploy-launch"
+                "bash scripts/vita-companion.sh deploy-launch"
             ],
             "workingDirectory": "${workspaceRoot}"
         },
@@ -72,7 +72,7 @@
             "command": "${env.COMSPEC}",
             "args": [
                 "/c",
-                "bash tools/vita-companion.sh fetch-logs"
+                "bash scripts/vita-companion.sh fetch-logs"
             ],
             "workingDirectory": "${workspaceRoot}"
         },
@@ -85,7 +85,7 @@
             "command": "${env.COMSPEC}",
             "args": [
                 "/c",
-                "docker compose -f docker\\compose.yml run --rm mingw32 bash -c \"cmake --preset windows-x86-debug && cmake --build --preset windows-x86-debug\""
+                "docker compose -f build\\docker\\compose.yml run --rm mingw32 bash -c \"cmake --preset windows-x86-debug && cmake --build --preset windows-x86-debug\""
             ],
             "workingDirectory": "${workspaceRoot}",
             "output": "${workspaceRoot}\\out\\build\\windows-x86-debug"
@@ -97,7 +97,7 @@
             "command": "${env.COMSPEC}",
             "args": [
                 "/c",
-                "docker compose -f docker\\compose.yml run --rm mingw32 bash -c \"cmake --preset windows-x86-release && cmake --build --preset windows-x86-release\""
+                "docker compose -f build\\docker\\compose.yml run --rm mingw32 bash -c \"cmake --preset windows-x86-release && cmake --build --preset windows-x86-release\""
             ],
             "workingDirectory": "${workspaceRoot}",
             "output": "${workspaceRoot}\\out\\build\\windows-x86-release"
@@ -111,7 +111,7 @@
             "command": "${env.COMSPEC}",
             "args": [
                 "/c",
-                "docker compose -f docker\\compose.yml run --rm linux bash -c \"cmake --preset linux-x64-release && cmake --build --preset linux-x64-release\""
+                "docker compose -f build\\docker\\compose.yml run --rm linux bash -c \"cmake --preset linux-x64-release && cmake --build --preset linux-x64-release\""
             ],
             "workingDirectory": "${workspaceRoot}",
             "output": "${workspaceRoot}\\out\\build\\linux-x64-release"
@@ -149,7 +149,7 @@
             "command": "${env.COMSPEC}",
             "args": [
                 "/c",
-                "bash tools/vita-companion.sh reboot"
+                "bash scripts/vita-companion.sh reboot"
             ],
             "workingDirectory": "${workspaceRoot}"
         },

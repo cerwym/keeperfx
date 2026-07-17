@@ -3,7 +3,7 @@ set -euo pipefail
 
 workspace="${1:-$(pwd)}"
 preset="${2:-windows-x86-debug}"
-compose_file="$workspace/docker/compose.yml"
+compose_file="$workspace/build/docker/compose.yml"
 build_dir="$workspace/out/build/$preset"
 deploy_dir="$workspace/.deploy"
 exe_src="$build_dir/keeperfx.exe"

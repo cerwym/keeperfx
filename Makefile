@@ -40,13 +40,13 @@ VER_STRING = $(VER_MAJOR).$(VER_MINOR).$(VER_RELEASE).$(BUILD_NUMBER) $(PACKAGE_
 
 include build/make/prebuilds.mk
 
-PNGTOICO   = tools/png2ico/png2ico
-PNGTORAW   = tools/pngpal2raw/bin/pngpal2raw
-PNGTOBSPAL = tools/png2bestpal/bin/png2bestpal
-POTONGDAT  = tools/po2ngdat/bin/po2ngdat
-WAVTODAT   = tools/sndbanker/bin/sndbanker
-RNC        = tools/rnctools/bin/rnc
-DERNC      = tools/rnctools/bin/dernc
+PNGTOICO   = build/tools/png2ico/png2ico
+PNGTORAW   = build/tools/pngpal2raw/bin/pngpal2raw
+PNGTOBSPAL = build/tools/png2bestpal/bin/png2bestpal
+POTONGDAT  = build/tools/po2ngdat/bin/po2ngdat
+WAVTODAT   = build/tools/sndbanker/bin/sndbanker
+RNC        = build/tools/rnctools/bin/rnc
+DERNC      = build/tools/rnctools/bin/dernc
 
 .PHONY: package clean-package
 

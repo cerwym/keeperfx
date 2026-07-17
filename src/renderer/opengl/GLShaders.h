@@ -924,7 +924,24 @@ void main()
 }
 )glsl";
 
-// Program 2: font glyph rendering.
+// Program 1b: truecolour atlas sprites (RGBA8).  Same role as UI_SPRITE but the
+// atlas already holds materialised RGBA, so no palette lookup is needed.  Used
+// when the sprite atlas is running in truecolour mode (palette_mode=TRUECOLOUR).
+// Unit 0 = sprite atlas (RGBA8 GL_TEXTURE_2D).  Straight-alpha; index-0 texels
+// were baked to alpha 0 at atlas build time.
+constexpr const char* UI_SPRITE_RGBA_FRAGMENT_SHADER = R"glsl(
+#version 330 core
+in vec2 v_uv;
+in vec4 v_color;
+uniform sampler2D u_sprite_atlas;  // unit 0: RGBA8 materialised atlas
+out vec4 fragColor;
+void main()
+{
+    vec4 tex = texture(u_sprite_atlas, v_uv);
+    if (tex.a < (0.5 / 255.0)) discard;
+    fragColor = vec4(tex.rgb * v_color.rgb, tex.a * v_color.a);
+}
+)glsl";
 // Unit 0 = font atlas (RGBA GL_TEXTURE_2D); alpha channel is the glyph mask.
 constexpr const char* UI_FONT_FRAGMENT_SHADER = R"glsl(
 #version 330 core

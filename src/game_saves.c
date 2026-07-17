@@ -56,6 +56,7 @@
 #include "lua_base.h"
 #include "lua_triggers.h"
 #include "moonphase.h"
+#include "kfx/imgui/DevTools.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -211,6 +212,7 @@ int load_game_chunks(TbFileHandle fhandle, struct CatalogueEntry *centry)
                 WorldViewRenderer_ClearKeeperSpriteAtlas();
                 init_custom_sprites(centry->level_num);
                 WorldViewRenderer_PreloadKeeperSpriteAtlas();
+                KfxDevTools_InvalidateCreatureSprites();
                 load_stats_files();
                 snprintf(high_score_entry, PLAYER_NAME_LENGTH, "%s", centry->player_name);
             }
@@ -448,10 +450,7 @@ TbBool load_game(long slot_num)
     process_pause_packet(0, 0);
     clear_flag(game.operation_flags, GOF_Paused);
     clear_flag(game.operation_flags, GOF_WorldInfluence);
-    close_main_cheat_menu();
-    close_creature_cheat_menu();
-    close_instance_cheat_menu();
-    close_secondary_cheat_menu();
+    KfxDevTools_CloseCheatMenu();
     output_message(SMsg_GameLoaded, 0);
     panel_map_on_level_load();
     panel_map_update(0, 0, game.map_subtiles_x+1, game.map_subtiles_y+1);

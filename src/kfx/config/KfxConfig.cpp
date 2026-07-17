@@ -99,6 +99,7 @@ const KfxConfigFieldDesc k_field_descs[] = {
     {KfxField_RendererTileFilter,     "RENDERER_TILE_FILTER",             false},
     {KfxField_ZoomBoxMode,            "ZOOM_BOX_MODE",                    false},
     {KfxField_RendererMenuPause,      "RENDERER_MENU_PAUSE",              false},
+    {KfxField_FxSprAnimSelectDir,     "FXSPR_ANIM_SELECT_DIR",            false},
 };
 
 enum class BoolTextStyle {
@@ -285,6 +286,7 @@ bool field_equals(const KfxConfig& lhs, const KfxConfig& rhs, KfxField field)
     case KfxField_RendererTileFilter:     return lhs.tile_filter == rhs.tile_filter;
     case KfxField_ZoomBoxMode:            return lhs.zoom_box_mode == rhs.zoom_box_mode;
     case KfxField_RendererMenuPause:      return lhs.menu_pause == rhs.menu_pause;
+    case KfxField_FxSprAnimSelectDir:     return lhs.fxspr_anim_select_dir == rhs.fxspr_anim_select_dir;
     case KfxField_COUNT:                  return true;
     }
     return true;
@@ -458,6 +460,9 @@ bool get_field_value_string(const KfxConfig& cfg, KfxField field, char* buf, siz
     case KfxField_RendererMenuPause:
         std::snprintf(buf, buflen, "%s", bool_text(cfg.menu_pause, get_bool_style(field)));
         return true;
+    case KfxField_FxSprAnimSelectDir:
+        std::snprintf(buf, buflen, "%s", bool_text(cfg.fxspr_anim_select_dir, get_bool_style(field)));
+        return true;
     case KfxField_COUNT:
         return false;
     }
@@ -557,6 +562,7 @@ void KfxConfigManager::setDefaults()
     m_current.shade_gamma = 1.0f;
     m_current.tile_filter = RENDERER_FILTER_NEAREST;
     m_current.menu_pause = true;
+    m_current.fxspr_anim_select_dir = false;
     m_current.censorship = false;
     m_current.atmos_sounds = false;
     m_current.freeze_on_focus_lost = false;
@@ -1126,6 +1132,15 @@ bool KfxConfigManager::parseFile(const char* path)
                 m_current.menu_pause = (std::atoi(word_buf) != 0);
             }
             break;
+        case 52:
+            i = recognize_conf_parameter(buf, &pos, len, logicval_type);
+            if (i <= 0)
+            {
+                CONFWRNLOG("Couldn't recognize \"%s\" command parameter in %s file.", COMMAND_TEXT(cmd_num), config_textname);
+                break;
+            }
+            m_current.fxspr_anim_select_dir = (i == 1);
+            break;
         case ccr_comment:
         case ccr_endOfFile:
             break;
@@ -1247,6 +1262,7 @@ void KfxConfigManager::syncToLegacyGlobals()
     screenshot_format = (unsigned char)m_current.screenshot_format;
     cfg_renderer_type = m_current.renderer_type;
     cfg_renderer_menu_pause = m_current.menu_pause ? 1 : 0;
+    cfg_fxspr_anim_select_dir = m_current.fxspr_anim_select_dir ? 1 : 0;
     g_renderer_settings.palette_mode = m_current.palette_mode;
     g_renderer_settings.zoom_box_mode = m_current.zoom_box_mode;
     g_renderer_settings.shade_fullbright = m_current.shade_fullbright;
@@ -1318,6 +1334,7 @@ void KfxConfigManager::syncFromLegacyGlobals()
     snapshot.shade_gamma = g_renderer_settings.shade_gamma;
     snapshot.tile_filter = g_renderer_settings.tile_filter;
     snapshot.menu_pause = (cfg_renderer_menu_pause != 0);
+    snapshot.fxspr_anim_select_dir = (cfg_fxspr_anim_select_dir != 0);
     snapshot.censorship = ((features_enabled & Ft_Censorship) != 0);
     snapshot.atmos_sounds = ((features_enabled & Ft_Atmossounds) != 0);
     snapshot.freeze_on_focus_lost = ((features_enabled & Ft_FreezeOnLoseFocus) != 0);

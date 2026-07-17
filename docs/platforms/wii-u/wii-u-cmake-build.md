@@ -29,13 +29,13 @@ These tasks run:
 
 ```bash
 # Release
-docker compose -f docker/compose.yml run --rm wii-u-sdk bash -c 'cmake --preset wii-u-release && cmake --build --preset wii-u-release'
+docker compose -f build/docker/compose.yml run --rm wii-u-sdk bash -c 'cmake --preset wii-u-release && cmake --build --preset wii-u-release'
 
 # RelWithDebInfo
-docker compose -f docker/compose.yml run --rm wii-u-sdk bash -c 'cmake --preset wii-u-reldebug && cmake --build --preset wii-u-reldebug'
+docker compose -f build/docker/compose.yml run --rm wii-u-sdk bash -c 'cmake --preset wii-u-reldebug && cmake --build --preset wii-u-reldebug'
 
 # Debug
-docker compose -f docker/compose.yml run --rm wii-u-sdk bash -c 'cmake --preset wii-u-debug && cmake --build --preset wii-u-debug'
+docker compose -f build/docker/compose.yml run --rm wii-u-sdk bash -c 'cmake --preset wii-u-debug && cmake --build --preset wii-u-debug'
 ```
 
 ### Direct CMake flow

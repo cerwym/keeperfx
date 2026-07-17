@@ -13,7 +13,14 @@
 //   2. Cmd/Ctrl+Shift+P → "Dev Containers: Reopen in Container"
 //   3. Select "KeeperFX — Vita SDK (PS Vita cross-compile)"
 //
-// Inside the container, build with cmake directly — no docker compose wrapper:
+// GUI builds (preset dropdown):
+//   Inside the container the host is Linux and $VITASDK is set, so the vita-*
+//   presets pass their `condition` and appear in the CMake Tools status-bar
+//   preset selector. Pick "PS Vita Release" (or Debug/RelDebug) and hit Build —
+//   cmake + arm-vita-eabi-gcc run natively in the container, producing
+//   out/build/<preset>/keeperfx.vpk. No docker compose wrapper needed.
+//
+// Terminal builds (equivalent, no GUI):
 //   cmake --preset vita-debug   && cmake --build --preset vita-debug
 //   cmake --preset vita-reldebug && cmake --build --preset vita-reldebug
 //   cmake --preset vita-release  && cmake --build --preset vita-release
@@ -23,7 +30,7 @@
 {
 	"name": "KeeperFX — Vita SDK (PS Vita cross-compile)",
 	"build": {
-		"dockerfile": "../../docker/vitasdk/Dockerfile",
+		"dockerfile": "../../build/docker/vitasdk/Dockerfile",
 		"context": "../.."
 	},
 	"workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/${localWorkspaceFolderBasename},type=bind",
@@ -37,6 +44,7 @@
 		"vscode": {
 			"extensions": [
 				"ms-vscode.cpptools",
+				"ms-vscode.cmake-tools",
 				"eamodio.gitlens",
 				"github.vscode-pull-request-github"
 			],
@@ -51,7 +59,12 @@
 				"C_Cpp.default.intelliSenseMode": "linux-gcc-arm",
 				"C_Cpp.default.cStandard": "gnu11",
 				"C_Cpp.default.cppStandard": "gnu++20",
-				// Prevent cmake-tools from interfering if installed globally
+				// CMake Tools drives the status-bar preset dropdown. Force the
+				// preset workflow (no "kits") so the vita-* presets — and their
+				// VitaSDK toolchain file — are used verbatim.
+				"cmake.useCMakePresets": "always",
+				// Don't auto-configure on open: the Vita configure builds vitaGL
+				// from source (slow). Let the user pick a preset and build on demand.
 				"cmake.configureOnOpen": false,
 				"cmake.autoSelectActiveFolder": false
 			}

@@ -66,6 +66,7 @@ enum KfxField {
     KfxField_RendererTileFilter,
     KfxField_ZoomBoxMode,
     KfxField_RendererMenuPause,
+    KfxField_FxSprAnimSelectDir,
     KfxField_COUNT
 };
 
@@ -82,6 +83,7 @@ struct KfxConfig {
     float        shade_gamma;
     int          tile_filter;
     bool         menu_pause;
+    bool         fxspr_anim_select_dir;
     bool         censorship;
     bool         atmos_sounds;
     bool         freeze_on_focus_lost;

@@ -109,7 +109,8 @@ docker run --rm -v $(pwd):/src ghcr.io/cerwym/keeperfx-build-linux:latest bash -
 |--------|----------|--------|
 | `x64-windows-static-debug` | MSVC x64 | Windows debug |
 | `x64-windows-static-release` | MSVC x64 | Windows release |
-| `x86-windows-static-debug` | MSVC x86 | Windows x86 debug |
+| `x64-windows-static-debug-asan` | MSVC x64 | Windows debug + AddressSanitizer |
+| `x64-windows-static-reldebug-asan` | MSVC x64 | Windows RelWithDebInfo + AddressSanitizer |
 | `windows-x64-release` | MinGW-w64 x64 | Windows x64 release (Docker) |
 | `windows-x86-release` | MinGW-w64 x86 | Windows x86 release (Docker) |
 | `linux-x64-release` | GCC x64 | Linux release (Docker) |
@@ -147,9 +148,9 @@ For a CLion workflow using Docker cross-builds and local Windows GDB, see `docs/
 - **From a Windows-hosted VS Code session:** use `Host F5: Build + Assemble + Debug (Windows gdb)` instead (runs gdb natively, no gdbserver needed).
 - Host debugger preflight (`Verify Windows Host GDB`) checks `.vscode/gdb.exe` and fails fast with instructions if missing.
 - First-time requirement: initialize `.deploy/` once so layered runtime assets are available for assembly:
-  `powershell -ExecutionPolicy Bypass -File tools/init-deploy.ps1 -DungeonKeeperPath "C:\\Path\\To\\Dungeon Keeper"`.
+  `powershell -ExecutionPolicy Bypass -File scripts/init-deploy.ps1 -DungeonKeeperPath "C:\\Path\\To\\Dungeon Keeper"`.
   When working on a dev branch, use `-UseAlpha` to also overlay the latest alpha patch:
-  `powershell -ExecutionPolicy Bypass -File tools/init-deploy.ps1 -UseAlpha`.
+  `powershell -ExecutionPolicy Bypass -File scripts/init-deploy.ps1 -UseAlpha`.
   DK path is cached in `~/.keeperfx-dev/` and reused across git worktrees automatically.
 
 

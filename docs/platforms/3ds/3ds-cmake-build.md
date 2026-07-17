@@ -29,13 +29,13 @@ These tasks run:
 
 ```bash
 # Release
-docker compose -f docker/compose.yml run --rm 3ds-sdk bash -c 'cmake --preset 3ds-release && cmake --build --preset 3ds-release'
+docker compose -f build/docker/compose.yml run --rm 3ds-sdk bash -c 'cmake --preset 3ds-release && cmake --build --preset 3ds-release'
 
 # RelWithDebInfo
-docker compose -f docker/compose.yml run --rm 3ds-sdk bash -c 'cmake --preset 3ds-reldebug && cmake --build --preset 3ds-reldebug'
+docker compose -f build/docker/compose.yml run --rm 3ds-sdk bash -c 'cmake --preset 3ds-reldebug && cmake --build --preset 3ds-reldebug'
 
 # Debug
-docker compose -f docker/compose.yml run --rm 3ds-sdk bash -c 'cmake --preset 3ds-debug && cmake --build --preset 3ds-debug'
+docker compose -f build/docker/compose.yml run --rm 3ds-sdk bash -c 'cmake --preset 3ds-debug && cmake --build --preset 3ds-debug'
 ```
 
 ### Direct CMake flow

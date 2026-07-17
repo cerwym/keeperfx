@@ -119,11 +119,11 @@ pkg/levels/lostlvls/text_por.dat \
 pkg/levels/lostlvls/text_chi.dat \
 pkg/levels/lostlvls/text_rus.dat
 
-EU_CHAR_ENCODING = tools/po2ngdat/res/char_encoding_tbl_eu.txt
-JP_CHAR_ENCODING = tools/po2ngdat/res/char_encoding_tbl_jp.txt
-RU_CHAR_ENCODING = tools/po2ngdat/res/char_encoding_tbl_ru.txt
-CH_CHAR_ENCODING = tools/po2ngdat/res/char_encoding_tbl_ch.txt
-KR_CHAR_ENCODING = tools/po2ngdat/res/char_encoding_tbl_kr.txt
+EU_CHAR_ENCODING = build/tools/po2ngdat/res/char_encoding_tbl_eu.txt
+JP_CHAR_ENCODING = build/tools/po2ngdat/res/char_encoding_tbl_jp.txt
+RU_CHAR_ENCODING = build/tools/po2ngdat/res/char_encoding_tbl_ru.txt
+CH_CHAR_ENCODING = build/tools/po2ngdat/res/char_encoding_tbl_ch.txt
+KR_CHAR_ENCODING = build/tools/po2ngdat/res/char_encoding_tbl_kr.txt
 
 .PRECIOUS: $(EU_CHAR_ENCODING) $(JP_CHAR_ENCODING) $(RU_CHAR_ENCODING) $(CH_CHAR_ENCODING) $(KR_CHAR_ENCODING)
 

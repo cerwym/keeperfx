@@ -8,7 +8,7 @@ $ErrorActionPreference = "Stop"
 $workspace = (Resolve-Path $WorkspaceFolder).Path
 $deployDir = Join-Path $workspace ".deploy"
 $deployData = Join-Path $deployDir "data"
-$composeFile = Join-Path $workspace "docker/compose.yml"
+$composeFile = Join-Path $workspace "build/docker/compose.yml"
 
 if (-not (Test-Path $deployDir)) {
     throw ".deploy does not exist. Run 'Init .deploy/' first."

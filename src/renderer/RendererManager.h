@@ -923,4 +923,13 @@ ITextRenderer* RendererGetTextRenderer();
 IUIRenderer* RendererGetUIRenderer();
 /* C++ only: direct access to the active ICursorLayer* */
 ICursorLayer* RendererGetCursorLayer();
+
+/* C++ only: read-only access for the sprite atlas debug viewer.
+ * Returns the active desktop-GL sprite atlas, or nullptr when not running the
+ * OpenGL backend (software/console backends have no atlas). */
+class GLSpriteAtlas;
+GLSpriteAtlas* RendererGetSpriteAtlas();
+/* C++ only: the current 768-byte 6-bit VGA game palette (engine_palette) that
+ * feeds the GL palette upload; used by the atlas viewer to materialise indices. */
+const unsigned char* RendererGetActivePalette();
 #endif

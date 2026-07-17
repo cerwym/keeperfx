@@ -27,6 +27,24 @@
 #include "renderer/SpriteHandle.h"
 #include "renderer/SpriteUV.h"
 
+namespace kfx { class FxSprSheet; }   // truecolour companion sheet (forward decl)
+
+/** One packed sprite in a read-only atlas snapshot. */
+struct AtlasEntry {
+    SpriteHandle handle;
+    SpriteUV     uv;   ///< normalised atlas rect + native pixel dims
+};
+
+/** Read-only copy of the atlas suitable for the ImGui debug viewer.  Detached
+ *  from the live atlas (plain data), so it can be held and inspected without
+ *  touching the atlas lock or aliasing any atlas-owned pointers. */
+struct AtlasSnapshot {
+    int                     width  = 0;   ///< atlas texel width  (k_atlas_w)
+    int                     height = 0;   ///< atlas texel height (k_atlas_h)
+    std::vector<uint8_t>    pixels;       ///< R8 palette indices, width*height (empty if atlas unallocated)
+    std::vector<AtlasEntry> entries;      ///< every currently-packed sprite region
+};
+
 class GLSpriteAtlas {
 public:
     static const int k_atlas_w = 4096;
@@ -42,16 +60,24 @@ public:
     void Free();
 
     /** Decode and pack all sprites in a sheet into the atlas.
-     *  @param name  Optional debug label (e.g. "gui_panel_sprites") shown in log output. */
-    void AddSheet(const struct TbSpriteSheet* sheet, const char* name = nullptr);
+     *  @param name  Optional debug label (e.g. "gui_panel_sprites") shown in log output.
+     *  @param fxspr Optional truecolour companion (`.fxspr`) whose entry order and
+     *      per-sprite dimensions match this sheet (parity contract). When present
+     *      and truecolour is enabled, each sprite's RGBA is sourced straight from
+     *      the companion instead of being materialised from the palette. */
+    void AddSheet(const struct TbSpriteSheet* sheet, const char* name = nullptr,
+                  const kfx::FxSprSheet* fxspr = nullptr);
 
     /** Atomically rebuild the entire atlas: Free + Init + AddSheet for each
      *  provided sheet, all under a single exclusive lock so the render thread
      *  never sees a partially-rebuilt atlas.  Use instead of calling Free/Init/
-     *  AddSheet individually when replacing the entire atlas contents. */
+     *  AddSheet individually when replacing the entire atlas contents.
+     *  @param fxspr Optional array parallel to sheets[]; entry i is the truecolour
+     *      companion for sheet i, or NULL. */
     void Rebuild(const struct TbSpriteSheet* const* sheets,
                  const char* const*                 names,
-                 int                                count);
+                 int                                count,
+                 const kfx::FxSprSheet* const*      fxspr = nullptr);
 
     /** Invalidate UV entries for all sprites in a sheet. */
     void RemoveSheet(const struct TbSpriteSheet* sheet);
@@ -74,7 +100,33 @@ public:
     uint8_t* GetSpriteMask(SpriteHandle h, int* out_w, int* out_h, int* out_stride) const;
 
     GLuint GetTexture() const;
+
+    /** Truecolour (RGBA8) atlas texture, valid only when truecolour is enabled
+     *  (see SetTruecolour).  Returns 0 in indexed mode or before the first
+     *  FlushPendingGL().  Mirrors the R8 index atlas region-for-region: the
+     *  index atlas is always built, so palette-dependent draw paths (player
+     *  colour remap, fades, colour-keyed masks) keep working unchanged. */
+    GLuint GetRGBATexture() const;
+
+    /** True when this atlas is maintaining a parallel RGBA8 texture. */
+    bool   IsRGBAEnabled() const;
+
+    /** Re-materialise the truecolour RGBA8 atlas against a new active palette.
+     *  No-op unless truecolour is enabled and `pal` (768-byte VGA6) differs from
+     *  the palette last baked in. Re-bakes the packed region from the always-present
+     *  R8 index atlas and marks it dirty for the next FlushPendingGL() upload, so
+     *  truecolour sprites follow palette changes (frontend<->level, fades) exactly
+     *  like the indexed path. Cheap (a 768-byte compare) when the palette is stable.
+     *  Call from the render thread with the frame's palette snapshot. */
+    void   RefreshRGBAForPalette(const unsigned char* pal);
+
     size_t GetRegisteredCount() const;
+
+    /** Fill out with a detached, read-only copy of the atlas: dimensions, the
+     *  full R8 pixel buffer, and an AtlasEntry for every currently-packed
+     *  sprite.  Taken under a shared lock; safe to call from the render thread.
+     *  Used by the ImGui sprite atlas debug viewer. */
+    void Snapshot(AtlasSnapshot& out) const;
 
     /** Perform all deferred GL work: delete old texture (if any), create the
      *  new GL texture and upload the pixel buffer packed by AddSheet() calls.
@@ -83,7 +135,8 @@ public:
     void FlushPendingGL();
 
 private:
-    bool pack_sprite(const struct TbSprite* spr, SpriteUV& out);
+    bool pack_sprite(const struct TbSprite* spr, SpriteUV& out,
+                     const kfx::FxSprSheet* fxspr, long index, bool& rgba_from_fxspr);
     void flush_dirty();
 
     // Unlocked variants — called only while m_mutex is already held.
@@ -91,7 +144,8 @@ private:
     bool GetUV_Unlocked(SpriteHandle h, SpriteUV& out) const;
     void Free_Internal();
     bool Init_Internal();
-    void AddSheet_Internal(const struct TbSpriteSheet* sheet, const char* name);
+    void AddSheet_Internal(const struct TbSpriteSheet* sheet, const char* name,
+                           const kfx::FxSprSheet* fxspr);
 
     /** Guards all cross-thread access to atlas data.
      *  Game thread holds exclusive lock during Free()/Init()/AddSheet()/RemoveSheet().
@@ -104,6 +158,17 @@ private:
     bool                 m_gl_init_needed = false; // set by Init(); cleared by FlushPendingGL()
     std::vector<uint8_t> m_pixels;           // CPU copy, k_atlas_w × k_atlas_h
 
+    // Parallel truecolour (RGBA8) atlas.  Built alongside m_pixels when
+    // m_rgba_enabled: each packed sprite is materialised through m_pal_snapshot
+    // (idx 0 -> transparent) into m_rgba at the same shelf position.  Uploaded to
+    // m_rgba_texture in FlushPendingGL().  The R8 index atlas is still built, so
+    // indexed draw paths are unaffected.
+    bool                 m_rgba_enabled  = false;
+    std::vector<uint8_t> m_rgba;              // k_atlas_w × k_atlas_h × 4 (RGBA8)
+    GLuint               m_rgba_texture     = 0;
+    GLuint               m_old_rgba_texture = 0;
+    unsigned char        m_pal_snapshot[768] = {0}; // VGA6 palette baked at build time
+
     // Shelf packer state
     int m_cursor_x = 0;
     int m_shelf_y  = 0;
@@ -115,6 +180,10 @@ private:
 
     std::unordered_map<const struct TbSprite*, SpriteHandle> m_sprite_to_handle;
     std::vector<SpriteUV>                                    m_handle_uvs;  // indexed by SpriteHandleIndex(handle)
+    // Parallel to m_handle_uvs: 1 if this region's RGBA came straight from a
+    // .fxspr (real truecolour, palette-independent) and must NOT be re-baked by
+    // RefreshRGBAForPalette; 0 if it was materialised from the palette.
+    std::vector<uint8_t>                                     m_handle_rgba_from_fxspr;
     uint32_t                                                 m_next_handle = 0;
     uint16_t                                                 m_generation  = 0;
 };

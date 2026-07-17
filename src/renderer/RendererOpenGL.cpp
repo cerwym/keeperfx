@@ -41,9 +41,7 @@
 #include "engine_redraw.h"   // setup_engine_window / store_engine_window (PiP viewport)
 #include "engine_lenses.h"   // lens_mode
 #include "vidfade.h"         // g_palette_possession_tint
-#ifdef KEEPERFX_IMGUI_ENABLED
-#include "debug/DebugOverlay.hpp"
-#endif
+#include "kfx/imgui/DevTools.h"
 
 #include <glad/glad.h>
 #include <cstring>
@@ -603,9 +601,7 @@ void RendererOpenGL::Shutdown()
     if (m_swipe_vao)    { glDeleteVertexArrays(1, &m_swipe_vao); m_swipe_vao = 0; }
     if (m_swipe_vbo)    { glDeleteBuffers(1, &m_swipe_vbo); m_swipe_vbo = 0; }
 
-    #ifdef KEEPERFX_IMGUI_ENABLED
-    DebugOverlay_Shutdown();
-    #endif
+    kfx::DevTools::instance().shutdownOverlay();
 
     platform_destroy_gl_context();
 }
@@ -758,7 +754,7 @@ void RendererOpenGL::EndFrame()
     // Snapshot all game-thread globals that EndFrame_GL() needs.
     // Must happen here (before signalling) so the render thread never reads live
     // globals that the game thread can modify concurrently once we return.
-    std::memcpy(m_rt_frame_state.palette, lbPalette, sizeof(m_rt_frame_state.palette));
+    std::memcpy(m_rt_frame_state.palette, LbPaletteGetReadonly(), sizeof(m_rt_frame_state.palette));
     m_rt_frame_state.possession_tint = g_palette_possession_tint;
     std::memcpy(m_rt_frame_state.screen_tint, g_screen_tint, sizeof(m_rt_frame_state.screen_tint));
     m_rt_frame_state.lens_mode = lens_mode;
@@ -828,13 +824,11 @@ void RendererOpenGL::EndFrame_GL()
     // Reset the per-frame "presents captured into the map-fade FBO" flag; set by
     // FlushSceneToFBO() during a parchment fade so the main present pass skips them.
     m_rt_presents_captured = false;
-#ifdef KEEPERFX_IMGUI_ENABLED
     if (m_imgui_init_pending)
     {
         m_imgui_init_pending = false;
-        DebugOverlay_Initialize(platform_get_sdl_window(), platform_get_gl_context());
+        kfx::DevTools::instance().initOverlay(platform_get_sdl_window(), platform_get_gl_context());
     }
-#endif
 
     // Deferred tile-atlas GPU init — runs on the render thread that owns the
     // GL context.  BeginFrame() (game thread) cannot call glGenTextures /
@@ -868,6 +862,14 @@ void RendererOpenGL::EndFrame_GL()
         IUIRenderer* ui = RendererGetUIRenderer();
         if (ui) ui->FlushPendingInit();
     }
+
+    // Truecolour: re-bake the RGBA sprite atlas if the active palette changed
+    // this frame (frontend<->level, fades). Uses the game-thread palette snapshot
+    // taken in EndFrame() so it never tears against a live LbPaletteSet(). No-op
+    // in indexed mode or when the palette is unchanged. Must precede the flush
+    // below so the re-materialised region is uploaded in the same frame.
+    if (m_sprite_atlas)
+        m_sprite_atlas->RefreshRGBAForPalette(m_rt_frame_state.palette);
 
     // Flush deferred sprite-atlas GL work (glGenTextures/glTexImage2D/glDeleteTextures
     // deferred from RendererNotifySpritesReloaded, which runs on the game thread).
@@ -1297,10 +1299,7 @@ void RendererOpenGL::EndFrame_GL()
     if (auto* cursor = RendererGetCursorLayer())
         cursor->ExecuteCursorFromIR(m_render_graph.GetUIBuffersRT());
 
-#ifdef KEEPERFX_IMGUI_ENABLED
-    DebugOverlay_NewFrame();
-    DebugOverlay_Render();
-#endif
+    kfx::DevTools::instance().drawOverlay();
 
     // Screenshot capture: after all draw calls, before buffer swap so that the
     // default framebuffer holds the fully-composited frame.
@@ -2380,7 +2379,7 @@ bool RendererOpenGL::compile_shaders()
 IWorldViewRenderer* RendererOpenGL::CreateGLWorldViewRenderer()
 {
     auto* glwr = new GLWorldViewRenderer(m_tile_atlas, m_texFade, m_texPalette);
-    glwr->SetPaletteSource(lbPalette);
+    glwr->SetPaletteSource(LbPaletteGetReadonly());
     SetWorldRenderer(glwr);
     return glwr;
 }
@@ -2420,7 +2419,7 @@ IUIRenderer* RendererOpenGL::CreateGLUIRenderer()
     glui->SetSpriteAtlas(m_sprite_atlas);
     glui->SetFontAtlas(m_font_atlas);
     glui->SetPaletteTexture(m_texPalette, GL_TEXTURE_2D);
-    glui->SetPaletteSource(lbPalette);
+    glui->SetPaletteSource(LbPaletteGetReadonly());
     glui->SetScreenDimensions(RendererPhysicalWidth(), RendererPhysicalHeight());
     SetGLUIRenderer(glui);
     return glui;
@@ -2524,9 +2523,9 @@ void RendererOpenGL::NotifyGameTablesReady()
     // Wire the palette source pointer into sub-renderers that cache it.
     // SetPaletteSource is just a pointer copy — safe on the game thread.
     if (auto* ui = RendererGetUIRenderer())
-        ui->SetPaletteSource(lbPalette);
+        ui->SetPaletteSource(LbPaletteGetReadonly());
     if (auto* wr = RendererGetWorldViewRenderer())
-        wr->SetPaletteSource(lbPalette);
+        wr->SetPaletteSource(LbPaletteGetReadonly());
 }
 
 bool RendererOpenGL::ScheduleScreenshot(const char* path, int fmt)

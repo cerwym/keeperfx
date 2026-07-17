@@ -47,13 +47,13 @@
             "cStandard": "c17"
         },
         {
-            "name": "MSVC (Windows x86 Debug)",
+            "name": "MSVC (Windows x64 Debug)",
             "compileCommands": [
-                "${workspaceFolder}/out/build/x86-windows-static-debug/compile_commands.json"
+                "${workspaceFolder}/out/build/x64-windows-static-debug/compile_commands.json"
             ],
             "cStandard": "c17",
             "cppStandard": "c++17",
-            "intelliSenseMode": "windows-msvc-x86"
+            "intelliSenseMode": "windows-msvc-x64"
         }
     ],
     "version": 4

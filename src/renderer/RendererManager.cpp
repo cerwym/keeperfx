@@ -153,8 +153,9 @@ void RendererDrainDeferredAtlasRebuild()
     const size_t cap = mgr.RegisteredCount();
     std::vector<const TbSpriteSheet*> sheets(cap);
     std::vector<const char*>          names(cap);
-    int count = mgr.CollectActive(sheets.data(), names.data(), (int)cap);
-    s_spriteAtlas->Rebuild(sheets.data(), names.data(), count);
+    std::vector<const kfx::FxSprSheet*> fxspr(cap);
+    int count = mgr.CollectActive(sheets.data(), names.data(), (int)cap, fxspr.data());
+    s_spriteAtlas->Rebuild(sheets.data(), names.data(), count, fxspr.data());
     for (int i = 0; i < count; ++i)
         SYNCLOG("RendererDrainDeferredAtlasRebuild: packed '%s' (%d sprites)",
                 names[i], (int)num_sprites(sheets[i]));
@@ -744,6 +745,26 @@ IUIRenderer* RendererGetUIRenderer()
 ICursorLayer* RendererGetCursorLayer()
 {
     return s_cursorLayer;
+}
+
+GLSpriteAtlas* RendererGetSpriteAtlas()
+{
+#ifdef RENDERER_OPENGL_ENABLED
+    return s_spriteAtlas;
+#else
+    return nullptr;
+#endif
+}
+
+const unsigned char* RendererGetActivePalette()
+{
+    // The currently-active 6-bit VGA palette (what indexed drawing samples and
+    // what LbPaletteGetReadonly feeds to the GL palette texture). This is NOT the
+    // fixed in-game engine_palette: the frontend swaps in frontend_palette, fades
+    // install transient palettes, etc. The truecolour atlas and the debug viewer
+    // must match whatever is on screen, so track lbPalette.
+    extern unsigned char lbPalette[]; // from bflib_video.c — 6-bit VGA (768 bytes)
+    return lbPalette;
 }
 
 RendererType RendererGetActiveType()

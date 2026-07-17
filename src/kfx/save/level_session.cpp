@@ -20,8 +20,6 @@
 #include "sounds.h"                /* sound_reinit_after_load */
 #include "ui_init.h"               /* init_gameplay_ui */
 #include "creature_states_combt.h" /* reset_postal_instance_cache */
-#include "renderer/RendererManager.h"
-#include "kfx/assets/SpriteSheetManager.h"
 
 /******************************************************************************/
 
@@ -34,6 +32,9 @@ void LevelSession_ReinitGameState(void)
     init_navigation();
     reinit_packets_after_load();
     game.easter_eggs_enabled = start_params.easter_egg;
+#ifdef KEEPERFX_FORCE_ALEX
+    game.easter_eggs_enabled = true;
+#endif
     parchment_loaded = 0;
     /* View modes and panel colours — must precede tab-config calls below. */
     int i;
@@ -62,12 +63,8 @@ void LevelSession_ReinitMapData(void)
 
 void LevelSession_ReinitUI(void)
 {
-    // Software renderer always reinits; GL only reinits when a full GUI
-    // sprite reload happened (resolution change, etc.).
-    if (!RendererHasGPURenderPath() || SpriteSheetManager::Get().ConsumeGUIDirty()) {
-        init_gui();
-        init_gameplay_ui(UIPROLE_ACTIVE_PLAYER, game.active_players_count > 1);
-    }
+    init_gui();
+    init_gameplay_ui(UIPROLE_ACTIVE_PLAYER, game.active_players_count > 1);
     /* Caller must invoke reset_gui_based_on_player_mode() to open the correct
        initial panels via the lazy turn_on_menu() path. */
 }
@@ -101,4 +98,3 @@ void LevelSession_ReinitAfterLoad(void)
     LevelSession_ReinitAI();
     LevelSession_ReinitAudio();
 }
-

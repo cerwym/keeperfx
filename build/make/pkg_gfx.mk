@@ -143,7 +143,7 @@ pkg-landviewtabs: $(LANDVIEWDATTABS)
 
 # Creation of land view image files for campaigns
 define define_campaign_landview_rule
-pkg/campgns/$(1)_lnd/rgmap%.pal: gfx/landviews/$(1)_lnd/rgmap%.png gfx/landviews/$(1)_lnd/viframe.png tools/png2bestpal/res/color_tbl_landview.txt $$(PNGTOBSPAL)
+pkg/campgns/$(1)_lnd/rgmap%.pal: gfx/landviews/$(1)_lnd/rgmap%.png gfx/landviews/$(1)_lnd/viframe.png build/tools/png2bestpal/res/color_tbl_landview.txt $$(PNGTOBSPAL)
 	-$$(ECHO) 'Building land view palette: $$@'
 	@$$(MKDIR) $$(@D)
 	$$(PNGTOBSPAL) -o "$$@" -m "$$(word 3,$$^)" "$$(word 1,$$^)" "$$(word 2,$$^)"
@@ -170,16 +170,16 @@ endef
 
 $(foreach campaign,$(sort $(CAMPAIGNS)),$(eval $(call define_campaign_landview_rule,$(campaign))))
 
-pkg/ldata/torture.pal:  gfx/menufx/torturescr/tortr_background.png gfx/menufx/torturescr/tortr_doora_open11.png gfx/menufx/torturescr/tortr_doorb_open11.png gfx/menufx/torturescr/tortr_doorc_open11.png gfx/menufx/torturescr/tortr_doord_open11.png gfx/menufx/torturescr/tortr_doore_open11.png gfx/menufx/torturescr/tortr_doorf_open11.png gfx/menufx/torturescr/tortr_doorg_open11.png gfx/menufx/torturescr/tortr_doorh_open11.png gfx/menufx/torturescr/tortr_doori_open11.png gfx/menufx/torturescr/cursor_horny.png tools/png2bestpal/res/color_tbl_basic.txt $(PNGTOBSPAL)
-pkg/data/legal32.pal:   gfx/menufx/loading/legal-32.png tools/png2bestpal/res/color_tbl_basic.txt $(PNGTOBSPAL)
-pkg/data/legal64.pal:   gfx/menufx/loading/legal-64.png tools/png2bestpal/res/color_tbl_basic.txt $(PNGTOBSPAL)
-pkg/data/legal-720p-wide.pal: gfx/menufx/loading/legal-720p-wide.png tools/png2bestpal/res/color_tbl_basic.txt $(PNGTOBSPAL)
-pkg/data/legal-1080p-wide.pal: gfx/menufx/loading/legal-1080p-wide.png tools/png2bestpal/res/color_tbl_basic.txt $(PNGTOBSPAL)
-pkg/data/startfx32.pal: gfx/menufx/loading/startupfx-32.png tools/png2bestpal/res/color_tbl_basic.txt $(PNGTOBSPAL)
-pkg/data/startfx64.pal: gfx/menufx/loading/startupfx-64.png tools/png2bestpal/res/color_tbl_basic.txt $(PNGTOBSPAL)
-pkg/data/loading32.pal: gfx/menufx/loading/loading-32.png tools/png2bestpal/res/color_tbl_basic.txt $(PNGTOBSPAL)
-pkg/data/loading64.pal: gfx/menufx/loading/loading-64.png tools/png2bestpal/res/color_tbl_basic.txt $(PNGTOBSPAL)
-pkg/data/nocd.pal:      gfx/menufx/loading/nocd-32.png tools/png2bestpal/res/color_tbl_basic.txt $(PNGTOBSPAL)
+pkg/ldata/torture.pal:  gfx/menufx/torturescr/tortr_background.png gfx/menufx/torturescr/tortr_doora_open11.png gfx/menufx/torturescr/tortr_doorb_open11.png gfx/menufx/torturescr/tortr_doorc_open11.png gfx/menufx/torturescr/tortr_doord_open11.png gfx/menufx/torturescr/tortr_doore_open11.png gfx/menufx/torturescr/tortr_doorf_open11.png gfx/menufx/torturescr/tortr_doorg_open11.png gfx/menufx/torturescr/tortr_doorh_open11.png gfx/menufx/torturescr/tortr_doori_open11.png gfx/menufx/torturescr/cursor_horny.png build/tools/png2bestpal/res/color_tbl_basic.txt $(PNGTOBSPAL)
+pkg/data/legal32.pal:   gfx/menufx/loading/legal-32.png build/tools/png2bestpal/res/color_tbl_basic.txt $(PNGTOBSPAL)
+pkg/data/legal64.pal:   gfx/menufx/loading/legal-64.png build/tools/png2bestpal/res/color_tbl_basic.txt $(PNGTOBSPAL)
+pkg/data/legal-720p-wide.pal: gfx/menufx/loading/legal-720p-wide.png build/tools/png2bestpal/res/color_tbl_basic.txt $(PNGTOBSPAL)
+pkg/data/legal-1080p-wide.pal: gfx/menufx/loading/legal-1080p-wide.png build/tools/png2bestpal/res/color_tbl_basic.txt $(PNGTOBSPAL)
+pkg/data/startfx32.pal: gfx/menufx/loading/startupfx-32.png build/tools/png2bestpal/res/color_tbl_basic.txt $(PNGTOBSPAL)
+pkg/data/startfx64.pal: gfx/menufx/loading/startupfx-64.png build/tools/png2bestpal/res/color_tbl_basic.txt $(PNGTOBSPAL)
+pkg/data/loading32.pal: gfx/menufx/loading/loading-32.png build/tools/png2bestpal/res/color_tbl_basic.txt $(PNGTOBSPAL)
+pkg/data/loading64.pal: gfx/menufx/loading/loading-64.png build/tools/png2bestpal/res/color_tbl_basic.txt $(PNGTOBSPAL)
+pkg/data/nocd.pal:      gfx/menufx/loading/nocd-32.png build/tools/png2bestpal/res/color_tbl_basic.txt $(PNGTOBSPAL)
 
 pkg/ldata/torture.pal pkg/data/legal32.pal pkg/data/legal64.pal pkg/data/legal-720p-wide.pal pkg/data/legal-1080p-wide.pal pkg/data/startfx32.pal pkg/data/startfx64.pal pkg/data/loading32.pal pkg/data/loading64.pal pkg/data/nocd.pal:
 	-$(ECHO) 'Building palette: $@'

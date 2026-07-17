@@ -10,7 +10,7 @@
 
 A comprehensive crash debugging toolkit for the PS Vita port, spanning 5 phases:
 
-### Phase 1 — Python Crash Tool (`tools/vita_crash/`)
+### Phase 1 — Python Crash Tool (`scripts/vita_crash/`)
 Replaces the old PowerShell crash script with a cross-platform Python tool that runs in Docker.
 
 | Module | Purpose |
@@ -24,7 +24,7 @@ Replaces the old PowerShell crash script with a cross-platform Python tool that 
 | `requirements.txt` | `pyelftools>=0.31` |
 
 ### Phase 2 — Docker Integration
-- `tools/vita-parse-crash.ps1` — Rewritten to invoke Docker with the Python package
+- `scripts/vita-parse-crash.ps1` — Rewritten to invoke Docker with the Python package
 - VS Code tasks added: "Parse Local Crash Dump", "Parse Vita Crash Dump"
 
 ### Phase 3 — On-Device Crash Handler + Breadcrumbs
@@ -46,9 +46,9 @@ Renamed the shared Vita SDK Docker image from `keeperfx-build-vitasdk` to `build
 - `.github/workflows/docker-publish.yml` — image name `keeperfx-build-vitasdk` → `build-vitasdk`
 - `.github/workflows/ci-homebrew.yml` — 2 container refs updated
 - `.github/workflows/release.yml` — `gnuton/vitasdk-docker:latest` → `ghcr.io/${{ github.repository_owner }}/build-vitasdk:latest`
-- `docker/compose.yml` — image name updated
-- `docker/vitasdk/Dockerfile` — replaced 42-line Dockerfile with 7-line `FROM ghcr.io/cerwym/build-vitasdk:latest`
-- `tools/vita-parse-crash.ps1` — image name + comment updated
+- `build/docker/compose.yml` — image name updated
+- `build/docker/vitasdk/Dockerfile` — replaced 42-line Dockerfile with 7-line `FROM ghcr.io/cerwym/build-vitasdk:latest`
+- `scripts/vita-parse-crash.ps1` — image name + comment updated
 
 ### Phase 7 — vitaGL Razor GPU Support + Build Fixes
 Enabled `HAVE_RAZOR=1` on the vitaGL ExternalProject build so that Razor GPU Capture APIs are compiled in, allowing GPU profiling on-device.
@@ -64,13 +64,13 @@ Enabled `HAVE_RAZOR=1` on the vitaGL ExternalProject build so that Razor GPU Cap
 - `.github/workflows/ci-homebrew.yml`, `.github/workflows/docker-publish.yml`, `.github/workflows/release.yml`
 - `.vscode/extensions.json`, `.vscode/launch.json`, `.vscode/tasks.json`
 - `CMakeLists.txt`
-- `docker/compose.yml`, `docker/vitasdk/Dockerfile`
+- `build/docker/compose.yml`, `build/docker/vitasdk/Dockerfile`
 - `docs/platforms/vita/vita-setup.md`
 - `keeperfx.code-workspace`
 - `src/bflib_video.c`, `src/front_input.c`, `src/main.cpp`, `src/main_game.c`
 - `src/platform/PlatformVita.cpp`, `src/platform/vita_malloc_wrap.c`
 - `src/renderer/RendererVita.cpp`
-- `tools/vita-parse-crash.ps1`
+- `scripts/vita-parse-crash.ps1`
 
 **Deleted:**
 - `docs/coding_style_for_eclipse.xml`
@@ -78,7 +78,7 @@ Enabled `HAVE_RAZOR=1` on the vitaGL ExternalProject build so that Razor GPU Cap
 **New** (untracked):
 - `docs/platforms/vita/vita-cmake-build.md`
 - `src/platform/kfx_breadcrumb.h`
-- `tools/vita_crash/` (entire directory — 7 files)
+- `scripts/vita_crash/` (entire directory — 7 files)
 
 ---
 
@@ -89,7 +89,7 @@ Enabled `HAVE_RAZOR=1` on the vitaGL ExternalProject build so that Razor GPU Cap
    - Commit 1: Phase 6 (Docker infra) — workflows, Dockerfile, compose.yml, vita-parse-crash.ps1 image refs
    - Commit 2: Phase 7 (Razor GPU + build fixes) — `CMakeLists.txt`, `PlatformVita.cpp` (sysmem.h, ARM asm fix)
    - Commit 3: Phase 3 (crash handler + breadcrumbs) — `PlatformVita.cpp` crash handler, `kfx_breadcrumb.h`, breadcrumb call sites
-   - Commit 4: Phase 1+2 (Python crash tool + Docker integration) — `tools/vita_crash/`, `vita-parse-crash.ps1`, tasks
+   - Commit 4: Phase 1+2 (Python crash tool + Docker integration) — `scripts/vita_crash/`, `vita-parse-crash.ps1`, tasks
    - Commit 5: Phase 5C.6 (GDB launch config) — `launch.json`
    - Commit 6: Housekeeping — `extensions.json`, `keeperfx.code-workspace`, deleted `coding_style_for_eclipse.xml`
    - Or one combined commit if preferred
@@ -107,6 +107,6 @@ The GDB remote debugging stack lives in two sibling repos (see their own RESUME 
 The shared Vita SDK Docker image lives in its own repo:
 - `C:\Users\peter\source\repos\vita\build-vitasdk\` — [github.com/cerwym/build-vitasdk](https://github.com/cerwym/build-vitasdk)
 - Published as `ghcr.io/cerwym/build-vitasdk:latest`
-- keeperfx's `docker/vitasdk/Dockerfile` now just does `FROM ghcr.io/cerwym/build-vitasdk:latest`
+- keeperfx's `build/docker/vitasdk/Dockerfile` now just does `FROM ghcr.io/cerwym/build-vitasdk:latest`
 
 GitHub issues were filed: 12 on `cerwym/kvdb`, 4 on `cerwym/vdbtcp`.

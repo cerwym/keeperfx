@@ -33,14 +33,27 @@ if(NOT PLATFORM_VITA AND NOT PLATFORM_3DS AND NOT PLATFORM_SWITCH)
     endif()
 
     # ━━━ ImGui Debug/Settings Overlay (optional, desktop + OpenGL only) ━━━
+    # NOTE: homebrew platforms (Vita/3DS/Switch/Wii U) set KEEPERFX_IMGUI OFF in
+    # Platforms.cmake *before* this runs, so this block is desktop-only. If the
+    # user explicitly configured -DKEEPERFX_IMGUI=OFF this block is skipped too.
     if(KEEPERFX_IMGUI)
         find_package(imgui CONFIG QUIET)
         if(imgui_FOUND)
             kfx_status("DEPS" "ImGui found — debug/settings overlay enabled")
             add_compile_definitions(KEEPERFX_IMGUI_ENABLED=1)
         else()
-            kfx_status("DEPS" "ImGui not found — debug/settings overlay disabled (install via vcpkg)")
-            set(KEEPERFX_IMGUI OFF CACHE BOOL "" FORCE)
+            # Do NOT silently force KEEPERFX_IMGUI OFF here: that poisons the
+            # CMake cache permanently (it never re-enables even after imgui is
+            # installed) and produces a no-overlay build that looks fine but is
+            # missing F3. Fail loudly instead so the cause is obvious. To build
+            # without the overlay on purpose, configure with -DKEEPERFX_IMGUI=OFF.
+            message(FATAL_ERROR
+                "KEEPERFX_IMGUI is ON but the 'imgui' package was not found for "
+                "triplet '${VCPKG_TARGET_TRIPLET}'.\n"
+                "  - vcpkg manifest mode should install it automatically; try a "
+                "clean reconfigure of this build directory.\n"
+                "  - Or install it explicitly: vcpkg install imgui[core,opengl3-binding]:${VCPKG_TARGET_TRIPLET}\n"
+                "  - To build intentionally WITHOUT the overlay, configure with -DKEEPERFX_IMGUI=OFF.")
         endif()
     endif()
 

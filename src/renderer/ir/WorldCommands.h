@@ -84,9 +84,8 @@ struct IRWorldFlatPolyBatchCmd
  *  Captured on the game thread during the bucket walk; the render thread
  *  decodes the RLE, does atlas/CLUT management, and issues the GL draw.
  *
- *  Both @p data and @p remap point into static game-level arrays that remain
- *  resident for the entire level lifetime, so raw pointers are safe across the
- *  Flip() frame boundary.
+ *  @p data points to stable sprite storage, while remap state is copied into
+ *  this command so render-thread replay does not depend on mutable globals.
  */
 struct IRWorldKeeperSpriteCmd
 {
@@ -100,8 +99,9 @@ struct IRWorldKeeperSpriteCmd
     uint32_t              draw_flags    = 0;   /**< Sprite draw flags (Lb_SPRITE_*). */
     /** RLE-compressed pixel data (keepersprite_array — stable for level lifetime). */
     const unsigned char*  data          = nullptr;
-    /** 256-byte remap table (static global palette table), or nullptr for identity. */
-    const unsigned char*  remap         = nullptr;
+    /** 256-byte remap snapshot, valid when remap_enabled != 0. */
+    uint8_t               remap_table[256] = {};
+    uint8_t               remap_enabled = 0;
     float                 z_ndc         = 0.0f;  /**< Pre-computed NDC depth (half-bucket bias). */
     int8_t                owner         = -1;    /**< Player owner index (-1 = none). */
     int8_t                wants_outline =  0;    /**< Non-zero if depth-fail outline is wanted. */

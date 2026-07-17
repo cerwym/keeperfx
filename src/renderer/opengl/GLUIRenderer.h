@@ -242,6 +242,7 @@ public:
 private:
     // GPU shader programs — one per rendering domain to isolate texture unit bindings.
     GLuint m_prog_sprite;          // palette-indexed atlas sprites (unit 0 = atlas R8, unit 1 = palette 1D)
+    GLuint m_prog_sprite_rgba;     // truecolour atlas sprites (unit 0 = atlas RGBA8, no palette)
     GLuint m_prog_sprite_colored;  // atlas-as-mask, flat vertex colour output (unit 0 = atlas R8)
     GLuint m_prog_font;     // glyph rendering (unit 0 = font atlas RGBA)
     GLuint m_prog_solid;    // solid-colour quads and lines (no textures)
@@ -250,6 +251,7 @@ private:
 
     // Per-program u_screen_size uniform locations.
     GLint  m_loc_screen_sprite;
+    GLint  m_loc_screen_sprite_rgba;
     GLint  m_loc_screen_sprite_colored;
     GLint  m_loc_screen_font;
     GLint  m_loc_screen_solid;
