@@ -84,7 +84,6 @@ public:
     bool     ScheduleScreenshot(const char* path, int fmt) override;
 
     const char* GetName() const override;
-    bool     SupportsRuntimeSwitch() const override;
 
     BackendCapabilities GetCapabilities() const override {
         BackendCapabilities c = {};

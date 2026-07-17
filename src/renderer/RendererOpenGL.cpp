@@ -2303,11 +2303,6 @@ const char* RendererOpenGL::GetName() const
     return "OpenGL";
 }
 
-bool RendererOpenGL::SupportsRuntimeSwitch() const
-{
-    return true;
-}
-
 IWorldViewRenderer* RendererOpenGL::GetWorldViewRenderer()
 {
     return RendererGetWorldViewRenderer();

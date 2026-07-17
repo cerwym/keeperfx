@@ -507,58 +507,6 @@ int RendererInit(RendererType type)
     return true;
 }
 
-int RendererSwitch(RendererType type)
-{
-    if (type == RENDERER_AUTO)
-        type = resolve_auto();
-
-    if (type == s_activeType)
-        return true; // already active
-
-    IRenderer* next = create_renderer(type);
-    if (!next)
-    {
-        ERRORLOG("RendererSwitch: unknown or unsupported renderer type %d", (int)type);
-        return false;
-    }
-
-    if (!next->SupportsRuntimeSwitch())
-    {
-        ERRORLOG("RendererSwitch: backend '%s' does not support runtime switching", next->GetName());
-        delete next;
-        return false;
-    }
-
-    // Tear down current backend
-    if (s_activeRenderer)
-    {
-        s_activeRenderer->Shutdown();
-        delete s_activeRenderer;
-        s_activeRenderer = nullptr;
-    }
-
-    // Bring up new backend
-    if (!next->Init())
-    {
-        ERRORLOG("RendererSwitch: backend '%s' failed to initialise — falling back to software", next->GetName());
-        delete next;
-        // Fallback to software renderer
-        next = new RendererSoftware();
-        if (!next->Init())
-        {
-            ERRORLOG("RendererSwitch: software fallback also failed");
-            delete next;
-            return false;
-        }
-        type = RENDERER_SOFTWARE;
-    }
-
-    s_activeRenderer = next;
-    s_activeType     = type;
-    SYNCLOG("Renderer switched to: %s", next->GetName());
-    return true;
-}
-
 void RendererShutdown()
 {
 #if !defined(RENDERER_OPENGL_ENABLED)

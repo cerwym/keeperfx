@@ -574,11 +574,6 @@ const char* RendererSoftware::GetName() const
     return "Software";
 }
 
-bool RendererSoftware::SupportsRuntimeSwitch() const
-{
-    return true;
-}
-
 IWorldViewRenderer* RendererSoftware::GetWorldViewRenderer()
 {
     return m_worldViewRenderer;

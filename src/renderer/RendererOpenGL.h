@@ -58,7 +58,6 @@ public:
     uint8_t* LockFramebuffer(int* out_pitch) override;
     void     UnlockFramebuffer() override;
     const char* GetName() const override;
-    bool     SupportsRuntimeSwitch() const override;
 
     BackendCapabilities GetCapabilities() const override {
         BackendCapabilities c = {};

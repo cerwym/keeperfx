@@ -38,7 +38,6 @@ public:
     void UnlockFramebuffer() override;
 
     const char* GetName() const override { return "Vita (vitaGL palette shader)"; }
-    bool SupportsRuntimeSwitch() const override { return false; }
 
     BackendCapabilities GetCapabilities() const override {
         BackendCapabilities c = {};

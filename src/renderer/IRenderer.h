@@ -234,10 +234,6 @@ public:
     /** Human-readable name for this backend (e.g. "Software", "OpenGL"). */
     virtual const char* GetName() const = 0;
 
-    /** Returns true if this backend supports switching to/from it at runtime
-     *  without requiring a full application restart. */
-    virtual bool SupportsRuntimeSwitch() const = 0;
-
     /** Returns a struct of capability flags for this backend.
      *  Callers should use RendererGetCapabilities() (RendererManager.h) rather
      *  than RendererGetActiveType() to avoid hard-coding backend identities.

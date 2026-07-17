@@ -52,9 +52,6 @@ extern "C" {
 /** Initialise the renderer subsystem with the requested backend type. */
 int  RendererInit(RendererType type);
 
-/** Switch to a different renderer backend at runtime. */
-int  RendererSwitch(RendererType type);
-
 /** Shut down the active renderer backend and release all resources. */
 void RendererShutdown(void);
 

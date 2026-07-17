@@ -40,7 +40,6 @@ public:
     void UnlockFramebuffer() override;
 
     const char* GetName() const override { return "3DS (citro3d)"; }
-    bool SupportsRuntimeSwitch() const override { return false; }
 
     BackendCapabilities GetCapabilities() const override {
         BackendCapabilities c = {};
