@@ -189,7 +189,7 @@ if(VITA_UVDB)
         message(FATAL_ERROR
             "VITA_UVDB=ON but kubridge_stub.a was not found in the VitaSDK sysroot.\n"
             "Pull the latest base image and rebuild:\n"
-            "  docker compose -f docker/compose.yml build vitasdk")
+            "  docker compose -f build/docker/compose.yml build vitasdk")
     endif()
 
     add_library(vita_uvdb STATIC
@@ -209,10 +209,10 @@ vita_create_self(keeperfx.self keeperfx UNSAFE)
 vita_create_vpk(keeperfx.vpk KFXV00001 keeperfx.self
     VERSION "01.00"
     NAME    "KeeperFX"
-    FILE    ${CMAKE_SOURCE_DIR}/vita/sce_sys/icon0.png                             sce_sys/icon0.png
-    FILE    ${CMAKE_SOURCE_DIR}/vita/sce_sys/livearea/contents/bg.png              sce_sys/livearea/contents/bg.png
-    FILE    ${CMAKE_SOURCE_DIR}/vita/sce_sys/livearea/contents/startup.png         sce_sys/livearea/contents/startup.png
-    FILE    ${CMAKE_SOURCE_DIR}/vita/sce_sys/livearea/contents/template.xml        sce_sys/livearea/contents/template.xml
+    FILE    ${CMAKE_SOURCE_DIR}/build/packaging/vita/sce_sys/icon0.png                             sce_sys/icon0.png
+    FILE    ${CMAKE_SOURCE_DIR}/build/packaging/vita/sce_sys/livearea/contents/bg.png              sce_sys/livearea/contents/bg.png
+    FILE    ${CMAKE_SOURCE_DIR}/build/packaging/vita/sce_sys/livearea/contents/startup.png         sce_sys/livearea/contents/startup.png
+    FILE    ${CMAKE_SOURCE_DIR}/build/packaging/vita/sce_sys/livearea/contents/template.xml        sce_sys/livearea/contents/template.xml
 )
 
 # ━━━ vita-deploy: incremental deploy+launch target ━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -221,7 +221,7 @@ vita_create_vpk(keeperfx.vpk KFXV00001 keeperfx.self
 # shell one-liner, keeping all deploy logic in CMake.
 set(_VITA_SELF  "${CMAKE_CURRENT_BINARY_DIR}/keeperfx.self")
 set(_VITA_STAMP "${CMAKE_CURRENT_BINARY_DIR}/keeperfx.deploy.stamp")
-set(_COMPANION  "${CMAKE_SOURCE_DIR}/tools/vita-companion.sh")
+set(_COMPANION  "${CMAKE_SOURCE_DIR}/scripts/vita-companion.sh")
 add_custom_command(
     OUTPUT  "${_VITA_STAMP}"
     DEPENDS "${_VITA_SELF}"

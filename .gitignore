@@ -5,13 +5,13 @@
 /pkg
 /gfx
 /sfx
-/tools/peresec
-/tools/png2bestpal
-/tools/png2ico
-/tools/pngpal2raw
-/tools/po2ngdat
-/tools/rnctools
-/tools/sndbanker
+/build/tools/peresec
+/build/tools/png2bestpal
+/build/tools/png2ico
+/build/tools/pngpal2raw
+/build/tools/po2ngdat
+/build/tools/rnctools
+/build/tools/sndbanker
 /config/fxdata/*.dat
 /config/fxdata/*.fon
 .vs/
@@ -23,7 +23,7 @@ docs/latex
 *.o
 *.d
 *.Tpo
-res/keeperfx_icon.ico
+build/res/keeperfx_icon.ico
 .header_checksum
 /deps/enet
 /deps/enet6
@@ -64,10 +64,10 @@ __pycache__/
 VITAGL_SECURITY_AUDIT.md
 .vscode/.sonar-token
 /docs/rendering/
-# Asset packs fetched by packaging/fetch-assets.ps1
+# Asset packs fetched by build/packaging/fetch-assets.ps1
 /gfx/
 /sfx/
 /custom/
-/packaging/assets.local.json
+/build/packaging/assets.local.json
 
 *.obj

@@ -1,44 +1,14 @@
 {
-  "/usr/bin/c++" : 
-  {
-    "hash" : "5685f35c387c986e48389fa170601ba471805ec3",
-    "size" : 932680,
-    "timestamp" : 1766043084
-  },
-  "/usr/bin/cc" : 
-  {
-    "hash" : "176075db61a900c1c4c9fe02eb1ca37928773194",
-    "size" : 928584,
-    "timestamp" : 1766043084
-  },
-  "/usr/bin/i686-w64-mingw32-g++" : 
-  {
-    "hash" : "45d9e9c56bc929c749b53541289f8dbe73d78076",
-    "size" : 1263456,
-    "timestamp" : 1644596746
-  },
-  "/usr/bin/i686-w64-mingw32-gcc" : 
-  {
-    "hash" : "0d370be7fe02faa05d59725202a58ae974916f10",
-    "size" : 1168664,
-    "timestamp" : 1644596746
-  },
-  "C:/Program Files/Microsoft Visual Studio/18/Community/VC/Tools/MSVC/14.50.35717/bin/Hostx64/x64/cl.exe" : 
-  {
-    "hash" : "82651775b7e2582693ef40017450d1ddfefa35a9",
-    "size" : 682568,
-    "timestamp" : 1770770519
-  },
   "C:/Program Files/Microsoft Visual Studio/18/Community/VC/Tools/MSVC/14.51.36231/bin/Hostx64/x64/cl.exe" : 
   {
-    "hash" : "aa1dc90e418c34d8412c26ea8822aab89ff7d744",
+    "hash" : "4cc8817c7ebecb518477cb598a09c5f595b621fb",
     "size" : 893328,
-    "timestamp" : 1779948720
+    "timestamp" : 1784105599
   },
   "C:/Program Files/Microsoft Visual Studio/18/Community/VC/Tools/MSVC/14.51.36231/bin/Hostx64/x86/cl.exe" : 
   {
-    "hash" : "7a99046842adab9b242799108106d80f6285ad37",
+    "hash" : "350b979a83f01187f40b7b34a4dc247086a70ce9",
     "size" : 891752,
-    "timestamp" : 1779948721
+    "timestamp" : 1784105603
   }
 }

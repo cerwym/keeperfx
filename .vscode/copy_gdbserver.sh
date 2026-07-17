@@ -10,7 +10,7 @@ preset="${2:-windows-x86-debug}"
 port="${3:-2159}"
 
 out_dir="$workspace/out/package/$preset"
-compose_file="$workspace/docker/compose.yml"
+compose_file="$workspace/build/docker/compose.yml"
 
 [[ -d "$out_dir" ]] || {
   echo "Package directory not found: $out_dir" >&2

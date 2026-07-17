@@ -1,0 +1,112 @@
+# Docker Compose for local KeeperFX development and CI image testing.
+# All services mount the repository root as /src (read-write).
+# Build output lands in out/build/<preset>/ on the host.
+#
+# ── Build images locally (test Dockerfile changes before pushing) ───────────
+#   cd build/docker/
+#   docker compose build linux          # rebuild linux image
+#   docker compose build mingw64        # rebuild mingw64 image
+#   docker compose build mingw32        # rebuild mingw32 image
+#   docker compose build                # rebuild all
+#
+# ── Run a build inside a local image ────────────────────────────────────────
+#   docker compose run linux   bash -c "cmake --preset linux-x64-release && cmake --build --preset linux-x64-release"
+#   docker compose run mingw64 bash -c "cmake --preset windows-x64-release && cmake --build --preset windows-x64-release"
+#   docker compose run mingw32 bash -c "cmake --preset windows-x86-release && cmake --build --preset windows-x86-release"
+#   docker compose run linux-asan bash -c "cmake --preset linux-x64-asan && cmake --build --preset linux-x64-asan"
+#   docker compose run wasm    bash -c "cmake --preset wasm-release && cmake --build --preset wasm-release"
+#
+# ── Pull latest CI images (skip local build) ────────────────────────────────
+#   docker compose pull
+#
+# ── Packaging (linux only) ──────────────────────────────────────────────────
+#   docker compose run linux bash -c "make pkg-gfx"
+#   docker compose run linux bash -c "make pkg-lang"
+#
+# ── Vita crash parsing ───────────────────────────────────────────────────────
+#   docker compose run vitasdk bash -c "arm-vita-eabi-addr2line -e out/build/vita-debug/keeperfx -fCa 0x81XXXXXX"
+
+name: keeperfx
+
+x-build-base: &build-base
+  working_dir: /src
+  volumes:
+    - type: bind
+      source: ../..
+      target: /src
+  environment:
+    CMAKE_BUILD_PARALLEL_LEVEL: "${CMAKE_BUILD_PARALLEL_LEVEL:-4}"
+
+services:
+
+  mingw32:
+    <<: *build-base
+    image: ghcr.io/${DOCKER_ORG:-cerwym}/keeperfx-build-mingw32:latest
+    build:
+      context: ../..
+      dockerfile: build/docker/mingw32/Dockerfile
+
+  mingw64:
+    <<: *build-base
+    image: ghcr.io/${DOCKER_ORG:-cerwym}/keeperfx-build-mingw64:latest
+    build:
+      context: ../..
+      dockerfile: build/docker/mingw64/Dockerfile
+
+  linux:
+    <<: *build-base
+    image: ghcr.io/${DOCKER_ORG:-cerwym}/keeperfx-build-linux:latest
+    build:
+      context: ../..
+      dockerfile: build/docker/linux/Dockerfile
+
+  linux-asan:
+    <<: *build-base
+    image: ghcr.io/${DOCKER_ORG:-cerwym}/keeperfx-build-linux:latest
+    build:
+      context: ../..
+      dockerfile: build/docker/linux/Dockerfile
+    environment:
+      CMAKE_BUILD_PARALLEL_LEVEL: "${CMAKE_BUILD_PARALLEL_LEVEL:-4}"
+      ASAN_OPTIONS: "detect_leaks=0:halt_on_error=1:print_stats=1"
+      UBSAN_OPTIONS: "print_stacktrace=1:halt_on_error=1"
+
+  wasm:
+    <<: *build-base
+    image: ghcr.io/${DOCKER_ORG:-cerwym}/keeperfx-build-wasm:latest
+
+  vitasdk:
+    <<: *build-base
+    build:
+      context: ../..
+      dockerfile: build/docker/vitasdk/Dockerfile
+    image: ghcr.io/${DOCKER_ORG:-cerwym}/build-vitasdk:latest
+
+  3ds-sdk:
+    <<: *build-base
+    build:
+      context: ../..
+      dockerfile: build/docker/3ds-sdk/Dockerfile
+    image: ghcr.io/${DOCKER_ORG:-cerwym}/build-3ds-sdk:latest
+
+  wii-u-sdk:
+    <<: *build-base
+    build:
+      context: ../..
+      dockerfile: build/docker/wii-u-sdk/Dockerfile
+    image: ghcr.io/${DOCKER_ORG:-cerwym}/build-wii-u-sdk:latest
+
+  switch-sdk:
+    <<: *build-base
+    build:
+      context: ../..
+      dockerfile: build/docker/switch-sdk/Dockerfile
+    image: ghcr.io/${DOCKER_ORG:-cerwym}/build-switch-sdk:latest
+
+  sonarscanner:
+    <<: *build-base
+    image: sonarsource/sonar-scanner-cli:latest
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      SONAR_HOST_URL: "${SONAR_HOST_URL:-http://host.docker.internal:9000}"

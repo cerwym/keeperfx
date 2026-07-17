@@ -17,6 +17,8 @@ jobs:
 
   build-prototype:
     name: "Prototype ${{ matrix.name }}"
+    # Fork-noise gate: multi-platform desktop prototypes only run upstream.
+    if: ${{ github.repository == 'dkfans/keeperfx' }}
     runs-on: ubuntu-latest
     needs: prepare
     container:

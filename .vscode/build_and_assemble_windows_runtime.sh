@@ -3,7 +3,7 @@ set -euo pipefail
 
 workspace="${1:-$(pwd)}"
 preset="${2:-windows-x86-release}"
-compose_file="$workspace/docker/compose.yml"
+compose_file="$workspace/build/docker/compose.yml"
 
 reconfigure() {
   (

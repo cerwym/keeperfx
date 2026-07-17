@@ -15,19 +15,19 @@
 "type": "shell",
 "windows": {
 "command": [
-"$vcvars = 'C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Auxiliary\\Build\\vcvars32.bat';",
+"$vcvars = 'C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Auxiliary\\Build\\vcvars64.bat';",
 "$bat = [System.IO.Path]::GetTempFileName() + '.bat';",
-"Set-Content $bat \"@call `\"$vcvars`\" >nul 2>&1`r`ncmake --build --preset x86-windows-static-debug\" -Encoding ascii;",
+"Set-Content $bat \"@call `\"$vcvars`\" >nul 2>&1`r`ncmake --build --preset x64-windows-static-debug\" -Encoding ascii;",
 "cmd /c $bat;",
 "if ($LASTEXITCODE -ne 0) { Remove-Item $bat; exit 1 };",
 "Remove-Item $bat;",
-"Copy-Item '${workspaceFolder}\\out\\build\\x86-windows-static-debug\\keeperfx.exe' '${workspaceFolder}\\.deploy\\keeperfx.exe' -Force;",
+"Copy-Item '${workspaceFolder}\\out\\build\\x64-windows-static-debug\\keeperfx.exe' '${workspaceFolder}\\.deploy\\keeperfx.exe' -Force;",
 "Write-Host 'keeperfx.exe deployed to .deploy/' -ForegroundColor Green;",
 "powershell -ExecutionPolicy Bypass -File '${workspaceFolder}\\.vscode\\deploy_assets.ps1' -DeployConfig -GameDirectory '${workspaceFolder}\\.deploy';",
 "powershell -ExecutionPolicy Bypass -File '${workspaceFolder}\\.vscode\\validate_runtime_assets.ps1' -WorkspaceFolder '${workspaceFolder}' -DeploySubdir '.deploy'"
 ]
 },
-"command": "cmake --build --preset x86-windows-static-debug && cp out/build/x86-windows-static-debug/keeperfx.exe .deploy/keeperfx.exe && pwsh -File '${workspaceFolder}/.vscode/deploy_assets.ps1' -DeployConfig -GameDirectory '${workspaceFolder}/.deploy' && bash '${workspaceFolder}/.vscode/validate_runtime_assets.sh' '${workspaceFolder}' '.deploy'",
+"command": "cmake --build --preset x64-windows-static-debug && cp out/build/x64-windows-static-debug/keeperfx.exe .deploy/keeperfx.exe && pwsh -File '${workspaceFolder}/.vscode/deploy_assets.ps1' -DeployConfig -GameDirectory '${workspaceFolder}/.deploy' && bash '${workspaceFolder}/.vscode/validate_runtime_assets.sh' '${workspaceFolder}' '.deploy'",
 "problemMatcher": "$msCompile",
 "group": "build",
 "presentation": { "clear": true, "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
@@ -36,10 +36,10 @@
 {
 "label": "Build & Deploy Windows Debug",
 "type": "shell",
-"command": "docker compose -f '${workspaceFolder}/docker/compose.yml' run --rm mingw32 bash -c 'if grep -q /workspaces out/build/windows-x86-debug/CMakeCache.txt 2>/dev/null; then rm -rf out/build/windows-x86-debug/CMakeCache.txt out/build/windows-x86-debug/CMakeFiles; fi && cmake --preset windows-x86-debug && cmake --build --preset windows-x86-debug' && cp out/build/windows-x86-debug/keeperfx.exe .deploy/keeperfx.exe && echo 'Deployed.' && bash '${workspaceFolder}/.vscode/validate_runtime_assets.sh' '${workspaceFolder}' '.deploy'",
+"command": "docker compose -f '${workspaceFolder}/build/docker/compose.yml' run --rm mingw32 bash -c 'if grep -q /workspaces out/build/windows-x86-debug/CMakeCache.txt 2>/dev/null; then rm -rf out/build/windows-x86-debug/CMakeCache.txt out/build/windows-x86-debug/CMakeFiles; fi && cmake --preset windows-x86-debug && cmake --build --preset windows-x86-debug' && cp out/build/windows-x86-debug/keeperfx.exe .deploy/keeperfx.exe && echo 'Deployed.' && bash '${workspaceFolder}/.vscode/validate_runtime_assets.sh' '${workspaceFolder}' '.deploy'",
 "windows": {
 "command": [
-"docker compose -f '${workspaceFolder}\\docker\\compose.yml' run --rm mingw32 bash -c 'if grep -q /workspaces out/build/windows-x86-debug/CMakeCache.txt 2>/dev/null; then rm -rf out/build/windows-x86-debug/CMakeCache.txt out/build/windows-x86-debug/CMakeFiles; fi && cmake --preset windows-x86-debug && cmake --build --preset windows-x86-debug';",
+"docker compose -f '${workspaceFolder}\\build\\docker\\compose.yml' run --rm mingw32 bash -c 'if grep -q /workspaces out/build/windows-x86-debug/CMakeCache.txt 2>/dev/null; then rm -rf out/build/windows-x86-debug/CMakeCache.txt out/build/windows-x86-debug/CMakeFiles; fi && cmake --preset windows-x86-debug && cmake --build --preset windows-x86-debug';",
 "if ($LASTEXITCODE -ne 0) { exit 1 };",
 "Copy-Item '${workspaceFolder}\\out\\build\\windows-x86-debug\\keeperfx.exe' '${workspaceFolder}\\.deploy\\keeperfx.exe' -Force;",
 "Write-Host 'keeperfx.exe deployed to .deploy/' -ForegroundColor Green;",
@@ -75,9 +75,9 @@
 {
 "label": "Build Windows x86 Release",
 "type": "shell",
-"command": "docker compose -f '${workspaceFolder}/docker/compose.yml' run --rm mingw32 bash -c 'cmake --preset windows-x86-release && cmake --build --preset windows-x86-release'",
+"command": "docker compose -f '${workspaceFolder}/build/docker/compose.yml' run --rm mingw32 bash -c 'cmake --preset windows-x86-release && cmake --build --preset windows-x86-release'",
 "windows": {
-"command": "docker compose -f '${workspaceFolder}\\docker\\compose.yml' run --rm mingw32 bash -c 'cmake --preset windows-x86-release && cmake --build --preset windows-x86-release'"
+"command": "docker compose -f '${workspaceFolder}\\build\\docker\\compose.yml' run --rm mingw32 bash -c 'cmake --preset windows-x86-release && cmake --build --preset windows-x86-release'"
 },
 "problemMatcher": "$gcc",
 "group": "build",
@@ -90,7 +90,7 @@
 "type": "shell",
 "windows": {
 "command": [
-"docker compose -f '${workspaceFolder}\\docker\\compose.yml' run --rm mingw32 bash -c 'cmake --preset ${input:windowsBuildPreset} && cmake --build --preset ${input:windowsBuildPreset}';",
+"docker compose -f '${workspaceFolder}\\build\\docker\\compose.yml' run --rm mingw32 bash -c 'cmake --preset ${input:windowsBuildPreset} && cmake --build --preset ${input:windowsBuildPreset}';",
 "if ($LASTEXITCODE -ne 0) { exit 1 };",
 "powershell -ExecutionPolicy Bypass -File '${workspaceFolder}\\.vscode\\assemble_windows_runtime.ps1' -WorkspaceFolder '${workspaceFolder}' -Preset '${input:windowsBuildPreset}'"
 ]
@@ -119,9 +119,9 @@
 {
 "label": "Build Linux x64",
 "type": "shell",
-"command": "docker compose -f '${workspaceFolder}/docker/compose.yml' run --rm linux bash -c 'cmake --preset linux-x64-release && cmake --build --preset linux-x64-release'",
+"command": "docker compose -f '${workspaceFolder}/build/docker/compose.yml' run --rm linux bash -c 'cmake --preset linux-x64-release && cmake --build --preset linux-x64-release'",
 "windows": {
-"command": "docker compose -f '${workspaceFolder}\\docker\\compose.yml' run --rm linux bash -c 'cmake --preset linux-x64-release && cmake --build --preset linux-x64-release'"
+"command": "docker compose -f '${workspaceFolder}\\build\\docker\\compose.yml' run --rm linux bash -c 'cmake --preset linux-x64-release && cmake --build --preset linux-x64-release'"
 },
 "problemMatcher": "$gcc",
 "group": "build",
@@ -135,9 +135,9 @@
 {
 "label": "Build Vita Release",
 "type": "shell",
-"command": "docker compose -f '${workspaceFolder}/docker/compose.yml' run --rm vitasdk bash -c 'cmake --preset vita-release && cmake --build --preset vita-release'",
+"command": "docker compose -f '${workspaceFolder}/build/docker/compose.yml' run --rm vitasdk bash -c 'cmake --preset vita-release && cmake --build --preset vita-release'",
 "windows": {
-"command": "docker compose -f '${workspaceFolder}\\docker\\compose.yml' run --rm vitasdk bash -c 'cmake --preset vita-release && cmake --build --preset vita-release'"
+"command": "docker compose -f '${workspaceFolder}\\build\\docker\\compose.yml' run --rm vitasdk bash -c 'cmake --preset vita-release && cmake --build --preset vita-release'"
 },
 "problemMatcher": "$gcc",
 "group": "build",
@@ -147,9 +147,9 @@
 {
 "label": "Build Vita RelDebug",
 "type": "shell",
-"command": "docker compose -f '${workspaceFolder}/docker/compose.yml' run --rm vitasdk bash -c 'cmake --preset vita-reldebug && cmake --build --preset vita-reldebug'",
+"command": "docker compose -f '${workspaceFolder}/build/docker/compose.yml' run --rm vitasdk bash -c 'cmake --preset vita-reldebug && cmake --build --preset vita-reldebug'",
 "windows": {
-"command": "docker compose -f '${workspaceFolder}\\docker\\compose.yml' run --rm vitasdk bash -c 'cmake --preset vita-reldebug && cmake --build --preset vita-reldebug'"
+"command": "docker compose -f '${workspaceFolder}\\build\\docker\\compose.yml' run --rm vitasdk bash -c 'cmake --preset vita-reldebug && cmake --build --preset vita-reldebug'"
 },
 "problemMatcher": "$gcc",
 "group": "build",
@@ -159,9 +159,9 @@
 {
 "label": "Build Vita Debug",
 "type": "shell",
-"command": "docker compose -f '${workspaceFolder}/docker/compose.yml' run --rm vitasdk bash -c 'cmake --preset vita-debug && cmake --build --preset vita-debug'",
+"command": "docker compose -f '${workspaceFolder}/build/docker/compose.yml' run --rm vitasdk bash -c 'cmake --preset vita-debug && cmake --build --preset vita-debug'",
 "windows": {
-"command": "docker compose -f '${workspaceFolder}\\docker\\compose.yml' run --rm vitasdk bash -c 'cmake --preset vita-debug && cmake --build --preset vita-debug'"
+"command": "docker compose -f '${workspaceFolder}\\build\\docker\\compose.yml' run --rm vitasdk bash -c 'cmake --preset vita-debug && cmake --build --preset vita-debug'"
 },
 "problemMatcher": "$gcc",
 "group": "build",
@@ -178,7 +178,7 @@
 "windows": {
 "command": "powershell -ExecutionPolicy Bypass -File '${workspaceFolder}\\tools\\init-deploy.ps1' -WorkspaceFolder '${workspaceFolder}' -DungeonKeeperPath '${input:dkInstallPath}' -RefreshDkLayer -SkipPkgBuild -SkipKfxOverlay"
 },
-"command": "bash '${workspaceFolder}/tools/init-deploy.sh' --workspace '${workspaceFolder}' --dk-path '${input:dkInstallPath}' --refresh-dk-layer --skip-pkg-build --skip-kfx-overlay",
+"command": "bash '${workspaceFolder}/scripts/init-deploy.sh' --workspace '${workspaceFolder}' --dk-path '${input:dkInstallPath}' --refresh-dk-layer --skip-pkg-build --skip-kfx-overlay",
 "problemMatcher": [],
 "group": "build",
 "presentation": { "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
@@ -193,12 +193,12 @@
 "command": "powershell -ExecutionPolicy Bypass -File '${workspaceFolder}\\tools\\init-deploy.ps1' -WorkspaceFolder '${workspaceFolder}' -DungeonKeeperPath '${input:dkInstallPath}'"
 },
 "osx": {
-"command": "bash '${workspaceFolder}/tools/init-deploy.sh' --workspace '${workspaceFolder}' --dk-path '${input:dkInstallPath}'"
+"command": "bash '${workspaceFolder}/scripts/init-deploy.sh' --workspace '${workspaceFolder}' --dk-path '${input:dkInstallPath}'"
 },
 "linux": {
-"command": "bash '${workspaceFolder}/tools/init-deploy.sh' --workspace '${workspaceFolder}' --dk-path '${input:dkInstallPath}'"
+"command": "bash '${workspaceFolder}/scripts/init-deploy.sh' --workspace '${workspaceFolder}' --dk-path '${input:dkInstallPath}'"
 },
-"command": "bash '${workspaceFolder}/tools/init-deploy.sh' --workspace '${workspaceFolder}' --dk-path '${input:dkInstallPath}'",
+"command": "bash '${workspaceFolder}/scripts/init-deploy.sh' --workspace '${workspaceFolder}' --dk-path '${input:dkInstallPath}'",
 "problemMatcher": [],
 "group": "build",
 "presentation": { "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
@@ -213,12 +213,12 @@
 "command": "powershell -ExecutionPolicy Bypass -File '${workspaceFolder}\\tools\\init-deploy.ps1' -WorkspaceFolder '${workspaceFolder}' -DungeonKeeperPath '${input:dkInstallPath}' -UseAlpha"
 },
 "osx": {
-"command": "bash '${workspaceFolder}/tools/init-deploy.sh' --workspace '${workspaceFolder}' --dk-path '${input:dkInstallPath}' --use-alpha"
+"command": "bash '${workspaceFolder}/scripts/init-deploy.sh' --workspace '${workspaceFolder}' --dk-path '${input:dkInstallPath}' --use-alpha"
 },
 "linux": {
-"command": "bash '${workspaceFolder}/tools/init-deploy.sh' --workspace '${workspaceFolder}' --dk-path '${input:dkInstallPath}' --use-alpha"
+"command": "bash '${workspaceFolder}/scripts/init-deploy.sh' --workspace '${workspaceFolder}' --dk-path '${input:dkInstallPath}' --use-alpha"
 },
-"command": "bash '${workspaceFolder}/tools/init-deploy.sh' --workspace '${workspaceFolder}' --dk-path '${input:dkInstallPath}' --use-alpha",
+"command": "bash '${workspaceFolder}/scripts/init-deploy.sh' --workspace '${workspaceFolder}' --dk-path '${input:dkInstallPath}' --use-alpha",
 "problemMatcher": [],
 "group": "build",
 "presentation": { "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
@@ -251,9 +251,9 @@
 // Uses the debug preset so headers and macros match the active code.
 "label": "Generate compile_commands.json",
 "type": "shell",
-"command": "docker compose -f '${workspaceFolder}/docker/compose.yml' run --rm mingw32 bash -c 'cmake --preset windows-x86-debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON'",
+"command": "docker compose -f '${workspaceFolder}/build/docker/compose.yml' run --rm mingw32 bash -c 'cmake --preset windows-x86-debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON'",
 "windows": {
-"command": "docker compose -f '${workspaceFolder}\\docker\\compose.yml' run --rm mingw32 bash -c 'cmake --preset windows-x86-debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON'"
+"command": "docker compose -f '${workspaceFolder}\\build\\docker\\compose.yml' run --rm mingw32 bash -c 'cmake --preset windows-x86-debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON'"
 },
 "problemMatcher": "$gcc",
 "group": "build"
@@ -264,9 +264,9 @@
 {
 "label": "Clean Windows Debug",
 "type": "shell",
-"command": "docker compose -f '${workspaceFolder}/docker/compose.yml' run --rm mingw32 bash -c 'cmake --build --preset windows-x86-debug --target clean'",
+"command": "docker compose -f '${workspaceFolder}/build/docker/compose.yml' run --rm mingw32 bash -c 'cmake --build --preset windows-x86-debug --target clean'",
 "windows": {
-"command": "docker compose -f '${workspaceFolder}\\docker\\compose.yml' run --rm mingw32 bash -c 'cmake --build --preset windows-x86-debug --target clean'"
+"command": "docker compose -f '${workspaceFolder}\\build\\docker\\compose.yml' run --rm mingw32 bash -c 'cmake --build --preset windows-x86-debug --target clean'"
 },
 "problemMatcher": "$gcc",
 "group": "build"
@@ -275,9 +275,9 @@
 {
 "label": "Clean Windows Release",
 "type": "shell",
-"command": "docker compose -f '${workspaceFolder}/docker/compose.yml' run --rm mingw32 bash -c 'cmake --build --preset windows-x86-release --target clean'",
+"command": "docker compose -f '${workspaceFolder}/build/docker/compose.yml' run --rm mingw32 bash -c 'cmake --build --preset windows-x86-release --target clean'",
 "windows": {
-"command": "docker compose -f '${workspaceFolder}\\docker\\compose.yml' run --rm mingw32 bash -c 'cmake --build --preset windows-x86-release --target clean'"
+"command": "docker compose -f '${workspaceFolder}\\build\\docker\\compose.yml' run --rm mingw32 bash -c 'cmake --build --preset windows-x86-release --target clean'"
 },
 "problemMatcher": "$gcc",
 "group": "build"
@@ -289,7 +289,7 @@
 "label": "Parse Vita Crash Dump",
     "detail": "Auto-download latest crash dump from Vita and generate report",
     "type": "shell",
-    "command": "bash '${workspaceFolder}/tools/vita-parse-crash.sh' --open",
+    "command": "bash '${workspaceFolder}/scripts/vita-parse-crash.sh' --open",
     "windows": {
         "command": "powershell -ExecutionPolicy Bypass -File '${workspaceFolder}\\tools\\vita-parse-crash.ps1'; if (Test-Path '${workspaceFolder}\\out\\vita-dumps\\crash_report.html') { code '${workspaceFolder}\\out\\vita-dumps\\crash_report.html' }"
     },
@@ -301,7 +301,7 @@
 {
 "label": "Parse Local Crash Dump",
 "type": "shell",
-"command": "bash '${workspaceFolder}/tools/vita-parse-crash.sh' --dump '${input:dumpFile}' --open",
+"command": "bash '${workspaceFolder}/scripts/vita-parse-crash.sh' --dump '${input:dumpFile}' --open",
 "windows": {
 "command": "powershell -ExecutionPolicy Bypass -File '${workspaceFolder}\\tools\\vita-parse-crash.ps1' -Dump '${input:dumpFile}'; if (Test-Path '${workspaceFolder}\\out\\vita-dumps\\crash_report.html') { code '${workspaceFolder}\\out\\vita-dumps\\crash_report.html' }"
 },
@@ -366,7 +366,7 @@
     "label": "Setup Vita Companion",
     "detail": "Download vitacompanion + noASLR + PrincessLog, upload to Vita, patch taiHEN config",
     "type": "shell",
-    "command": "bash '${workspaceFolder}/tools/vita-companion.sh' setup",
+    "command": "bash '${workspaceFolder}/scripts/vita-companion.sh' setup",
     "problemMatcher": [],
     "group": "build",
     "presentation": { "reveal": "always", "focus": true, "panel": "dedicated", "showReuseMessage": false }
@@ -376,7 +376,7 @@
     "label": "Deploy Vita eboot.bin",
     "detail": "Upload latest eboot.bin to the Vita via FTP (vitacompanion)",
     "type": "shell",
-    "command": "VITA_PRESET='${input:vitaPreset}' bash '${workspaceFolder}/tools/vita-companion.sh' deploy-eboot",
+    "command": "VITA_PRESET='${input:vitaPreset}' bash '${workspaceFolder}/scripts/vita-companion.sh' deploy-eboot",
     "problemMatcher": [],
     "group": "build",
     "presentation": { "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
@@ -386,7 +386,7 @@
     "label": "Deploy & Launch Vita",
     "detail": "Upload eboot.bin + kill + relaunch KeeperFX on Vita",
     "type": "shell",
-    "command": "VITA_PRESET='${input:vitaPreset}' bash '${workspaceFolder}/tools/vita-companion.sh' deploy-launch",
+    "command": "VITA_PRESET='${input:vitaPreset}' bash '${workspaceFolder}/scripts/vita-companion.sh' deploy-launch",
     "problemMatcher": [],
     "group": "build",
     "presentation": { "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
@@ -396,7 +396,7 @@
     "label": "Build & Deploy Vita",
     "detail": "Build → deploy → launch on Vita",
     "type": "shell",
-    "command": "cmake --preset ${input:vitaPreset} && cmake --build --preset ${input:vitaPreset} && VITA_PRESET='${input:vitaPreset}' bash '${workspaceFolder}/tools/vita-companion.sh' deploy-launch",
+    "command": "cmake --preset ${input:vitaPreset} && cmake --build --preset ${input:vitaPreset} && VITA_PRESET='${input:vitaPreset}' bash '${workspaceFolder}/scripts/vita-companion.sh' deploy-launch",
     "problemMatcher": "$gcc",
     "group": "build",
     "presentation": { "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
@@ -406,7 +406,7 @@
     "label": "Reboot Vita",
     "detail": "Send reboot command to Vita via vitacompanion",
     "type": "shell",
-    "command": "bash '${workspaceFolder}/tools/vita-companion.sh' reboot",
+    "command": "bash '${workspaceFolder}/scripts/vita-companion.sh' reboot",
     "problemMatcher": [],
     "group": "build",
     "presentation": { "reveal": "always", "focus": false, "panel": "shared", "showReuseMessage": false }
@@ -416,7 +416,7 @@
     "label": "Fetch Vita Logs",
     "detail": "Download kfx_boot.log, kfx_preinit.log, keeperfx.log, profiler.log, vitaGL.log from Vita → out/vita-logs/",
     "type": "shell",
-    "command": "bash '${workspaceFolder}/tools/vita-companion.sh' fetch-logs",
+    "command": "bash '${workspaceFolder}/scripts/vita-companion.sh' fetch-logs",
     "problemMatcher": [],
     "group": "build",
     "presentation": { "reveal": "always", "focus": true, "panel": "dedicated", "showReuseMessage": false }
@@ -428,7 +428,7 @@
 // the game blocks at uvdb_enter() until gdb-multiarch connects on port 1234.
 // Pre-requisites (one-time):
 //   1. Run "Setup Vita uvdb" to install kubridge.skprx on the Vita.
-//   2. Run "docker compose -f docker/compose.yml build vitasdk" to bake
+//   2. Run "docker compose -f build/docker/compose.yml build vitasdk" to bake
 //      kubridge_stub.a into the vitasdk image.
 // Then build vita-gdb, deploy, launch, and use F5 ("Debug KeeperFX (Vita GDB)").
 
@@ -436,7 +436,7 @@
     "label": "Setup Vita uvdb",
     "detail": "Download kubridge.skprx, upload to Vita, patch taiHEN config (one-time)",
     "type": "shell",
-    "command": "bash '${workspaceFolder}/tools/vita-companion.sh' setup-uvdb",
+    "command": "bash '${workspaceFolder}/scripts/vita-companion.sh' setup-uvdb",
     "problemMatcher": [],
     "group": "build",
     "presentation": { "reveal": "always", "focus": true, "panel": "dedicated", "showReuseMessage": false }
@@ -456,7 +456,7 @@
     "label": "Build & Deploy Vita GDB",
     "detail": "Build vita-gdb → deploy eboot.bin → launch → wait for GDB stub on port 1234",
     "type": "shell",
-    "command": "cmake --preset vita-gdb && cmake --build --preset vita-gdb && VITA_PRESET='vita-gdb' bash '${workspaceFolder}/tools/vita-companion.sh' deploy-launch && bash '${workspaceFolder}/tools/vita-companion.sh' wait-for-gdb",
+    "command": "cmake --preset vita-gdb && cmake --build --preset vita-gdb && VITA_PRESET='vita-gdb' bash '${workspaceFolder}/scripts/vita-companion.sh' deploy-launch && bash '${workspaceFolder}/scripts/vita-companion.sh' wait-for-gdb",
     "problemMatcher": "$gcc",
     "group": "build",
     "presentation": { "clear": true, "reveal": "always", "focus": true, "panel": "shared", "showReuseMessage": false }
@@ -466,7 +466,7 @@
     "label": "Kill Vita App",
     "detail": "Send destroy command to vitacompanion to kill the running app",
     "type": "shell",
-    "command": "bash '${workspaceFolder}/tools/vita-companion.sh' kill",
+    "command": "bash '${workspaceFolder}/scripts/vita-companion.sh' kill",
     "problemMatcher": [],
     "group": "build",
     "presentation": { "reveal": "silent", "panel": "shared", "showReuseMessage": false }

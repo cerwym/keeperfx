@@ -29,13 +29,13 @@ These tasks run:
 
 ```bash
 # Release
-docker compose -f docker/compose.yml run --rm switch-sdk bash -c 'cmake --preset switch-release && cmake --build --preset switch-release'
+docker compose -f build/docker/compose.yml run --rm switch-sdk bash -c 'cmake --preset switch-release && cmake --build --preset switch-release'
 
 # RelWithDebInfo
-docker compose -f docker/compose.yml run --rm switch-sdk bash -c 'cmake --preset switch-reldebug && cmake --build --preset switch-reldebug'
+docker compose -f build/docker/compose.yml run --rm switch-sdk bash -c 'cmake --preset switch-reldebug && cmake --build --preset switch-reldebug'
 
 # Debug
-docker compose -f docker/compose.yml run --rm switch-sdk bash -c 'cmake --preset switch-debug && cmake --build --preset switch-debug'
+docker compose -f build/docker/compose.yml run --rm switch-sdk bash -c 'cmake --preset switch-debug && cmake --build --preset switch-debug'
 ```
 
 ### Direct CMake flow

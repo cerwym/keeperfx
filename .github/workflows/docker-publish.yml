@@ -7,7 +7,7 @@ on:
       - dev
       - "release/**"
     paths:
-      - "docker/**"
+      - "build/docker/**"
       - "vcpkg.json"
       - "vcpkg-configuration.json"
   workflow_dispatch:
@@ -31,42 +31,31 @@ jobs:
           - name: mingw32
             image: keeperfx-build-mingw32
             context: .
-            dockerfile: docker/mingw32/Dockerfile
+            dockerfile: build/docker/mingw32/Dockerfile
 
           - name: mingw64
             image: keeperfx-build-mingw64
             context: .
-            dockerfile: docker/mingw64/Dockerfile
+            dockerfile: build/docker/mingw64/Dockerfile
 
           - name: linux
             image: keeperfx-build-linux
             context: .
-            dockerfile: docker/linux/Dockerfile
+            dockerfile: build/docker/linux/Dockerfile
 
           - name: wasm
             image: keeperfx-build-wasm
             context: .
-            dockerfile: docker/wasm/Dockerfile
+            dockerfile: build/docker/wasm/Dockerfile
 
           - name: vitasdk
             image: build-vitasdk
             context: .
-            dockerfile: docker/vitasdk/Dockerfile
+            dockerfile: build/docker/vitasdk/Dockerfile
 
-          - name: 3ds-sdk
-            image: keeperfx-build-3ds-sdk
-            context: .
-            dockerfile: docker/3ds-sdk/Dockerfile
-
-          - name: switch-sdk
-            image: keeperfx-build-switch-sdk
-            context: .
-            dockerfile: docker/switch-sdk/Dockerfile
-
-          - name: wii-u-sdk
-            image: keeperfx-build-wii-u-sdk
-            context: .
-            dockerfile: docker/wii-u-sdk/Dockerfile
+          # 3DS / Switch / Wii U SDK images are disabled (early-stage platforms).
+          # Their Dockerfiles remain under build/docker/ for future development;
+          # build them manually with `docker compose build <name>` when needed.
 
     steps:
       - name: Checkout

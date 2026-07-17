@@ -50,7 +50,7 @@ include(BuildTargets)
 # Go into submodules (desktop only — homebrew platforms use their own SDK deps).
 if(NOT PLATFORM_VITA AND NOT PLATFORM_3DS AND NOT PLATFORM_SWITCH AND NOT PLATFORM_WII_U)
     add_subdirectory(deps)
-    add_subdirectory(tools)
+    add_subdirectory(build/tools)
 endif()
 
 

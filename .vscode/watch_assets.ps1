@@ -92,7 +92,7 @@ $timerAction = {
             $startTime = Get-Date
             
             Push-Location $WorkspaceRoot
-            docker compose -f "$WorkspaceRoot\docker\compose.yml" run --rm linux bash -c "make pkg-gfx"
+            docker compose -f "$WorkspaceRoot\build\docker\compose.yml" run --rm linux bash -c "make pkg-gfx"
             Pop-Location
             
             $duration = [math]::Round(((Get-Date) - $startTime).TotalSeconds, 2)
@@ -110,7 +110,7 @@ $timerAction = {
             $startTime = Get-Date
             
             Push-Location $WorkspaceRoot
-            docker compose -f "$WorkspaceRoot\docker\compose.yml" run --rm linux bash -c "make pkg-sfx"
+            docker compose -f "$WorkspaceRoot\build\docker\compose.yml" run --rm linux bash -c "make pkg-sfx"
             Pop-Location
             
             $duration = [math]::Round(((Get-Date) - $startTime).TotalSeconds, 2)
@@ -128,7 +128,7 @@ $timerAction = {
             $startTime = Get-Date
             
             Push-Location $WorkspaceRoot
-            docker compose -f "$WorkspaceRoot\docker\compose.yml" run --rm linux bash -c "make pkg-lang"
+            docker compose -f "$WorkspaceRoot\build\docker\compose.yml" run --rm linux bash -c "make pkg-lang"
             Pop-Location
             
             $duration = [math]::Round(((Get-Date) - $startTime).TotalSeconds, 2)

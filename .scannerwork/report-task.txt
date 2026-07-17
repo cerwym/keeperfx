@@ -1,6 +1,0 @@
-projectKey=keeperfx-local-vita-hardware-acceleration
-serverUrl=http://host.docker.internal:9000
-serverVersion=26.3.0.120487
-dashboardUrl=http://host.docker.internal:9000/dashboard?id=keeperfx-local-vita-hardware-acceleration
-ceTaskId=39ab466f-1eb6-48fb-83fc-bf1365c071ee
-ceTaskUrl=http://host.docker.internal:9000/api/ce/task?id=39ab466f-1eb6-48fb-83fc-bf1365c071ee
