@@ -27,6 +27,7 @@ class IMapFadePass;
 struct TbSpriteSheet;
 class ITextRenderer;
 class IUIRenderer;
+class ICursorLayer;
 
 /******************************************************************************/
 
@@ -37,7 +38,6 @@ enum RendererType {
     RENDERER_SOFTWARE = 1,  /**< CPU software renderer, SDL2 display output */
     RENDERER_OPENGL   = 2,  /**< OpenGL backend — framebuffer blit + GPU world geometry */
     RENDERER_VITA     = 3,  /**< PS Vita — vitaGL over GXM */
-    RENDERER_3DS      = 4,  /**< Nintendo 3DS — citro3d/PICA200 */
 };
 
 /******************************************************************************/
@@ -234,10 +234,6 @@ public:
     /** Human-readable name for this backend (e.g. "Software", "OpenGL"). */
     virtual const char* GetName() const = 0;
 
-    /** Returns true if this backend supports switching to/from it at runtime
-     *  without requiring a full application restart. */
-    virtual bool SupportsRuntimeSwitch() const = 0;
-
     /** Returns a struct of capability flags for this backend.
      *  Callers should use RendererGetCapabilities() (RendererManager.h) rather
      *  than RendererGetActiveType() to avoid hard-coding backend identities.
@@ -268,6 +264,10 @@ public:
     /** Returns the UI renderer managed by this backend.
      *  Each renderer type creates the appropriate implementation internally. */
     virtual class IUIRenderer* GetUIRenderer() = 0;
+
+    /** Returns the cursor layer managed by this backend.
+     *  Each renderer type creates the appropriate implementation internally. */
+    virtual class ICursorLayer* GetCursorLayer() = 0;
 
     // -------------------------------------------------------------------------
     // Lifecycle notifications from the game thread

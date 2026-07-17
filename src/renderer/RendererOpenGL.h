@@ -38,12 +38,14 @@ class ICursorLayer;
  */
 class RendererOpenGL : public IRenderer {
 private:
-    // Typed GL sub-renderer pointers — set by RendererManager factory functions
-    // after each sub-renderer is created.  Null if the sub-renderer fell back to
-    // software (e.g. GLTextRenderer::Init() failure).
+    // Typed GL sub-renderer pointers — created and owned by this backend in
+    // Init(), destroyed in Shutdown().  Non-null on a successful Init(); a GL
+    // sub-renderer Init() failure fails the whole backend (no software fallback —
+    // the manager retries with RendererSoftware, see main.cpp).
     GLTextRenderer*      m_textRenderer    = nullptr;
     GLMapFadePass*       m_gl_mapfade      = nullptr;
     GLUIRenderer*        m_gl_ui_renderer  = nullptr;
+    ICursorLayer*        m_cursor          = nullptr;
 
 public:
     RendererOpenGL();
@@ -58,7 +60,6 @@ public:
     uint8_t* LockFramebuffer(int* out_pitch) override;
     void     UnlockFramebuffer() override;
     const char* GetName() const override;
-    bool     SupportsRuntimeSwitch() const override;
 
     BackendCapabilities GetCapabilities() const override {
         BackendCapabilities c = {};
@@ -127,6 +128,7 @@ public:
     IMapFadePass* GetMapFadePass() override;
     ITextRenderer* GetTextRenderer() override;
     IUIRenderer* GetUIRenderer() override;
+    ICursorLayer* GetCursorLayer() override;
 
     // Sprite-atlas accessor — kept for RendererManager's sprite-handle registry.
     GLSpriteAtlas* GetSpriteAtlas() const { return m_sprite_atlas; }
@@ -170,6 +172,12 @@ private:
     void upload_palette_texture();
     bool init_tile_atlas();
     bool init_fade_table_texture();
+
+    /** Drain a pending deferred atlas rebuild (game thread).  Re-packs every
+     *  active sprite sheet registered with SpriteSheetManager into m_sprite_atlas;
+     *  no-op when no rebuild is pending or the atlas is absent.  Called from
+     *  BeginFrame()/EndFrame() with the render thread idle. */
+    void drain_deferred_atlas_rebuild();
 
 private:
 

@@ -147,10 +147,6 @@
 #include <psp2/kernel/clib.h>
 #endif
 
-#ifdef FUNCTESTING
-  #include "ftests/ftest.h"
-#endif
-
 #include "platform/kfx_breadcrumb.h"
 #include "post_inc.h"
 
@@ -896,12 +892,6 @@ short setup_game(void)
   // Kick off sound bank I/O on a background thread so it overlaps with
   // the splash screens.  InitAudio() will join it before first use.
   SoundBanks_StartAsyncLoad();
-
-  #ifdef FUNCTESTING
-    start_params.startup_flags &= ~SFlg_Legal;
-    start_params.startup_flags &= ~SFlg_FX;
-    features_enabled |= Ft_SkipHeartZoom;
-  #endif
 
   // Process CmdLine overrides
   process_cmdline_overrides();
@@ -3263,18 +3253,6 @@ void gameplay_loop_logic()
     if (frametime_enabled())
         framerate_measurement_capture(Framerate_Logic);
 
-#ifdef FUNCTESTING
-    if(flag_is_set(start_params.functest_flags, FTF_Enabled))
-    {
-        FTestFrameworkState ftstate = ftest_update(NULL);
-        if(ftstate == FTSt_InvalidState || ftstate == FTSt_TestsCompletedSuccessfully)
-        {
-            quit_game = true;
-            exit_keeper = true;
-            return;
-        }
-    }
-#endif // FUNCTESTING
     do_draw = display_should_be_updated_this_turn() || (!LbIsActive());
     poll_inputs();
     input_eastegg();
@@ -3598,30 +3576,6 @@ static TbBool wait_at_frontend(void)
     }
     // Init load/save catalogue
     initialise_load_game_slots();
-
-    #ifdef FUNCTESTING
-    if(flag_is_set(start_params.functest_flags, FTF_Enabled)) //override for functional tests
-    {
-        FTestFrameworkState ft_prev_state = FTSt_InvalidState;
-        FTestFrameworkState ft_current_state = ftest_update(&ft_prev_state);
-
-        TbBool user_aborted_tests = ft_prev_state == FTSt_TestIsProcessingActions && ft_current_state == FTSt_TestIsProcessingActions;
-        if(user_aborted_tests)
-        {
-            FTEST_FAIL_TEST("User aborted tests");
-        }
-
-        if(ft_current_state == FTSt_InvalidState || ft_current_state == FTSt_TestsCompletedSuccessfully || user_aborted_tests)
-        {
-            quit_game = true;
-            exit_keeper = true;
-            return true;
-        }
-        faststartup_network_game(&loop);
-        coroutine_process(&loop);
-        return true;
-    }
-    #endif
 
     // Prepare to enter PacketLoad game
     if ((game.packet_load_enable) && (!game.packet_load_initialized))
@@ -4162,42 +4116,13 @@ short process_command_line(unsigned short argc, char *argv[])
       {
         set_flag(start_params.startup_flags, SFlg_EA);
       }
-      else if (strcasecmp(parstr, "ftests") == 0)
-      {
-#ifdef FUNCTESTING
-        if(ftest_parse_arg(pr2str)) // handle arg on ftest build
-#else
-        if(strlen(pr2str) > 0 && pr2str[0] != '-') // ignore arg on regular build
-#endif // FUNCTESTING
-        {
-            ++narg;
-        }
-
-#ifdef FUNCTESTING
-        set_flag(start_params.functest_flags, FTF_Enabled);
-#else
-        WARNLOG("Flag '%s' disabled for release builds.", parstr);
-#endif // FUNCTESTING
-      }
       else if (strcasecmp(parstr, "log") == 0)
       {
           narg++;
       }
       else if(strcasecmp(parstr, "exitonfailedtest") == 0)
       {
-#ifdef FUNCTESTING
-        set_flag(start_params.functest_flags, FTF_ExitOnTestFailure);
-#else
        WARNLOG("Flag '%s' disabled for release builds.", parstr);
-#endif // FUNCTESTING
-      }
-      else if(strcasecmp(parstr, "includelongtests") == 0)
-      {
-#ifdef FUNCTESTING
-        set_flag(start_params.functest_flags, FTF_IncludeLongTests);
-#else
-       WARNLOG("Flag '%s' disabled for release builds.", parstr);
-#endif // FUNCTESTING
       }
       else
       {
@@ -4230,10 +4155,6 @@ short process_command_line(unsigned short argc, char *argv[])
   }
   start_params.selected_level_number = level_num;
   my_player_number = default_loc_player;
-
-#ifdef FUNCTESTING
-  ftest_init(); // initialise test framework on ftest build
-#endif
 
   if(bad_param != 0)
   {
@@ -4291,10 +4212,6 @@ int LbBullfrogMain(unsigned short argc, char *argv[])
     RendererSetIcon(1);
     RendererSetDoubleBuffering(true);
     srand(LbTimerClock());
-
-#ifdef FUNCTESTING
-    ftest_srand();
-#endif // FUNCTESTING
 
     if (!retval)
     {
@@ -4358,14 +4275,6 @@ int kfxmain(int argc, char *argv[])
       error_dialog(__func__, 1, "Exception raised!");
       return 1;
   }
-
-#ifdef FUNCTESTING
-  TbBool should_report_failure = flag_is_set(start_params.functest_flags, FTF_TestFailed) && flag_is_set(start_params.functest_flags, FTF_ExitOnTestFailure);
-  if(flag_is_set(start_params.functest_flags, FTF_Enabled) && (flag_is_set(start_params.functest_flags, FTF_Abort) || should_report_failure))
-  {
-      return -1;
-  }
-#endif
 
   return 0;
 }

@@ -151,6 +151,26 @@ uint8_t* GLUIRenderer::QuerySpriteMask(SpriteHandle h, int* out_w, int* out_h, i
     return m_sprite_atlas->GetSpriteMask(h, out_w, out_h, out_stride);
 }
 
+SpriteHandle GLUIRenderer::ResolveSprite(const struct TbSprite* spr)
+{
+    if (!spr || !m_sprite_atlas) return kInvalidSpriteHandle;
+    // Zero-dimension sprites are sentinel/placeholder entries that can never be
+    // packed into the atlas.  Skip silently — not an error.
+    if (spr->SWidth == 0 || spr->SHeight == 0)
+        return kInvalidSpriteHandle;
+    SpriteHandle h = m_sprite_atlas->GetHandle(spr);
+    if (h == kInvalidSpriteHandle) {
+        static int s_miss_count = 0;
+        if (s_miss_count < 20) {
+            SYNCLOG("GLUIRenderer::ResolveSprite: spr %p not in atlas (miss #%d, atlas size=%u, w=%d h=%d data=%p)",
+                    (void*)spr, ++s_miss_count,
+                    (unsigned)m_sprite_atlas->GetRegisteredCount(),
+                    (int)spr->SWidth, (int)spr->SHeight, (void*)spr->Data);
+        }
+    }
+    return h;
+}
+
 bool GLUIRenderer::SetFontAtlas(GLFontAtlas* atlas)
 {
     m_font_atlas = atlas;

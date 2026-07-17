@@ -38,7 +38,6 @@ public:
     void UnlockFramebuffer() override;
 
     const char* GetName() const override { return "Vita (vitaGL palette shader)"; }
-    bool SupportsRuntimeSwitch() const override { return false; }
 
     BackendCapabilities GetCapabilities() const override {
         BackendCapabilities c = {};
@@ -49,16 +48,26 @@ public:
         return c;
     }
 
-    IWorldViewRenderer* GetWorldViewRenderer() override { return nullptr; }
-    IMapFadePass*        GetMapFadePass()        override { return nullptr; }
-    ITextRenderer*       GetTextRenderer()       override { return nullptr; }
-    IUIRenderer*         GetUIRenderer()         override { return nullptr; }
+    // Vita uses the software sub-renderers (the GPU path handles the framebuffer
+    // blit + passes; UI/text/world/fade go through the CPU staging path).  Owned
+    // here, created in Init(), destroyed in Shutdown().
+    IWorldViewRenderer* GetWorldViewRenderer() override { return m_worldViewRenderer; }
+    IMapFadePass*        GetMapFadePass()        override { return m_mapFadePass; }
+    ITextRenderer*       GetTextRenderer()       override { return m_textRenderer; }
+    IUIRenderer*         GetUIRenderer()         override { return m_uiRenderer; }
+    ICursorLayer*        GetCursorLayer()        override { return m_cursorLayer; }
 
 private:
     static const int k_gameW = 640;
     static const int k_gameH = 480;
 
     bool m_initialized = false;
+
+    IWorldViewRenderer* m_worldViewRenderer = nullptr;
+    IMapFadePass*       m_mapFadePass       = nullptr;
+    ITextRenderer*      m_textRenderer      = nullptr;
+    IUIRenderer*        m_uiRenderer        = nullptr;
+    ICursorLayer*       m_cursorLayer       = nullptr;
 
     GLuint m_index_tex   = 0;   /**< 640×480 GL_LUMINANCE: 8-bit palette indices */
     GLuint m_palette_tex = 0;   /**< 256×1  GL_RGBA:       expanded palette colours */

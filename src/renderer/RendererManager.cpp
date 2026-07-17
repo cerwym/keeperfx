@@ -26,14 +26,11 @@
 #ifdef PLATFORM_VITA
 #  include "renderer/RendererVita.h"
 #endif
-#ifdef PLATFORM_3DS
-#  include "renderer/Renderer3DS.h"
-#endif
 
 #include "bflib_basics.h"
 #include "bflib_datetm.h"
 #include "globals.h"
-#include "bflib_video.h"
+
 #include "bflib_vidraw.h"      // LbSpriteDrawResized
 #include "bflib_mouse.h"       // LbMouseOnBeginSwap / LbMouseOnEndSwap
 #include "bflib_sprite.h"      // TbSprite
@@ -76,10 +73,6 @@ extern "C" {
 
 static IRenderer*           s_activeRenderer      = nullptr;
 static RendererType         s_activeType          = RENDERER_INVALID;
-static IWorldViewRenderer*  s_worldViewRenderer   = nullptr;
-static IMapFadePass*        s_mapFadePass         = nullptr;
-static ITextRenderer*       s_textRenderer        = nullptr;
-static IUIRenderer*         s_uiRenderer          = nullptr;
 
 // Renderer-private screen dimensions.
 static TbScreenCoord        s_physicalScreenWidth  = 0;
@@ -94,14 +87,6 @@ static long                 s_graphicsWindowX      = 0;
 static long                 s_graphicsWindowY      = 0;
 static long                 s_graphicsWindowWidth  = 0;
 static long                 s_graphicsWindowHeight = 0;
-static SoftwareUIRenderer*  s_softwareUIRenderer  = nullptr;  // non-null only in software mode
-static ICursorLayer*        s_cursorLayer         = nullptr;
-#ifdef RENDERER_OPENGL_ENABLED
-static GLSpriteAtlas*       s_spriteAtlas         = nullptr;  // non-null only in GL mode
-#endif
-// Software-mode sprite handle registry (GL mode uses s_spriteAtlas->GetHandle instead)
-static std::unordered_map<const TbSprite*, SpriteHandle> s_sprite_to_handle;
-static uint32_t             s_software_next_handle = 0;
 
 /******************************************************************************/
 
@@ -127,49 +112,20 @@ void RendererNotifySpritesReloaded()
     SpriteSheetManager::Get().MarkGUIDirty();
     FontManager::Get().BumpGeneration();
 #ifdef RENDERER_OPENGL_ENABLED
-    SYNCLOG("RendererNotifySpritesReloaded: gui dirty set, font gen=%u (atlas=%p)",
-            FontManager::Get().GetGeneration(), (void*)s_spriteAtlas);
+    SYNCLOG("RendererNotifySpritesReloaded: gui dirty set, font gen=%u",
+            FontManager::Get().GetGeneration());
     UIRenderer_SetSlabTexture();
 #endif
 }
 
-bool RendererHasDeferredAtlasRebuild()
-{
-#ifdef RENDERER_OPENGL_ENABLED
-    return SpriteSheetManager::Get().RebuildPending();
-#else
-    return false;
-#endif
-}
-
-void RendererDrainDeferredAtlasRebuild()
-{
-#ifdef RENDERER_OPENGL_ENABLED
-    auto& mgr = SpriteSheetManager::Get();
-    if (!mgr.RebuildPending() || !s_spriteAtlas)
-        return;
-    mgr.ClearRebuildPending();
-
-    const size_t cap = mgr.RegisteredCount();
-    std::vector<const TbSpriteSheet*> sheets(cap);
-    std::vector<const char*>          names(cap);
-    std::vector<const kfx::FxSprSheet*> fxspr(cap);
-    int count = mgr.CollectActive(sheets.data(), names.data(), (int)cap, fxspr.data());
-    s_spriteAtlas->Rebuild(sheets.data(), names.data(), count, fxspr.data());
-    for (int i = 0; i < count; ++i)
-        SYNCLOG("RendererDrainDeferredAtlasRebuild: packed '%s' (%d sprites)",
-                names[i], (int)num_sprites(sheets[i]));
-#endif
-}
-
-static void register_sheet_software(const struct TbSpriteSheet* sheet); // fwd
-
 /** Notify that map_flag was loaded.  GL: atlas rebuild is scheduled by the
- *  SpriteSheetMgr_Load() at the callsite.  Software: register handle table entries
- *  so SubmitPanelSprite falls back to LbSpriteDrawResized correctly. */
+ *  SpriteSheetMgr_Load() at the callsite (RegisterSpriteSheet is a no-op).
+ *  Software: register handle table entries so SubmitPanelSprite falls back to
+ *  LbSpriteDrawResized correctly. */
 void RendererNotifyLandviewFlagLoaded()
 {
-    register_sheet_software(map_flag);
+    if (RendererGetUIRenderer())
+        RendererGetUIRenderer()->RegisterSpriteSheet(map_flag);
 }
 
 void RendererNotifyGameTablesReady()
@@ -285,68 +241,12 @@ void RendererSchedulePiPRender(struct Camera* cam, int x, int y, int w, int h)
 
 /******************************************************************************/
 
-/** Resolve a TbSprite pointer to its registered SpriteHandle.
- *  In GL mode: queries the sprite atlas.  In software mode: queries the
- *  RendererManager-owned handle table populated by register_sheet_software(). */
-static SpriteHandle resolve_sprite_handle(const TbSprite* spr)
-{
-    if (!spr) return kInvalidSpriteHandle;
-#ifdef RENDERER_OPENGL_ENABLED
-    if (s_spriteAtlas) {
-        // Zero-dimension sprites are sentinel/placeholder entries that can never
-        // be packed into the atlas.  Skip silently — not an error.
-        if (spr->SWidth == 0 || spr->SHeight == 0)
-            return kInvalidSpriteHandle;
-        SpriteHandle h = s_spriteAtlas->GetHandle(spr);
-        if (h == kInvalidSpriteHandle) {
-            static int s_miss_count = 0;
-            if (s_miss_count < 20) {
-                SYNCLOG("resolve_sprite_handle: spr %p not in atlas (miss #%d, atlas size=%u, w=%d h=%d data=%p)",
-                        (void*)spr, ++s_miss_count,
-                        (unsigned)s_spriteAtlas->GetRegisteredCount(),
-                        (int)spr->SWidth, (int)spr->SHeight, (void*)spr->Data);
-            }
-        }
-        return h;
-    }
-#endif
-    auto it = s_sprite_to_handle.find(spr);
-    if (it != s_sprite_to_handle.end())
-        return it->second;
-    // Software: lazily register any not-yet-seen sprite so EVERY valid sprite
-    // resolves.  Only a few sheets are eagerly registered (gui_panel/button/
-    // map_flag); the menu's frontend_sprite and most others are not, so without
-    // this they resolve to kInvalidSpriteHandle and never draw.  Software is
-    // single-threaded here, so mutating the tables is safe.
-    if (s_softwareUIRenderer && spr->Data && spr->SWidth > 0 && spr->SHeight > 0) {
-        SpriteHandle h = s_software_next_handle++;
-        s_sprite_to_handle[spr] = h;
-        s_softwareUIRenderer->RegisterSpriteHandle(h, spr);
-        return h;
-    }
-    return kInvalidSpriteHandle;
-}
-
+// Sprite -> handle resolution lives on the active UI renderer: the software
+// (base) renderer lazily mints and registers handles; the GL renderer looks them
+// up in its atlas.  The manager just forwards to whichever is active.
 SpriteHandle RendererResolveSprite(const TbSprite* spr)
 {
-    return resolve_sprite_handle(spr);
-}
-
-/** Register all valid sprites in a sheet into the software-mode handle table.
- *  Calls SoftwareUIRenderer::RegisterSpriteHandle so the renderer can reverse-
- *  resolve handles back to TbSprite* for CPU blitting. */
-static void register_sheet_software(const struct TbSpriteSheet* sheet)
-{
-    if (!sheet || !s_softwareUIRenderer) return;
-    int32_t n = num_sprites(sheet);
-    for (int32_t i = 0; i < n; ++i) {
-        const struct TbSprite* spr = get_sprite(sheet, i);
-        if (!spr || !spr->Data || spr->SWidth == 0 || spr->SHeight == 0) continue;
-        if (s_sprite_to_handle.count(spr)) continue;
-        SpriteHandle h = s_software_next_handle++;
-        s_sprite_to_handle[spr] = h;
-        s_softwareUIRenderer->RegisterSpriteHandle(h, spr);
-    }
+    return RendererGetUIRenderer() ? RendererGetUIRenderer()->ResolveSprite(spr) : kInvalidSpriteHandle;
 }
 
 /** Allocates a new backend instance for the requested type.
@@ -368,114 +268,9 @@ static IRenderer* create_renderer(RendererType type)
             return new RendererVita();
 #endif
 
-#ifdef PLATFORM_3DS
-        case RENDERER_3DS:
-            return new Renderer3DS();
-#endif
-
         default:
             return nullptr;
     }
-}
-
-/** Allocates the appropriate IWorldViewRenderer for the given renderer type.
- *  OpenGL uses GLWorldViewRenderer (GPU geometry); all others use software. */
-static IWorldViewRenderer* create_world_view_renderer(RendererType type)
-{
-#ifdef RENDERER_OPENGL_ENABLED
-    if (type == RENDERER_OPENGL)
-    {
-        RendererOpenGL* ogl = static_cast<RendererOpenGL*>(s_activeRenderer);
-        if (ogl) return ogl->CreateGLWorldViewRenderer();
-        WARNLOG("RendererManager: GLWorldViewRenderer requested but no RendererOpenGL active");
-    }
-#endif
-    (void)type;
-    return new SoftwareWorldViewRenderer();
-}
-
-/** Allocates the appropriate IMapFadePass for the given renderer type. */
-static IMapFadePass* create_map_fade_pass(RendererType type)
-{
-#ifdef RENDERER_OPENGL_ENABLED
-    if (type == RENDERER_OPENGL)
-    {
-        RendererOpenGL* ogl = static_cast<RendererOpenGL*>(s_activeRenderer);
-        if (ogl) return ogl->CreateGLMapFadePass();
-    }
-#endif
-    (void)type;
-    return new SoftwareMapFadePass();
-}
-
-/** Allocates the appropriate ITextRenderer for the given renderer type. */
-static ITextRenderer* create_text_renderer(RendererType type)
-{
-    ITextRenderer* renderer = nullptr;
-#ifdef RENDERER_OPENGL_ENABLED
-    if (type == RENDERER_OPENGL)
-    {
-        RendererOpenGL* ogl = static_cast<RendererOpenGL*>(s_activeRenderer);
-        if (ogl) renderer = ogl->CreateGLTextRenderer();
-    }
-#endif
-    (void)type;
-    if (!renderer)
-    {
-        WARNLOG("Text renderer creation failed, falling back to software");
-        renderer = new SoftwareTextRenderer();
-    }
-    return renderer;
-}
-
-/** Allocates the appropriate ICursorLayer for the given renderer type. */
-static ICursorLayer* create_cursor_layer(RendererType type)
-{
-#ifdef RENDERER_OPENGL_ENABLED
-    if (type == RENDERER_OPENGL)
-    {
-        RendererOpenGL* ogl = static_cast<RendererOpenGL*>(s_activeRenderer);
-        if (ogl)
-            return ogl->CreateGLCursorLayer();
-    }
-#endif
-    (void)type;
-    return new SWCursorLayer();
-}
-
-/** Allocates the appropriate IUIRenderer for the given renderer type.
- *  OpenGL uses GLUIRenderer (GPU-accelerated UI elements); all others use software no-ops. */
-static IUIRenderer* create_ui_renderer(RendererType type)
-{
-#ifdef RENDERER_OPENGL_ENABLED
-    if (type == RENDERER_OPENGL)
-    {
-        RendererOpenGL* ogl = static_cast<RendererOpenGL*>(s_activeRenderer);
-        if (ogl)
-        {
-            IUIRenderer* glui = ogl->CreateGLUIRenderer();
-            if (glui)
-            {
-                s_spriteAtlas = ogl->GetSpriteAtlas();
-                s_softwareUIRenderer = nullptr;
-                // All sheets registered via SpriteSheetManager — drain on next BeginFrame
-                SpriteSheetManager::Get().ScheduleRebuild();
-                return glui;
-            }
-            // CreateGLUIRenderer returned nullptr — fall through to software
-        }
-        WARNLOG("RendererManager: GLUIRenderer requested but no RendererOpenGL active");
-    }
-#endif
-    (void)type;
-    auto* swui = new SoftwareUIRenderer();
-#ifdef RENDERER_OPENGL_ENABLED
-    s_spriteAtlas = nullptr;
-#endif
-    s_softwareUIRenderer = swui;
-    register_sheet_software(gui_panel_sprites);
-    register_sheet_software(button_sprites);
-    return swui;
 }
 
 /** Resolve RENDERER_AUTO to a concrete type.
@@ -484,8 +279,6 @@ static RendererType resolve_auto()
 {
 #ifdef PLATFORM_VITA
     return RENDERER_VITA;
-#elif defined(PLATFORM_3DS)
-    return RENDERER_3DS;
 #elif defined(RENDERER_OPENGL_ENABLED)
     return RENDERER_OPENGL;
 #else
@@ -557,32 +350,17 @@ int RendererInit(RendererType type)
     s_activeType     = type;
     SYNCLOG("Renderer initialised: %s", backend->GetName());
 
-    s_worldViewRenderer = create_world_view_renderer(type);
-    SYNCLOG("WorldViewRenderer initialised: %s", s_worldViewRenderer->GetName());
-
-    s_mapFadePass = create_map_fade_pass(type);
-    SYNCLOG("MapFadePass initialised: %s", s_mapFadePass->GetName());
-
-    s_textRenderer = create_text_renderer(type);
-    SYNCLOG("TextRenderer initialised: %s", s_textRenderer->GetName());
-
-    s_uiRenderer = create_ui_renderer(type);
-    SYNCLOG("UIRenderer initialised: %s", s_uiRenderer->GetName());
-
-    s_cursorLayer = create_cursor_layer(type);
-    SYNCLOG("CursorLayer initialised: %s", s_cursorLayer->GetName());
-
-#ifdef RENDERER_OPENGL_ENABLED
-    if (type == RENDERER_OPENGL)
+    // The backend created and owns its sub-renderers inside Init().  Register the
+    // GUI sprite sheets on the active UI renderer and schedule the atlas rebuild.
+    // On the GL backend RegisterSpriteSheet() is a no-op (the atlas Rebuild path
+    // owns registration); ScheduleRebuild() is a no-op flag on software.
+    if (IUIRenderer* ui = RendererGetUIRenderer())
     {
-        RendererOpenGL* ogl = static_cast<RendererOpenGL*>(s_activeRenderer);
-        if (!ogl->CompileSubRendererShaders())
-        {
-            RendererShutdown();
-            return false;
-        }
+        ui->RegisterSpriteSheet(gui_panel_sprites);
+        ui->RegisterSpriteSheet(button_sprites);
+        SYNCLOG("UIRenderer initialised: %s", ui->GetName());
     }
-#endif
+    SpriteSheetManager::Get().ScheduleRebuild();
 
     // Wire the LbSpriteDraw intercept for GPU sprite submission.
     // Vita: route through VitaGPUBackend (IBackend path).
@@ -606,58 +384,6 @@ int RendererInit(RendererType type)
     return true;
 }
 
-int RendererSwitch(RendererType type)
-{
-    if (type == RENDERER_AUTO)
-        type = resolve_auto();
-
-    if (type == s_activeType)
-        return true; // already active
-
-    IRenderer* next = create_renderer(type);
-    if (!next)
-    {
-        ERRORLOG("RendererSwitch: unknown or unsupported renderer type %d", (int)type);
-        return false;
-    }
-
-    if (!next->SupportsRuntimeSwitch())
-    {
-        ERRORLOG("RendererSwitch: backend '%s' does not support runtime switching", next->GetName());
-        delete next;
-        return false;
-    }
-
-    // Tear down current backend
-    if (s_activeRenderer)
-    {
-        s_activeRenderer->Shutdown();
-        delete s_activeRenderer;
-        s_activeRenderer = nullptr;
-    }
-
-    // Bring up new backend
-    if (!next->Init())
-    {
-        ERRORLOG("RendererSwitch: backend '%s' failed to initialise — falling back to software", next->GetName());
-        delete next;
-        // Fallback to software renderer
-        next = new RendererSoftware();
-        if (!next->Init())
-        {
-            ERRORLOG("RendererSwitch: software fallback also failed");
-            delete next;
-            return false;
-        }
-        type = RENDERER_SOFTWARE;
-    }
-
-    s_activeRenderer = next;
-    s_activeType     = type;
-    SYNCLOG("Renderer switched to: %s", next->GetName());
-    return true;
-}
-
 void RendererShutdown()
 {
 #if !defined(RENDERER_OPENGL_ENABLED)
@@ -666,51 +392,13 @@ void RendererShutdown()
 #endif
     g_render_pass_active = 0;
 
-    // Stop and join the render thread FIRST, before deleting any of the
-    // sub-renderer objects below.  The render thread can still be mid-frame
-    // (EndFrame_GL() touching m_textRenderer/m_uiRenderer/m_world_renderer,
-    // which are the exact same objects as s_textRenderer/s_uiRenderer/
-    // s_worldViewRenderer) right up until Shutdown() joins it — deleting
-    // those objects first is a use-after-free race that crashes on exit.
+    // The backend owns its sub-renderers and destroys them inside Shutdown()
+    // (after joining its render thread and while its GL context is still current),
+    // so tearing the backend down releases everything in the correct order.
     if (s_activeRenderer)
     {
         s_activeRenderer->Shutdown();
-    }
-
-    if (s_cursorLayer)
-    {
-        delete s_cursorLayer;
-        s_cursorLayer = nullptr;
-    }
-    if (s_uiRenderer)
-    {
-        delete s_uiRenderer;
-        s_uiRenderer = nullptr;
-        s_softwareUIRenderer = nullptr;  // owned by s_uiRenderer above
-    }
-#ifdef RENDERER_OPENGL_ENABLED
-    s_spriteAtlas = nullptr;  // owned by RendererOpenGL
-#endif
-    s_sprite_to_handle.clear();
-    s_software_next_handle = 0;
-    FontManager::Get().BumpGeneration();
-    if (s_textRenderer)
-    {
-        delete s_textRenderer;
-        s_textRenderer = nullptr;
-    }
-    if (s_mapFadePass)
-    {
-        delete s_mapFadePass;
-        s_mapFadePass = nullptr;
-    }
-    if (s_worldViewRenderer)
-    {
-        delete s_worldViewRenderer;
-        s_worldViewRenderer = nullptr;
-    }
-    if (s_activeRenderer)
-    {
+        FontManager::Get().BumpGeneration();
         delete s_activeRenderer;
         s_activeRenderer = nullptr;
     }
@@ -722,38 +410,41 @@ IRenderer* RendererGetActive()
     return s_activeRenderer;
 }
 
+// Sub-renderers are owned by the active backend and vended through its
+// IRenderer::GetXxx() virtuals; the manager just forwards to whichever backend
+// is active.
 IWorldViewRenderer* RendererGetWorldViewRenderer()
 {
-    return s_worldViewRenderer;
+    return s_activeRenderer ? s_activeRenderer->GetWorldViewRenderer() : nullptr;
 }
 
 IMapFadePass* RendererGetMapFadePass()
 {
-    return s_mapFadePass;
+    return s_activeRenderer ? s_activeRenderer->GetMapFadePass() : nullptr;
 }
 
 ITextRenderer* RendererGetTextRenderer()
 {
-    return s_textRenderer;
+    return s_activeRenderer ? s_activeRenderer->GetTextRenderer() : nullptr;
 }
 
 IUIRenderer* RendererGetUIRenderer()
 {
-    return s_uiRenderer;
+    return s_activeRenderer ? s_activeRenderer->GetUIRenderer() : nullptr;
 }
 
 ICursorLayer* RendererGetCursorLayer()
 {
-    return s_cursorLayer;
+    return s_activeRenderer ? s_activeRenderer->GetCursorLayer() : nullptr;
 }
 
 GLSpriteAtlas* RendererGetSpriteAtlas()
 {
 #ifdef RENDERER_OPENGL_ENABLED
-    return s_spriteAtlas;
-#else
-    return nullptr;
+    if (s_activeType == RENDERER_OPENGL)
+        return static_cast<RendererOpenGL*>(s_activeRenderer)->GetSpriteAtlas();
 #endif
+    return nullptr;
 }
 
 const unsigned char* RendererGetActivePalette()
@@ -894,21 +585,7 @@ void RendererPresentFrame(void)
         if (s_warn++ < 5)
             WARNLOG("RendererPresentFrame: LbMouseOnBeginSwap failed (ret=%d), rendering continued", (int)ret);
     }
-#if defined(VITA_PERF_LOG)
-    {
-        static TbClockMSec _ef_accum = 0;
-        static int    _ef_cnt   = 0;
-        TbClockMSec _ef_t0 = LbTimerClock();
-        RendererEndFrame();
-        _ef_accum += LbTimerClock() - _ef_t0;
-        if (++_ef_cnt >= 60) {
-            JUSTLOG("[perf] EndFrame   avg %d ms/frame (60-frame window)", (int)(_ef_accum / 60));
-            _ef_accum = 0; _ef_cnt = 0;
-        }
-    }
-#else
     RendererEndFrame();
-#endif
     LbMouseOnEndSwap();
 }
 
@@ -1098,42 +775,42 @@ void WorldViewRenderer_BeginWorldPass(unsigned char* framebuf, int pitch, int w,
                                       int vp_x, int vp_y)
 {
     s_world_drawn_this_frame = true;
-    if (s_worldViewRenderer)
-        s_worldViewRenderer->BeginWorldPass(framebuf, pitch, w, h, vp_x, vp_y);
+    if (RendererGetWorldViewRenderer())
+        RendererGetWorldViewRenderer()->BeginWorldPass(framebuf, pitch, w, h, vp_x, vp_y);
 }
 
 void WorldViewRenderer_DrawIsometricView(void)
 {
-    if (s_worldViewRenderer)
-        s_worldViewRenderer->DrawIsometricView();
+    if (RendererGetWorldViewRenderer())
+        RendererGetWorldViewRenderer()->DrawIsometricView();
 }
 
 void WorldViewRenderer_DrawFrontView(struct Camera* cam)
 {
-    if (s_worldViewRenderer)
-        s_worldViewRenderer->DrawFrontView(cam);
+    if (RendererGetWorldViewRenderer())
+        RendererGetWorldViewRenderer()->DrawFrontView(cam);
 }
 
 int WorldViewRenderer_SubmitKeeperSprite(int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
                                          const unsigned char* data, int src_w, int src_h,
                                          unsigned int draw_flags, const unsigned char* remap)
 {
-    if (s_worldViewRenderer)
-        return s_worldViewRenderer->SubmitKeeperSprite(dst_x, dst_y, dst_w, dst_h,
+    if (RendererGetWorldViewRenderer())
+        return RendererGetWorldViewRenderer()->SubmitKeeperSprite(dst_x, dst_y, dst_w, dst_h,
                                                        data, src_w, src_h, draw_flags, remap);
     return 0;
 }
 
 static int SubmitWorldShadowCmd(const IRWorldShadowCmd& cmd)
 {
-    if (s_worldViewRenderer)
-        return s_worldViewRenderer->SubmitWorldShadowCmd(cmd);
+    if (RendererGetWorldViewRenderer())
+        return RendererGetWorldViewRenderer()->SubmitWorldShadowCmd(cmd);
     return 0;
 }
 
 int WorldViewRenderer_SubmitWorldShadow(const struct WorldShadowSubmitCmd* cmd)
 {
-    if (!cmd || !s_worldViewRenderer)
+    if (!cmd || !RendererGetWorldViewRenderer())
         return 0;
 
     IRWorldShadowCmd ir_cmd;
@@ -1161,22 +838,14 @@ int WorldViewRenderer_SubmitWorldShadow(const struct WorldShadowSubmitCmd* cmd)
 
 void WorldViewRenderer_ClearKeeperSpriteAtlas(void)
 {
-    if (s_worldViewRenderer)
-        s_worldViewRenderer->ClearKeeperSpriteAtlas();
+    if (RendererGetWorldViewRenderer())
+        RendererGetWorldViewRenderer()->ClearKeeperSpriteAtlas();
 }
 
 void WorldViewRenderer_PreloadKeeperSpriteAtlas(void)
 {
-    if (s_worldViewRenderer)
-        s_worldViewRenderer->PreloadKeeperSpriteAtlas();
-}
-
-void RendererFlushPendingSpriteAtlas(void)
-{
-#ifdef RENDERER_OPENGL_ENABLED
-    if (s_spriteAtlas)
-        s_spriteAtlas->FlushPendingGL();
-#endif
+    if (RendererGetWorldViewRenderer())
+        RendererGetWorldViewRenderer()->PreloadKeeperSpriteAtlas();
 }
 
 uint32_t RendererGetTextFontGeneration(void)
@@ -1213,61 +882,61 @@ int WorldViewRenderer_GetCurrentSpriteWantsOutline(void)
 
 void CursorLayer_Draw(void)
 {
-    if (s_cursorLayer)
-        s_cursorLayer->Draw();
+    if (RendererGetCursorLayer())
+        RendererGetCursorLayer()->Draw();
 }
 
 void CursorLayer_Clear(void)
 {
-    if (s_cursorLayer)
-        s_cursorLayer->Clear();
+    if (RendererGetCursorLayer())
+        RendererGetCursorLayer()->Clear();
 }
 
 void CursorLayer_FlipBuffers(void)
 {
-    if (s_cursorLayer)
-        s_cursorLayer->FlipBuffers();
+    if (RendererGetCursorLayer())
+        RendererGetCursorLayer()->FlipBuffers();
 }
 
 void CursorLayer_SubmitPointerSprite(const struct TbSprite* spr, int32_t x, int32_t y, int units_per_px)
 {
-    if (s_cursorLayer)
-        s_cursorLayer->SubmitPointerSprite(spr, x, y, units_per_px);
+    if (RendererGetCursorLayer())
+        RendererGetCursorLayer()->SubmitPointerSprite(spr, x, y, units_per_px);
 }
 
 void CursorLayer_SubmitKeeperHandSprite(short x, short y, unsigned short kspr_base,
                                         short kspr_angle, unsigned char sprgroup, int32_t scale,
                                         TbDrawFlagsMask draw_flags)
 {
-    if (s_cursorLayer)
-        s_cursorLayer->SubmitKeeperHandSprite(x, y, kspr_base, kspr_angle, sprgroup, scale, draw_flags);
+    if (RendererGetCursorLayer())
+        RendererGetCursorLayer()->SubmitKeeperHandSprite(x, y, kspr_base, kspr_angle, sprgroup, scale, draw_flags);
 }
 /******************************************************************************/
 
 void MapFadePass_PrepareBuffers(unsigned char* fade_src, unsigned char* fade_dest, int scanline, int height)
 {
-    if (s_mapFadePass)
-        s_mapFadePass->PrepareBuffers(fade_src, fade_dest, scanline, height);
+    if (RendererGetMapFadePass())
+        RendererGetMapFadePass()->PrepareBuffers(fade_src, fade_dest, scanline, height);
 }
 
 int32_t MapFadePass_StepFadeIn(int32_t step)
 {
-    if (s_mapFadePass)
-        return s_mapFadePass->StepFadeIn(step);
+    if (RendererGetMapFadePass())
+        return RendererGetMapFadePass()->StepFadeIn(step);
     return step; // no-op: don't advance if not initialised
 }
 
 int32_t MapFadePass_StepFadeOut(int32_t step)
 {
-    if (s_mapFadePass)
-        return s_mapFadePass->StepFadeOut(step);
+    if (RendererGetMapFadePass())
+        return RendererGetMapFadePass()->StepFadeOut(step);
     return step;
 }
 
 TbBool MapFadePass_SupportsNativeResolution(void)
 {
-    if (s_mapFadePass)
-        return s_mapFadePass->SupportsNativeResolution() ? 1 : 0;
+    if (RendererGetMapFadePass())
+        return RendererGetMapFadePass()->SupportsNativeResolution() ? 1 : 0;
     return 0;
 }
 

@@ -145,9 +145,6 @@ int LbNetLog(const char *format, ...) KFX_PRINTF_FORMAT(1, 2) KFX_NONNULL(1);
 int LbJustLog(const char *format, ...) KFX_PRINTF_FORMAT(1, 2) KFX_NONNULL(1);
 int LbNaviLog(const char *format, ...) KFX_PRINTF_FORMAT(1, 2) KFX_NONNULL(1);
 
-#ifdef FUNCTESTING
-int LbFTestLog(const char *format, ...) KFX_PRINTF_FORMAT(1, 2) KFX_NONNULL(1);
-#endif
 int LbScriptLog(unsigned long line,const char *format, ...) KFX_PRINTF_FORMAT(2, 3) KFX_NONNULL(2);
 int LbConfigLog(unsigned long line,const char *format, ...) KFX_PRINTF_FORMAT(2, 3) KFX_NONNULL(2);
 

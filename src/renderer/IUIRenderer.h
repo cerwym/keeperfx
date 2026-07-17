@@ -74,6 +74,20 @@ public:
      *  Called from RendererManager whenever sprite sheets are loaded. */
     void RegisterSpriteHandle(SpriteHandle h, const struct TbSprite* spr);
 
+    /** Resolve a raw TbSprite* to its SpriteHandle — the single entry point the
+     *  RendererManager C bridge uses before crossing into the handle-based API.
+     *
+     *  Base (CPU) impl: lazily assigns and registers a handle for any not-yet-seen
+     *  sprite, so every valid sprite resolves.  UI submission is single-threaded,
+     *  so mutating the tables here is safe.
+     */
+    virtual SpriteHandle ResolveSprite(const struct TbSprite* spr);
+
+    /** Eagerly register every packable sprite in a sheet.
+     *  Base (CPU) impl assigns handles now so later ResolveSprite() calls hit
+     *  without a first-use miss */
+    virtual void RegisterSpriteSheet(const struct TbSpriteSheet* sheet);
+
     // -------------------------------------------------------------------------
     // Submission API  (default = CPU; GPU backends override selectively)
     // -------------------------------------------------------------------------
@@ -394,6 +408,14 @@ public:
 protected:
     /** Sprite handle → raw TbSprite* map, used by CPU default implementations. */
     std::unordered_map<SpriteHandle, const struct TbSprite*> m_handle_to_sprite;
+
+    /** Reverse index (raw TbSprite* → handle) backing the base ResolveSprite().
+     *  Populated by ResolveSprite()/RegisterSpriteHandle(); unused by GPU backends,
+     *  which resolve through their atlas instead. */
+    std::unordered_map<const struct TbSprite*, SpriteHandle> m_sprite_to_handle;
+
+    /** Next handle to mint in the base (CPU) ResolveSprite(). */
+    uint32_t m_next_handle = 0;
 
     /** IR write target for this frame.  When non-null (software IR executor),
      *  the CPU Submit* paths append a command instead of drawing immediately;

@@ -41,7 +41,6 @@ typedef struct InputInterface {
 extern InputInterface* g_input;
 
 void input_sdl_initialize(void);
-void input_3ds_initialize(void);
 void input_vita_initialize(void);
 void input_switch_initialize(void);
 

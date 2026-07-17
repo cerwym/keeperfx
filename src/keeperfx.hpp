@@ -49,10 +49,6 @@
 #include "net_game.h"
 #include "sounds.h"
 
-#ifdef FUNCTESTING
-#include "ftests/ftest.h"
-#endif
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -97,17 +93,6 @@ enum DebugFlags {
     DFlg_Wireframe          =  0x20,
 };
 
-#ifdef FUNCTESTING
-enum FunctestFlags {
-    FTF_Enabled             = 0x01, // Functional Tests Enabled
-    FTF_TestFailed          = 0x02, // Test failed, causes exit code -1 for cmd line automation
-    FTF_Abort               = 0x04, // Something went wrong, aborting
-    FTF_LevelLoaded         = 0x08, // For tracking if map is ready
-    FTF_ExitOnTestFailure   = 0x10, // If users want to exit on any test failure
-    FTF_IncludeLongTests    = 0x20, // If users want to run the long running test list
-};
-#endif
-
 #pragma pack(1)
 
 struct TbLoadFiles;
@@ -144,11 +129,6 @@ struct StartupParameters {
     char config_file[CMDLN_MAXLEN+1];
     GameTurn pause_at_gameturn;
     unsigned char startup_flags;
-#ifdef FUNCTESTING
-    unsigned char functest_flags;
-    char functest_name[FTEST_MAX_NAME_LENGTH];
-    unsigned int functest_seed;
-#endif
 };
 
 // Global variables migration between DLL and the program

@@ -29,6 +29,7 @@ private:
     class IMapFadePass* m_mapFadePass = nullptr;
     class ITextRenderer* m_textRenderer = nullptr;
     class IUIRenderer* m_uiRenderer = nullptr;
+    class ICursorLayer* m_cursorLayer = nullptr;
     int m_screenW = 0;
     int m_screenH = 0;
     bool m_lens_capture_active = false;
@@ -84,7 +85,6 @@ public:
     bool     ScheduleScreenshot(const char* path, int fmt) override;
 
     const char* GetName() const override;
-    bool     SupportsRuntimeSwitch() const override;
 
     BackendCapabilities GetCapabilities() const override {
         BackendCapabilities c = {};
@@ -99,6 +99,7 @@ public:
     IMapFadePass* GetMapFadePass() override;
     ITextRenderer* GetTextRenderer() override;
     IUIRenderer* GetUIRenderer() override;
+    ICursorLayer* GetCursorLayer() override;
 };
 
 /******************************************************************************/

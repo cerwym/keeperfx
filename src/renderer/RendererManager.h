@@ -36,7 +36,6 @@ typedef int RendererType;
 #  define RENDERER_SOFTWARE 1
 #  define RENDERER_OPENGL   2
 #  define RENDERER_VITA     3
-#  define RENDERER_3DS      4
 #endif
 
 #ifdef __cplusplus
@@ -51,9 +50,6 @@ extern "C" {
 
 /** Initialise the renderer subsystem with the requested backend type. */
 int  RendererInit(RendererType type);
-
-/** Switch to a different renderer backend at runtime. */
-int  RendererSwitch(RendererType type);
 
 /** Shut down the active renderer backend and release all resources. */
 void RendererShutdown(void);
@@ -314,28 +310,6 @@ int WorldViewRenderer_SubmitKeeperSprite(int32_t dst_x, int32_t dst_y, int32_t d
  *  from the previous level are not reused. */
 void WorldViewRenderer_ClearKeeperSpriteAtlas(void);
 void WorldViewRenderer_PreloadKeeperSpriteAtlas(void);
-
-/** Flush any pending GL work on the global sprite atlas (GLSpriteAtlas).
- *  Must be called from the render thread (the thread that owns the GL context).
- *  Handles deferred glGenTextures/glTexImage2D (after RendererNotifySpritesReloaded)
- *  and deferred glDeleteTextures (after GLSpriteAtlas::Free()). */
-void RendererFlushPendingSpriteAtlas(void);
-
-/** Returns true when a deferred sprite-atlas rebuild is pending.
- *  Used by RendererOpenGL::BeginFrame() to decide whether to stall the render
- *  thread (WaitForCompletion) before draining — ensures the old-generation atlas
- *  is no longer in use before Rebuild() increments the generation. */
-bool RendererHasDeferredAtlasRebuild(void);
-
-/** Execute a deferred sprite-atlas rebuild, if one is pending.
- *  Preferred call-site: RendererOpenGL::BeginFrame(), after WaitForCompletion(),
- *  before any sprite IR commands are submitted for the new frame.  This is the
- *  only window where the render thread is idle AND no sprite handles for the
- *  current frame have been issued yet, so the generation bump is invisible to
- *  both the retiring and the incoming frame.
- *  A secondary call in EndFrame() acts as a fallback for mid-frame notifications
- *  (rare; still produces a one-frame sprite drop in that edge case). */
-void RendererDrainDeferredAtlasRebuild(void);
 
 /** Set the game-entity context for the next keeper-sprite draw.
  *  Called by draw_jonty_mapwho() before dispatching each sprite so that

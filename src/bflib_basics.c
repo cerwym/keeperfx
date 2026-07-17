@@ -263,20 +263,6 @@ int LbNaviLog(const char *format, ...)
     return result;
 }
 
-#ifdef FUNCTESTING
-int LbFTestLog(const char *format, ...)
-{
-    if (!error_log_initialised)
-        return -1;
-    LbLogSetPrefix(&error_log, "FTest: ");
-    va_list val;
-    va_start(val, format);
-    int result=LbLog(&error_log, format, val);
-    va_end(val);
-    return result;
-}
-#endif
-
 /*
  * Logs script-related message.
  */
@@ -356,7 +342,7 @@ int LbErrorLogClose(void)
 TbFileHandle file = NULL;
 
 void write_log_to_array_for_live_viewing(const char* fmt_str, va_list args, const char* add_log_prefix) {
-#if defined(PLATFORM_VITA) || defined(PLATFORM_3DS) || defined(PLATFORM_SWITCH)
+#if defined(PLATFORM_VITA) || defined(PLATFORM_SWITCH)
   (void)fmt_str;
   (void)args;
   (void)add_log_prefix;

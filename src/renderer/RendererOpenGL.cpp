@@ -35,6 +35,7 @@
 
 #include "bflib_video.h"    // lbDisplay, RendererGetScreenWidth()/Height
 #include "bflib_sprite.h"   // TbSpriteSheet, get_sprite
+#include "kfx/assets/SpriteSheetManager.h" // deferred atlas rebuild drain
 #include "platform.h"       // platform_create_gl_context / swap / destroy
 #include "engine_textures.h" // update_animating_texture_maps()
 #include "engine_render.h"   // draw_view()
@@ -532,6 +533,29 @@ bool RendererOpenGL::Init()
     }
 #endif // DEBUG
 
+    // Create and own the sub-renderers now that all GPU resources (tile/sprite/font
+    // atlases, palette + fade textures) exist.  No software fallback: if a GL
+    // sub-renderer fails to initialise, this whole backend fails and the manager
+    // retries with RendererSoftware (see main.cpp).
+    CreateGLWorldViewRenderer();
+    CreateGLMapFadePass();
+    if (!CreateGLTextRenderer())
+    {
+        ERRORLOG("RendererOpenGL::Init: GLTextRenderer initialisation failed");
+        return false;
+    }
+    if (!CreateGLUIRenderer())
+    {
+        ERRORLOG("RendererOpenGL::Init: GLUIRenderer initialisation failed");
+        return false;
+    }
+    CreateGLCursorLayer();
+    if (!CompileSubRendererShaders())
+    {
+        ERRORLOG("RendererOpenGL::Init: sub-renderer shader compilation failed");
+        return false;
+    }
+
     return true;
 }
 
@@ -545,6 +569,17 @@ void RendererOpenGL::Shutdown()
         m_render_thread.Stop();
         platform_gl_acquire_context();
     }
+
+    // Destroy the owned sub-renderers while the GL context is still current and
+    // before the atlases they reference are freed.  Cursor first — it holds
+    // non-owning pointers to the world/UI renderers and the sprite atlas.  Their
+    // destructors call Shutdown(), so their GL resources are released here (the
+    // old manager-side teardown deleted them after the context was gone, leaking).
+    delete m_cursor;          m_cursor          = nullptr;
+    delete m_gl_ui_renderer;  m_gl_ui_renderer  = nullptr;
+    delete m_textRenderer;    m_textRenderer    = nullptr;
+    delete m_world_renderer;  m_world_renderer  = nullptr;
+    delete m_gl_mapfade;      m_gl_mapfade      = nullptr;
 
     delete m_tile_atlas;
     m_tile_atlas = nullptr;
@@ -611,15 +646,33 @@ void RendererOpenGL::ClearScreen(uint8_t colour_index)
     m_clearColourIndex = colour_index;
 }
 
+void RendererOpenGL::drain_deferred_atlas_rebuild()
+{
+    auto& mgr = SpriteSheetManager::Get();
+    if (!mgr.RebuildPending() || !m_sprite_atlas)
+        return;
+    mgr.ClearRebuildPending();
+
+    const size_t cap = mgr.RegisteredCount();
+    std::vector<const TbSpriteSheet*>   sheets(cap);
+    std::vector<const char*>            names(cap);
+    std::vector<const kfx::FxSprSheet*> fxspr(cap);
+    int count = mgr.CollectActive(sheets.data(), names.data(), (int)cap, fxspr.data());
+    m_sprite_atlas->Rebuild(sheets.data(), names.data(), count, fxspr.data());
+    for (int i = 0; i < count; ++i)
+        SYNCLOG("drain_deferred_atlas_rebuild: packed '%s' (%d sprites)",
+                names[i], (int)num_sprites(sheets[i]));
+}
+
 bool RendererOpenGL::BeginFrame()
 {
     // Idempotent: multiple RendererLockScreen calls per frame must not clear the UI queue again.
     if (m_frame_begun) return true;
 
-    if (RendererHasDeferredAtlasRebuild())
+    if (SpriteSheetManager::Get().RebuildPending())
     {
         m_render_thread.WaitForCompletion();
-        RendererDrainDeferredAtlasRebuild();
+        drain_deferred_atlas_rebuild();
     }
 
     m_frame_begun = true;
@@ -685,7 +738,7 @@ void RendererOpenGL::EndFrame()
 {
     m_render_thread.WaitForCompletion();
 
-    RendererDrainDeferredAtlasRebuild();
+    drain_deferred_atlas_rebuild();
 
     // Lazily start the render thread on the first EndFrame() call.
     // All sub-renderer GL initialisation (GLWorldViewRenderer, GLTextRenderer,
@@ -873,7 +926,8 @@ void RendererOpenGL::EndFrame_GL()
 
     // Flush deferred sprite-atlas GL work (glGenTextures/glTexImage2D/glDeleteTextures
     // deferred from RendererNotifySpritesReloaded, which runs on the game thread).
-    RendererFlushPendingSpriteAtlas();
+    if (m_sprite_atlas)
+        m_sprite_atlas->FlushPendingGL();
     SYNCDBG(0, "EndFrame_GL step 1: sprite atlas flush done");
 
     // Upload animated tile strips if BeginFrame() detected a game-tick animation
@@ -2283,29 +2337,29 @@ const char* RendererOpenGL::GetName() const
     return "OpenGL";
 }
 
-bool RendererOpenGL::SupportsRuntimeSwitch() const
-{
-    return true;
-}
-
 IWorldViewRenderer* RendererOpenGL::GetWorldViewRenderer()
 {
-    return RendererGetWorldViewRenderer();
+    return m_world_renderer;
 }
 
 IMapFadePass* RendererOpenGL::GetMapFadePass()
 {
-    return RendererGetMapFadePass();
+    return m_gl_mapfade;
 }
 
 ITextRenderer* RendererOpenGL::GetTextRenderer()
 {
-    return RendererGetTextRenderer();
+    return m_textRenderer;
 }
 
 IUIRenderer* RendererOpenGL::GetUIRenderer()
 {
-    return RendererGetUIRenderer();
+    return m_gl_ui_renderer;
+}
+
+ICursorLayer* RendererOpenGL::GetCursorLayer()
+{
+    return m_cursor;
 }
 
 /******************************************************************************/
@@ -2431,6 +2485,7 @@ ICursorLayer* RendererOpenGL::CreateGLCursorLayer()
     glcur->SetWorldViewRenderer(m_world_renderer);
     glcur->SetSpriteAtlas(m_sprite_atlas);
     glcur->SetGLUIRenderer(m_gl_ui_renderer);
+    m_cursor = glcur;
     return glcur;
 }
 
