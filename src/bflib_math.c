@@ -750,13 +750,19 @@ long LbMathOperation(unsigned char opkind, long first_operand, long second_opera
   }
 }
 
+/** 32-bit rotate right. Replaces the non-standard _lrotr intrinsic. */
+static inline uint32_t rotr32(uint32_t value, unsigned bits)
+{
+  return (value >> bits) | (value << (32 - bits));
+}
+
 unsigned long LbRandomSeries(unsigned long range, uint32_t *seed, const char *func_name, unsigned long place)
 {
   if (range == 0)
     return 0;
-  unsigned long i = 9377 * (*seed) + 9439;
-  i = (*seed) % range;
-  return i;
+  uint32_t next = 9377u * (*seed) + 9439u;
+  *seed = rotr32(next, 13);
+  return (*seed) % range;
 }
 
 TbBool LbNumberSignsSame(long num_a, long num_b)
