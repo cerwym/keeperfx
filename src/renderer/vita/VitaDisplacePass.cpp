@@ -73,18 +73,8 @@ static const char* k_displace_frag_radial =
 
 // ---------------------------------------------------------------------------
 
-void VitaDisplacePass::Configure(int algo, int magnitude, int period)
+bool VitaDisplacePass::BuildProgram()
 {
-    m_algo       = algo;
-    m_magnitude  = magnitude;
-    m_period     = period;
-    m_configured = true;
-}
-
-bool VitaDisplacePass::Init()
-{
-    if (!m_configured) return false;
-
     const char* frag = nullptr;
     switch (m_algo) {
         case 0: frag = k_displace_frag_linear;     break;  // DisplaceAlgo_Linear
@@ -94,6 +84,8 @@ bool VitaDisplacePass::Init()
             ERRORLOG("VitaDisplacePass: unsupported algorithm %d", m_algo);
             return false;
     }
+
+    if (m_program) { glDeleteProgram(m_program); m_program = 0; }
 
     m_program = vita_build_pass_program(frag);
     if (!m_program) return false;
@@ -107,9 +99,40 @@ bool VitaDisplacePass::Init()
     if (m_loc_per >= 0) glUniform1f(m_loc_per, (float)m_period);
     glUseProgram(0);
 
-    SYNCLOG("VitaDisplacePass: initialized (algo=%d mag=%d per=%d)",
+    SYNCLOG("VitaDisplacePass: (re)built (algo=%d mag=%d per=%d)",
             (int)m_algo, m_magnitude, m_period);
     return true;
+}
+
+bool VitaDisplacePass::Init()
+{
+    // Compile the default algorithm variant; Configure() rebuilds if the
+    // caller selects a different one.
+    return BuildProgram();
+}
+
+void VitaDisplacePass::Configure(int algo, int magnitude, int period)
+{
+    bool need_rebuild = (algo != m_algo) || (m_program == 0);
+    m_algo      = algo;
+    m_magnitude = magnitude;
+    m_period    = period;
+
+    if (need_rebuild) {
+        BuildProgram();
+        return;
+    }
+
+    // Same algorithm already compiled — just refresh the uniforms.
+    glUseProgram(m_program);
+    if (m_loc_mag >= 0) glUniform1f(m_loc_mag, (float)m_magnitude);
+    if (m_loc_per >= 0) glUniform1f(m_loc_per, (float)m_period);
+    glUseProgram(0);
+}
+
+void VitaDisplacePass::Configure(const LensGPUPassParams& params)
+{
+    Configure(params.displace_algorithm, (int)params.displace_magnitude, (int)params.displace_period);
 }
 
 void VitaDisplacePass::Apply(unsigned int src_tex, unsigned int dst_fbo,

@@ -21,8 +21,14 @@ public:
     VitaMistPass() = default;
     ~VitaMistPass() override { Free(); }
 
+    /** Compile the shader and allocate an (empty) mist texture.
+     *  Does not require Configure() to have been called first — the texture
+     *  is populated with real data on the first Configure() call. */
+    bool Init()  override;
+
     /** Supply the 256×256 mist amplitude data and per-frame step values.
-     *  Must be called before Init().
+     *  Safe to call any time after a successful Init() (including before
+     *  the first Apply()).
      *  @param data       Pointer to 256×256 bytes of mist texture data.
      *  @param pos_x_step Primary-layer X offset added each frame (byte-wrapping).
      *  @param pos_y_step Primary-layer Y offset added each frame.
@@ -31,8 +37,8 @@ public:
     void Configure(const unsigned char* data,
                    int pos_x_step, int pos_y_step,
                    int sec_x_step, int sec_y_step);
+    void Configure(const LensGPUPassParams& params) override;
 
-    bool Init()  override;
     void Apply(unsigned int src_tex, unsigned int dst_fbo,
                int src_w, int src_h) override;
     void Free()  override;
@@ -59,8 +65,7 @@ private:
     int m_step_pos_x = 2,   m_step_pos_y = 1;
     int m_step_sec_x = 253, m_step_sec_y = 3;
 
-    bool m_configured = false;
-    const unsigned char* m_pending_data = nullptr; // held only during Configure→Init
+    bool m_configured = false; // true once real mist data has been uploaded
 };
 
 #endif // PLATFORM_VITA

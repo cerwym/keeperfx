@@ -25,13 +25,20 @@ public:
     VitaDisplacePass() = default;
     ~VitaDisplacePass() override { Free(); }
 
-    /** Supply algorithm parameters before Init().
+    /** Compile the default (Sinusoidal) shader variant. Does not require
+     *  Configure() first — Configure() rebuilds the shader if it selects a
+     *  different algorithm than the one currently compiled. */
+    bool Init()  override;
+
+    /** Supply algorithm parameters.
+     *  Safe to call any time after a successful Init(); rebuilds the
+     *  compiled shader if the algorithm differs from the current one.
      *  @param algo      DisplacementAlgorithm value (0=Linear, 1=Sinusoidal, 2=Radial).
      *  @param magnitude Displacement magnitude in reference 640×480 pixels.
      *  @param period    Warp period / scale factor (algorithm-specific). */
     void Configure(int algo, int magnitude, int period);
+    void Configure(const LensGPUPassParams& params) override;
 
-    bool Init()  override;
     void Apply(unsigned int src_tex, unsigned int dst_fbo,
                int src_w, int src_h) override;
     void Free()  override;
@@ -39,6 +46,9 @@ public:
     bool IsInitialized() const { return m_program != 0; }
 
 private:
+    /** (Re)compile the shader for m_algo. Returns false on shader error. */
+    bool BuildProgram();
+
     GLuint m_program   = 0;
     GLint  m_loc_scene = -1;
     GLint  m_loc_mag   = -1;
@@ -47,7 +57,6 @@ private:
     int  m_algo      = 1;  // 0=Linear, 1=Sinusoidal, 2=Radial
     int  m_magnitude = 0;
     int  m_period    = 1;
-    bool m_configured = false;
 };
 
 #endif // PLATFORM_VITA

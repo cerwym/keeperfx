@@ -25,6 +25,8 @@
 #include <map>
 #include <string>
 
+struct IRLensCmd;
+
 /*****************************************************************************/
 
 /**
@@ -92,6 +94,20 @@ public:
     /** Read-only access to the registered effect list.
      *  Used by RendererVita to collect GPU passes during EndFrame(). */
     const std::vector<LensEffect*>& GetEffects() const { return m_effects; }
+
+    /** Game thread: collect active GPU lens passes into an IRLensCmd and push
+     *  it to the graph's write-side post-process buffers (or clear the slot
+     *  if no GPU passes are active / the backend doesn't support them).
+     *  Called by RendererOpenGL::EndFrame(), mirroring
+     *  IMapFadePass::FlushToRenderGraph(). */
+    void FlushToRenderGraph(class RenderGraph& graph);
+
+    /** Collect active GPU lens passes into an IRLensCmd without touching a
+     *  RenderGraph. Used by RendererVita::EndFrame(), which has no
+     *  RenderGraph/thread split and consumes the result in the same call —
+     *  same data shape as FlushToRenderGraph() for architectural symmetry,
+     *  without inventing double-buffering for a single-threaded backend. */
+    IRLensCmd CollectGPULensCmd() const;
     
     // Helper: Copy buffer with pitch
     static void CopyBuffer(unsigned char *dst, long dstpitch,

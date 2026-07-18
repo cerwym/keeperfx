@@ -27,6 +27,8 @@
 #include "../../config_lenses.h"
 #include "../../vidmode.h"
 #include "../../lens_api.h"
+#include "renderer/RendererManager.h"
+#include "renderer/IPostProcessPass.h"
 
 #include "../../keeperfx.hpp"
 #include "../../post_inc.h"
@@ -186,22 +188,32 @@ TbBool DisplacementEffect::Setup(long lens_idx)
     FreeLookupTable();
 
     m_current_lens = lens_idx;
-#ifdef PLATFORM_VITA
-    m_gpu_pass.Configure((int)m_algorithm, m_magnitude, m_period);
-    m_gpu_pass.Init();
-#elif defined(RENDERER_OPENGL_ENABLED)
-    if (!m_gl_pass_ready)
+
+    if (m_gpu_pass == nullptr)
     {
-        if (m_gl_pass.Init())
+        if (IRenderer* active_renderer = RendererGetActive())
         {
-            m_gl_pass.SetMagnitude((float)m_magnitude / 1000.0f);
-            m_gl_pass.SetPeriod((float)m_period);
-            m_gl_pass_ready = true;
+            m_gpu_pass = active_renderer->CreateLensPass(LensEffectType::Displacement);
+        }
+    }
+    if (m_gpu_pass != nullptr)
+    {
+        if (m_gpu_pass->Init())
+        {
+            LensGPUPassParams params;
+            params.displace_algorithm = (int)m_algorithm;
+            params.displace_magnitude = (float)m_magnitude;
+            params.displace_period    = (float)m_period;
+            m_gpu_pass->Configure(params);
         }
         else
-            { SYNCDBG(7, "GL displacement pass init failed — CPU fallback"); }
+        {
+            SYNCDBG(7, "GPU displacement pass init failed — CPU fallback");
+            delete m_gpu_pass;
+            m_gpu_pass = nullptr;
+        }
     }
-#endif
+
     SYNCDBG(7, "Displacement effect ready (algo=%d, mag=%d, period=%d)",
            m_algorithm, m_magnitude, m_period);
     return true;
@@ -211,12 +223,12 @@ void DisplacementEffect::Cleanup()
 {
     FreeLookupTable();
     m_current_lens = -1;
-#ifdef PLATFORM_VITA
-    m_gpu_pass.Free();
-#elif defined(RENDERER_OPENGL_ENABLED)
-    m_gl_pass.Free();
-    m_gl_pass_ready = false;
-#endif
+    if (m_gpu_pass != nullptr)
+    {
+        m_gpu_pass->Free();
+        delete m_gpu_pass;
+        m_gpu_pass = nullptr;
+    }
 }
 
 TbBool DisplacementEffect::Draw(LensRenderContext* ctx)

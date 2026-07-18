@@ -57,6 +57,10 @@ public:
     IUIRenderer*         GetUIRenderer()         override { return m_uiRenderer; }
     ICursorLayer*        GetCursorLayer()        override { return m_cursorLayer; }
 
+    /** Create a Vita GPU post-process pass for the given lens effect type.
+     *  Ownership transfers to the caller (LensEffect). */
+    class IPostProcessPass* CreateLensPass(LensEffectType type) override;
+
 private:
     static const int k_gameW = 640;
     static const int k_gameH = 480;

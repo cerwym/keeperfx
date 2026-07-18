@@ -46,6 +46,11 @@ public:
     void Apply(unsigned int src_tex, unsigned int dst_fbo, int w, int h) override;
     const char* RendererName() const override { return "GLDisplacementPass"; }
 
+    void Configure(const LensGPUPassParams& params) override {
+        SetMagnitude(params.displace_magnitude / 1000.0f);
+        SetPeriod(params.displace_period);
+    }
+
     void SetMagnitude(float mag) { m_magnitude = mag; }
     void SetPeriod(float per)    { m_period = per; }
 
@@ -67,6 +72,10 @@ public:
     void Apply(unsigned int src_tex, unsigned int dst_fbo, int w, int h) override;
     const char* RendererName() const override { return "GLMistPass"; }
 
+    void Configure(const LensGPUPassParams& params) override {
+        SetColor(params.mist_color[0], params.mist_color[1], params.mist_color[2], params.mist_color[3]);
+    }
+
     void SetColor(float r, float g, float b, float density) {
         m_color[0] = r; m_color[1] = g; m_color[2] = b; m_color[3] = density;
     }
@@ -87,6 +96,10 @@ public:
     void Apply(unsigned int src_tex, unsigned int dst_fbo, int w, int h) override;
     const char* RendererName() const override { return "GLFlyeyePass"; }
 
+    void Configure(const LensGPUPassParams& params) override {
+        SetHexSize(params.flyeye_hex_size);
+    }
+
     void SetHexSize(float size) { m_hex_size = size; }
 
 private:
@@ -104,6 +117,13 @@ public:
     void Apply(unsigned int src_tex, unsigned int dst_fbo, int w, int h) override;
     void Free() override;
     const char* RendererName() const override { return "GLOverlayPass"; }
+
+    void Configure(const LensGPUPassParams& params) override {
+        if (params.overlay_data != nullptr) {
+            UploadOverlay(params.overlay_data, params.overlay_w, params.overlay_h);
+        }
+        SetOverlayAlpha(params.overlay_alpha);
+    }
 
     void SetOverlayAlpha(float a) { m_alpha = a; }
     bool UploadOverlay(const unsigned char* rgba, int w, int h);

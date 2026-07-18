@@ -29,6 +29,8 @@
 #include "../../globals.h"
 #include "../../vidmode.h"
 #include "../../vidfade.h"
+#include "renderer/RendererManager.h"
+#include "renderer/IPostProcessPass.h"
 
 #include "../../keeperfx.hpp"
 #include "../../post_inc.h"
@@ -242,23 +244,33 @@ TbBool MistEffect::Setup(long lens_idx)
     m_user_data = renderer;
     m_current_lens = lens_idx;
 
-#ifdef PLATFORM_VITA
-    m_gpu_pass.Configure((const unsigned char*)eye_lens_memory,
-                         (unsigned char)cfg->mist_pos_x_step,
-                         (unsigned char)cfg->mist_pos_y_step,
-                         (unsigned char)cfg->mist_sec_x_step,
-                         (unsigned char)cfg->mist_sec_y_step);
-    m_gpu_pass.Init();
-#elif defined(RENDERER_OPENGL_ENABLED)
-    if (!m_gl_pass_ready)
+    if (m_gpu_pass == nullptr)
     {
-        if (m_gl_pass.Init())
-            m_gl_pass_ready = true;
-        else
-            { SYNCDBG(7, "GL mist pass init failed — CPU fallback"); }
+        if (IRenderer* active_renderer = RendererGetActive())
+        {
+            m_gpu_pass = active_renderer->CreateLensPass(LensEffectType::Mist);
+        }
     }
-#endif
-    
+    if (m_gpu_pass != nullptr)
+    {
+        if (m_gpu_pass->Init())
+        {
+            LensGPUPassParams params;
+            params.mist_data       = (const unsigned char*)eye_lens_memory;
+            params.mist_pos_x_step = (unsigned char)cfg->mist_pos_x_step;
+            params.mist_pos_y_step = (unsigned char)cfg->mist_pos_y_step;
+            params.mist_sec_x_step = (unsigned char)cfg->mist_sec_x_step;
+            params.mist_sec_y_step = (unsigned char)cfg->mist_sec_y_step;
+            m_gpu_pass->Configure(params);
+        }
+        else
+        {
+            SYNCDBG(7, "GPU mist pass init failed — CPU fallback");
+            delete m_gpu_pass;
+            m_gpu_pass = nullptr;
+        }
+    }
+
     SYNCDBG(7, "Mist effect ready");
     return true;
 }
@@ -274,12 +286,12 @@ void MistEffect::Cleanup()
             m_user_data = NULL;
         }
         m_current_lens = -1;
-#ifdef PLATFORM_VITA
-        m_gpu_pass.Free();
-#elif defined(RENDERER_OPENGL_ENABLED)
-        m_gl_pass.Free();
-        m_gl_pass_ready = false;
-#endif
+        if (m_gpu_pass != nullptr)
+        {
+            m_gpu_pass->Free();
+            delete m_gpu_pass;
+            m_gpu_pass = nullptr;
+        }
     }
 }
 
