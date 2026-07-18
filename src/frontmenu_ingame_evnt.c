@@ -802,7 +802,7 @@ void draw_frametime()
         snprintf(text, sizeof(text), "%-7s | %-7s | %-10s", "Current", "Min", "Max");
     }
     if (text[0] != 0)
-        LbTextDrawResized(0, (iStartLine)*tx_units_per_px, tx_units_per_px, text, Lb_TEXT_HALIGN_RIGHT);
+        LbTextDrawResized(RendererGetScreenWidth(), (iStartLine)*tx_units_per_px, tx_units_per_px, text, Lb_TEXT_HALIGN_RIGHT);
 
     iStartLine += 1;
     // Frametimes
@@ -831,7 +831,7 @@ void draw_frametime()
             }
         }
         if (text[0] != 0)
-            LbTextDrawResized(0, (iStartLine+i)*tx_units_per_px, tx_units_per_px, text, Lb_TEXT_HALIGN_RIGHT);
+            LbTextDrawResized(RendererGetScreenWidth(), (iStartLine+i)*tx_units_per_px, tx_units_per_px, text, Lb_TEXT_HALIGN_RIGHT);
     }
 
     // Framerates
@@ -858,7 +858,7 @@ void draw_frametime()
             }
         }
         if (text[0] > 0)
-            LbTextDrawResized(0, (iStartLine+i)*tx_units_per_px, tx_units_per_px, text, Lb_TEXT_HALIGN_RIGHT);
+            LbTextDrawResized(RendererGetScreenWidth(), (iStartLine+i)*tx_units_per_px, tx_units_per_px, text, Lb_TEXT_HALIGN_RIGHT);
     }
 
 }
