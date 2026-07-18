@@ -330,7 +330,7 @@ void GLWorldViewRenderer::execute_preload_atlas()
         if (ks.SWidth <= 0 || ks.SHeight <= 0 ||
             ks.SWidth > k_kspr_decode_dim || ks.SHeight > k_kspr_decode_dim) continue;
         const uint8_t* data = *keepsprite[i];
-        if (m_kspr_atlas_map.count(data)) continue;
+        if (m_kspr_atlas_map.count(i)) continue;
 
         memset(s_kspr_decode_buf, 0, sizeof(s_kspr_decode_buf));
         decode_keeper_rle(s_kspr_decode_buf, data, ks.SWidth, ks.SHeight);
@@ -340,7 +340,7 @@ void GLWorldViewRenderer::execute_preload_atlas()
                         ks.SWidth, k_kspr_decode_dim, 1,
                         GL_RED, GL_UNSIGNED_BYTE, s_kspr_decode_buf);
         glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-        m_kspr_atlas_map[data] = {layer, ks.SWidth};
+        m_kspr_atlas_map[i] = {layer, ks.SWidth};
         preloaded++;
     }
 
@@ -352,7 +352,8 @@ void GLWorldViewRenderer::execute_preload_atlas()
         if (ks.SWidth <= 0 || ks.SHeight <= 0 ||
             ks.SWidth > k_kspr_decode_dim || ks.SHeight > k_kspr_decode_dim) continue;
         const uint8_t* data = keepersprite_add[i];
-        if (m_kspr_atlas_map.count(data)) continue;
+        const int32_t sprite_id = KEEPERSPRITE_ADD_OFFSET + i;
+        if (m_kspr_atlas_map.count(sprite_id)) continue;
 
         memset(s_kspr_decode_buf, 0, sizeof(s_kspr_decode_buf));
         decode_keeper_rle(s_kspr_decode_buf, data, ks.SWidth, ks.SHeight);
@@ -362,7 +363,7 @@ void GLWorldViewRenderer::execute_preload_atlas()
                         ks.SWidth, k_kspr_decode_dim, 1,
                         GL_RED, GL_UNSIGNED_BYTE, s_kspr_decode_buf);
         glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-        m_kspr_atlas_map[data] = {layer, ks.SWidth};
+        m_kspr_atlas_map[sprite_id] = {layer, ks.SWidth};
         preloaded++;
     }
 
@@ -1274,7 +1275,8 @@ void GLWorldViewRenderer::DrawCursorKeeperSprites()
         render_keepersprite_gpu(cmd.dst_x, cmd.dst_y, cmd.dst_w, cmd.dst_h,
                                 cmd.data, cmd.src_w, cmd.src_h,
                                 cmd.draw_flags, remap,
-                                cmd.z_ndc, cmd.owner, cmd.wants_outline);
+                                cmd.z_ndc, cmd.owner, cmd.wants_outline,
+                                cmd.sprite_id);
     }
     m_cursor_pass_active = false;
 
@@ -1291,7 +1293,8 @@ void GLWorldViewRenderer::DrawCursorKeeperSprites()
 int GLWorldViewRenderer::SubmitKeeperSprite(
     int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
     const unsigned char* data, int src_w, int src_h,
-    unsigned int draw_flags, const unsigned char* remap)
+    unsigned int draw_flags, const unsigned char* remap,
+    int32_t sprite_id)
 {
 
     if (src_w <= 0 || src_h <= 0 || src_w > k_kspr_decode_dim || src_h > k_kspr_decode_dim) {
@@ -1322,6 +1325,7 @@ int GLWorldViewRenderer::SubmitKeeperSprite(
         cmd.z_ndc         = -1.0f;
         cmd.owner         = (int8_t)WorldViewRenderer_GetCurrentSpriteOwner();
         cmd.wants_outline = (int8_t)WorldViewRenderer_GetCurrentSpriteWantsOutline();
+        cmd.sprite_id     = sprite_id;
         m_cursor_kspr_ir.push_back(cmd);
         return 1;
     }
@@ -1344,6 +1348,7 @@ int GLWorldViewRenderer::SubmitKeeperSprite(
     cmd.z_ndc         = m_current_sprite_z;
     cmd.owner         = (int8_t)WorldViewRenderer_GetCurrentSpriteOwner();
     cmd.wants_outline = (int8_t)WorldViewRenderer_GetCurrentSpriteWantsOutline();
+    cmd.sprite_id     = sprite_id;
     kspr_buf.push_back(cmd);
     return 1;
 }
@@ -1367,11 +1372,13 @@ int GLWorldViewRenderer::SubmitWorldShadowCmd(const IRWorldShadowCmd& cmd)
 
 /******************************************************************************/
 
-int GLWorldViewRenderer::resolve_atlas_layer(const unsigned char* data, int src_w, int src_h)
+int GLWorldViewRenderer::resolve_atlas_layer(int32_t sprite_id, const unsigned char* data, int src_w, int src_h)
 {
     if (!m_kspr_sprite_array || !m_kspr_atlas_shader || !m_kspr_clut_tex)
         return -1;
-    auto it = m_kspr_atlas_map.find(data);
+    if (sprite_id < 0)
+        return -1;  // no stable identity — cannot cache safely
+    auto it = m_kspr_atlas_map.find(sprite_id);
     if (it != m_kspr_atlas_map.end())
     {
         // src_w for this cached entry may differ from current clip height;
@@ -1407,7 +1414,7 @@ int GLWorldViewRenderer::resolve_atlas_layer(const unsigned char* data, int src_
                     src_w, k_kspr_decode_dim, 1,
                     GL_RED, GL_UNSIGNED_BYTE, s_kspr_decode_buf);
     glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-    m_kspr_atlas_map[data] = {atlas_layer, src_w};
+    m_kspr_atlas_map[sprite_id] = {atlas_layer, src_w};
     m_kspr_atlas_misses++;
     return atlas_layer;
 }
@@ -1463,7 +1470,7 @@ void GLWorldViewRenderer::append_keeper_sprite_instance(const IRWorldKeeperSprit
     const unsigned char* remap = cmd.remap_enabled ? cmd.remap_table : nullptr;
     const bool use_remap = remap && (cmd.draw_flags & Lb_TEXT_UNDERLNSHADOW) && !additive;
 
-    const int layer = resolve_atlas_layer(cmd.data, cmd.src_w, cmd.src_h);
+    const int layer = resolve_atlas_layer(cmd.sprite_id, cmd.data, cmd.src_w, cmd.src_h);
     if (layer < 0)
     {
         // Atlas full: flush what we have so painter's order holds, then draw
@@ -1597,7 +1604,8 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
     int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
     const unsigned char* data, int src_w, int src_h,
     unsigned int draw_flags, const unsigned char* remap,
-    float z_ndc, int sprite_owner, int sprite_wants_outline)
+    float z_ndc, int sprite_owner, int sprite_wants_outline,
+    int32_t sprite_id)
 {
     // GL resources must be ready before any sprite is submitted.  If they are
     // not, this is a hard initialisation failure — never fall back to the CPU
@@ -1631,7 +1639,7 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
     const bool use_remap = remap && (draw_flags & Lb_TEXT_UNDERLNSHADOW) && !additive;
     int atlas_layer = -1;
     if (!m_cursor_pass_active)
-        atlas_layer = resolve_atlas_layer(data, src_w, src_h);
+        atlas_layer = resolve_atlas_layer(sprite_id, data, src_w, src_h);
 
     // CLUT row: 0 = identity, remapped sprites get a lazily built row.
     float clut_v = 0.5f / (float)k_clut_rows;  // row 0 centre
@@ -1855,7 +1863,8 @@ void GLWorldViewRenderer::DrawKeeperSpriteGL(const IRWorldKeeperSpriteCmd& cmd)
     const unsigned char* remap = cmd.remap_enabled ? cmd.remap_table : nullptr;
     render_keepersprite_gpu(cmd.dst_x, cmd.dst_y, cmd.dst_w, cmd.dst_h,
                             cmd.data, cmd.src_w, cmd.src_h, cmd.draw_flags, remap,
-                            cmd.z_ndc, (int)cmd.owner, (int)cmd.wants_outline);
+                            cmd.z_ndc, (int)cmd.owner, (int)cmd.wants_outline,
+                            cmd.sprite_id);
 }
 
 /******************************************************************************/

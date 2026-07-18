@@ -178,7 +178,8 @@ extern short td_iso_add[KEEPERSPRITE_ADD_NUM];
  *  Returns 1 if successfully submitted (CPU blit skipped), 0 to fall back. */
 int try_submit_keepersprite_to_render_system(long screen_x, long screen_y, long screen_w, long screen_h,
                                            const unsigned char *sprite_data, int src_w, int src_h,
-                                           unsigned int draw_flags, const unsigned char *remap);
+                                           unsigned int draw_flags, const unsigned char *remap,
+                                           long sprite_id);
 
 /*****************************************************************************/
 float interpolate(float variable_to_interpolate, long previous, long current);

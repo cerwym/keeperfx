@@ -163,7 +163,8 @@ public:
     // IWorldViewRenderer: submit a keeper-sprite through the GPU path.
     int SubmitKeeperSprite(int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
                            const unsigned char* data, int src_w, int src_h,
-                           unsigned int draw_flags, const unsigned char* remap) override;
+                           unsigned int draw_flags, const unsigned char* remap,
+                           int32_t sprite_id) override;
     int SubmitWorldShadowCmd(const IRWorldShadowCmd& cmd) override;
 
     // IWorldViewRenderer: clear per-level atlas cache.
@@ -207,7 +208,8 @@ private:
     int render_keepersprite_gpu(int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
                                 const unsigned char* data, int src_w, int src_h,
                                 unsigned int draw_flags, const unsigned char* remap,
-                                float z_ndc, int sprite_owner, int sprite_wants_outline);
+                                float z_ndc, int sprite_owner, int sprite_wants_outline,
+                                int32_t sprite_id);
 
     // Append one triangle (3 PolyPoint vertices, integer screen pixels) to the staging array.
     // tile_id is the flat block_ptrs[] index from p->block;
@@ -282,8 +284,10 @@ private:
 
     bool  init_keeper_sprite_instancing();
     /** Look up (or decode + upload) the atlas layer for a sprite.
-     *  Returns -1 when the atlas is absent or full. */
-    int   resolve_atlas_layer(const unsigned char* data, int src_w, int src_h);
+     *  Keyed by @p sprite_id (stable across sprite-heap eviction); @p data is
+     *  only read on a cache miss to decode.  Returns -1 when the atlas is
+     *  absent or full, or when sprite_id is unknown (< 0). */
+    int   resolve_atlas_layer(int32_t sprite_id, const unsigned char* data, int src_w, int src_h);
     /** Look up (or lazily build) the CLUT row for a remap table.
      *  Returns the row's V texcoord; identity row 0 when the CLUT is full. */
     float resolve_clut_v(const unsigned char* remap);
@@ -356,7 +360,10 @@ private:
     int    m_kspr_atlas_hits    = 0;  // cache hits this frame
     int    m_kspr_atlas_misses  = 0;  // cache misses (decode+upload) this frame
     struct AtlasEntry { int layer; int src_w; };
-    std::unordered_map<const uint8_t*, AtlasEntry> m_kspr_atlas_map;
+    // Keyed by frame-resolved global sprite index, NOT the data pointer: the
+    // sprite heap can evict and reuse block addresses mid-level, so a pointer
+    // key could silently serve stale pixels for a recycled address.
+    std::unordered_map<int32_t, AtlasEntry> m_kspr_atlas_map;
 
     // CLUT (Colour Lookup Table): 256×k_clut_rows GL_RGBA8 texture.
     // Row 0 = identity (palette[i] for all i).

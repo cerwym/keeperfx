@@ -303,7 +303,8 @@ void WorldViewRenderer_DrawFrontView(struct Camera* cam);
  *  Returns 1 if the GPU handled it (CPU blit should be skipped), 0 to fall back. */
 int WorldViewRenderer_SubmitKeeperSprite(int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
                                          const unsigned char* data, int src_w, int src_h,
-                                         unsigned int draw_flags, const unsigned char* remap);
+                                         unsigned int draw_flags, const unsigned char* remap,
+                                         int32_t sprite_id);
 
 /** Clear the keeper-sprite decode atlas and reset the layer index.
  *  Must be called before each level load so stale data-pointer mappings

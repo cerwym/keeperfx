@@ -7790,7 +7790,7 @@ static void draw_keepersprite(long x, long y, const struct KeeperSprite * kspr, 
         if (EngineSpriteDrawUsingAlpha) gpu_flags |= Lb_SPRITE_ALPHA_ADDITIVE;
         if (try_submit_keepersprite_to_render_system(screen_x, screen_y, screen_w, screen_h,
                                                      *sprite_data_ptr, kspr->SWidth, clipped_height,
-                                                     gpu_flags, lbSpriteReMapPtr)) {
+                                                     gpu_flags, lbSpriteReMapPtr, kspr_idx)) {
             return;
         }
     }
@@ -9427,10 +9427,12 @@ void render_set_sprite_debug(int level)
 
 int try_submit_keepersprite_to_render_system(long screen_x, long screen_y, long screen_w, long screen_h,
                                            const unsigned char *sprite_data, int src_w, int src_h,
-                                           unsigned int draw_flags, const unsigned char *remap)
+                                           unsigned int draw_flags, const unsigned char *remap,
+                                           long sprite_id)
 {
     return WorldViewRenderer_SubmitKeeperSprite(screen_x, screen_y, screen_w, screen_h,
-                                               sprite_data, src_w, src_h, draw_flags, remap);
+                                               sprite_data, src_w, src_h, draw_flags, remap,
+                                               (int32_t)sprite_id);
 }
 
 /******************************************************************************/
