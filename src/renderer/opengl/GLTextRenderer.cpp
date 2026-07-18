@@ -92,7 +92,7 @@ bool GLTextRenderer::Init()
     // called by the bootstrapper in RendererManager::RendererInit().
 
     m_vertex_batch.reserve(32768);
-    SYNCDBG(8("GLTextRenderer: initialized");
+    SYNCDBG(8, "GLTextRenderer: initialized");
     return true;
 }
 
@@ -185,7 +185,7 @@ bool GLTextRenderer::CompileShaders()
     m_loc_palette    = glGetUniformLocation(m_shader_program, "u_palette");
     m_loc_text_color = glGetUniformLocation(m_shader_program, "u_text_color");
 
-    SYNCDBG(8("GLTextRenderer: Uniform locations - viewport=%d atlas=%d palette=%d color=%d",
+    SYNCDBG(8, "GLTextRenderer: Uniform locations - viewport=%d atlas=%d palette=%d color=%d",
             m_loc_viewport, m_loc_font_atlas, m_loc_palette, m_loc_text_color);
 
     if (m_loc_font_atlas >= 0)

@@ -55,6 +55,7 @@
 #include "frontmenu_ingame_map.h"
 #include "creature_graphics.h"
 #include "vidmode.h"
+#include "mouse_cursor.h"
 #include "config.h"
 #include "config_strings.h"
 #include "config_terrain.h"

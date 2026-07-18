@@ -51,6 +51,7 @@
 #include "gui_draw.h"
 #include "kjm_input.h"
 #include "vidmode.h"
+#include "mouse_cursor.h"
 #include "front_simple.h"
 #include "front_input.h"
 #include "front_fmvids.h"

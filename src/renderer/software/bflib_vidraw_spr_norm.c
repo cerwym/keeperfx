@@ -33,7 +33,8 @@
 #include "bflib_sprite.h"
 #include "bflib_mouse.h"
 #include "bflib_render.h"
-#include "vidmode.h"        // pixmap.ghost / alpha_sprite_table (transparency LUTs)
+#include "vidmode.h"
+#include "vidfade.h"        // pixmap.ghost / alpha_sprite_table (transparency LUTs)
 #include "renderer/RendererManager.h"
 #include "post_inc.h"
 

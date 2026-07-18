@@ -28,6 +28,7 @@
 #include "bflib_sprfnt.h"
 #include "bflib_dernc.h"
 #include "bflib_planar.h"
+#include "vidfade.h"        // pixmap ghost tables
 #include "renderer/RendererManager.h"
 #include "custom_sprites.h"
 #include "frontend.h"

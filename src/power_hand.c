@@ -25,6 +25,7 @@
 #include "bflib_math.h"
 #include "bflib_planar.h"
 #include "bflib_vidraw.h"
+#include "vidfade.h"        // pixmap.fade_tables
 #include "bflib_sound.h"
 #include "config_sounds.h"
 #include "custom_sprites.h"

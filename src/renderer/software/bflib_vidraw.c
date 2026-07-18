@@ -31,7 +31,8 @@
 #include "globals.h"
 #include "custom_sprites.h"
 #include "bflib_video.h"
-#include "vidmode.h"        // pixmap.ghost / pixmap.fade_tables (transparency/fade LUTs)
+#include "vidmode.h"
+#include "vidfade.h"        // pixmap.ghost / pixmap.fade_tables (transparency/fade LUTs)
 #include "bflib_sprite.h"
 #include "bflib_mouse.h"
 #include "bflib_render.h"

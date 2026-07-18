@@ -55,6 +55,7 @@
 #include "gui_msgs.h"
 #include "scrcapt.h"
 #include "vidmode.h"
+#include "mouse_cursor.h"
 #include "kfx/memory_system_c.h"
 #include "kjm_input.h"
 #include "packets.h"

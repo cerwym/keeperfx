@@ -28,6 +28,7 @@
 #include "../../custom_sprites.h"
 #include "../../globals.h"
 #include "../../vidmode.h"
+#include "../../vidfade.h"
 
 #include "../../keeperfx.hpp"
 #include "../../post_inc.h"
