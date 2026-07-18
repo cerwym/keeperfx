@@ -137,6 +137,14 @@ private:
     // Per-DBC-font atlas cache
     std::unordered_map<const struct AsianFont*, GLDbcFontAtlas*> m_dbc_atlas_cache;
     GLDbcFontAtlas*  m_active_dbc_atlas; // DBC atlas currently bound (nullptr when DBC off)
+
+    // Font generation the atlas caches were built for.  When this diverges from
+    // RendererGetTextFontGeneration() (fonts reloaded), the caches are evicted.
+    uint32_t         m_cache_generation = 0;
+
+    /** Delete every cached font atlas (Western + DBC) and clear the maps.
+     *  Must run on the render thread with the GL context current. */
+    void evict_font_atlas_caches();
     long             m_current_dbc_colour0; // DBC face colour for current draw
     unsigned int     m_shader_program;   // Text rendering shader
     unsigned int     m_vao;              // Vertex array object
