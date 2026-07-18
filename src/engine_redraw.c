@@ -903,7 +903,6 @@ void redraw_display(void)
     case PVM_IsoWibbleView:
     case PVM_IsoStraightView:
         redraw_isometric_view();
-        GUIBridge_DrawGameViewPiP();
         GUIBridge_LeaveParchmentView();
         parchment_loaded = 0;
         break;

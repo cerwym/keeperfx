@@ -13,7 +13,6 @@
  *     rect (origin + size) and the centre map tile, then passes them in.
  *     This makes ZoomBoxView reusable for:
  *       - Parchment hover box  (ParchmentScene, rect follows mouse)
- *       - Main-game PiP overlay (future IngameScene, fixed corner)
  *       - Battle-tracker box  (future BattleTrackerSubScene, tracks combat tile)
  *
  *     Corner frame sprites are drawn by this view (they are intrinsic to the
@@ -62,19 +61,8 @@ public:
               int                   draw_tiles_y,
               int                   subtile_size);
 
-public:
-    /// Lock the PiP zoom to a specific value, decoupling it from the main camera zoom.
-    /// Pass 0 to re-enable sync with the main camera.
-    void setFixedZoom(long zoom) { m_fixed_zoom = zoom; }
-
-    /// Lock the PiP rotation to a specific angle, decoupling it from the main camera.
-    /// Pass -1 to re-enable sync with the main camera.
-    void setFixedRotation(long angle) { m_fixed_rotation = angle; }
-
 private:
     int  m_mode;              ///< ZoomBoxMode value (ZBM_OVERHEAD / ZBM_ISOMETRIC)
-    long m_fixed_zoom     = 0;  ///< If > 0, PiP zoom locked; ignores main camera.
-    long m_fixed_rotation = -1; ///< If >= 0, PiP rotation locked; ignores main camera.
 
     void drawIsometric(const DrawContext& ctx, const ClientViewState& view,
                        const PlayerInfo* player,

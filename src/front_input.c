@@ -576,16 +576,6 @@ static short get_speed_control_inputs(void)
   {
       decreaseFrameskip();
   }
-  if (is_key_pressed(KC_1, KMod_CONTROL))
-  {
-      GUIBridge_ToggleGameViewPiP1();
-      clear_key_pressed(KC_1);
-  }
-  if (is_key_pressed(KC_2, KMod_CONTROL))
-  {
-      GUIBridge_ToggleGameViewPiP2();
-      clear_key_pressed(KC_2);
-  }
   return false;
 }
 
@@ -1020,9 +1010,7 @@ static TbBool get_level_lost_inputs(void)
                   mmzoom = (player->minimap_zoom) / (3-16/mm_units_per_px);
               else
                   mmzoom = (player->minimap_zoom);
-              inp_done = GUIBridge_HandleGameViewPiPInput();
-              if (!inp_done)
-                inp_done = get_small_map_inputs(player->minimap_pos_x*mm_units_per_px/16, player->minimap_pos_y*mm_units_per_px/16, mmzoom);
+              inp_done = get_small_map_inputs(player->minimap_pos_x*mm_units_per_px/16, player->minimap_pos_y*mm_units_per_px/16, mmzoom);
               if ( !inp_done )
                 get_bookmark_inputs();
               get_dungeon_control_nonaction_inputs();
@@ -1405,8 +1393,6 @@ static TbBool get_dungeon_control_action_inputs(void)
     }
     else
         mmzoom = (player->minimap_zoom);
-    if (GUIBridge_HandleGameViewPiPInput())
-        return 1;
     if (get_small_map_inputs(player->minimap_pos_x * mm_units_per_px / 16, player->minimap_pos_y * mm_units_per_px / 16, mmzoom))
         return 1;
 
