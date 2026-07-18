@@ -254,6 +254,63 @@ private:
     /** Render-thread: draw one keeper sprite from an IR command (GL calls). */
     void DrawKeeperSpriteGL(const IRWorldKeeperSpriteCmd& cmd);
 
+    // ── Instanced keeper-sprite fast path (render thread) ────────────────────
+    // All atlas-resident sprites of a frame collapse into one (or two, with
+    // outlines) glDrawArraysInstanced calls instead of a draw per sprite.
+    // Sprites that cannot live in the atlas (atlas full) force a flush and
+    // fall back to DrawKeeperSpriteGL so painter's order is preserved.
+
+    /** Per-instance record for the main instanced sprite pass. */
+    struct KsprInstance {
+        float    rect[4];   // dst x, y, w, h (screen px)
+        float    uvext[2];  // src_w/decode_dim, src_h/decode_dim
+        float    layer;     // atlas layer
+        float    clut_v;    // CLUT row V coord (row 0 = identity)
+        float    alpha;     // 1.0 / transpar4 / transpar8
+        float    z_ndc;     // pre-computed NDC depth
+        uint32_t flags;     // bit0 = flip_h, bit1 = additive glow
+    };
+    /** Per-instance record for the depth-fail outline pass. */
+    struct KsprOutlineInstance {
+        float rect[4];
+        float uvext[2];
+        float layer;
+        float z_ndc;        // sprite z + outline bias
+        float flip;         // 0/1
+        float color[4];     // owner colour + outline alpha
+    };
+
+    bool  init_keeper_sprite_instancing();
+    /** Look up (or decode + upload) the atlas layer for a sprite.
+     *  Returns -1 when the atlas is absent or full. */
+    int   resolve_atlas_layer(const unsigned char* data, int src_w, int src_h);
+    /** Look up (or lazily build) the CLUT row for a remap table.
+     *  Returns the row's V texcoord; identity row 0 when the CLUT is full. */
+    float resolve_clut_v(const unsigned char* remap);
+    void  append_keeper_sprite_instance(const IRWorldKeeperSpriteCmd& cmd);
+    void  flush_keeper_sprite_instances();
+
+    // ── Instanced shadow fast path (render thread) ───────────────────────────
+    // Silhouette masks are decoded once per (sprite, frame, quarter, flip)
+    // variant into a texture-array cache, then every shadow of the frame —
+    // circle and silhouette alike — draws as one instanced call.
+
+    /** Per-instance record for the instanced shadow pass (sheared quad). */
+    struct ShadowInstance {
+        float c01[4];   // corner0.xy, corner1.xy (screen px)
+        float c23[4];   // corner2.xy, corner3.xy
+        float uv01[4];  // uv0, uv1
+        float uv23[4];  // uv2, uv3
+        float ldc[4];   // layer, darkness, ndc_z, is_circle
+    };
+
+    bool init_shadow_instancing();
+    /** Look up (or decode + upload) the silhouette-cache layer for a shadow.
+     *  Returns -1 when the cache is absent/full or the variant is unsupported. */
+    int  resolve_shadow_silhouette_layer(const IRWorldShadowCmd& sc);
+    void append_shadow_instance(const IRWorldShadowCmd& sc, int screen_w, int screen_h);
+    void flush_shadow_instances();
+
     // Setup world sprite processing for a bucket (sets m_current_sprite_z — GT only)
     void setup_world_sprite_processing(int32_t bucket_num);
 
@@ -386,6 +443,37 @@ private:
     GLint  m_kspr_atlas_glow_loc_sprite      = -1;
     GLint  m_kspr_atlas_glow_loc_z_ndc       = -1;
     GLint  m_kspr_atlas_glow_loc_layer       = -1;
+
+    // Instanced shadow GL objects (see ShadowInstance above).
+    // The silhouette cache is a GL_TEXTURE_2D_ARRAY keyed by the variant
+    // resolve_keepsprite_shadow_variant() reports — decoding runs once per
+    // variant per level instead of once per shadow per frame.
+    static const int k_shadow_sil_layers = 512;
+    GLuint m_shadow_sil_array        = 0;
+    int    m_shadow_sil_used         = 0;
+    int    m_shadow_sil_peak         = 0;
+    std::unordered_map<uint64_t, int> m_shadow_sil_map;  // variant key → layer
+    GLuint m_shadow_inst_shader      = 0;
+    GLuint m_shadow_inst_vao         = 0;
+    GLuint m_shadow_inst_vbo         = 0;
+    GLint  m_shadow_inst_loc_viewport = -1;
+    GLint  m_shadow_inst_loc_colour   = -1;
+    std::vector<ShadowInstance> m_shadow_instances;      // RT: batch scratch
+
+    // Instanced keeper-sprite GL objects (see KsprInstance above).
+    // m_kspr_inst_quad_vbo holds the static unit quad shared by both VAOs;
+    // the instance VBOs are orphaned each flush (GL_STREAM_DRAW).
+    GLuint m_kspr_inst_shader               = 0;
+    GLuint m_kspr_inst_outline_shader       = 0;
+    GLuint m_kspr_inst_quad_vbo             = 0;
+    GLuint m_kspr_inst_vao                  = 0;
+    GLuint m_kspr_inst_vbo                  = 0;
+    GLuint m_kspr_inst_outline_vao          = 0;
+    GLuint m_kspr_inst_outline_vbo          = 0;
+    GLint  m_kspr_inst_loc_viewport         = -1;
+    GLint  m_kspr_inst_outline_loc_viewport = -1;
+    std::vector<KsprInstance>        m_kspr_instances;         // RT: batch scratch
+    std::vector<KsprOutlineInstance> m_kspr_outline_instances; // RT: batch scratch
 
     // Full OS-window dimensions — set by SetFullScreenSize(), used in
     // BeginHandSpriteRendering() and gpu_execute_passes() for full-screen viewport.

@@ -8422,6 +8422,36 @@ static void sprite_to_sbuff_xflip(const TbSpriteData sprdata, unsigned char *out
     }
 }
 
+TbBool resolve_keepsprite_shadow_variant(unsigned short kspr_n, short angle, unsigned char current_frame,
+                                         unsigned char *out_frame, unsigned char *out_quarter, unsigned char *out_flip)
+{
+    // Mirrors the (angle, frame) → (variant, flip) reduction performed by
+    // draw_keepsprite_unscaled_in_buffer() below, without decoding pixels.
+    // The GL renderer uses this to build silhouette-cache keys; any change to
+    // the reduction below must be reflected here or cached shadows will pick
+    // the wrong variant.
+    struct KeeperSprite *kspr_arr = keepersprite_array(kspr_n);
+    if (kspr_arr == NULL || kspr_arr->FramesCount == 0)
+        return false;
+    if (current_frame >= kspr_arr->FramesCount)
+        current_frame = kspr_arr->FramesCount - 1;
+    *out_frame = current_frame;
+    if (kspr_arr->Rotable == 0)
+    {
+        *out_quarter = 0;
+        *out_flip = (((angle & ANGLE_MASK) <= 1151) || ((angle & ANGLE_MASK) >= 1919)) ? 0 : 1;
+        return true;
+    }
+    if (kspr_arr->Rotable == 2)
+    {
+        int selected_mirror = 0;
+        *out_quarter = (unsigned char)kfx_anim_select_dir_group((int)angle, &selected_mirror);
+        *out_flip = (selected_mirror != 0) ? 1 : 0;
+        return true;
+    }
+    return false; // unsupported Rotable mode — caller must use the uncached path
+}
+
 void draw_keepsprite_unscaled_in_buffer(unsigned short kspr_n, short angle, unsigned char current_frame, unsigned char *outbuf)
 {
     struct KeeperSprite *kspr_arr;

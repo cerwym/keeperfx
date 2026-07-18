@@ -250,6 +250,12 @@ void draw_nonspatial_sprites_gpu(void);
 /** Rasterize a keeper sprite frame into a 256×256 byte scratch buffer.
  *  Non-zero bytes indicate shadow silhouette pixels. */
 void draw_keepsprite_unscaled_in_buffer(unsigned short kspr_n, short angle, unsigned char current_frame, unsigned char *outbuf);
+/** Reduce (sprite, angle, frame) to the variant draw_keepsprite_unscaled_in_buffer
+ *  would decode: clamped frame, rotation quarter, and x-flip.  Lets the GL
+ *  renderer cache decoded silhouettes by variant instead of re-decoding per draw.
+ *  Returns false for invalid sprites or unsupported Rotable modes. */
+TbBool resolve_keepsprite_shadow_variant(unsigned short kspr_n, short angle, unsigned char current_frame,
+                                         unsigned char *out_frame, unsigned char *out_quarter, unsigned char *out_flip);
 void setup_bflib_render(void);
 void reset_bflib_render(void);
 void finish_bflib_render(void);
