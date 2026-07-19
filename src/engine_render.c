@@ -307,6 +307,7 @@ static void (*render_sprite_debug_fn) (struct Thing*, long scrpos_x, long scrpos
 static int render_sprite_debug_level = 0;
 void draw_keepsprite_unscaled_in_buffer(unsigned short kspr_n, short angle, unsigned char current_frame, unsigned char *outbuf);
 static void draw_jonty_mapwho(struct BucketKindJontySprite *jspr);
+static long heap_manage_keepersprite(unsigned short kspr_idx);
 
 static TbBool animation_sprite_id_invalid(unsigned short animation_sprite)
 {
@@ -3837,6 +3838,12 @@ static void create_shadows(struct Thing *thing, struct EngineCoord *ecor, struct
 
     // Try GPU IR submission first; falls through to software bucket if not handled.
     {
+        // Load sprite frames on the game thread now: the render thread decodes
+        // this command later and must never lazy-load from the shared jty file
+        // handle concurrently with game-thread loads.
+        if (!heap_manage_keepersprite(keepersprite_index(animation_sprite)))
+            return;
+
         struct WorldShadowSubmitCmd scmd;
         memset(&scmd, 0, sizeof(scmd));
 
@@ -8425,11 +8432,9 @@ static void sprite_to_sbuff_xflip(const TbSpriteData sprdata, unsigned char *out
 TbBool resolve_keepsprite_shadow_variant(unsigned short kspr_n, short angle, unsigned char current_frame,
                                          unsigned char *out_frame, unsigned char *out_quarter, unsigned char *out_flip)
 {
-    // Mirrors the (angle, frame) → (variant, flip) reduction performed by
-    // draw_keepsprite_unscaled_in_buffer() below, without decoding pixels.
-    // The GL renderer uses this to build silhouette-cache keys; any change to
-    // the reduction below must be reflected here or cached shadows will pick
-    // the wrong variant.
+    // Must mirror the (angle, frame) → (variant, flip) reduction in
+    // draw_keepsprite_unscaled_in_buffer() below; silhouette-cache keys
+    // depend on the two staying in sync.
     struct KeeperSprite *kspr_arr = keepersprite_array(kspr_n);
     if (kspr_arr == NULL || kspr_arr->FramesCount == 0)
         return false;
