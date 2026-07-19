@@ -433,6 +433,8 @@ void GLWorldViewRenderer::free_gl_resources()
     if (m_kspr_glow_shader) { glDeleteProgram(m_kspr_glow_shader);          m_kspr_glow_shader = 0; }
     if (m_kspr_outline_shader)       { glDeleteProgram(m_kspr_outline_shader);       m_kspr_outline_shader = 0; }
     if (m_kspr_atlas_outline_shader) { glDeleteProgram(m_kspr_atlas_outline_shader); m_kspr_atlas_outline_shader = 0; }
+    if (m_kspr_edge_shader)          { glDeleteProgram(m_kspr_edge_shader);          m_kspr_edge_shader = 0; }
+    if (m_kspr_atlas_edge_shader)    { glDeleteProgram(m_kspr_atlas_edge_shader);    m_kspr_atlas_edge_shader = 0; }
     if (m_kspr_sprite_tex)  { glDeleteTextures(1, &m_kspr_sprite_tex);      m_kspr_sprite_tex = 0; }
     if (m_kspr_sprite_array){ glDeleteTextures(1, &m_kspr_sprite_array);    m_kspr_sprite_array = 0; }
     if (m_kspr_atlas_shader){ glDeleteProgram(m_kspr_atlas_shader);         m_kspr_atlas_shader = 0; }
@@ -451,6 +453,7 @@ void GLWorldViewRenderer::free_gl_resources()
     if (m_kspr_inst_quad_vbo)       { glDeleteBuffers(1, &m_kspr_inst_quad_vbo);         m_kspr_inst_quad_vbo = 0; }
     if (m_kspr_inst_shader)         { glDeleteProgram(m_kspr_inst_shader);               m_kspr_inst_shader = 0; }
     if (m_kspr_inst_outline_shader) { glDeleteProgram(m_kspr_inst_outline_shader);       m_kspr_inst_outline_shader = 0; }
+    if (m_kspr_inst_edge_shader)    { glDeleteProgram(m_kspr_inst_edge_shader);          m_kspr_inst_edge_shader = 0; }
     m_kspr_instances.clear();
     m_kspr_outline_instances.clear();
 
@@ -984,6 +987,81 @@ bool GLWorldViewRenderer::init_keeper_sprite_shader()
         }
     }
 
+    // ── Edge-detect outline shaders ──────────────────────────────────────────
+    // Same structure as the silhouette outline shaders above, but sample
+    // 4 neighbours to emit only boundary pixels.
+    {
+        GLuint ev = compile_shader_src(GL_VERTEX_SHADER,   KSPR_VERTEX_SHADER,           "kspr_vert.glsl");
+        GLuint ef = compile_shader_src(GL_FRAGMENT_SHADER, KSPR_EDGE_FRAGMENT_SHADER,    "kspr_edge_frag.glsl");
+        if (ev && ef)
+        {
+            m_kspr_edge_shader = glCreateProgram();
+            glAttachShader(m_kspr_edge_shader, ev);
+            glAttachShader(m_kspr_edge_shader, ef);
+            glLinkProgram(m_kspr_edge_shader);
+            glDeleteShader(ev); glDeleteShader(ef);
+            GLint el = 0;
+            glGetProgramiv(m_kspr_edge_shader, GL_LINK_STATUS, &el);
+            if (el)
+            {
+                glUseProgram(m_kspr_edge_shader);
+                m_kspr_edge_loc_viewport = glGetUniformLocation(m_kspr_edge_shader, "u_viewport");
+                m_kspr_edge_loc_sprite   = glGetUniformLocation(m_kspr_edge_shader, "u_sprite");
+                m_kspr_edge_loc_z_ndc    = glGetUniformLocation(m_kspr_edge_shader, "u_z_ndc");
+                m_kspr_edge_loc_color    = glGetUniformLocation(m_kspr_edge_shader, "u_outline_color");
+                glUniform1i(m_kspr_edge_loc_sprite, 0);
+                glUseProgram(0);
+                KFX_GL_LABEL(GL_PROGRAM, m_kspr_edge_shader, "WVR/KSprEdgeProg");
+            }
+            else
+            {
+                char log[512];
+                glGetProgramInfoLog(m_kspr_edge_shader, sizeof(log), nullptr, log);
+                WARNLOG("GLWorldViewRenderer: kspr_edge shader link failed: %s", log);
+                glDeleteProgram(m_kspr_edge_shader);
+                m_kspr_edge_shader = 0;
+            }
+        }
+        else { if (ev) glDeleteShader(ev); if (ef) glDeleteShader(ef); }
+
+        if (m_kspr_atlas_shader)
+        {
+            GLuint eav = compile_shader_src(GL_VERTEX_SHADER,   KSPR_VERTEX_SHADER,                "kspr_vert.glsl");
+            GLuint eaf = compile_shader_src(GL_FRAGMENT_SHADER, KSPR_ARRAY_EDGE_FRAGMENT_SHADER,   "kspr_array_edge_frag.glsl");
+            if (eav && eaf)
+            {
+                m_kspr_atlas_edge_shader = glCreateProgram();
+                glAttachShader(m_kspr_atlas_edge_shader, eav);
+                glAttachShader(m_kspr_atlas_edge_shader, eaf);
+                glLinkProgram(m_kspr_atlas_edge_shader);
+                glDeleteShader(eav); glDeleteShader(eaf);
+                GLint eal = 0;
+                glGetProgramiv(m_kspr_atlas_edge_shader, GL_LINK_STATUS, &eal);
+                if (eal)
+                {
+                    glUseProgram(m_kspr_atlas_edge_shader);
+                    m_kspr_atlas_edge_loc_viewport = glGetUniformLocation(m_kspr_atlas_edge_shader, "u_viewport");
+                    m_kspr_atlas_edge_loc_sprite   = glGetUniformLocation(m_kspr_atlas_edge_shader, "u_sprite");
+                    m_kspr_atlas_edge_loc_z_ndc    = glGetUniformLocation(m_kspr_atlas_edge_shader, "u_z_ndc");
+                    m_kspr_atlas_edge_loc_color    = glGetUniformLocation(m_kspr_atlas_edge_shader, "u_outline_color");
+                    m_kspr_atlas_edge_loc_layer    = glGetUniformLocation(m_kspr_atlas_edge_shader, "u_layer");
+                    glUniform1i(m_kspr_atlas_edge_loc_sprite, 0);
+                    glUseProgram(0);
+                    KFX_GL_LABEL(GL_PROGRAM, m_kspr_atlas_edge_shader, "WVR/KSprAtlasEdgeProg");
+                }
+                else
+                {
+                    char log[512];
+                    glGetProgramInfoLog(m_kspr_atlas_edge_shader, sizeof(log), nullptr, log);
+                    WARNLOG("GLWorldViewRenderer: kspr_array_edge shader link failed: %s", log);
+                    glDeleteProgram(m_kspr_atlas_edge_shader);
+                    m_kspr_atlas_edge_shader = 0;
+                }
+            }
+            else { if (eav) glDeleteShader(eav); if (eaf) glDeleteShader(eaf); }
+        }
+    }
+
     // ── Atlas glow shader (additive sprites via atlas) ────────────────────────
     if (m_kspr_atlas_shader)
     {
@@ -1093,6 +1171,21 @@ bool GLWorldViewRenderer::init_keeper_sprite_instancing()
     // Outline shader is optional — without it sprites still draw instanced,
     // just with no depth-fail outline in the instanced path.
 
+    // Instanced edge-detect shader — shares the same vertex shader and VAO as
+    // the instanced outline, but uses edge-detection in the fragment shader.
+    m_kspr_inst_edge_shader = link_inst_program(
+        KSPR_INST_OUTLINE_VERTEX_SHADER, KSPR_INST_EDGE_FRAGMENT_SHADER,
+        "kspr_inst_outline_vert.glsl", "kspr_inst_edge_frag.glsl",
+        "kspr_inst_edge shader");
+    if (m_kspr_inst_edge_shader)
+    {
+        glUseProgram(m_kspr_inst_edge_shader);
+        m_kspr_inst_edge_loc_viewport =
+            glGetUniformLocation(m_kspr_inst_edge_shader, "u_viewport");
+        glUniform1i(glGetUniformLocation(m_kspr_inst_edge_shader, "u_sprite"), 0);
+        glUseProgram(0);
+    }
+
     // Static unit quad shared by both VAOs (triangle strip: TL TR BL BR).
     static const float k_unit_quad[8] = {
         0.0f, 0.0f,
@@ -1168,6 +1261,8 @@ bool GLWorldViewRenderer::init_keeper_sprite_instancing()
     KFX_GL_LABEL(GL_PROGRAM,      m_kspr_inst_shader,          "WVR/KSprInstProg");
     if (m_kspr_inst_outline_shader)
         KFX_GL_LABEL(GL_PROGRAM,  m_kspr_inst_outline_shader,  "WVR/KSprInstOutlineProg");
+    if (m_kspr_inst_edge_shader)
+        KFX_GL_LABEL(GL_PROGRAM,  m_kspr_inst_edge_shader,     "WVR/KSprInstEdgeProg");
     KFX_GL_LABEL(GL_VERTEX_ARRAY, m_kspr_inst_vao,             "WVR/KSprInstVAO");
     KFX_GL_LABEL(GL_VERTEX_ARRAY, m_kspr_inst_outline_vao,     "WVR/KSprInstOutlineVAO");
     KFX_GL_LABEL(GL_BUFFER,       m_kspr_inst_quad_vbo,        "WVR/KSprInstQuadVBO");
@@ -1501,8 +1596,8 @@ void GLWorldViewRenderer::append_keeper_sprite_instance(const IRWorldKeeperSprit
                   | (additive ? 2u : 0u);
     m_kspr_instances.push_back(inst);
 
-    if (g_renderer_settings.creature_outline_enable && !additive && cmd.wants_outline
-        && m_kspr_inst_outline_shader)
+    if (g_renderer_settings.creature_outline_mode != RENDERER_OUTLINE_NONE && !additive && cmd.wants_outline
+        && (m_kspr_inst_outline_shader || m_kspr_inst_edge_shader))
     {
         // Resolve owner → player colour index → linear RGB from the palette.
         float oc_r = 0.9f, oc_g = 0.9f, oc_b = 0.9f;
@@ -1556,19 +1651,25 @@ void GLWorldViewRenderer::flush_keeper_sprite_instances()
     // Depth-fail outline pass first.  Outline pixels only appear where the
     // sprite is occluded (GL_GREATER); main pixels only where it is visible
     // (GL_LEQUAL) — disjoint regions, so pass order does not matter.
-    if (!m_kspr_outline_instances.empty() && m_kspr_inst_outline_shader)
+    // Select the silhouette or edge-detect shader based on outline mode.
+    if (!m_kspr_outline_instances.empty())
     {
-        glDepthFunc(GL_GREATER);
-        glUseProgram(m_kspr_inst_outline_shader);
-        glUniform2f(m_kspr_inst_outline_loc_viewport,
-                    (float)m_draw_screen_w, (float)m_draw_screen_h);
-        glBindVertexArray(m_kspr_inst_outline_vao);
-        glBindBuffer(GL_ARRAY_BUFFER, m_kspr_inst_outline_vbo);
-        glBufferData(GL_ARRAY_BUFFER,
-                     (GLsizeiptr)(m_kspr_outline_instances.size() * sizeof(KsprOutlineInstance)),
-                     m_kspr_outline_instances.data(), GL_STREAM_DRAW);
-        glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4,
-                              (GLsizei)m_kspr_outline_instances.size());
+        const bool use_edge = (g_renderer_settings.creature_outline_mode == RENDERER_OUTLINE_EDGE);
+        GLuint prog = use_edge ? m_kspr_inst_edge_shader    : m_kspr_inst_outline_shader;
+        GLint  vloc = use_edge ? m_kspr_inst_edge_loc_viewport : m_kspr_inst_outline_loc_viewport;
+        if (prog)
+        {
+            glDepthFunc(GL_GREATER);
+            glUseProgram(prog);
+            glUniform2f(vloc, (float)m_draw_screen_w, (float)m_draw_screen_h);
+            glBindVertexArray(m_kspr_inst_outline_vao);
+            glBindBuffer(GL_ARRAY_BUFFER, m_kspr_inst_outline_vbo);
+            glBufferData(GL_ARRAY_BUFFER,
+                         (GLsizeiptr)(m_kspr_outline_instances.size() * sizeof(KsprOutlineInstance)),
+                         m_kspr_outline_instances.data(), GL_STREAM_DRAW);
+            glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4,
+                                  (GLsizei)m_kspr_outline_instances.size());
+        }
     }
 
     if (!m_kspr_instances.empty())
@@ -1680,7 +1781,7 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
     // Additive glow sprites are excluded (no meaningful silhouette).
     // The class-mask in RendererSettings controls which entity types are outlined.
     const bool wants_outline = sprite_wants_outline != 0;
-    if (g_renderer_settings.creature_outline_enable && !additive && wants_outline)
+    if (g_renderer_settings.creature_outline_mode != RENDERER_OUTLINE_NONE && !additive && wants_outline)
     {
         // Resolve owner → player colour index → linear RGB from the palette.
         float oc_r = 0.9f, oc_g = 0.9f, oc_b = 0.9f;
@@ -1706,43 +1807,62 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
         // where depth values are nearly equal (avoids stray corner pixels).
         const float outline_z = z_ndc + 0.002f;
 
-        if (atlas_layer >= 0 && m_kspr_atlas_outline_shader)
-        {
-            // Atlas path: texture already cached in m_kspr_sprite_array.
-            glUseProgram(m_kspr_atlas_outline_shader);
-            glUniform2f(m_kspr_atlas_outline_loc_viewport, (float)m_draw_screen_w, (float)m_draw_screen_h);
-            glUniform1f(m_kspr_atlas_outline_loc_z_ndc,    outline_z);
-            glUniform1f(m_kspr_atlas_outline_loc_layer,    (float)atlas_layer);
-            glUniform4f(m_kspr_atlas_outline_loc_color,    oc_r, oc_g, oc_b, oc_a);
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D_ARRAY, m_kspr_sprite_array);
-            glDrawArrays(GL_TRIANGLES, 0, 6);
-        }
-        else if (atlas_layer < 0 && m_kspr_outline_shader)
-        {
-            // Fallback path: decode + upload now so the outline has pixel data.
-            // The normal draw below will re-use the already-uploaded texture.
-            decode_keeper_rle(s_kspr_decode_buf, data, src_w, src_h);
-            if (use_remap)
-            {
-                for (int oy = 0; oy < src_h; ++oy) {
-                    uint8_t* orow = s_kspr_decode_buf + oy * k_kspr_decode_dim;
-                    for (int ox = 0; ox < src_w; ++ox)
-                        if (orow[ox] != 0) orow[ox] = remap[orow[ox]];
-                }
-            }
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, m_kspr_sprite_tex);
-            glPixelStorei(GL_UNPACK_ROW_LENGTH, k_kspr_decode_dim);
-            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, src_w, src_h,
-                            GL_RED, GL_UNSIGNED_BYTE, s_kspr_decode_buf);
-            glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+        const bool use_edge = (g_renderer_settings.creature_outline_mode == RENDERER_OUTLINE_EDGE);
 
-            glUseProgram(m_kspr_outline_shader);
-            glUniform2f(m_kspr_outline_loc_viewport, (float)m_draw_screen_w, (float)m_draw_screen_h);
-            glUniform1f(m_kspr_outline_loc_z_ndc,    outline_z);
-            glUniform4f(m_kspr_outline_loc_color,    oc_r, oc_g, oc_b, oc_a);
-            glDrawArrays(GL_TRIANGLES, 0, 6);
+        if (atlas_layer >= 0)
+        {
+            // Select edge vs silhouette shader for the atlas path.
+            GLuint prog    = use_edge ? m_kspr_atlas_edge_shader         : m_kspr_atlas_outline_shader;
+            GLint  loc_vp  = use_edge ? m_kspr_atlas_edge_loc_viewport   : m_kspr_atlas_outline_loc_viewport;
+            GLint  loc_z   = use_edge ? m_kspr_atlas_edge_loc_z_ndc      : m_kspr_atlas_outline_loc_z_ndc;
+            GLint  loc_lay = use_edge ? m_kspr_atlas_edge_loc_layer      : m_kspr_atlas_outline_loc_layer;
+            GLint  loc_col = use_edge ? m_kspr_atlas_edge_loc_color      : m_kspr_atlas_outline_loc_color;
+            if (prog)
+            {
+                // Atlas path: texture already cached in m_kspr_sprite_array.
+                glUseProgram(prog);
+                glUniform2f(loc_vp, (float)m_draw_screen_w, (float)m_draw_screen_h);
+                glUniform1f(loc_z,    outline_z);
+                glUniform1f(loc_lay,  (float)atlas_layer);
+                glUniform4f(loc_col,  oc_r, oc_g, oc_b, oc_a);
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D_ARRAY, m_kspr_sprite_array);
+                glDrawArrays(GL_TRIANGLES, 0, 6);
+            }
+        }
+        else
+        {
+            // Select edge vs silhouette shader for the single-texture path.
+            GLuint prog    = use_edge ? m_kspr_edge_shader         : m_kspr_outline_shader;
+            GLint  loc_vp  = use_edge ? m_kspr_edge_loc_viewport   : m_kspr_outline_loc_viewport;
+            GLint  loc_z   = use_edge ? m_kspr_edge_loc_z_ndc      : m_kspr_outline_loc_z_ndc;
+            GLint  loc_col = use_edge ? m_kspr_edge_loc_color      : m_kspr_outline_loc_color;
+            if (prog)
+            {
+                // Fallback path: decode + upload now so the outline has pixel data.
+                // The normal draw below will re-use the already-uploaded texture.
+                decode_keeper_rle(s_kspr_decode_buf, data, src_w, src_h);
+                if (use_remap)
+                {
+                    for (int oy = 0; oy < src_h; ++oy) {
+                        uint8_t* orow = s_kspr_decode_buf + oy * k_kspr_decode_dim;
+                        for (int ox = 0; ox < src_w; ++ox)
+                            if (orow[ox] != 0) orow[ox] = remap[orow[ox]];
+                    }
+                }
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, m_kspr_sprite_tex);
+                glPixelStorei(GL_UNPACK_ROW_LENGTH, k_kspr_decode_dim);
+                glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, src_w, src_h,
+                                GL_RED, GL_UNSIGNED_BYTE, s_kspr_decode_buf);
+                glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+
+                glUseProgram(prog);
+                glUniform2f(loc_vp, (float)m_draw_screen_w, (float)m_draw_screen_h);
+                glUniform1f(loc_z,    outline_z);
+                glUniform4f(loc_col,  oc_r, oc_g, oc_b, oc_a);
+                glDrawArrays(GL_TRIANGLES, 0, 6);
+            }
         }
 
         glDepthFunc(GL_LEQUAL); // restore for normal draw below
@@ -1784,11 +1904,11 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
     // Used for remapped sprites, additive glow sprites, and when atlas is full.
     // If the outline block above already decoded + uploaded the sprite, skip
     // the decode/upload here to avoid redundant work.
-    const bool outline_uploaded = g_renderer_settings.creature_outline_enable
+    const bool outline_uploaded = g_renderer_settings.creature_outline_mode != RENDERER_OUTLINE_NONE
                                    && !additive
                                    && wants_outline
                                    && atlas_layer < 0
-                                   && m_kspr_outline_shader;
+                                   && (m_kspr_outline_shader || m_kspr_edge_shader);
     if (!outline_uploaded)
     {
         // Decode RLE into the scratch buffer (stride = k_kspr_decode_dim)

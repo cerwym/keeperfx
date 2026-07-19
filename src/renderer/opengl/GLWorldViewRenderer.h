@@ -446,6 +446,21 @@ private:
     GLint  m_kspr_atlas_outline_loc_color        = -1;
     GLint  m_kspr_atlas_outline_loc_layer        = -1;
 
+    // Edge-detect outline shaders — same uniforms as the silhouette variants.
+    // Single-texture variant (fallback/remapped sprites):
+    GLuint m_kspr_edge_shader                    = 0;
+    GLint  m_kspr_edge_loc_viewport              = -1;
+    GLint  m_kspr_edge_loc_sprite                = -1;
+    GLint  m_kspr_edge_loc_z_ndc                 = -1;
+    GLint  m_kspr_edge_loc_color                 = -1;
+    // Array-atlas variant:
+    GLuint m_kspr_atlas_edge_shader              = 0;
+    GLint  m_kspr_atlas_edge_loc_viewport        = -1;
+    GLint  m_kspr_atlas_edge_loc_sprite          = -1;
+    GLint  m_kspr_atlas_edge_loc_z_ndc           = -1;
+    GLint  m_kspr_atlas_edge_loc_color           = -1;
+    GLint  m_kspr_atlas_edge_loc_layer           = -1;
+
     // Atlas glow shader for additive sprites (sampler2DArray variant)
     GLuint m_kspr_atlas_glow_shader          = 0;
     GLint  m_kspr_atlas_glow_loc_viewport    = -1;
@@ -474,6 +489,7 @@ private:
     // the instance VBOs are orphaned each flush (GL_STREAM_DRAW).
     GLuint m_kspr_inst_shader               = 0;
     GLuint m_kspr_inst_outline_shader       = 0;
+    GLuint m_kspr_inst_edge_shader          = 0;
     GLuint m_kspr_inst_quad_vbo             = 0;
     GLuint m_kspr_inst_vao                  = 0;
     GLuint m_kspr_inst_vbo                  = 0;
@@ -481,6 +497,7 @@ private:
     GLuint m_kspr_inst_outline_vbo          = 0;
     GLint  m_kspr_inst_loc_viewport         = -1;
     GLint  m_kspr_inst_outline_loc_viewport = -1;
+    GLint  m_kspr_inst_edge_loc_viewport    = -1;
     std::vector<KsprInstance>        m_kspr_instances;         // RT: batch scratch
     std::vector<KsprOutlineInstance> m_kspr_outline_instances; // RT: batch scratch
 

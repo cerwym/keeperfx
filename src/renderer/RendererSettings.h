@@ -105,6 +105,16 @@ extern "C" {
 #define RENDERER_SHADOW_CIRCLE 5
 
 /* ---------------------------------------------------------------------------
+ * Creature outline mode constants (creature_outline_mode field)
+ * ------------------------------------------------------------------------- */
+/** No depth-fail outline — occluded creatures are not highlighted. */
+#define RENDERER_OUTLINE_NONE       0
+/** Full silhouette fill — every visible occluded pixel is coloured. */
+#define RENDERER_OUTLINE_SILHOUETTE 1
+/** Edge highlight — only boundary pixels of the occluded sprite are shown. */
+#define RENDERER_OUTLINE_EDGE       2
+
+/* ---------------------------------------------------------------------------
  * Main settings struct
  * ------------------------------------------------------------------------- */
 typedef struct RendererSettings {
@@ -257,11 +267,12 @@ typedef struct RendererSettings {
 
     /* --- Creature depth-fail outline --- */
 
-    /** Draw an owner-coloured silhouette where a creature sprite is occluded
-     *  by geometry (walls, columns).  Uses a depth-fail pass so the outline
-     *  is visible only through solid objects.
-     *  0 = disabled; 1 = enabled.  Default: 1. */
-    int   creature_outline_enable;
+    /** Outline mode for occluded creatures.
+     *  RENDERER_OUTLINE_NONE (0)       = disabled.
+     *  RENDERER_OUTLINE_SILHOUETTE (1) = full flat fill (default).
+     *  RENDERER_OUTLINE_EDGE (2)       = 1-texel border only.
+     *  Default: RENDERER_OUTLINE_SILHOUETTE. */
+    int   creature_outline_mode;
 
     /** Alpha of the depth-fail creature outline.  Range [0.0, 1.0].
      *  Default: 0.5. */

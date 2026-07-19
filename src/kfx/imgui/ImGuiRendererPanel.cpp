@@ -73,6 +73,12 @@ const ComboOption kTintModes[] = {
     {"CPU fallback (default)", RENDERER_TINT_CPU},
 };
 
+const ComboOption kOutlineModes[] = {
+    {"None", RENDERER_OUTLINE_NONE},
+    {"Silhouette (default)", RENDERER_OUTLINE_SILHOUETTE},
+    {"Edge", RENDERER_OUTLINE_EDGE},
+};
+
 int find_option_index(const ComboOption* options, int count, int value)
 {
     for (int i = 0; i < count; ++i)
@@ -431,8 +437,9 @@ void DrawLightingTab()
     ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.4f, 1.0f), "Modern requires future renderer update");
     changed |= DrawComboField("Tint Mode", &g_renderer_settings.tint_mode,
         kTintModes, IM_ARRAYSIZE(kTintModes));
-    changed |= DrawCheckboxField("Creature Outline", &g_renderer_settings.creature_outline_enable);
-    if (g_renderer_settings.creature_outline_enable != 0) {
+    changed |= DrawComboField("Creature Outline", &g_renderer_settings.creature_outline_mode,
+        kOutlineModes, IM_ARRAYSIZE(kOutlineModes));
+    if (g_renderer_settings.creature_outline_mode != RENDERER_OUTLINE_NONE) {
         changed |= ImGui::SliderFloat("Creature Outline Alpha", &g_renderer_settings.creature_outline_alpha, 0.0f, 1.0f);
     }
     ApplyLivePreviewIfChanged(changed);

@@ -198,6 +198,54 @@ void main()
 }
 )glsl";
 
+// Edge-detect variant of the outline shader (sampler2D).
+// Emits outline colour only at sprite boundary pixels (where at least one
+// cardinal neighbour has palette index 0).  Texel step is 1/256 — the atlas
+// tile dimension is compile-time fixed at 256×256.
+constexpr const char* KSPR_EDGE_FRAGMENT_SHADER = R"glsl(
+#version 330 core
+in vec2 v_uv;
+uniform sampler2D u_sprite;
+uniform vec4      u_outline_color;
+out vec4 fragColor;
+const float kStep = 1.0 / 256.0;
+const float kThr  = 0.5 / 255.0;
+void main()
+{
+    float idx = texture(u_sprite, v_uv).r;
+    if (idx < kThr) discard;
+    float l = texture(u_sprite, v_uv + vec2(-kStep, 0.0)).r;
+    float r = texture(u_sprite, v_uv + vec2( kStep, 0.0)).r;
+    float u = texture(u_sprite, v_uv + vec2(0.0, -kStep)).r;
+    float d = texture(u_sprite, v_uv + vec2(0.0,  kStep)).r;
+    if (l >= kThr && r >= kThr && u >= kThr && d >= kThr) discard;
+    fragColor = u_outline_color;
+}
+)glsl";
+
+// Edge-detect variant — array-atlas (sampler2DArray + u_layer).
+constexpr const char* KSPR_ARRAY_EDGE_FRAGMENT_SHADER = R"glsl(
+#version 330 core
+in vec2 v_uv;
+uniform sampler2DArray u_sprite;
+uniform float          u_layer;
+uniform vec4           u_outline_color;
+out vec4 fragColor;
+const float kStep = 1.0 / 256.0;
+const float kThr  = 0.5 / 255.0;
+void main()
+{
+    float idx = texture(u_sprite, vec3(v_uv, u_layer)).r;
+    if (idx < kThr) discard;
+    float l = texture(u_sprite, vec3(v_uv + vec2(-kStep, 0.0), u_layer)).r;
+    float r = texture(u_sprite, vec3(v_uv + vec2( kStep, 0.0), u_layer)).r;
+    float u = texture(u_sprite, vec3(v_uv + vec2(0.0, -kStep), u_layer)).r;
+    float d = texture(u_sprite, vec3(v_uv + vec2(0.0,  kStep), u_layer)).r;
+    if (l >= kThr && r >= kThr && u >= kThr && d >= kThr) discard;
+    fragColor = u_outline_color;
+}
+)glsl";
+
 // Array-atlas variant of the glow shader — additive sprites cached in atlas.
 constexpr const char* KSPR_ARRAY_GLOW_FRAGMENT_SHADER = R"glsl(
 #version 330 core
@@ -348,6 +396,30 @@ void main()
 {
     float idx = texture(u_sprite, vec3(v_uv, v_layer)).r;
     if (idx < (0.5 / 255.0)) discard;
+    fragColor = vec4(v_color.rgb * v_color.a, v_color.a);  // premultiplied
+}
+)glsl";
+
+// Instanced edge-detect: only emit colour at sprite boundary pixels.
+// Shares the same vertex shader and VAO as the instanced outline.
+constexpr const char* KSPR_INST_EDGE_FRAGMENT_SHADER = R"glsl(
+#version 330 core
+in vec2 v_uv;
+flat in float v_layer;
+flat in vec4  v_color;
+uniform sampler2DArray u_sprite;
+out vec4 fragColor;
+const float kStep = 1.0 / 256.0;
+const float kThr  = 0.5 / 255.0;
+void main()
+{
+    float idx = texture(u_sprite, vec3(v_uv, v_layer)).r;
+    if (idx < kThr) discard;
+    float l = texture(u_sprite, vec3(v_uv + vec2(-kStep, 0.0), v_layer)).r;
+    float r = texture(u_sprite, vec3(v_uv + vec2( kStep, 0.0), v_layer)).r;
+    float u = texture(u_sprite, vec3(v_uv + vec2(0.0, -kStep), v_layer)).r;
+    float d = texture(u_sprite, vec3(v_uv + vec2(0.0,  kStep), v_layer)).r;
+    if (l >= kThr && r >= kThr && u >= kThr && d >= kThr) discard;
     fragColor = vec4(v_color.rgb * v_color.a, v_color.a);  // premultiplied
 }
 )glsl";
