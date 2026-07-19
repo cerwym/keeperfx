@@ -322,7 +322,7 @@ void GLWorldViewRenderer::execute_preload_atlas()
     // Vanilla sprites: only those already resident in RAM.
     // keepsprite[i] is lazy-loaded from disk; null entries haven't been
     // accessed yet and cannot be preloaded without a full disk-load pass.
-    for (int i = 0; i < KEEPSPRITE_LENGTH && m_kspr_atlas_used < k_kspr_atlas_layers; i++)
+    for (int i = 0; i < KEEPSPRITE_LENGTH && m_kspr_atlas_used < k_kspr_atlas_preload_max; i++)
     {
         if (!keepsprite[i] || !*keepsprite[i]) continue;
         if ((size_t)i >= creature_table_length) continue;
@@ -345,7 +345,7 @@ void GLWorldViewRenderer::execute_preload_atlas()
     }
 
     // Custom sprites: fully in RAM after init_custom_sprites().
-    for (int i = 0; i < KEEPERSPRITE_ADD_NUM && m_kspr_atlas_used < k_kspr_atlas_layers; i++)
+    for (int i = 0; i < KEEPERSPRITE_ADD_NUM && m_kspr_atlas_used < k_kspr_atlas_preload_max; i++)
     {
         if (!keepersprite_add[i]) continue;
         const struct KeeperSprite& ks = creature_table_add[i];
@@ -1267,7 +1267,6 @@ void GLWorldViewRenderer::DrawCursorKeeperSprites()
     glViewport(0, 0, m_full_screen_w, m_full_screen_h);
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
-    m_cursor_pass_active = true;
 
     for (const auto& cmd : m_rt_cursor_kspr_ir)
     {
@@ -1278,7 +1277,6 @@ void GLWorldViewRenderer::DrawCursorKeeperSprites()
                                 cmd.z_ndc, cmd.owner, cmd.wants_outline,
                                 cmd.sprite_id);
     }
-    m_cursor_pass_active = false;
 
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
@@ -1637,9 +1635,7 @@ int GLWorldViewRenderer::render_keepersprite_gpu(
     // layer with no CPU decode and no GPU upload.
     const bool additive = (draw_flags & Lb_SPRITE_ALPHA_ADDITIVE) != 0;
     const bool use_remap = remap && (draw_flags & Lb_TEXT_UNDERLNSHADOW) && !additive;
-    int atlas_layer = -1;
-    if (!m_cursor_pass_active)
-        atlas_layer = resolve_atlas_layer(sprite_id, data, src_w, src_h);
+    int atlas_layer = resolve_atlas_layer(sprite_id, data, src_w, src_h);
 
     // CLUT row: 0 = identity, remapped sprites get a lazily built row.
     float clut_v = 0.5f / (float)k_clut_rows;  // row 0 centre

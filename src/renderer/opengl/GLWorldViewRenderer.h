@@ -352,7 +352,11 @@ private:
     // Keeper-sprite decode atlas: GL_TEXTURE_2D_ARRAY where each layer holds
     // one pre-decoded sprite (populated on first use, persists across frames).
     // Fallback to m_kspr_sprite_tex when atlas is full or unsupported.
-    static const int k_kspr_atlas_layers = 512;
+    // 2048 × 256×256 GL_R8 = 128 MB. Exhaustion drops sprites onto the
+    // per-draw fallback path, breaking the instanced batch per sprite.
+    static const int k_kspr_atlas_layers = 2048;
+    // Preload fills at most half the atlas so demand-loading always has room.
+    static const int k_kspr_atlas_preload_max = k_kspr_atlas_layers / 2;
     GLuint m_kspr_sprite_array  = 0;  // GL_TEXTURE_2D_ARRAY 256×256×k_kspr_atlas_layers GL_R8
     GLuint m_kspr_atlas_shader  = 0;  // separate program using sampler2DArray
     int    m_kspr_atlas_used    = 0;  // next free layer index
@@ -360,9 +364,7 @@ private:
     int    m_kspr_atlas_hits    = 0;  // cache hits this frame
     int    m_kspr_atlas_misses  = 0;  // cache misses (decode+upload) this frame
     struct AtlasEntry { int layer; int src_w; };
-    // Keyed by frame-resolved global sprite index, NOT the data pointer: the
-    // sprite heap can evict and reuse block addresses mid-level, so a pointer
-    // key could silently serve stale pixels for a recycled address.
+    // Keyed by sprite id, not data pointer — heap block addresses can be reused.
     std::unordered_map<int32_t, AtlasEntry> m_kspr_atlas_map;
 
     // CLUT (Colour Lookup Table): 256×k_clut_rows GL_RGBA8 texture.
@@ -535,7 +537,6 @@ private:
     std::vector<IRWorldKeeperSpriteCmd> m_pip_kspr_ir;        // GT(PiP capture):
     bool                                m_pip_capture         = false; // GT:
     bool         m_cursor_capture      = false;             // GT: redirect SubmitKeeperSprite → m_cursor_kspr_ir
-    bool         m_cursor_pass_active  = false;             // RT: force non-atlas keeper-sprite path for cursor/hand sprites
 
     // ── Cursor keeper-sprite double buffer ────────────────────────────────────
     // Game thread pre-computes cursor sprites (via process_keeper_sprite_ex) into
