@@ -14,6 +14,7 @@
 #include "player_data.h"
 #include "renderer/RendererManager.h"
 #include "vidmode.h"
+#include "vidfade.h"
 
 extern "C" {
 void map_fade(unsigned char *outbuf, unsigned char *srcbuf1, unsigned char *srcbuf2,

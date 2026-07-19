@@ -24,7 +24,8 @@
 #include "bflib_sprite.h"    // TbSpriteSheet, get_sprite
 #include "bflib_vidraw.h"    // LbSpriteDrawResized
 #include "engine_render.h"   // draw_texture
-#include "vidmode.h"         // pixmap ghost tables
+#include "vidmode.h"
+#include "vidfade.h"         // pixmap ghost tables
 #include "renderer/RendererManager.h"
 #include "platform/PlatformManager.h"
 #include "platform.h"        // platform_get_sdl_window

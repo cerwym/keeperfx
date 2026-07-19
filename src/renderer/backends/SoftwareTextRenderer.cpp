@@ -348,9 +348,16 @@ TbBool SoftwareTextRenderer::DrawTextResized(int32_t posx, int32_t posy,
     clip_grwnd.ptr    = nullptr;
     RendererLoadViewport(&clip_grwnd);
 
+    // Glyph blits must draw directly: the LbSpriteDraw* UI-bridge intercept
+    // would re-route them through SubmitScaledSprite, which carries no draw
+    // flags (transparency lost) and would re-defer during replay.
+    const int saved_submit = lb_in_sprite_submit;
+    lb_in_sprite_submit = 1;
+
     TextLayoutContext ctx = BuildLayoutContext();
     TextLayout(ctx, posx, posy, units_per_px, text, SwDrawSegment, this);
 
+    lb_in_sprite_submit = saved_submit;
     RendererLoadViewport(&grwnd);
     return true;
 }
@@ -377,9 +384,14 @@ TbBool SoftwareTextRenderer::DrawTextAt(int32_t screen_x, int32_t screen_y,
     clip_grwnd.ptr    = nullptr;
     RendererLoadViewport(&clip_grwnd);
 
+    // See DrawTextResized: bypass the UI-bridge sprite intercept for glyphs.
+    const int saved_submit = lb_in_sprite_submit;
+    lb_in_sprite_submit = 1;
+
     int32_t space_w = CharWidthScaled(' ', units_per_px);
     PutDownSprites(text, text + strlen(text), screen_x, screen_y, space_w, units_per_px);
 
+    lb_in_sprite_submit = saved_submit;
     RendererLoadViewport(&grwnd);
     return true;
 }

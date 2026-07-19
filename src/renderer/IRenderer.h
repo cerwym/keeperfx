@@ -28,6 +28,8 @@ struct TbSpriteSheet;
 class ITextRenderer;
 class IUIRenderer;
 class ICursorLayer;
+class IPostProcessPass;
+enum class LensEffectType;
 
 /******************************************************************************/
 
@@ -297,6 +299,14 @@ public:
     virtual void SubmitPiPRender(struct Camera* /*cam*/,
                                  int /*x*/, int /*y*/,
                                  int /*w*/, int /*h*/) {}
+
+    /** Create a GPU post-process pass for the given lens effect type.
+     *  Called once by the owning LensEffect::Setup() (game thread) when the
+     *  effect activates. Ownership transfers to the caller: LensEffect must
+     *  call Free() then delete the returned pass in Cleanup().
+     *  Backends without GPU lens support return nullptr (default), which the
+     *  caller treats as "fall back to CPU LensEffect::Draw()". */
+    virtual class IPostProcessPass* CreateLensPass(LensEffectType /*type*/) { return nullptr; }
 };
 
 /******************************************************************************/

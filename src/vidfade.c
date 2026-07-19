@@ -25,6 +25,7 @@
 #include "bflib_video.h"
 #include "bflib_keybrd.h"
 #include "bflib_datetm.h"
+#include "bflib_dernc.h"
 
 #include "vidmode.h"
 #include "kjm_input.h"
@@ -47,6 +48,11 @@ unsigned char fade_palette_in;
 unsigned char frontend_palette[768];
 TbRGBColorTable colours;
 float g_palette_possession_tint = 0.0f;
+
+struct TbColorTables pixmap;
+struct TbAlphaTables alpha_sprite_table;
+unsigned char white_pal[256];
+unsigned char red_pal[256];
 /******************************************************************************/
 void fade_in(void)
 {
@@ -218,6 +224,89 @@ void compute_shifted_palette_table(TbPixel *ocol, const unsigned char *spal, con
         if (valB <   0) valB = 0;
         ocol[i] = LbPaletteFindColour(dpal, valR, valG, valB);
     }
+}
+
+/**
+ * Loads a cached colour/fade table from disk, or computes and caches it if the
+ * cache file is missing/stale.
+ */
+static TbBool load_or_compute_colour_table(const char *log_label, const char *leaf_fname,
+    void *buf, size_t buf_size, void (*compute)(void))
+{
+    char* fname = prepare_file_path(FGrp_StdData, leaf_fname);
+    SYNCDBG(0,"Reading %s file \"%s\".",log_label,fname);
+    if (LbFileLoadAt(fname, buf) != (long)buf_size)
+    {
+        compute();
+        LbFileSaveAt(fname, buf, (unsigned long)buf_size);
+    }
+    return true;
+}
+
+static void compute_fades_table_cb(void)
+{
+    compute_fade_tables(&pixmap, engine_palette, engine_palette);
+}
+
+TbBool init_fades_table(void)
+{
+    load_or_compute_colour_table("fade table", "tables.dat", &pixmap, sizeof(struct TbColorTables), compute_fades_table_cb);
+    TbPixel cblack = 144;
+    // Update black color
+    for (long i = 0; i < 8192; i++)
+    {
+        if (pixmap.fade_tables[i] == 0) {
+            pixmap.fade_tables[i] = cblack;
+        }
+    }
+    return true;
+}
+
+static void compute_alpha_table_cb(void)
+{
+    compute_alpha_tables(&alpha_sprite_table, engine_palette, engine_palette);
+}
+
+TbBool init_alpha_table(void)
+{
+    return load_or_compute_colour_table("alpha color table", "alpha.col", &alpha_sprite_table, sizeof(struct TbAlphaTables), compute_alpha_table_cb);
+}
+
+static void compute_rgb2idx_table_cb(void)
+{
+    compute_rgb2idx_table(colours, engine_palette);
+}
+
+static TbBool init_rgb2idx_table(void)
+{
+    return load_or_compute_colour_table("rgb-to-index color table", "colours.col", &colours, sizeof(TbRGBColorTable), compute_rgb2idx_table_cb);
+}
+
+static void compute_redpal_table_cb(void)
+{
+    compute_shifted_palette_table(red_pal, engine_palette, engine_palette, 20, -10, -10);
+}
+
+static TbBool init_redpal_table(void)
+{
+    return load_or_compute_colour_table("red-blended color table", "redpal.col", &red_pal, 256, compute_redpal_table_cb);
+}
+
+static void compute_whitepal_table_cb(void)
+{
+    compute_shifted_palette_table(white_pal, engine_palette, engine_palette, 48, 48, 48);
+}
+
+static TbBool init_whitepal_table(void)
+{
+    return load_or_compute_colour_table("white-blended color table", "whitepal.col", &white_pal, 256, compute_whitepal_table_cb);
+}
+
+void init_colours(void)
+{
+    init_rgb2idx_table();
+    init_redpal_table();
+    init_whitepal_table();
 }
 
 void ProperFadePalette(unsigned char *pal, long fade_steps, enum TbPaletteFadeFlag flg)

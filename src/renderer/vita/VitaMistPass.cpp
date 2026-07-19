@@ -52,32 +52,9 @@ static const char* k_mist_frag_glsl =
 
 // ---------------------------------------------------------------------------
 
-void VitaMistPass::Configure(const unsigned char* data,
-                             int pos_x_step, int pos_y_step,
-                             int sec_x_step, int sec_y_step)
-{
-    // Copy step values; mist data will be used in Init().
-    m_step_pos_x = pos_x_step;
-    m_step_pos_y = pos_y_step;
-    m_step_sec_x = sec_x_step;
-    m_step_sec_y = sec_y_step;
-    m_configured = (data != nullptr);
-
-    // Store pointer for Init(); the caller (MistEffect::Setup) guarantees
-    // that eye_lens_memory remains valid until Init() is called in the same
-    // Setup() invocation.
-    if (data) {
-        // Upload later in Init() via the pointer passed here.
-        // Keep a static pointer — valid only during Setup().
-        m_pending_data = data;
-    }
-}
-
 bool VitaMistPass::Init()
 {
-    if (!m_configured || !m_pending_data) return false;
-
-    // Upload the 256×256 mist amplitude texture as GL_LUMINANCE.
+    // Allocate the mist texture object now (empty — populated by Configure()).
     glGenTextures(1, &m_mist_tex);
     glBindTexture(GL_TEXTURE_2D, m_mist_tex);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -85,8 +62,7 @@ bool VitaMistPass::Init()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, 256, 256, 0,
-                 GL_LUMINANCE, GL_UNSIGNED_BYTE, m_pending_data);
-    m_pending_data = nullptr;
+                 GL_LUMINANCE, GL_UNSIGNED_BYTE, nullptr);
 
     m_program = vita_build_pass_program(k_mist_frag_glsl);
     if (!m_program) { Free(); return false; }
@@ -104,6 +80,29 @@ bool VitaMistPass::Init()
     return true;
 }
 
+void VitaMistPass::Configure(const unsigned char* data,
+                             int pos_x_step, int pos_y_step,
+                             int sec_x_step, int sec_y_step)
+{
+    m_step_pos_x = pos_x_step;
+    m_step_pos_y = pos_y_step;
+    m_step_sec_x = sec_x_step;
+    m_step_sec_y = sec_y_step;
+
+    if (data != nullptr && m_mist_tex != 0) {
+        glBindTexture(GL_TEXTURE_2D, m_mist_tex);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 256, 256,
+                        GL_LUMINANCE, GL_UNSIGNED_BYTE, data);
+        m_configured = true;
+    }
+}
+
+void VitaMistPass::Configure(const LensGPUPassParams& params)
+{
+    Configure(params.mist_data, params.mist_pos_x_step, params.mist_pos_y_step,
+              params.mist_sec_x_step, params.mist_sec_y_step);
+}
+
 void VitaMistPass::Tick()
 {
     // Advance animation offsets (byte arithmetic, matching CMistFade::Animate).
@@ -117,7 +116,7 @@ void VitaMistPass::Tick()
 void VitaMistPass::Apply(unsigned int src_tex, unsigned int dst_fbo,
                          int src_w, int src_h)
 {
-    if (!m_program) return;
+    if (!m_program || !m_configured) return;
 
     Tick();
 
@@ -145,7 +144,6 @@ void VitaMistPass::Free()
     if (m_mist_tex) { glDeleteTextures(1, &m_mist_tex); m_mist_tex = 0; }
     m_loc_scene = m_loc_mist = m_loc_pos = m_loc_sec = -1;
     m_configured  = false;
-    m_pending_data = nullptr;
 }
 
 #endif // PLATFORM_VITA

@@ -176,7 +176,7 @@ extern char *level_names_data;
 extern char *end_level_names_data;
 extern unsigned char *frontend_backup_palette;
 extern unsigned char zoom_to_heart_palette[768];
-extern unsigned char EngineSpriteDrawUsingAlpha;
+
 extern unsigned char temp_pal[768];
 extern unsigned char *lightning_palette;
 

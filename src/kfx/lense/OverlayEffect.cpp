@@ -27,6 +27,8 @@
 #include "../../globals.h"
 #include "../../config_lenses.h"
 #include "../../custom_sprites.h"
+#include "renderer/RendererManager.h"
+#include "renderer/IPostProcessPass.h"
 
 #include "../../keeperfx.hpp"
 #include "../../post_inc.h"
@@ -274,23 +276,31 @@ TbBool OverlayEffect::Setup(long lens_idx)
     m_user_data = renderer;
     m_current_lens = lens_idx;
 
-#ifdef PLATFORM_VITA
-    m_gpu_pass.Configure(renderer->GetData(), renderer->GetWidth(),
-                         renderer->GetHeight(), renderer->GetAlphaF());
-    m_gpu_pass.Init();
-#elif defined(RENDERER_OPENGL_ENABLED)
-    if (!m_gl_pass_ready)
+    if (m_gpu_pass == nullptr)
     {
-        if (m_gl_pass.Init())
+        if (IRenderer* active_renderer = RendererGetActive())
         {
-            m_gl_pass.UploadOverlay(renderer->GetData(), renderer->GetWidth(), renderer->GetHeight());
-            m_gl_pass.SetOverlayAlpha(renderer->GetAlphaF());
-            m_gl_pass_ready = true;
+            m_gpu_pass = active_renderer->CreateLensPass(LensEffectType::Overlay);
+        }
+    }
+    if (m_gpu_pass != nullptr)
+    {
+        if (m_gpu_pass->Init())
+        {
+            LensGPUPassParams params;
+            params.overlay_data  = renderer->GetData();
+            params.overlay_w     = renderer->GetWidth();
+            params.overlay_h     = renderer->GetHeight();
+            params.overlay_alpha = renderer->GetAlphaF();
+            m_gpu_pass->Configure(params);
         }
         else
-            { SYNCDBG(7, "GL overlay pass init failed — CPU fallback"); }
+        {
+            SYNCDBG(7, "GPU overlay pass init failed — CPU fallback");
+            delete m_gpu_pass;
+            m_gpu_pass = nullptr;
+        }
     }
-#endif
 
     SYNCDBG(7, "Overlay effect ready");
     return true;
@@ -306,12 +316,12 @@ void OverlayEffect::Cleanup()
             m_user_data = NULL;
         }
         m_current_lens = -1;
-#ifdef PLATFORM_VITA
-        m_gpu_pass.Free();
-#elif defined(RENDERER_OPENGL_ENABLED)
-        m_gl_pass.Free();
-        m_gl_pass_ready = false;
-#endif
+        if (m_gpu_pass != nullptr)
+        {
+            m_gpu_pass->Free();
+            delete m_gpu_pass;
+            m_gpu_pass = nullptr;
+        }
         SYNCDBG(9, "Overlay effect cleaned up");
     }
 }

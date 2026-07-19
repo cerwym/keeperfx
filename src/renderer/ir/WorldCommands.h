@@ -99,6 +99,10 @@ struct IRWorldKeeperSpriteCmd
     uint32_t              draw_flags    = 0;   /**< Sprite draw flags (Lb_SPRITE_*). */
     /** RLE-compressed pixel data (keepersprite_array — stable for level lifetime). */
     const unsigned char*  data          = nullptr;
+    /** Frame-resolved global sprite index (keepsprite[] / keepersprite_add[]).
+     *  Atlas cache key — stable across sprite-heap eviction, unlike @p data.
+     *  -1 = unknown (submit path without an id); such sprites bypass the atlas. */
+    int32_t               sprite_id     = -1;
     /** 256-byte remap snapshot, valid when remap_enabled != 0. */
     uint8_t               remap_table[256] = {};
     uint8_t               remap_enabled = 0;

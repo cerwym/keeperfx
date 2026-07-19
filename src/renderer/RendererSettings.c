@@ -64,7 +64,7 @@ void RendererSettings_Reset(void)
     g_renderer_settings.fog_density           = 0.4f;
 
     /* Creature outline */
-    g_renderer_settings.creature_outline_enable     = 1;
+    g_renderer_settings.creature_outline_mode      = RENDERER_OUTLINE_SILHOUETTE;
     g_renderer_settings.creature_outline_alpha      = 0.5f;
     g_renderer_settings.creature_outline_class_mask = (1u << TCls_Creature) | (1u << TCls_DeadCreature);
 
@@ -99,7 +99,7 @@ void RendererSettings_Sanitize(void)
     RS_CLAMP_I(shadow_depth_test,         0, 1);
     RS_CLAMP_I(shadow_max_count,          0, 1024);
     RS_CLAMP_I(shadow_type,               0, 5);
-    RS_CLAMP_I(creature_outline_enable,   0, 1);
+    RS_CLAMP_I(creature_outline_mode,     0, 2);
     RS_CLAMP_I(wireframe,                 0, 1);
     RS_CLAMP_I(show_depth,                0, 1);
     RS_CLAMP_I(debug_gui_hitboxes,        0, 1);
@@ -192,7 +192,9 @@ void RendererSettings_Load(void)
         else if (strcmp(key, "shadow_colour_b")            == 0) g_renderer_settings.shadow_colour_b            = fval;
         else if (strcmp(key, "shadow_colour_a")            == 0) g_renderer_settings.shadow_colour_a            = fval;
         else if (strcmp(key, "shadow_type")                == 0) g_renderer_settings.shadow_type                = ival;
-        else if (strcmp(key, "creature_outline_enable")    == 0) g_renderer_settings.creature_outline_enable    = ival;
+        else if (strcmp(key, "creature_outline_mode")     == 0) g_renderer_settings.creature_outline_mode     = ival;
+        // Backward compat: old creature_outline_enable (0→None, 1→Silhouette)
+        else if (strcmp(key, "creature_outline_enable")    == 0) g_renderer_settings.creature_outline_mode     = ival ? RENDERER_OUTLINE_SILHOUETTE : RENDERER_OUTLINE_NONE;
         else if (strcmp(key, "creature_outline_alpha")     == 0) g_renderer_settings.creature_outline_alpha     = fval;
         else if (strcmp(key, "lighting_mode")              == 0) g_renderer_settings.lighting_mode              = ival;
         else if (strcmp(key, "tint_mode")                  == 0) g_renderer_settings.tint_mode                  = ival;
@@ -270,7 +272,7 @@ void RendererSettings_Save(void)
     fprintf(f, "shadow_colour_a         = %.4f\n", g_renderer_settings.shadow_colour_a);
     fprintf(f, "shadow_type             = %d\n",   g_renderer_settings.shadow_type);
     fprintf(f, "\n");
-    fprintf(f, "creature_outline_enable = %d\n",   g_renderer_settings.creature_outline_enable);
+    fprintf(f, "creature_outline_mode   = %d\n",   g_renderer_settings.creature_outline_mode);
     fprintf(f, "creature_outline_alpha  = %.4f\n", g_renderer_settings.creature_outline_alpha);
     fprintf(f, "\n");
     fprintf(f, "lighting_mode           = %d\n",   g_renderer_settings.lighting_mode);

@@ -26,6 +26,8 @@
 #include <string.h>
 #include "../../config_lenses.h"
 #include "../../lens_api.h"
+#include "renderer/RendererManager.h"
+#include "renderer/IPostProcessPass.h"
 
 #include "../../keeperfx.hpp"
 #include "../../post_inc.h"
@@ -360,17 +362,27 @@ TbBool FlyeyeEffect::Setup(long lens_idx)
     FreeLookupTable();
     m_current_lens = lens_idx;
 
-#ifdef PLATFORM_VITA
-    m_gpu_pass.Init();
-#elif defined(RENDERER_OPENGL_ENABLED)
-    if (!m_gl_pass_ready)
+    if (m_gpu_pass == nullptr)
     {
-        if (m_gl_pass.Init())
-            m_gl_pass_ready = true;
-        else
-            { SYNCDBG(7, "GL flyeye pass init failed — CPU fallback"); }
+        if (IRenderer* active_renderer = RendererGetActive())
+        {
+            m_gpu_pass = active_renderer->CreateLensPass(LensEffectType::Flyeye);
+        }
     }
-#endif
+    if (m_gpu_pass != nullptr)
+    {
+        if (m_gpu_pass->Init())
+        {
+            LensGPUPassParams params;
+            m_gpu_pass->Configure(params);
+        }
+        else
+        {
+            SYNCDBG(7, "GPU flyeye pass init failed — CPU fallback");
+            delete m_gpu_pass;
+            m_gpu_pass = nullptr;
+        }
+    }
 
     SYNCDBG(7, "Flyeye effect ready");
     return true;
@@ -380,12 +392,12 @@ void FlyeyeEffect::Cleanup()
 {
     FreeLookupTable();
     m_current_lens = -1;
-#ifdef PLATFORM_VITA
-    m_gpu_pass.Free();
-#elif defined(RENDERER_OPENGL_ENABLED)
-    m_gl_pass.Free();
-    m_gl_pass_ready = false;
-#endif
+    if (m_gpu_pass != nullptr)
+    {
+        m_gpu_pass->Free();
+        delete m_gpu_pass;
+        m_gpu_pass = nullptr;
+    }
 }
 
 TbBool FlyeyeEffect::Draw(LensRenderContext* ctx)

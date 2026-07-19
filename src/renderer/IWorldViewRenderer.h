@@ -84,14 +84,16 @@ public:
      *  src_w/h     = sprite source dimensions.
      *  draw_flags  = lbDisplay.DrawFlags at time of call (flip, transpar, remap, additive).
      *  remap       = colour remap table (may be NULL).
+     *  sprite_id   = frame-resolved global sprite index (stable cache key; -1 = unknown).
      *  Returns 1 if the GPU handled it (CPU blit should be skipped), 0 to fall back. */
     virtual int SubmitKeeperSprite(int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
                                    const unsigned char* data, int src_w, int src_h,
-                                   unsigned int draw_flags, const unsigned char* remap)
+                                   unsigned int draw_flags, const unsigned char* remap,
+                                   int32_t sprite_id)
     {
         (void)dst_x; (void)dst_y; (void)dst_w; (void)dst_h;
         (void)data;  (void)src_w; (void)src_h;
-        (void)draw_flags; (void)remap;
+        (void)draw_flags; (void)remap; (void)sprite_id;
         return 0;
     }
 

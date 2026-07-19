@@ -20,6 +20,8 @@
 #include "kfx_memory.h"
 #include "../../pre_inc.h"
 #include "renderer/RendererManager.h"
+#include "renderer/RenderGraph.h"
+#include "renderer/IPostProcessPass.h"
 #include "LensManager.h"
 
 #include "MistEffect.h"
@@ -278,6 +280,37 @@ void LensManager::Draw(unsigned char* srcbuf, unsigned char* dstbuf,
         unsigned char* viewport_src = srcbuf + viewport_x;
         CopyBuffer(dstbuf, dstpitch, viewport_src, srcpitch, width, height);
     }
+}
+
+IRLensCmd LensManager::CollectGPULensCmd() const
+{
+    IRLensCmd cmd;
+
+    if (!m_initialized || !RendererGetActive()->GetCapabilities().supportsGPUPasses)
+        return cmd;
+
+    for (LensEffect* effect : m_effects)
+    {
+        if (!effect->IsEnabled())
+            continue;
+        IPostProcessPass* pass = effect->GetGPUPass();
+        if (pass == nullptr)
+            continue;
+        if (cmd.count >= kMaxLensGPUPasses)
+        {
+            WARNLOG("LensManager: more than %d active GPU lens passes — dropping extras", kMaxLensGPUPasses);
+            break;
+        }
+        cmd.passes[cmd.count++] = pass;
+    }
+
+    return cmd;
+}
+
+void LensManager::FlushToRenderGraph(RenderGraph& graph)
+{
+    IRLensCmd cmd = CollectGPULensCmd();
+    graph.GetPostProcessBuffers().lens = (cmd.count > 0) ? std::optional<IRLensCmd>(cmd) : std::nullopt;
 }
 
 void LensManager::LoadAccessibilityConfig()

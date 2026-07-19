@@ -43,6 +43,7 @@
 #include "room_list.h"
 #include "vidfade.h"
 #include "vidmode.h"
+#include "mouse_cursor.h"
 #include "renderer/RendererManager.h"
 #include "kfx/assets/SpriteSheetManager.h"
 #include "kfx/assets/FontManager.h"

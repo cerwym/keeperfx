@@ -28,6 +28,7 @@
 #include "bflib_sprfnt.h"
 #include "bflib_dernc.h"
 #include "bflib_planar.h"
+#include "vidfade.h"        // pixmap ghost tables
 #include "renderer/RendererManager.h"
 #include "custom_sprites.h"
 #include "frontend.h"
@@ -196,9 +197,9 @@ TbBool parchment_copy_background_at(const struct TbRect *bkgnd_area, int units_p
     // Burning candle flames — submitted via UIRenderer so they composite on top
     // of the GPU parchment blit quad without writing into the CPU staging buffer.
     const struct TbSprite* spr = get_button_sprite(GBS_parchment_map_screen_flame_1 + (get_gameturn() & 3));
-    UIRenderer_SubmitScaledSprite(bkgnd_area->left+(36*units_per_px/(pixel_size << shift)),(bkgnd_area->top+0*units_per_px/(16*pixel_size)), spr->SWidth*units_per_px/16, spr->SHeight*units_per_px/16, spr);
+    UIRenderer_SubmitScaledSprite(bkgnd_area->left+(36*units_per_px/(pixel_size << shift)),(bkgnd_area->top+0*units_per_px/(16*pixel_size)), spr->SWidth*units_per_px/16, spr->SHeight*units_per_px/16, spr, 0);
     spr = get_button_sprite(GBS_parchment_map_screen_flame_5+(get_gameturn() & 3));
-    UIRenderer_SubmitScaledSprite(bkgnd_area->left+(574*units_per_px/(pixel_size << shift)),(bkgnd_area->top+0*units_per_px/(16*pixel_size)), spr->SWidth*units_per_px/16, spr->SHeight*units_per_px/16, spr);
+    UIRenderer_SubmitScaledSprite(bkgnd_area->left+(574*units_per_px/(pixel_size << shift)),(bkgnd_area->top+0*units_per_px/(16*pixel_size)), spr->SWidth*units_per_px/16, spr->SHeight*units_per_px/16, spr, 0);
     return true;
 }
 
@@ -922,6 +923,15 @@ void draw_zoom_box_terrain(long scrtop_x, long scrtop_y, int stl_x, int stl_y, P
     }
 
     // Software path: direct pixel write via the SW rasteriser.
+    // Only reachable on tile_buf allocation failure (OOM). In GL mode there is no
+    // CPU staging buffer (RendererGetWScreen() is always NULL — same class of bug
+    // as draw_slab64k_background); setup_vecs() would silently leave vec_screen
+    // unset, and draw_texture() below writes through it directly. Bail out instead.
+    if (RendererGetWScreen() == NULL)
+    {
+        WARNLOG("Zoom box tile buffer allocation failed and no CPU screen buffer is available; skipping terrain fallback draw");
+        return;
+    }
     setup_vecs(RendererGetWScreen(), NULL, (unsigned int)RendererScreenWidth(), (unsigned int)RendererScreenWidth(), (unsigned int)RendererScreenHeight());
     int scr_y = scrtop_y;
     for (int map_dy = 0; map_dy < draw_tiles_y; map_dy++)

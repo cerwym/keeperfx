@@ -25,6 +25,7 @@
 #include "bflib_math.h"
 #include "bflib_planar.h"
 #include "bflib_vidraw.h"
+#include "vidfade.h"        // pixmap.fade_tables
 #include "bflib_sound.h"
 #include "config_sounds.h"
 #include "custom_sprites.h"
@@ -577,25 +578,6 @@ void draw_power_hand(void)
         }
         return;
     }
-    if (GUIBridge_IsMouseOverPiP())
-    {
-        // Mouse is over a PiP window: draw the same lightweight overlay as the minimap.
-        // game.hand_over_subtile_x/y and game.small_map_state were set by GUIBridge_HandleGameViewPiPInput().
-        MapSubtlCoord stl_x = game.hand_over_subtile_x;
-        MapSubtlCoord stl_y = game.hand_over_subtile_y;
-        SYNCDBG(7,"Drawing over PiP window");
-        room = subtile_room_get(stl_x, stl_y);
-        if ((!room_is_invalid(room)) && (subtile_revealed(stl_x, stl_y, player->id_number)))
-        {
-            roomst = get_room_kind_stats(room->kind);
-            UIRenderer_SubmitPanelSpriteCentered(GetMouseX()+scale_ui_value(24*global_hand_scale), GetMouseY()+scale_ui_value(32*global_hand_scale), ps_units_per_px, roomst->medsym_sprite_idx, 0);
-        }
-        if ((!power_hand_is_empty(player)) && (game.small_map_state == 1))
-        {
-            draw_mini_things_in_hand(GetMouseX()+scale_ui_value(10*global_hand_scale), GetMouseY()+scale_ui_value(10*global_hand_scale));
-        }
-        return;
-    }
     if (game_is_busy_doing_gui())
     {
         SYNCDBG(7,"Drawing while GUI busy");
@@ -673,12 +655,11 @@ void draw_power_hand(void)
                 else if (crconf->transparency_flags == TRF_Transpar_4)
                     draw_flags = Lb_SPRITE_TRANSPAR4;
                 else if(crconf->transparency_flags == TRF_Transpar_Alpha)
-                    EngineSpriteDrawUsingAlpha = 1;
+                    draw_flags = Lb_SPRITE_ALPHA_ADDITIVE;
 
                 CursorLayer_SubmitKeeperHandSprite(inputpos_x / pixel_size, inputpos_y / pixel_size,
                     picktng->anim_sprite, 0, picktng->current_frame, scale_ui_value(64*global_hand_scale),
                     draw_flags);
-                EngineSpriteDrawUsingAlpha = 0;
             } else
             {
                 inputpos_x = GetMouseX() + scale_ui_value(11*global_hand_scale);

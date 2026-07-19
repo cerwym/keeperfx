@@ -22,8 +22,10 @@
 #include "bflib_vidraw.h"        // sprite and primitive CPU fallbacks
 #include "bflib_sprite.h"        // TbSprite
 #include "bflib_video.h"         // lbDisplay, units_per_pixel
-#include "vidmode.h"             // pixmap (TbColorTables) for fade_tables
+#include "vidmode.h"
+#include "vidfade.h"             // pixmap (TbColorTables) for fade_tables
 #include <algorithm>             // std::sort for the seq-merge replay
+#include <cstring>               // memcpy for the minimap snapshot blit
 #include <vector>
 
 extern "C" {
@@ -32,6 +34,7 @@ extern int32_t* MapShapeStart;
 extern int32_t* MapShapeEnd;
 extern long NumBackColours;
 extern unsigned char MapBackColours[256];
+void setup_panel_colors(void);
 }
 
 namespace {
@@ -99,16 +102,47 @@ void IUIRenderer::SubmitSlabSelector(int x1, int y1, int x2, int y2,
 void IUIRenderer::BeginZoomBoxOverlay(int x, int y, int w, int h)
 {
     const int pad = (2 * units_per_pixel) / 16;
+    // Always set the window immediately: submit-time coordinate math
+    // (RendererGraphicsWindowX/Y) must see the zoom-box window even when the
+    // draws themselves defer to IR.
     RendererSetViewport(x + pad, y + pad, w - 2 * pad, h - 2 * pad);
+    if (m_ui_write_cmds) {
+        // Re-establish the clip at replay time, ordered against the deferred
+        // draws it bounds.
+        IRUIViewportCmd cmd;
+        cmd.x = x + pad; cmd.y = y + pad;
+        cmd.w = w - 2 * pad; cmd.h = h - 2 * pad;
+        cmd.seq = m_ui_write_cmds->NextSeq();
+        m_ui_write_cmds->viewports.Append(cmd);
+    }
 }
 
 void IUIRenderer::EndZoomBoxOverlay(int x, int y, int w, int h)
 {
     (void)x; (void)y; (void)w; (void)h;
     RendererSetViewport(0, 0, RendererScreenWidth(), RendererScreenHeight());
+    if (m_ui_write_cmds) {
+        IRUIViewportCmd cmd; // w<=0: restore full screen at replay time
+        cmd.seq = m_ui_write_cmds->NextSeq();
+        m_ui_write_cmds->viewports.Append(cmd);
+    }
 }
 
 void IUIRenderer::SetupMinimapBackground(int diaglen, int panel_x, int panel_y)
+{
+    if (m_ui_write_cmds) {
+        // The pixels to sample (panel sprites under the minimap circle) are
+        // produced by the IR replay — sample there, in submission order.
+        IRUIMinimapBgSetupCmd cmd;
+        cmd.diaglen = diaglen; cmd.panel_x = panel_x; cmd.panel_y = panel_y;
+        cmd.seq = m_ui_write_cmds->NextSeq();
+        m_ui_write_cmds->minimap_bg_setups.Append(cmd);
+        return;
+    }
+    SampleMinimapBackground(diaglen, panel_x, panel_y);
+}
+
+void IUIRenderer::SampleMinimapBackground(int diaglen, int panel_x, int panel_y)
 {
     if (!MapBackground || !MapShapeStart || !MapShapeEnd || !RendererGetWScreen())
     {
@@ -311,9 +345,41 @@ uint8_t* IUIRenderer::AcquireMinimapBuffer(int /*size*/)
     return nullptr;
 }
 
-void IUIRenderer::SubmitMinimap(int /*screen_x*/, int /*screen_y*/, int /*size*/)
+void IUIRenderer::SubmitMinimap(int screen_x, int screen_y, int size)
 {
-    // No-op: minimap pixels were written directly to RendererGetWScreen().
+    // Immediate mode: no-op — minimap pixels were written directly to
+    // RendererGetWScreen(). Deferred mode: those mid-frame pixels would be
+    // painted over by the replayed panel background, so snapshot the circle
+    // spans now and re-blit them at this submission's seq during replay.
+    if (!m_ui_write_cmds || size <= 0)
+        return;
+    const TbPixel* src = RendererGetWScreen();
+    if (!src || !MapShapeStart || !MapShapeEnd)
+        return;
+    const int stride   = RendererScreenWidth();
+    const int screen_h = RendererScreenHeight();
+    UICommandBuffers* cmds = m_ui_write_cmds;
+    cmds->minimap_pixels.assign((size_t)size * (size_t)size, 0);
+    for (int h = 0; h < size; ++h)
+    {
+        const int y = screen_y + h;
+        if (y < 0 || y >= screen_h) continue;
+        int w0 = MapShapeStart[h];
+        int w1 = MapShapeEnd[h];
+        if (w0 < 0) w0 = 0;
+        if (w1 > size) w1 = size;
+        if (screen_x + w0 < 0) w0 = -screen_x;
+        if (screen_x + w1 > stride) w1 = stride - screen_x;
+        if (w1 <= w0) continue;
+        memcpy(&cmds->minimap_pixels[(size_t)h * size + w0],
+               &src[(size_t)y * stride + screen_x + w0],
+               (size_t)(w1 - w0));
+    }
+    cmds->minimap_blit.x    = screen_x;
+    cmds->minimap_blit.y    = screen_y;
+    cmds->minimap_blit.size = size;
+    cmds->minimap_blit.seq  = cmds->NextSeq();
+    cmds->minimap_blit.set  = true;
 }
 
 void IUIRenderer::SetUICommandBuffers(UICommandBuffers* cmds)
@@ -331,10 +397,12 @@ void IUIRenderer::ReplayMergedFromIR(const UICommandBuffers& ui,
     // (Boxes/circles/raw sprites are not deferred yet — they stay immediate as
     // background draws under the deferred foreground; see docs.)
     struct Ref { uint32_t seq; uint8_t kind; uint32_t idx; };
-    enum { K_Sprite = 0, K_Remap, K_Colored, K_Box, K_Text };
+    enum { K_Sprite = 0, K_Remap, K_Colored, K_Box, K_Text, K_Viewport,
+           K_MinimapSetup, K_MinimapBlit };
     std::vector<Ref> order;
     order.reserve(ui.sprites.Size() + ui.sprites_remap.Size() +
-                  ui.sprites_colored.Size() + ui.solid_boxes.Size() + text.draws.Size());
+                  ui.sprites_colored.Size() + ui.solid_boxes.Size() +
+                  ui.viewports.Size() + text.draws.Size());
     for (uint32_t i = 0; i < (uint32_t)ui.sprites.Size(); ++i)
         order.push_back({ ui.sprites.Data()[i].seq, K_Sprite, i });
     for (uint32_t i = 0; i < (uint32_t)ui.sprites_remap.Size(); ++i)
@@ -343,6 +411,12 @@ void IUIRenderer::ReplayMergedFromIR(const UICommandBuffers& ui,
         order.push_back({ ui.sprites_colored.Data()[i].seq, K_Colored, i });
     for (uint32_t i = 0; i < (uint32_t)ui.solid_boxes.Size(); ++i)
         order.push_back({ ui.solid_boxes.Data()[i].seq, K_Box, i });
+    for (uint32_t i = 0; i < (uint32_t)ui.viewports.Size(); ++i)
+        order.push_back({ ui.viewports.Data()[i].seq, K_Viewport, i });
+    for (uint32_t i = 0; i < (uint32_t)ui.minimap_bg_setups.Size(); ++i)
+        order.push_back({ ui.minimap_bg_setups.Data()[i].seq, K_MinimapSetup, i });
+    if (ui.minimap_blit.set)
+        order.push_back({ ui.minimap_blit.seq, K_MinimapBlit, 0 });
     if (text_renderer)
         for (uint32_t i = 0; i < (uint32_t)text.draws.Size(); ++i)
             order.push_back({ text.draws.Data()[i].seq, K_Text, i });
@@ -392,8 +466,53 @@ void IUIRenderer::ReplayMergedFromIR(const UICommandBuffers& ui,
         case K_Text:
             text_renderer->ReplayTextCommand(text.draws.Data()[r.idx]);
             break;
+        case K_Viewport: {
+            const IRUIViewportCmd& c = ui.viewports.Data()[r.idx];
+            if (c.w > 0 && c.h > 0)
+                RendererSetViewport(c.x, c.y, c.w, c.h);
+            else
+                RendererSetViewport(0, 0, RendererScreenWidth(), RendererScreenHeight());
+            break;
+        }
+        case K_MinimapSetup: {
+            const IRUIMinimapBgSetupCmd& c = ui.minimap_bg_setups.Data()[r.idx];
+            SampleMinimapBackground(c.diaglen, c.panel_x, c.panel_y);
+            // The panel colour tables derive from the sampled colours and were
+            // built from stale data at submit time — rebuild them now.
+            setup_panel_colors();
+            break;
+        }
+        case K_MinimapBlit: {
+            const UIMinimapBlit& c = ui.minimap_blit;
+            TbPixel* dst = RendererGetWScreen();
+            if (!dst || !MapShapeStart || !MapShapeEnd ||
+                (size_t)c.size * (size_t)c.size > ui.minimap_pixels.size())
+                break;
+            const int stride   = RendererScreenWidth();
+            const int screen_h = RendererScreenHeight();
+            for (int h = 0; h < c.size; ++h)
+            {
+                const int y = c.y + h;
+                if (y < 0 || y >= screen_h) continue;
+                int w0 = MapShapeStart[h];
+                int w1 = MapShapeEnd[h];
+                if (w0 < 0) w0 = 0;
+                if (w1 > c.size) w1 = c.size;
+                if (c.x + w0 < 0) w0 = -c.x;
+                if (c.x + w1 > stride) w1 = stride - c.x;
+                if (w1 <= w0) continue;
+                memcpy(&dst[(size_t)y * stride + c.x + w0],
+                       &ui.minimap_pixels[(size_t)h * c.size + w0],
+                       (size_t)(w1 - w0));
+            }
+            break;
+        }
         }
     }
+    // An unbalanced Begin (no matching End this frame) must not leak its clip
+    // into the cursor draw / blit that follow the replay.
+    if (!ui.viewports.Empty())
+        RendererSetViewport(0, 0, RendererScreenWidth(), RendererScreenHeight());
     m_ui_write_cmds = saved;
 }
 

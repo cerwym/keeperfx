@@ -25,6 +25,11 @@
 #include "bflib_video.h"
 #include "globals.h"
 #include "renderer/IPostProcessPass.h"
+#include "renderer/ir/PostProcessCommands.h"
+#include "renderer/vita/VitaMistPass.h"
+#include "renderer/vita/VitaDisplacePass.h"
+#include "renderer/vita/VitaFlyeyePass.h"
+#include "renderer/vita/VitaOverlayPass.h"
 #include "kfx/lense/LensManager.h"
 #include "renderer/backends/SoftwareWorldViewRenderer.h"
 #include "renderer/backends/SoftwareMapFadePass.h"
@@ -175,6 +180,18 @@ bool RendererVita::BeginFrame()
     return m_initialized;
 }
 
+IPostProcessPass* RendererVita::CreateLensPass(LensEffectType type)
+{
+    switch (type)
+    {
+        case LensEffectType::Mist:         return new VitaMistPass();
+        case LensEffectType::Displacement: return new VitaDisplacePass();
+        case LensEffectType::Flyeye:       return new VitaFlyeyePass();
+        case LensEffectType::Overlay:      return new VitaOverlayPass();
+        default:                           return nullptr;
+    }
+}
+
 void RendererVita::EndFrame()
 {
     if (!m_initialized) return;
@@ -210,22 +227,22 @@ void RendererVita::EndFrame()
 
         // Collect GPU-side post-process passes from active lens effects.
         // These run on the GPU instead of the CPU lens path in LensManager.
-        std::vector<IPostProcessPass*> gpu_passes;
+        // Vita has no RenderGraph/thread split, so the IRLensCmd is built and
+        // consumed in the same call — same data shape as
+        // RendererOpenGL::EndFrame()'s FlushToRenderGraph() for architectural
+        // symmetry, without a double-buffer flip.
+        // TODO : Actually port the fucking thing to the Graph.
+        IRLensCmd lens_cmd;
         {
             LensManager* lm = LensManager::GetInstance();
             if (lm && lm->IsReady()) {
-                for (LensEffect* e : lm->GetEffects()) {
-                    if (e->IsEnabled()) {
-                        IPostProcessPass* p = e->GetGPUPass();
-                        if (p) gpu_passes.push_back(p);
-                    }
-                }
+                lens_cmd = lm->CollectGPULensCmd();
             }
         }
 
         // Stage 1 — palette decode: index_tex + palette_tex → (scene FBO when GPU
         //   passes are active, directly to screen when running CPU-only effects).
-        if (gpu_passes.empty()) {
+        if (lens_cmd.count == 0) {
             // Direct-to-screen path: ensure we're rendering to the default
             // framebuffer at the full display size.
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -251,11 +268,12 @@ void RendererVita::EndFrame()
         glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, dyn_uv);
         glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
-        if (!gpu_passes.empty()) {
+        if (lens_cmd.count > 0) {
             // Stage 2 — ping-pong each GPU pass over the decoded scene.
             GLuint src_tex = m_scene_tex;
             bool   flip    = false;
-            for (IPostProcessPass* pass : gpu_passes) {
+            for (int i = 0; i < lens_cmd.count; ++i) {
+                IPostProcessPass* pass = lens_cmd.passes[i];
                 GLuint dst_fbo = flip ? m_pass_fbo_b : m_pass_fbo_a;
                 GLuint dst_tex = flip ? m_pass_tex_b : m_pass_tex_a;
                 pass->Apply(src_tex, dst_fbo, k_gameW, k_gameH);

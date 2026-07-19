@@ -31,8 +31,8 @@
 #include "bflib_filelst.h"
 
 
-#include "config_spritecolors.h"
 #include "vidfade.h"
+#include "mouse_cursor.h"
 #include "front_simple.h"
 #include "front_landview.h"
 #include "frontend.h"
@@ -51,8 +51,6 @@
 #include "renderer/RendererManager.h"
 #include "kfx/assets/SpriteSheetManager.h"
 #include "kfx/assets/FontManager.h"
-#include "custom_sprites.h"
-#include "sprites.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -92,28 +90,23 @@ unsigned long landview_frame_movement_scale_y;
 long base_mouse_sensitivity = 256;
 
 static TbBool force_video_mode_reset = true;
-struct TbSpriteSheet * pointer_sprites = NULL;
-struct MapLevelInfo map_info;
 
 TbBool MinimalResolutionSetup;
-
-struct TbColorTables pixmap;
-struct TbAlphaTables alpha_sprite_table;
-unsigned char white_pal[256];
-unsigned char red_pal[256];
 /******************************************************************************/
 
 
 extern struct TbLoadFiles gui_load_files_320[];
 extern struct TbLoadFiles gui_load_files_640[];
 extern struct TbLoadFiles front_load_files_minimal_640[];
+
+static TbBool switch_to_next_video_mode(void);
 /******************************************************************************/
 
 /**
  * Loads VGA 256 graphics files, for high resolution modes.
  * @return Returns true if all files were loaded, false otherwise.
  */
-short LoadVRes256Data(long scrbuf_size)
+static short LoadVRes256Data(long scrbuf_size)
 {
     // Update size of the parchment buffer, as it is also used as screen buffer
     if (scrbuf_size < 640*480)
@@ -131,7 +124,7 @@ short LoadVRes256Data(long scrbuf_size)
     return 1;
 }
 
-void FreeVRes256Data(void)
+static void FreeVRes256Data(void)
 {
     FontMgr_Free(&winfont);
     FontMgr_Free(&font_sprites);
@@ -140,7 +133,7 @@ void FreeVRes256Data(void)
     LbDataFreeAll(gui_load_files_640);
 }
 
-short LoadVResMinimal(void)
+static short LoadVResMinimal(void)
 {
     SpriteSheetMgr_Load(&button_sprites, "data/gui1-32.dat", "data/gui1-32.tab");
     FontMgr_Load(&frontend_font[0], "ldata/frontft1.dat", "ldata/frontft1.tab");
@@ -155,7 +148,7 @@ short LoadVResMinimal(void)
     return 1;
 }
 
-void FreeVResMinimal(void)
+static void FreeVResMinimal(void)
 {
     for (int i = 0; i < FRONTEND_FONTS_COUNT; ++i) {
         FontMgr_Free(&frontend_font[i]);
@@ -170,7 +163,7 @@ void FreeVResMinimal(void)
  * game speed on very slow machines.
  * @return Returns true if all files were loaded, false otherwise.
  */
-short LoadMcgaData(void)
+static short LoadMcgaData(void)
 {
     int ferror = 0;
     int i = 0;
@@ -204,7 +197,7 @@ short LoadMcgaData(void)
   return 0;
 }
 
-void FreeMcgaData(void)
+static void FreeMcgaData(void)
 {
     LbDataFreeAll(gui_load_files_320);
     FontMgr_Free(&winfont);
@@ -218,12 +211,12 @@ void set_game_vidmode(uint i, TbScreenMode nmode)
   switching_vidmodes[i%MAX_GAME_VIDMODE_COUNT]=nmode;
 }
 
-TbScreenMode get_game_vidmode(uint i)
+static TbScreenMode get_game_vidmode(uint i)
 {
   return switching_vidmodes[i%MAX_GAME_VIDMODE_COUNT];
 }
 
-TbScreenMode try_failsafe_vidmode(void)
+static TbScreenMode try_failsafe_vidmode(void)
 {
   // Check the failsafe mode
   if (!LbScreenIsModeAvailable(failsafe_vidmode, display_id))
@@ -234,7 +227,7 @@ TbScreenMode try_failsafe_vidmode(void)
   return failsafe_vidmode;
 }
 
-TbScreenMode get_failsafe_vidmode(void)
+static TbScreenMode get_failsafe_vidmode(void)
 {
   return failsafe_vidmode;
 }
@@ -264,320 +257,23 @@ void set_frontend_vidmode(TbScreenMode nmode)
   frontend_vidmode=nmode;
 }
 
-void load_pointer_file(short hi_res)
-{
-    SpriteSheetMgr_Load(&pointer_sprites, "data/pointer64.dat", "data/pointer64.tab");
-    if (!pointer_sprites) ERRORLOG("Unable to load pointer sprites");
-}
-
-TbBool set_pointer_graphic_none(void)
-{
-  LbMouseChangeSpriteAndHotspot(NULL, 0, 0);
-  return true;
-}
-
-TbBool set_pointer_graphic_menu(void)
-{
-  if (frontend_sprite == NULL)
-  {
-    WARNLOG("Frontend sprites not loaded, setting pointer to none");
-    LbMouseChangeSpriteAndHotspot(NULL, 0, 0);
-    return false;
-  }
-  LbMouseChangeSpriteAndHotspot(get_frontend_sprite(GFS_cursor_horny), 0, 0);
-  return true;
-}
-
-TbBool set_pointer_graphic_spell(long spridx, long frame)
-{
-    long i;
-    long x;
-    long y;
-    SYNCDBG(8, "Setting to sprite %d", (int)spridx);
-    if (pointer_sprites == NULL)
-    {
-        WARNLOG("Pointer sprites not loaded, setting to none");
-        LbMouseChangeSpriteAndHotspot(NULL, 0, 0);
-        return false;
-  }
-  if (is_feature_on(Ft_BigPointer))
-  {
-    y = 32;
-    x = 32;
-    // frame is the game turn; the 64px spell pointers are stored as runs of
-    // 8 consecutive animation frames, so this advances one frame per turn.
-    i = spridx + (frame % 8);
-  } else
-  {
-    y = 78;
-    x = 26;
-    i = spridx;
-  }
-  const struct TbSprite* spr = NULL;
-
-  if (is_custom_icon(i))
-  {
-      spr = get_new_icon_sprite(i);
-      SYNCDBG(8,"Activating pointer %ld", i);
-      LbMouseChangeSpriteAndHotspot(spr, x/2, y/2);
-  }
-  else
-  {
-      if (i >= 0 && i < num_sprites(pointer_sprites))
-      {
-          spr = get_sprite(pointer_sprites, i);
-          SYNCDBG(8,"Activating pointer %ld", i);
-          LbMouseChangeSpriteAndHotspot(spr, x/2, y/2);
-      } else
-      {
-          WARNLOG("Sprite %d exceeds buffer, setting pointer to none",(int)i);
-          LbMouseChangeSpriteAndHotspot(NULL, 0, 0);
-      }
-  }
-  return true;
-}
-
-TbBool set_pointer_graphic(long ptr_idx)
-{
-    long x;
-    long y;
-    const struct TbSprite* spr;
-    SYNCDBG(8, "Setting to %d", (int)ptr_idx);
-    if (pointer_sprites == NULL)
-    {
-        WARNLOG("Pointer sprites not loaded, setting to none");
-        LbMouseChangeSpriteAndHotspot(NULL, 0, 0);
-        return false;
-    }
-
-
-  switch (ptr_idx)
-  {
-  case MousePG_Invisible:
-  case MousePG_Arrow:
-  case MousePG_Pickaxe:
-  case MousePG_Query:
-  case MousePG_DenyMark:
-  case MousePG_Pickaxe2:
-    ptr_idx = get_player_colored_pointer_icon_idx(ptr_idx,my_player_number);
-      x = 12; y = 15;
-      break;
-  case MousePG_Sell:
-      ptr_idx = get_player_colored_pointer_icon_idx(ptr_idx,my_player_number);
-      x = 17; y = 29;
-      break;
-  case MousePG_PlaceTrap01:
-  case MousePG_PlaceTrap02:
-  case MousePG_PlaceTrap03:
-  case MousePG_PlaceTrap04:
-  case MousePG_PlaceTrap05:
-  case MousePG_PlaceTrap06:
-  case MousePG_PlaceTrap07:
-  case MousePG_PlaceTrap08:
-  case MousePG_PlaceTrap09:
-  case MousePG_PlaceTrap10:
-  case MousePG_PlaceTrap11:
-  case MousePG_PlaceTrap12:
-  case MousePG_PlaceTrap13:
-  case MousePG_PlaceTrap14:
-  case MousePG_PlaceDoor01:
-  case MousePG_PlaceDoor02:
-  case MousePG_PlaceDoor03:
-  case MousePG_PlaceDoor04:
-  case MousePG_Mystery:
-      // 166..181 are place trap pointers with spell icons
-  case 166:
-  case 167:
-  case 168:
-  case 169:
-  case 170:
-  case 171:
-  case 172:
-  case 173:
-  case 174:
-  case 175:
-  case 176:
-  case 177:
-  case 178:
-  case 179:
-  case 180:
-  case 181:
-      ptr_idx = get_player_colored_pointer_icon_idx(ptr_idx,my_player_number);
-      x = 12; y = 38;
-      break;
-  case  MousePG_SpellCharge0:
-  case  MousePG_SpellCharge1:
-  case  MousePG_SpellCharge2:
-  case  MousePG_SpellCharge3:
-  case  MousePG_SpellCharge4:
-  case  MousePG_SpellCharge5:
-  case  MousePG_SpellCharge6:
-  case  MousePG_SpellCharge7:
-  case  MousePG_SpellCharge8:
-      ptr_idx = get_player_colored_pointer_icon_idx(ptr_idx,my_player_number);
-      x = 20; y = 20;
-      break;
-  case  MousePG_PlaceRoom01:
-  case  MousePG_PlaceRoom02:
-  case  MousePG_PlaceRoom03:
-  case  MousePG_PlaceRoom04:
-  case  MousePG_PlaceRoom05:
-  case  MousePG_PlaceRoom06:
-  case  MousePG_PlaceRoom07:
-  case  MousePG_PlaceRoom08:
-  case  MousePG_PlaceRoom09:
-  case  MousePG_PlaceRoom10:
-  case  MousePG_PlaceRoom11:
-  case  MousePG_PlaceRoom12:
-  case  MousePG_PlaceRoom13:
-  case  MousePG_PlaceRoom14:
-  case  MousePG_PlaceRoom15:
-      ptr_idx = get_player_colored_pointer_icon_idx(ptr_idx,my_player_number);
-      x = 12; y = 38;
-      break;
-  case  MousePG_LockMark:
-  // 40..144 are spell pointers
-  case  MousePG_Unkn47:
-      ptr_idx = get_player_colored_pointer_icon_idx(ptr_idx,my_player_number);
-      x = 12; y = 15;
-      break;
-  case  96:
-  case  97:
-  case  98:
-  case  99:
-  case 100:
-  case 101:
-  case 102:
-  case 103:
-      ptr_idx = get_player_colored_pointer_icon_idx(ptr_idx,my_player_number);
-      x = 12; y = 15;
-      break;
-  case MousePG_PlaceImpRock:
-  case MousePG_PlaceGold:
-  case MousePG_PlaceEarth:
-  case MousePG_PlaceWall:
-  case MousePG_PlacePath:
-  case MousePG_PlaceClaimed:
-  case MousePG_PlaceLava:
-  case MousePG_PlaceWater:
-  case MousePG_PlaceGems:
-  case MousePG_MkDigger:
-  case MousePG_MkCreature:
-  case MousePG_MvCreature:
-      ptr_idx = get_player_colored_pointer_icon_idx(ptr_idx,my_player_number);
-      x = 12; y = 38;
-      break;
-  default:
-      ptr_idx = get_player_colored_pointer_icon_idx(ptr_idx,my_player_number);
-      spr = get_new_icon_sprite(ptr_idx);
-      if (spr != NULL)
-      {
-          LbMouseChangeSpriteAndHotspot(spr, spr->SWidth/2, spr->SHeight);
-          return true;
-      }
-    WARNLOG("Unrecognized Mouse Pointer index, %ld",ptr_idx);
-    LbMouseChangeSpriteAndHotspot(NULL, 0, 0);
-    return false;
-  }
-  if (ptr_idx >= 0 && ptr_idx < num_sprites(pointer_sprites)) {
-    spr = get_sprite(pointer_sprites, ptr_idx);
-    LbMouseChangeSpriteAndHotspot(spr, x, y);
-  } else {
-    WARNLOG("Sprite %d exceeds buffer, setting pointer to none",(int)ptr_idx);
-    LbMouseChangeSpriteAndHotspot(NULL, 0, 0);
-  }
-  return true;
-}
-
-void unload_pointer_file(short hi_res)
-{
-    set_pointer_graphic_none();
-    SpriteSheetMgr_Free(&pointer_sprites);
-}
-
-TbBool init_fades_table(void)
-{
-    char* fname = prepare_file_path(FGrp_StdData, "tables.dat");
-    SYNCDBG(0,"Reading fade table file \"%s\".",fname);
-    if (LbFileLoadAt(fname, &pixmap) != sizeof(struct TbColorTables))
-    {
-        compute_fade_tables(&pixmap,engine_palette,engine_palette);
-        LbFileSaveAt(fname, &pixmap, sizeof(struct TbColorTables));
-    }
-    TbPixel cblack = 144;
-    // Update black color
-    for (long i = 0; i < 8192; i++)
-    {
-        if (pixmap.fade_tables[i] == 0) {
-            pixmap.fade_tables[i] = cblack;
-        }
-    }
-    return true;
-}
-
-TbBool init_alpha_table(void)
-{
-    char* fname = prepare_file_path(FGrp_StdData, "alpha.col");
-    SYNCDBG(0,"Reading alpha color table file \"%s\".",fname);
-    // Loading file data
-    if (LbFileLoadAt(fname, &alpha_sprite_table) != sizeof(struct TbAlphaTables))
-    {
-        compute_alpha_tables(&alpha_sprite_table,engine_palette,engine_palette);
-        LbFileSaveAt(fname, &alpha_sprite_table, sizeof(struct TbAlphaTables));
-    }
-    return true;
-}
-
-TbBool init_rgb2idx_table(void)
-{
-    char* fname = prepare_file_path(FGrp_StdData, "colours.col");
-    SYNCDBG(0,"Reading rgb-to-index color table file \"%s\".",fname);
-    // Loading file data
-    if (LbFileLoadAt(fname, &colours) != sizeof(TbRGBColorTable))
-    {
-        compute_rgb2idx_table(colours,engine_palette);
-        LbFileSaveAt(fname, &colours, sizeof(TbRGBColorTable));
-    }
-    return true;
-}
-
-TbBool init_redpal_table(void)
-{
-    char* fname = prepare_file_path(FGrp_StdData, "redpal.col");
-    SYNCDBG(0,"Reading red-blended color table file \"%s\".",fname);
-    // Loading file data
-    if (LbFileLoadAt(fname, &red_pal) != 256)
-    {
-        compute_shifted_palette_table(red_pal, engine_palette, engine_palette, 20, -10, -10);
-        LbFileSaveAt(fname, &red_pal, 256);
-    }
-    return true;
-}
-
-TbBool init_whitepal_table(void)
-{
-    char* fname = prepare_file_path(FGrp_StdData, "whitepal.col");
-    SYNCDBG(0,"Reading white-blended color table file \"%s\".",fname);
-    // Loading file data
-    if (LbFileLoadAt(fname, &white_pal) != 256)
-    {
-        compute_shifted_palette_table(white_pal, engine_palette, engine_palette, 48, 48, 48);
-        LbFileSaveAt(fname, &white_pal, 256);
-    }
-    return true;
-}
-
-void init_colours(void)
-{
-    init_rgb2idx_table();
-    init_redpal_table();
-    init_whitepal_table();
-}
-
 char *get_vidmode_name(TbScreenMode mode)
 {
     TbScreenModeInfo* curr_mdinfo = LbScreenGetModeInfo(mode);
     return curr_mdinfo->Desc;
+}
+
+static TbScreenModeInfo* begin_screen_mode_setup(TbScreenMode nmode, TbScreenMode *old_mode_out)
+{
+  TbScreenModeInfo* new_mdinfo = LbScreenGetModeInfo(nmode);
+  TbScreenMode old_mode = RendererActiveMode();
+  TbScreenModeInfo* old_mdinfo = LbScreenGetModeInfo(old_mode);
+  if (!(old_mdinfo->VideoFlags & Lb_VF_FILLALL))
+  {
+    display_id = LbGetCurrentDisplayIndex(); // get current display
+  }
+  *old_mode_out = old_mode;
+  return new_mdinfo;
 }
 
 /**
@@ -587,17 +283,11 @@ char *get_vidmode_name(TbScreenMode mode)
  * @param falisafe If TRUE the the failsafe resolution will be used if nmode is not available
  * @return Returns the mode that the screen was setup successfully with (or Lb_SCREEN_MODE_INVALID/false when the screen was not setup successfully).
  */
-TbScreenMode setup_screen_mode(TbScreenMode nmode, TbBool failsafe)
+static TbScreenMode setup_screen_mode(TbScreenMode nmode, TbBool failsafe)
 {
   SYNCDBG(4,"Setting up mode %d",(int)nmode);
-  TbScreenModeInfo* new_mdinfo = LbScreenGetModeInfo(nmode);
-  TbScreenMode old_mode = RendererActiveMode();
-  TbScreenModeInfo* old_mdinfo = LbScreenGetModeInfo(old_mode);
-  // we don't want to get the current display when using the "fill all" mode, we want to keep the old version
-  if (!(old_mdinfo->VideoFlags & Lb_VF_FILLALL))
-  {
-    display_id = LbGetCurrentDisplayIndex(); // get current display
-  }
+  TbScreenMode old_mode;
+  TbScreenModeInfo* new_mdinfo = begin_screen_mode_setup(nmode, &old_mode);
   // Check that the desired mode is available for the current display
   if (!LbScreenIsModeAvailable(nmode, display_id))
   {
@@ -768,14 +458,8 @@ TbBool update_screen_mode_data(long width, long height)
 TbScreenMode setup_screen_mode_minimal(TbScreenMode nmode)
 {
   SYNCDBG(4,"Setting up mode %d",(int)nmode);
-  TbScreenModeInfo* new_mdinfo = LbScreenGetModeInfo(nmode);
-  // we don't want to get the current display when using the "fill all" mode, we want to keep the old version
-  TbScreenMode old_mode = RendererActiveMode();
-  TbScreenModeInfo* old_mdinfo = LbScreenGetModeInfo(old_mode);
-  if (!(old_mdinfo->VideoFlags & Lb_VF_FILLALL))
-  {
-    display_id = LbGetCurrentDisplayIndex(); // get current display
-  }
+  TbScreenMode old_mode;
+  TbScreenModeInfo* new_mdinfo = begin_screen_mode_setup(nmode, &old_mode);
   // Check that the desired mode is available for the current display
   if (!LbScreenIsModeAvailable(nmode, display_id))
   {
@@ -891,14 +575,8 @@ TbScreenMode setup_screen_mode_minimal(TbScreenMode nmode)
 TbScreenMode setup_screen_mode_zero(TbScreenMode nmode)
 {
   SYNCDBG(4,"Setting up mode %d",(int)nmode);
-  TbScreenModeInfo* new_mdinfo = LbScreenGetModeInfo(nmode);
-  // we don't want to get the current display when using the "fill all" mode, we want to keep the old version
-  TbScreenMode old_mode = RendererActiveMode();
-  TbScreenModeInfo* old_mdinfo = LbScreenGetModeInfo(old_mode);
-  if (!(old_mdinfo->VideoFlags & Lb_VF_FILLALL))
-  {
-    display_id = LbGetCurrentDisplayIndex(); // get current display
-  }
+  TbScreenMode old_mode;
+  TbScreenModeInfo* new_mdinfo = begin_screen_mode_setup(nmode, &old_mode);
   // Skip full setup when already in the requested mode to avoid redundant
   // surface recreation and refresh-rate redetection on a visible window.
   if (old_mode == nmode)
@@ -963,7 +641,7 @@ TbScreenMode reenter_video_mode(void)
  *
  * @return Returns the mode that the screen was setup successfully with (or Lb_SCREEN_MODE_INVALID/false when the screen was not setup successfully).
  */
-TbBool switch_to_next_video_mode(void)
+static TbBool switch_to_next_video_mode(void)
 {
   uint current = settings.switching_vidmodes_index;
   uint i = current;
@@ -971,13 +649,6 @@ TbBool switch_to_next_video_mode(void)
   TbScreenMode scrmode;
   do
   {
-    if ((features_enabled & Ft_HiResVideo) == 0)
-    {
-      // Do not allow user enter higher modes on low memory systems
-      scrmode = setup_screen_mode(Lb_SCREEN_MODE_320_200_8, true);
-      failsafe = ((scrmode == Lb_SCREEN_MODE_320_200_8) ? false : true);
-      break;
-    }
     i++;
     if (i>=MAX_GAME_VIDMODE_COUNT)
     {

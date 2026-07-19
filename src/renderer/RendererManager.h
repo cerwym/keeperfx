@@ -303,7 +303,8 @@ void WorldViewRenderer_DrawFrontView(struct Camera* cam);
  *  Returns 1 if the GPU handled it (CPU blit should be skipped), 0 to fall back. */
 int WorldViewRenderer_SubmitKeeperSprite(int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
                                          const unsigned char* data, int src_w, int src_h,
-                                         unsigned int draw_flags, const unsigned char* remap);
+                                         unsigned int draw_flags, const unsigned char* remap,
+                                         int32_t sprite_id);
 
 /** Clear the keeper-sprite decode atlas and reset the layer index.
  *  Must be called before each level load so stale data-pointer mappings
@@ -741,7 +742,7 @@ void RendererSubmitButton(const RendererUIButtonDesc* desc);
 /** Submit a sprite with explicit pixel dimensions to the GPU batch.
  *  Called by game-logic hooks (draw_status_sprites, draw_engine_number, etc.)
  *  instead of LbSpriteDrawScaled when the GPU renderer is active. */
-void UIRenderer_SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h, const struct TbSprite *spr);
+void UIRenderer_SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h, const struct TbSprite *spr, TbDrawFlagsMask draw_flags);
 
 /** Submit a solid-color rectangle to the GPU batch.
  *  Called instead of LbDrawBox when the GPU renderer is active.

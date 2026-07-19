@@ -21,48 +21,27 @@
 
 #include "LensEffect.h"
 
-#ifdef PLATFORM_VITA
-#include "renderer/vita/VitaMistPass.h"
-#elif defined(RENDERER_OPENGL_ENABLED)
-#include "renderer/opengl/GLLensPass.h"
-#endif
-
 /******************************************************************************/
 
 class MistEffect : public LensEffect {
 public:
     MistEffect();
     virtual ~MistEffect();
-    
+
     virtual TbBool Setup(long lens_idx) override;
     virtual void Cleanup() override;
     virtual TbBool Draw(LensRenderContext* ctx) override;
 
-#ifdef PLATFORM_VITA
-    virtual IPostProcessPass* GetGPUPass() override {
-        return m_gpu_pass.IsInitialized() ? &m_gpu_pass : nullptr;
-    }
-#else
-    virtual IPostProcessPass* GetGPUPass() override {
-#ifdef RENDERER_OPENGL_ENABLED
-        return m_gl_pass_ready ? &m_gl_pass : nullptr;
-#else
-        return nullptr;
-#endif
-    }
-#endif
+    virtual class IPostProcessPass* GetGPUPass() override { return m_gpu_pass; }
 
 private:
     TbBool LoadMistTexture(const char* filename);
 
     long m_current_lens;
 
-#ifdef PLATFORM_VITA
-    VitaMistPass m_gpu_pass;
-#elif defined(RENDERER_OPENGL_ENABLED)
-    GLMistPass m_gl_pass;
-    bool m_gl_pass_ready = false;
-#endif
+    // Owned; created via RendererGetActive()->CreateLensPass() in Setup(),
+    // freed in Cleanup(). nullptr on backends without GPU lens support.
+    class IPostProcessPass* m_gpu_pass = nullptr;
 };
 
 /******************************************************************************/

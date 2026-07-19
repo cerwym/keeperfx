@@ -130,6 +130,10 @@ public:
     IUIRenderer* GetUIRenderer() override;
     ICursorLayer* GetCursorLayer() override;
 
+    /** Create a GL post-process pass for the given lens effect type.
+     *  Ownership transfers to the caller (LensEffect). */
+    class IPostProcessPass* CreateLensPass(LensEffectType type) override;
+
     // Sprite-atlas accessor — kept for RendererManager's sprite-handle registry.
     GLSpriteAtlas* GetSpriteAtlas() const { return m_sprite_atlas; }
 

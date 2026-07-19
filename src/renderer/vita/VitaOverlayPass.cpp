@@ -37,28 +37,8 @@ static const char k_overlay_frag[] =
     "}\n";
 
 // ---------------------------------------------------------------------------
-void VitaOverlayPass::Configure(const unsigned char* data, int w, int h, float alpha)
-{
-    m_pending_data = data;
-    m_pending_w    = w;
-    m_pending_h    = h;
-    m_alpha        = alpha;
-    m_configured   = true;
-}
-
-// ---------------------------------------------------------------------------
 bool VitaOverlayPass::Init()
 {
-    if (!m_configured)
-        return false;
-
-    // Validate dimensions before using them (max 4096×4096)
-    if (m_pending_w <= 0 || m_pending_w > 4096 || m_pending_h <= 0 || m_pending_h > 4096) {
-        ERRORLOG("VitaOverlayPass: invalid dimensions w=%d h=%d (must be 1-4096)", 
-                 m_pending_w, m_pending_h);
-        return false;
-    }
-
     m_program = vita_build_pass_program(k_overlay_frag);
     if (!m_program)
         return false;
@@ -68,17 +48,9 @@ bool VitaOverlayPass::Init()
     m_loc_palette = glGetUniformLocation(m_program, "uPalette");
     m_loc_alpha   = glGetUniformLocation(m_program, "uAlpha");
 
-    // Upload overlay image (static 8-bit palette indices).
-    glGenTextures(1, &m_overlay_tex);
-    glBindTexture(GL_TEXTURE_2D, m_overlay_tex);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, m_pending_w, m_pending_h,
-                 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, m_pending_data);
-
-    // Allocate palette texture (256×1 RGBA, filled each frame).
+    // Allocate palette texture (256×1 RGBA, filled each frame). Dimension-
+    // independent, so this can happen before Configure() supplies the
+    // overlay image.
     glGenTextures(1, &m_palette_tex);
     glBindTexture(GL_TEXTURE_2D, m_palette_tex);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -89,15 +61,53 @@ bool VitaOverlayPass::Init()
                  0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 
     glBindTexture(GL_TEXTURE_2D, 0);
-    m_pending_data = nullptr;
     return true;
+}
+
+// ---------------------------------------------------------------------------
+void VitaOverlayPass::Configure(const unsigned char* data, int w, int h, float alpha)
+{
+    m_alpha = alpha;
+
+    if (data == nullptr || m_program == 0)
+        return;
+
+    // Validate dimensions before using them (max 4096×4096)
+    if (w <= 0 || w > 4096 || h <= 0 || h > 4096) {
+        ERRORLOG("VitaOverlayPass: invalid dimensions w=%d h=%d (must be 1-4096)", w, h);
+        return;
+    }
+
+    if (!m_overlay_tex) {
+        glGenTextures(1, &m_overlay_tex);
+        glBindTexture(GL_TEXTURE_2D, m_overlay_tex);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    } else {
+        glBindTexture(GL_TEXTURE_2D, m_overlay_tex);
+    }
+
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, w, h,
+                 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, data);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    m_overlay_w  = w;
+    m_overlay_h  = h;
+    m_configured = true;
+}
+
+void VitaOverlayPass::Configure(const LensGPUPassParams& params)
+{
+    Configure(params.overlay_data, params.overlay_w, params.overlay_h, params.overlay_alpha);
 }
 
 // ---------------------------------------------------------------------------
 void VitaOverlayPass::Apply(unsigned int src_tex, unsigned int dst_fbo,
                              int src_w, int src_h)
 {
-    if (!m_program)
+    if (!m_program || !m_configured)
         return;
 
     // Rebuild the palette texture from the current 6-bit RGB lbPalette.

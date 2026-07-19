@@ -198,6 +198,54 @@ void main()
 }
 )glsl";
 
+// Edge-detect variant of the outline shader (sampler2D).
+// Emits outline colour only at sprite boundary pixels (where at least one
+// cardinal neighbour has palette index 0).  Texel step is 1/256 — the atlas
+// tile dimension is compile-time fixed at 256×256.
+constexpr const char* KSPR_EDGE_FRAGMENT_SHADER = R"glsl(
+#version 330 core
+in vec2 v_uv;
+uniform sampler2D u_sprite;
+uniform vec4      u_outline_color;
+out vec4 fragColor;
+const float kStep = 1.0 / 256.0;
+const float kThr  = 0.5 / 255.0;
+void main()
+{
+    float idx = texture(u_sprite, v_uv).r;
+    if (idx < kThr) discard;
+    float l = texture(u_sprite, v_uv + vec2(-kStep, 0.0)).r;
+    float r = texture(u_sprite, v_uv + vec2( kStep, 0.0)).r;
+    float u = texture(u_sprite, v_uv + vec2(0.0, -kStep)).r;
+    float d = texture(u_sprite, v_uv + vec2(0.0,  kStep)).r;
+    if (l >= kThr && r >= kThr && u >= kThr && d >= kThr) discard;
+    fragColor = u_outline_color;
+}
+)glsl";
+
+// Edge-detect variant — array-atlas (sampler2DArray + u_layer).
+constexpr const char* KSPR_ARRAY_EDGE_FRAGMENT_SHADER = R"glsl(
+#version 330 core
+in vec2 v_uv;
+uniform sampler2DArray u_sprite;
+uniform float          u_layer;
+uniform vec4           u_outline_color;
+out vec4 fragColor;
+const float kStep = 1.0 / 256.0;
+const float kThr  = 0.5 / 255.0;
+void main()
+{
+    float idx = texture(u_sprite, vec3(v_uv, u_layer)).r;
+    if (idx < kThr) discard;
+    float l = texture(u_sprite, vec3(v_uv + vec2(-kStep, 0.0), u_layer)).r;
+    float r = texture(u_sprite, vec3(v_uv + vec2( kStep, 0.0), u_layer)).r;
+    float u = texture(u_sprite, vec3(v_uv + vec2(0.0, -kStep), u_layer)).r;
+    float d = texture(u_sprite, vec3(v_uv + vec2(0.0,  kStep), u_layer)).r;
+    if (l >= kThr && r >= kThr && u >= kThr && d >= kThr) discard;
+    fragColor = u_outline_color;
+}
+)glsl";
+
 // Array-atlas variant of the glow shader — additive sprites cached in atlas.
 constexpr const char* KSPR_ARRAY_GLOW_FRAGMENT_SHADER = R"glsl(
 #version 330 core
@@ -227,6 +275,152 @@ void main()
     if (row == 0 || family == 6) discard;
     vec3 glow = clamp(k_glow_step[family] * float(row), 0.0, 1.0);
     fragColor = vec4(glow, 1.0);
+}
+)glsl";
+
+// ── Instanced keeper-sprite shaders ──────────────────────────────────────────
+// One glDrawArraysInstanced call draws every atlas-resident sprite of the
+// frame: the unit quad (location 0) is expanded per instance by a_rect, and
+// all per-sprite state (atlas layer, CLUT row, alpha, depth, flip/additive
+// flags) rides in per-instance attributes instead of uniforms.
+//
+// Blending is unified as premultiplied alpha — glBlendFunc(GL_ONE,
+// GL_ONE_MINUS_SRC_ALPHA) — so normal sprites (rgb*a, a) and additive glow
+// sprites (rgb, 0) coexist in a single draw with no blend-state changes.
+constexpr const char* KSPR_INST_VERTEX_SHADER = R"glsl(
+#version 330 core
+layout(location = 0) in vec2 a_corner;  // unit quad corner, (0,0)..(1,1)
+layout(location = 1) in vec4 a_rect;    // instance: dst x, y, w, h (screen px)
+layout(location = 2) in vec2 a_uvext;   // instance: uv extent (src_w/dim, src_h/dim)
+layout(location = 3) in vec4 a_misc;    // instance: layer, clut_v, alpha, z_ndc
+layout(location = 4) in uint a_flags;   // instance: bit0 = flip_h, bit1 = additive
+uniform vec2 u_viewport;
+out vec2 v_uv;
+flat out vec3 v_lca;    // layer, clut_v, alpha
+flat out uint v_flags;
+void main()
+{
+    vec2 px = a_rect.xy + a_corner * a_rect.zw;
+    vec2 ndc;
+    ndc.x = px.x / u_viewport.x * 2.0 - 1.0;
+    ndc.y = 1.0 - px.y / u_viewport.y * 2.0;
+    gl_Position = vec4(ndc, a_misc.w, 1.0);
+    float u = ((a_flags & 1u) != 0u) ? (1.0 - a_corner.x) : a_corner.x;
+    v_uv    = vec2(u * a_uvext.x, a_corner.y * a_uvext.y);
+    v_lca   = a_misc.xyz;
+    v_flags = a_flags;
+}
+)glsl";
+
+constexpr const char* KSPR_INST_FRAGMENT_SHADER = R"glsl(
+#version 330 core
+in vec2 v_uv;
+flat in vec3 v_lca;    // layer, clut_v, alpha
+flat in uint v_flags;  // bit1 = additive glow
+uniform sampler2DArray u_sprite;   // GL_R8 decode atlas, one layer per sprite
+uniform sampler2D      u_clut;     // 256xN CLUT — row 0 identity, rows 1..N remaps
+out vec4 fragColor;
+
+// Same glow families/steps as KSPR_GLOW_FRAGMENT_SHADER (see there for docs).
+const vec3 k_glow_step[8] = vec3[8](
+    vec3(16.0, 16.0, 16.0) / 255.0,
+    vec3(24.0, 16.0,  0.0) / 255.0,
+    vec3(24.0,  4.0,  4.0) / 255.0,
+    vec3( 8.0,  8.0, 24.0) / 255.0,
+    vec3( 8.0, 24.0,  8.0) / 255.0,
+    vec3(12.0,  0.0, 12.0) / 255.0,
+    vec3( 0.0,  0.0,  0.0) / 255.0,
+    vec3(24.0, 12.0,  4.0) / 255.0
+);
+
+void main()
+{
+    float idx = texture(u_sprite, vec3(v_uv, v_lca.x)).r;
+    if ((v_flags & 2u) != 0u)
+    {
+        // Additive glow: alpha 0 makes (ONE, ONE_MINUS_SRC_ALPHA) act as (ONE, ONE).
+        int px = int(idx * 255.0 + 0.5);
+        if (px < 1 || px > 64) discard;
+        int code   = px - 1;
+        int family = code / 8;
+        int row    = code % 8;
+        if (row == 0 || family == 6) discard;
+        vec3 glow = clamp(k_glow_step[family] * float(row), 0.0, 1.0);
+        fragColor = vec4(glow, 0.0);
+    }
+    else
+    {
+        if (idx < (0.5 / 255.0)) discard;
+        vec4 c = texture(u_clut, vec2(idx, v_lca.y));
+        float a = c.a * v_lca.z;
+        fragColor = vec4(c.rgb * a, a);  // premultiplied
+    }
+}
+)glsl";
+
+// Instanced depth-fail outline: flat owner colour where the sprite is behind
+// geometry (drawn with glDepthFunc(GL_GREATER) before the main instanced pass).
+constexpr const char* KSPR_INST_OUTLINE_VERTEX_SHADER = R"glsl(
+#version 330 core
+layout(location = 0) in vec2 a_corner;
+layout(location = 1) in vec4 a_rect;
+layout(location = 2) in vec2 a_uvext;
+layout(location = 3) in vec3 a_lzf;     // instance: layer, z_ndc, flip (0/1)
+layout(location = 4) in vec4 a_color;   // instance: outline rgba
+uniform vec2 u_viewport;
+out vec2 v_uv;
+flat out float v_layer;
+flat out vec4  v_color;
+void main()
+{
+    vec2 px = a_rect.xy + a_corner * a_rect.zw;
+    vec2 ndc;
+    ndc.x = px.x / u_viewport.x * 2.0 - 1.0;
+    ndc.y = 1.0 - px.y / u_viewport.y * 2.0;
+    gl_Position = vec4(ndc, a_lzf.y, 1.0);
+    float u = (a_lzf.z > 0.5) ? (1.0 - a_corner.x) : a_corner.x;
+    v_uv    = vec2(u * a_uvext.x, a_corner.y * a_uvext.y);
+    v_layer = a_lzf.x;
+    v_color = a_color;
+}
+)glsl";
+
+constexpr const char* KSPR_INST_OUTLINE_FRAGMENT_SHADER = R"glsl(
+#version 330 core
+in vec2 v_uv;
+flat in float v_layer;
+flat in vec4  v_color;
+uniform sampler2DArray u_sprite;
+out vec4 fragColor;
+void main()
+{
+    float idx = texture(u_sprite, vec3(v_uv, v_layer)).r;
+    if (idx < (0.5 / 255.0)) discard;
+    fragColor = vec4(v_color.rgb * v_color.a, v_color.a);  // premultiplied
+}
+)glsl";
+
+// Instanced edge-detect: only emit colour at sprite boundary pixels.
+// Shares the same vertex shader and VAO as the instanced outline.
+constexpr const char* KSPR_INST_EDGE_FRAGMENT_SHADER = R"glsl(
+#version 330 core
+in vec2 v_uv;
+flat in float v_layer;
+flat in vec4  v_color;
+uniform sampler2DArray u_sprite;
+out vec4 fragColor;
+const float kStep = 1.0 / 256.0;
+const float kThr  = 0.5 / 255.0;
+void main()
+{
+    float idx = texture(u_sprite, vec3(v_uv, v_layer)).r;
+    if (idx < kThr) discard;
+    float l = texture(u_sprite, vec3(v_uv + vec2(-kStep, 0.0), v_layer)).r;
+    float r = texture(u_sprite, vec3(v_uv + vec2( kStep, 0.0), v_layer)).r;
+    float u = texture(u_sprite, vec3(v_uv + vec2(0.0, -kStep), v_layer)).r;
+    float d = texture(u_sprite, vec3(v_uv + vec2(0.0,  kStep), v_layer)).r;
+    if (l >= kThr && r >= kThr && u >= kThr && d >= kThr) discard;
+    fragColor = vec4(v_color.rgb * v_color.a, v_color.a);  // premultiplied
 }
 )glsl";
 
@@ -326,6 +520,70 @@ void main()
     // When shadow_colour = (0,0,0,1) this is identical to the original multiply-darken:
     //   result = black * alpha + dst * (1 - alpha) = dst * (1 - alpha)
     fragColor = vec4(u_shadow_colour.rgb, u_darkness * u_shadow_colour.a);
+}
+)glsl";
+
+// ── Instanced shadow shaders ─────────────────────────────────────────────────
+// One glDrawArraysInstanced draws every creature shadow of the frame.  The
+// quad is a sheared 4-corner polygon, so instead of a rect the instance
+// carries all four corner positions and UVs packed into vec4 pairs; the
+// vertex shader picks the corner from gl_VertexID (6 verts = 2 triangles,
+// same 0,1,2 / 0,2,3 split as the legacy path).  Silhouette pixels come from
+// a per-variant decode cache (GL_TEXTURE_2D_ARRAY) instead of being RLE
+// decoded and re-uploaded per shadow per frame; circle shadows sample the
+// pre-baked gradient on unit 1, selected by the is_circle instance flag.
+constexpr const char* SHADOW_INST_VERTEX_SHADER = R"glsl(
+#version 330 core
+layout(location = 0) in vec4 a_c01;   // instance: corner0.xy, corner1.xy (screen px)
+layout(location = 1) in vec4 a_c23;   // instance: corner2.xy, corner3.xy
+layout(location = 2) in vec4 a_uv01;  // instance: uv0, uv1
+layout(location = 3) in vec4 a_uv23;  // instance: uv2, uv3
+layout(location = 4) in vec4 a_ldc;   // instance: layer, darkness, ndc_z, is_circle
+uniform vec2 u_viewport;
+out vec2 v_uv;
+flat out vec3 v_ldc;   // layer, darkness, is_circle
+void main()
+{
+    int corner;
+    switch (gl_VertexID) {
+        case 0:  corner = 0; break;
+        case 1:  corner = 1; break;
+        case 2:  corner = 2; break;
+        case 3:  corner = 0; break;
+        case 4:  corner = 2; break;
+        default: corner = 3; break;
+    }
+    vec2 pos, uv;
+    if      (corner == 0) { pos = a_c01.xy; uv = a_uv01.xy; }
+    else if (corner == 1) { pos = a_c01.zw; uv = a_uv01.zw; }
+    else if (corner == 2) { pos = a_c23.xy; uv = a_uv23.xy; }
+    else                  { pos = a_c23.zw; uv = a_uv23.zw; }
+    vec2 ndc;
+    ndc.x = pos.x / u_viewport.x * 2.0 - 1.0;
+    ndc.y = 1.0 - pos.y / u_viewport.y * 2.0;
+    gl_Position = vec4(ndc, a_ldc.z, 1.0);
+    v_uv  = uv;
+    v_ldc = vec3(a_ldc.x, a_ldc.y, a_ldc.w);
+}
+)glsl";
+
+constexpr const char* SHADOW_INST_FRAGMENT_SHADER = R"glsl(
+#version 330 core
+in vec2 v_uv;
+flat in vec3 v_ldc;    // layer, darkness, is_circle
+uniform sampler2DArray u_silhouettes;  // unit 0: cached silhouette masks
+uniform sampler2D      u_circle;       // unit 1: pre-baked radial gradient
+uniform vec4 u_shadow_colour;          // rgb=tint, a=intensity (RendererSettings)
+out vec4 fragColor;
+void main()
+{
+    float mask = (v_ldc.z > 0.5)
+        ? texture(u_circle, v_uv).r
+        : texture(u_silhouettes, vec3(v_uv, v_ldc.x)).r;
+    if (mask == 0.0) discard;
+    // Same blend semantics as SHADOW_FRAGMENT_SHADER: mask gates coverage,
+    // alpha carries the per-shadow darkness.
+    fragColor = vec4(u_shadow_colour.rgb, v_ldc.y * u_shadow_colour.a);
 }
 )glsl";
 

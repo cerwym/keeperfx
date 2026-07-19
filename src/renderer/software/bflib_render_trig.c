@@ -30,6 +30,7 @@
 #include "post_inc.h"
 
 #include "vidmode.h"
+#include "vidfade.h"
 
 /******************************************************************************/
 #pragma pack(1)

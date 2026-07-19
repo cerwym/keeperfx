@@ -820,6 +820,10 @@ void RendererOpenGL::EndFrame()
     // m_capture_pending. Must happen before Flip()/UpdateFrameState().
     if (auto* mfp = RendererGetMapFadePass()) mfp->FlushToRenderGraph(m_render_graph);
 
+    // Flush active GPU lens passes to the render graph's write-side post-process
+    // buffers, mirroring the map-fade flush above. Must happen before Flip().
+    if (LensManager* lm = LensManager::GetInstance()) lm->FlushToRenderGraph(m_render_graph);
+
     {
         const UICommandBuffers& wui [[maybe_unused]] = m_render_graph.GetWriteUIBuffers();
         SYNCDBG(1, "EndFrame: fade=%d ir_active=%d solid=%zu slabbg=%zu sprites=%zu sprR=%zu sprC=%zu "
@@ -983,28 +987,15 @@ void RendererOpenGL::EndFrame_GL()
     // passes can operate on the result before it reaches the screen.
     m_lens_active = false;
     {
-        LensManager* lm = LensManager::GetInstance();
-        if (m_rt_frame_state.lens_mode == 2 && lm && lm->IsReady())
+        const PostProcessCommandBuffers& pp = m_render_graph.GetPostProcessBuffersRT();
+        if (m_rt_frame_state.lens_mode == 2 && pp.lens.has_value() && pp.lens->count > 0)
         {
-            // Check if any effect actually provides a GPU pass
-            bool has_gpu_pass = false;
-            for (LensEffect* e : lm->GetEffects())
+            EnsureLensFBOs();
+            if (m_lens_scene_fbo)
             {
-                if (e->IsEnabled() && e->GetGPUPass())
-                {
-                    has_gpu_pass = true;
-                    break;
-                }
-            }
-            if (has_gpu_pass)
-            {
-                EnsureLensFBOs();
-                if (m_lens_scene_fbo)
-                {
-                    glBindFramebuffer(GL_FRAMEBUFFER, m_lens_scene_fbo);
-                    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-                    m_lens_active = true;
-                }
+                glBindFramebuffer(GL_FRAMEBUFFER, m_lens_scene_fbo);
+                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+                m_lens_active = true;
             }
         }
     }
@@ -2004,24 +1995,22 @@ void RendererOpenGL::EnsureLensFBOs()
             w, h, m_lens_scene_fbo, m_lens_pass_fbo_a, m_lens_pass_fbo_b);
 }
 
+IPostProcessPass* RendererOpenGL::CreateLensPass(LensEffectType type)
+{
+    switch (type)
+    {
+        case LensEffectType::Mist:         return new GLMistPass();
+        case LensEffectType::Displacement: return new GLDisplacementPass();
+        case LensEffectType::Flyeye:       return new GLFlyeyePass();
+        case LensEffectType::Overlay:      return new GLOverlayPass();
+        default:                           return nullptr;
+    }
+}
+
 void RendererOpenGL::ApplyLensGPUPasses()
 {
-    LensManager* lm = LensManager::GetInstance();
-    if (!lm || !lm->IsReady())
-        return;
-
-    // Collect active GPU passes
-    std::vector<IPostProcessPass*> gpu_passes;
-    for (LensEffect* e : lm->GetEffects())
-    {
-        if (e->IsEnabled())
-        {
-            IPostProcessPass* p = e->GetGPUPass();
-            if (p) gpu_passes.push_back(p);
-        }
-    }
-
-    if (gpu_passes.empty())
+    const PostProcessCommandBuffers& pp = m_render_graph.GetPostProcessBuffersRT();
+    if (!pp.lens.has_value() || pp.lens->count <= 0)
         return;
 
     EnsureLensFBOs();
@@ -2031,8 +2020,9 @@ void RendererOpenGL::ApplyLensGPUPasses()
     // Ping-pong: scene_tex → pass_a → pass_b → ...
     unsigned int src_tex = m_lens_scene_tex;
     bool flip = false;
-    for (IPostProcessPass* pass : gpu_passes)
+    for (int i = 0; i < pp.lens->count; ++i)
     {
+        IPostProcessPass* pass = pp.lens->passes[i];
         unsigned int dst_fbo = flip ? m_lens_pass_fbo_b : m_lens_pass_fbo_a;
         unsigned int dst_tex = flip ? m_lens_pass_tex_b : m_lens_pass_tex_a;
         pass->Apply(src_tex, dst_fbo, m_rt_frame_state.screen_w, m_rt_frame_state.screen_h);

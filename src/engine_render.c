@@ -307,6 +307,7 @@ static void (*render_sprite_debug_fn) (struct Thing*, long scrpos_x, long scrpos
 static int render_sprite_debug_level = 0;
 void draw_keepsprite_unscaled_in_buffer(unsigned short kspr_n, short angle, unsigned char current_frame, unsigned char *outbuf);
 static void draw_jonty_mapwho(struct BucketKindJontySprite *jspr);
+static long heap_manage_keepersprite(unsigned short kspr_idx);
 
 static TbBool animation_sprite_id_invalid(unsigned short animation_sprite)
 {
@@ -3837,6 +3838,12 @@ static void create_shadows(struct Thing *thing, struct EngineCoord *ecor, struct
 
     // Try GPU IR submission first; falls through to software bucket if not handled.
     {
+        // Load sprite frames on the game thread now: the render thread decodes
+        // this command later and must never lazy-load from the shared jty file
+        // handle concurrently with game-thread loads.
+        if (!heap_manage_keepersprite(keepersprite_index(animation_sprite)))
+            return;
+
         struct WorldShadowSubmitCmd scmd;
         memset(&scmd, 0, sizeof(scmd));
 
@@ -5334,7 +5341,7 @@ void draw_status_sprites(long scrpos_x, long scrpos_y, struct Thing *thing)
         spr = get_button_sprite(GBS_creature_states_cloud);
         w = (base_size * spr->SWidth * bs_units_per_px / 16) >> 13;
         h = (base_size * spr->SHeight * bs_units_per_px / 16) >> 13;
-        UIRenderer_SubmitScaledSprite(scrpos_x - w / 2, scrpos_y - h, w, h, spr);
+        UIRenderer_SubmitScaledSprite(scrpos_x - w / 2, scrpos_y - h, w, h, spr, 0);
     }
 
     if (((get_gameturn() % (8 * gui_blink_rate)) < 4 * gui_blink_rate) && (anger_spridx > 0))
@@ -5342,7 +5349,7 @@ void draw_status_sprites(long scrpos_x, long scrpos_y, struct Thing *thing)
         spr = get_button_sprite(anger_spridx);
         w = (base_size * spr->SWidth * bs_units_per_px / 16) >> 13;
         h = (base_size * spr->SHeight * bs_units_per_px / 16) >> 13;
-        UIRenderer_SubmitScaledSprite(scrpos_x - w / 2, scrpos_y - h, w, h, spr);
+        UIRenderer_SubmitScaledSprite(scrpos_x - w / 2, scrpos_y - h, w, h, spr, 0);
         spr = get_button_sprite_for_player(state_spridx, thing->owner);
         h_add += spr->SHeight * bs_units_per_px / 16;
     }
@@ -5351,7 +5358,7 @@ void draw_status_sprites(long scrpos_x, long scrpos_y, struct Thing *thing)
         spr = get_button_sprite_for_player(state_spridx, thing->owner);
         w = (base_size * spr->SWidth * bs_units_per_px / 16) >> 13;
         h = (base_size * spr->SHeight * bs_units_per_px / 16) >> 13;
-        UIRenderer_SubmitScaledSprite(scrpos_x - w / 2, scrpos_y - h, w, h, spr);
+        UIRenderer_SubmitScaledSprite(scrpos_x - w / 2, scrpos_y - h, w, h, spr, 0);
         h_add += h;
     }
 
@@ -5366,7 +5373,7 @@ void draw_status_sprites(long scrpos_x, long scrpos_y, struct Thing *thing)
         w = (base_size * spr->SWidth * bs_units_per_px / 16) >> 13;
         h = (base_size * spr->SHeight * bs_units_per_px / 16) >> 13;
         // Flash effect not yet implemented on GPU; render normal health sprite.
-        UIRenderer_SubmitScaledSprite(scrpos_x - w / 2, scrpos_y - h - h_add, w, h, spr);
+        UIRenderer_SubmitScaledSprite(scrpos_x - w / 2, scrpos_y - h - h_add, w, h, spr, 0);
     }
     else
     {
@@ -5415,12 +5422,12 @@ void draw_status_sprites(long scrpos_x, long scrpos_y, struct Thing *thing)
                 spr = get_button_sprite_for_player(health_spridx, thing->owner);
                 w = (base_size * spr->SWidth * bs_units_per_px / 16) >> 13;
                 h = (base_size * spr->SHeight * bs_units_per_px / 16) >> 13;
-                UIRenderer_SubmitScaledSprite(scrpos_x - w / 2, scrpos_y - h - h_add, w, h, spr);
+                UIRenderer_SubmitScaledSprite(scrpos_x - w / 2, scrpos_y - h - h_add, w, h, spr, 0);
             }
             spr = get_button_sprite(GBS_creature_flower_level_01 + exp_level);
             w = (base_size * spr->SWidth * bs_units_per_px / 16) >> 13;
             h = (base_size * spr->SHeight * bs_units_per_px / 16) >> 13;
-            UIRenderer_SubmitScaledSprite(scrpos_x - w / 2, scrpos_y - h - h_add, w, h, spr);
+            UIRenderer_SubmitScaledSprite(scrpos_x - w / 2, scrpos_y - h - h_add, w, h, spr, 0);
         }
     }
 }
@@ -5443,7 +5450,7 @@ static void draw_room_flag_top(long x, long y, int units_per_px, const struct Ro
     {
         long fw = spr->SWidth * ps_units_per_px / 16;
         long fh = spr->SHeight * ps_units_per_px / 16;
-        UIRenderer_SubmitScaledSprite(x, y, fw, fh, spr);
+        UIRenderer_SubmitScaledSprite(x, y, fw, fh, spr, 0);
     }
     struct RoomConfigStats *roomst;
     roomst = get_room_kind_stats(room->kind);
@@ -5453,7 +5460,7 @@ static void draw_room_flag_top(long x, long y, int units_per_px, const struct Ro
     {
         long sw = spr->SWidth * ps_units_per_px / 16;
         long sh = spr->SHeight * ps_units_per_px / 16;
-        UIRenderer_SubmitScaledSprite(x - 2*units_per_px/16, y - 4*units_per_px/16, sw, sh, spr);
+        UIRenderer_SubmitScaledSprite(x - 2*units_per_px/16, y - 4*units_per_px/16, sw, sh, spr, 0);
     }
     bar_fill = ROOM_FLAG_PROGRESS_BAR_WIDTH;
     bar_empty = 0;
@@ -7746,11 +7753,11 @@ static void draw_keepersprite(long x, long y, const struct KeeperSprite * kspr, 
         || ((kspr_idx >= KEEPSPRITE_LENGTH) && (kspr_idx < KEEPERSPRITE_ADD_OFFSET))
         || (kspr_idx > (KEEPERSPRITE_ADD_NUM + KEEPERSPRITE_ADD_OFFSET))) {
         WARNDBG(9,"Invalid KeeperSprite %ld at (%ld,%ld) size (%u,%u) alpha %d",
-            kspr_idx, x, y, kspr->SWidth, kspr->SHeight, (int)EngineSpriteDrawUsingAlpha);
+            kspr_idx, x, y, kspr->SWidth, kspr->SHeight, (int)((draw_flags & Lb_SPRITE_ALPHA_ADDITIVE) != 0));
         return;
     }
     SYNCDBG(17,"Drawing %ld at (%ld,%ld) size (%u,%u) alpha %d",
-        kspr_idx, x, y, kspr->SWidth, kspr->SHeight, (int)EngineSpriteDrawUsingAlpha);
+        kspr_idx, x, y, kspr->SWidth, kspr->SHeight, (int)((draw_flags & Lb_SPRITE_ALPHA_ADDITIVE) != 0));
     const long clipped_height = kspr->SHeight - water_source_cutoff;
     if (clipped_height <= 0) {
         return;
@@ -7784,13 +7791,9 @@ static void draw_keepersprite(long x, long y, const struct KeeperSprite * kspr, 
             screen_w = g_sprite_scale_dst_w;
             screen_h = g_sprite_scale_dst_h;
         }
-        // Fold EngineSpriteDrawUsingAlpha into draw_flags so the GPU path can
-        // choose the correct blend (Lb_SPRITE_ALPHA_ADDITIVE = glow/fire additive).
-        unsigned int gpu_flags = draw_flags;
-        if (EngineSpriteDrawUsingAlpha) gpu_flags |= Lb_SPRITE_ALPHA_ADDITIVE;
         if (try_submit_keepersprite_to_render_system(screen_x, screen_y, screen_w, screen_h,
                                                      *sprite_data_ptr, kspr->SWidth, clipped_height,
-                                                     gpu_flags, lbSpriteReMapPtr)) {
+                                                     draw_flags, lbSpriteReMapPtr, kspr_idx)) {
             return;
         }
     }
@@ -7800,7 +7803,7 @@ static void draw_keepersprite(long x, long y, const struct KeeperSprite * kspr, 
         clipped_height,
         kspr->SWidth,
     };
-    if ( EngineSpriteDrawUsingAlpha ) {
+    if ((draw_flags & Lb_SPRITE_ALPHA_ADDITIVE) != 0) {
         DrawAlphaSpriteUsingScalingData(x, y, &buffer, draw_flags);
     } else {
         LbSpriteDrawUsingScalingData(x, y, &buffer, draw_flags);
@@ -7958,7 +7961,10 @@ void process_keeper_sprite(short x, short y, unsigned short kspr_base, short ksp
         work_flags = draw_flags | Lb_SPRITE_FLIP_HORIZ;
     else
         work_flags = draw_flags & ~Lb_SPRITE_FLIP_HORIZ;
-    EngineSpriteDrawUsingAlpha = alpha;
+    if (alpha)
+        work_flags |= Lb_SPRITE_ALPHA_ADDITIVE;
+    else
+        work_flags &= ~Lb_SPRITE_ALPHA_ADDITIVE;
     sprite_group = sprgroup;
     kspr_idx = keepersprite_index(kspr_base);
     global_scaler = scale;
@@ -8420,6 +8426,34 @@ static void sprite_to_sbuff_xflip(const TbSpriteData sprdata, unsigned char *out
       out = out_lnstart;
       lines_max--;
     }
+}
+
+TbBool resolve_keepsprite_shadow_variant(unsigned short kspr_n, short angle, unsigned char current_frame,
+                                         unsigned char *out_frame, unsigned char *out_quarter, unsigned char *out_flip)
+{
+    // Must mirror the (angle, frame) → (variant, flip) reduction in
+    // draw_keepsprite_unscaled_in_buffer() below; silhouette-cache keys
+    // depend on the two staying in sync.
+    struct KeeperSprite *kspr_arr = keepersprite_array(kspr_n);
+    if (kspr_arr == NULL || kspr_arr->FramesCount == 0)
+        return false;
+    if (current_frame >= kspr_arr->FramesCount)
+        current_frame = kspr_arr->FramesCount - 1;
+    *out_frame = current_frame;
+    if (kspr_arr->Rotable == 0)
+    {
+        *out_quarter = 0;
+        *out_flip = (((angle & ANGLE_MASK) <= 1151) || ((angle & ANGLE_MASK) >= 1919)) ? 0 : 1;
+        return true;
+    }
+    if (kspr_arr->Rotable == 2)
+    {
+        int selected_mirror = 0;
+        *out_quarter = (unsigned char)kfx_anim_select_dir_group((int)angle, &selected_mirror);
+        *out_flip = (selected_mirror != 0) ? 1 : 0;
+        return true;
+    }
+    return false; // unsupported Rotable mode — caller must use the uncached path
 }
 
 void draw_keepsprite_unscaled_in_buffer(unsigned short kspr_n, short angle, unsigned char current_frame, unsigned char *outbuf)
@@ -9397,10 +9431,12 @@ void render_set_sprite_debug(int level)
 
 int try_submit_keepersprite_to_render_system(long screen_x, long screen_y, long screen_w, long screen_h,
                                            const unsigned char *sprite_data, int src_w, int src_h,
-                                           unsigned int draw_flags, const unsigned char *remap)
+                                           unsigned int draw_flags, const unsigned char *remap,
+                                           long sprite_id)
 {
     return WorldViewRenderer_SubmitKeeperSprite(screen_x, screen_y, screen_w, screen_h,
-                                               sprite_data, src_w, src_h, draw_flags, remap);
+                                               sprite_data, src_w, src_h, draw_flags, remap,
+                                               (int32_t)sprite_id);
 }
 
 /******************************************************************************/

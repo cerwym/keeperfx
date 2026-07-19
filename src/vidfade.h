@@ -34,16 +34,43 @@ extern "C" {
 #pragma pack(1)
 
 struct Thing;
-struct TbColorTables;
-struct TbAlphaTables;
 struct PlayerInfo;
 typedef unsigned char TbRGBColorTable[COLOUR_TABLE_DIMENSION][COLOUR_TABLE_DIMENSION][COLOUR_TABLE_DIMENSION];
+
+struct TbColorTables {
+  unsigned char fade_tables[64*256];
+  unsigned char ghost[256*256];
+  unsigned char flat_colours_tl[2*256];
+  unsigned char flat_colours_tr[2*256];
+  unsigned char flat_colours_br[2*256];
+  unsigned char flat_colours_bl[2*256];
+  unsigned char robs_bollocks[256];
+};
+
+struct TbAlphaTables {
+    unsigned char void_black[256];
+    unsigned char white[8*256];
+    unsigned char yellow[8*256];
+    unsigned char red[8*256];
+    unsigned char blue[8*256];
+    unsigned char green[8*256];
+    unsigned char purple[8*256];
+    unsigned char black[8*256];
+    unsigned char orange[8*256];
+    // This is to force the array to have 256x256 size
+    //unsigned char unused[191*256];
+};
 
 /******************************************************************************/
 extern unsigned char fade_palette_in;
 extern unsigned char frontend_palette[768];
 extern TbRGBColorTable colours;
 extern float g_palette_possession_tint;
+
+extern struct TbColorTables pixmap;
+extern struct TbAlphaTables alpha_sprite_table;
+extern unsigned char white_pal[256];
+extern unsigned char red_pal[256];
 
 #pragma pack()
 /******************************************************************************/
@@ -61,6 +88,10 @@ void compute_shifted_palette_table(TbPixel *ocol, const unsigned char *spal,
 
 long PaletteFadePlayer(struct PlayerInfo *player);
 void PaletteApplyPainToPlayer(struct PlayerInfo *player, long intense);
+
+TbBool init_fades_table(void);
+TbBool init_alpha_table(void);
+void init_colours(void);
 
 /******************************************************************************/
 #ifdef __cplusplus

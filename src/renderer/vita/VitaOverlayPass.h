@@ -22,14 +22,20 @@ public:
     VitaOverlayPass() = default;
     ~VitaOverlayPass() override { Free(); }
 
-    /** Supply overlay image data and blend factor before Init().
+    /** Compile the shader and allocate the (dimension-independent) palette
+     *  texture. Does not require Configure() first — the overlay texture is
+     *  allocated and uploaded on the first Configure() call. */
+    bool Init()  override;
+
+    /** Supply overlay image data and blend factor.
+     *  Safe to call any time after a successful Init().
      *  @param data  Pointer to width×height bytes of 8-bit palette indices.
      *  @param w     Overlay texture width in pixels.
      *  @param h     Overlay texture height in pixels.
      *  @param alpha Blend factor in [0, 1] (0 = fully transparent overlay). */
     void Configure(const unsigned char* data, int w, int h, float alpha);
+    void Configure(const LensGPUPassParams& params) override;
 
-    bool Init()  override;
     void Apply(unsigned int src_tex, unsigned int dst_fbo,
                int src_w, int src_h) override;
     void Free()  override;
@@ -48,10 +54,9 @@ private:
 
     float m_alpha = 0.5f;
 
-    const unsigned char* m_pending_data = nullptr;
-    int   m_pending_w   = 0;
-    int   m_pending_h   = 0;
-    bool  m_configured  = false;
+    int   m_overlay_w   = 0;
+    int   m_overlay_h   = 0;
+    bool  m_configured  = false; // true once real overlay data has been uploaded
 };
 
 #endif // PLATFORM_VITA

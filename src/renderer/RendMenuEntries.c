@@ -44,7 +44,7 @@ static int en_gpu(void)
 /** Creature outline alpha is only editable when the outline is enabled. */
 static int en_outline_enabled(void)
 {
-    return g_renderer_settings.creature_outline_enable != 0;
+    return g_renderer_settings.creature_outline_mode != RENDERER_OUTLINE_NONE;
 }
 
 /** Shadow colour / transparency sliders are only meaningful when shadows are
@@ -64,6 +64,7 @@ static const char* s_lighting_opts[]    = { "Software", "Modern" };
 static const char* s_glow_blend_opts[]  = { "Additive", "Screen" };
 static const char* s_zoom_opts[]        = { "Overhead", "Isometric" };
 static const char* s_shadow_type_opts[] = { "Off", "1", "2", "3", "4", "Circle" };
+static const char* s_outline_mode_opts[]= { "Off", "Silhouette", "Edge" };
 
 /* ---------------------------------------------------------------------------
  * Entry table
@@ -235,10 +236,11 @@ static RendMenuEntry s_entries[] = {
     /* ------------------------------------------------------------------ */
     { RMENU_WIDGET_SECTION, "CREATURES" },
 
-    { RMENU_WIDGET_TOGGLE, "Creature outlines",
-      "Draw an owner-coloured silhouette when a creature is occluded by walls",
+    { RMENU_WIDGET_CYCLE, "Creature outlines",
+      "Outline mode for occluded creatures: Off / Silhouette / Edge",
       NULL,
-      .w.toggle = { &g_renderer_settings.creature_outline_enable } },
+      .w.cycle = { &g_renderer_settings.creature_outline_mode,
+                   s_outline_mode_opts, 3 } },
 
     { RMENU_WIDGET_SLIDER_F, "Outline alpha",
       "Opacity of the depth-fail creature outline  [0..1]",

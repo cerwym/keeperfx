@@ -38,10 +38,6 @@ typedef unsigned int TbDrawFlagsMask;
 /** The per-draw "how to draw" modifiers. Immutable by convention: build one,
  *  pass it, never mutate a shared instance. */
 typedef struct KfxDrawState {
-    /** Lb_SPRITE_* / Lb_TEXT_* bitmask (TbDrawFlags values OR'd together).
-     *  Transparency (TRANSPAR4/8), flip (H/V), outline, and text alignment /
-     *  underline / one-colour. Same bit vocabulary as the former
-     *  lbDisplay.DrawFlags. */
     TbDrawFlagsMask flags;
     /** Active draw colour (palette index) — one-colour sprites and text.
      *  Same as the former lbDisplay.DrawColour (TbPixel == unsigned char). */

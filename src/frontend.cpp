@@ -51,6 +51,7 @@
 #include "gui_draw.h"
 #include "kjm_input.h"
 #include "vidmode.h"
+#include "mouse_cursor.h"
 #include "front_simple.h"
 #include "front_input.h"
 #include "front_fmvids.h"
@@ -1303,7 +1304,7 @@ void draw_scrolling_button_string(struct GuiButton *gbtn, const char *text)
   if (scrollwnd == NULL)
   {
       ERRORLOG("Cannot have a TEXT_SCROLLING box type without a pointer to a TextScrollWindow");
-      LbTextSetWindow(0, 0, RendererScreenHeight(), RendererScreenWidth());
+      LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
       return;
   }
   area_height = gbtn->height;
@@ -1372,7 +1373,7 @@ void draw_scrolling_button_string(struct GuiButton *gbtn, const char *text)
   // Finally, draw the text
   LbTextDrawResized(0, scrollwnd->start_y, tx_units_per_px, text, Lb_TEXT_HALIGN_CENTER);
   // And restore default drawing options
-  LbTextSetWindow(0, 0, RendererScreenHeight(), RendererScreenWidth());
+  LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
 }
 
 void gui_area_scroll_window(struct GuiButton *gbtn)
@@ -3324,6 +3325,19 @@ void draw_gui(void)
 {
     SYNCDBG(6,"Starting");
     LbTextSetFont(winfont);
+    {
+        static TbBool dims_logged = false;
+        if (!dims_logged) {
+            dims_logged = true;
+            if ((RendererScreenWidth() != RendererGetScreenWidth()) || (RendererScreenHeight() != RendererGetScreenHeight())) {
+                WARNLOG("draw_gui: screen dimension mismatch - RendererScreenWidth/Height=%ld/%ld vs RendererGetScreenWidth/Height=%d/%d",
+                        (long)RendererScreenWidth(), (long)RendererScreenHeight(),
+                        (int)RendererGetScreenWidth(), (int)RendererGetScreenHeight());
+            } else {
+                SYNCLOG("draw_gui: screen dimensions match - %ld/%ld", (long)RendererScreenWidth(), (long)RendererScreenHeight());
+            }
+        }
+    }
     LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
     update_fade_active_menus();
     draw_active_menus_buttons();

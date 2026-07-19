@@ -55,6 +55,7 @@
 #include "frontmenu_ingame_map.h"
 #include "creature_graphics.h"
 #include "vidmode.h"
+#include "mouse_cursor.h"
 #include "config.h"
 #include "config_strings.h"
 #include "config_terrain.h"
@@ -902,7 +903,6 @@ void redraw_display(void)
     case PVM_IsoWibbleView:
     case PVM_IsoStraightView:
         redraw_isometric_view();
-        GUIBridge_DrawGameViewPiP();
         GUIBridge_LeaveParchmentView();
         parchment_loaded = 0;
         break;

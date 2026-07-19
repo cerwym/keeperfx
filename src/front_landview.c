@@ -55,6 +55,7 @@
 #include "kjm_input.h"
 #include "vidmode.h"
 #include "vidfade.h"
+#include "mouse_cursor.h"
 #include "game_legacy.h"
 #include "front_input.h"
 #include "net_game.h"
@@ -89,6 +90,7 @@ unsigned char *map_screen;
 long fe_net_level_selected;
 long net_map_limp_time;
 long players_currently_in_session;
+struct MapLevelInfo map_info;
 /******************************************************************************/
 #ifdef __cplusplus
 }

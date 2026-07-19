@@ -793,11 +793,12 @@ void WorldViewRenderer_DrawFrontView(struct Camera* cam)
 
 int WorldViewRenderer_SubmitKeeperSprite(int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
                                          const unsigned char* data, int src_w, int src_h,
-                                         unsigned int draw_flags, const unsigned char* remap)
+                                         unsigned int draw_flags, const unsigned char* remap,
+                                         int32_t sprite_id)
 {
     if (RendererGetWorldViewRenderer())
         return RendererGetWorldViewRenderer()->SubmitKeeperSprite(dst_x, dst_y, dst_w, dst_h,
-                                                       data, src_w, src_h, draw_flags, remap);
+                                                       data, src_w, src_h, draw_flags, remap, sprite_id);
     return 0;
 }
 

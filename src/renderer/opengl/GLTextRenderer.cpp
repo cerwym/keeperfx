@@ -92,12 +92,15 @@ bool GLTextRenderer::Init()
     // called by the bootstrapper in RendererManager::RendererInit().
 
     m_vertex_batch.reserve(32768);
-    SYNCLOG("GLTextRenderer: initialized");
+    SYNCDBG(8, "GLTextRenderer: initialized");
     return true;
 }
 
-void GLTextRenderer::Shutdown()
+void GLTextRenderer::evict_font_atlas_caches()
 {
+    if (!m_atlas_cache.empty() || !m_dbc_atlas_cache.empty())
+        SYNCDBG(8, "GLTextRenderer: evicting font atlas caches (%d western + %d DBC)",
+                (int)m_atlas_cache.size(), (int)m_dbc_atlas_cache.size());
     for (auto& kv : m_atlas_cache)
         delete kv.second;
     m_atlas_cache.clear();
@@ -107,6 +110,11 @@ void GLTextRenderer::Shutdown()
         delete kv.second;
     m_dbc_atlas_cache.clear();
     m_active_dbc_atlas = nullptr;
+}
+
+void GLTextRenderer::Shutdown()
+{
+    evict_font_atlas_caches();
 
     if (m_shader_program) { glDeleteProgram(m_shader_program); m_shader_program = 0; }
     if (m_vao)            { glDeleteVertexArrays(1, &m_vao); m_vao = 0; }
@@ -177,7 +185,7 @@ bool GLTextRenderer::CompileShaders()
     m_loc_palette    = glGetUniformLocation(m_shader_program, "u_palette");
     m_loc_text_color = glGetUniformLocation(m_shader_program, "u_text_color");
 
-    SYNCLOG("GLTextRenderer: Uniform locations - viewport=%d atlas=%d palette=%d color=%d",
+    SYNCDBG(8, "GLTextRenderer: Uniform locations - viewport=%d atlas=%d palette=%d color=%d",
             m_loc_viewport, m_loc_font_atlas, m_loc_palette, m_loc_text_color);
 
     if (m_loc_font_atlas >= 0)
@@ -570,15 +578,6 @@ void GLTextRenderer::Draw()
     // Save globals that FlushSegment control codes will overwrite
     unsigned char               saved_colour     = m_text_draw_colour;
     TbDrawFlagsMask             saved_draw_flags = m_text_draw_flags;
-
-    // CRITICAL FIX: Sort pending draws by font pointer to minimize atlas rebinding.
-    // Main menu uses 3 different fonts (36BC0DC8, 36BC0E18, 36BC1368) and without
-    // sorting, the code thrashes between atlases hundreds of times per frame.
-    // Group DBC draws together so the DBC atlas is bound once per font.
-    // stable_sort, not sort: draws that share a font compare equal, and an
-    // unstable sort may reorder them differently every frame. Overlapping
-    // draws (shadow/face passes, highlight overdraw) then swap paint order
-    // frame-to-frame, which shows up as text flicker on the frontend menus.
     std::stable_sort(m_pending.begin(), m_pending.end(),
               [](const DeferredDraw& a, const DeferredDraw& b) {
                   if (a.dbc_enabled != b.dbc_enabled)
@@ -589,6 +588,17 @@ void GLTextRenderer::Draw()
               });
 
     const uint32_t current_gen = RendererGetTextFontGeneration();
+    // Fonts were reloaded since the caches were built (start/exit level, GUI data
+    // reload).  The caches are keyed by raw font pointer, so every entry is now
+    // stale: evict them here (render thread, GL context current) before repopulating
+    // for the live generation.  Without this the caches leak a GLFontAtlas + GL
+    // texture per font per reload cycle, and a reused font address could alias a
+    // stale atlas.
+    if (current_gen != m_cache_generation)
+    {
+        evict_font_atlas_caches();
+        m_cache_generation = current_gen;
+    }
     for (const DeferredDraw& d : m_pending)
     {
         if (d.font_generation != current_gen) continue;

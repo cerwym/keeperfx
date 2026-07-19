@@ -24,15 +24,6 @@
 
 /******************************************************************************/
 
-// Transitional helper: build a zero KfxDrawState for bridge functions that
-// use display_draw_state(). DrawFlags and DrawColour are always 0 here —
-// colour is unused by panel sprite implementations.
-// DrawFlags is always 0 here — all callers operate on opaque UI elements.
-static inline KfxDrawState display_draw_state(void)
-{
-    return draw_state_make(0, 0);
-}
-
 void UIRenderer_SubmitSlabSelector(int x1, int y1, int x2, int y2, unsigned char color, float z_depth)
 {
     IUIRenderer* ui = RendererGetUIRenderer();
@@ -178,7 +169,7 @@ void UIRenderer_SubmitButtonSprite(int32_t x, int32_t y, int units_per_px, short
     if (!ui) return;
     const struct TbSprite* spr = get_button_sprite_for_player(spridx, my_player_number);
     SpriteHandle h = RendererResolveSprite(spr);
-    ui->SubmitPanelSprite(x, y, units_per_px, h, false, display_draw_state());
+    ui->SubmitPanelSprite(x, y, units_per_px, h, false, draw_state_default());
 }
 
 void UIRenderer_SubmitButtonSpriteFlipped(int32_t x, int32_t y, int units_per_px, short spridx)
@@ -187,7 +178,7 @@ void UIRenderer_SubmitButtonSpriteFlipped(int32_t x, int32_t y, int units_per_px
     if (!ui) return;
     const struct TbSprite* spr = get_button_sprite_for_player(spridx, my_player_number);
     SpriteHandle h = RendererResolveSprite(spr);
-    ui->SubmitPanelSprite(x, y, units_per_px, h, true, display_draw_state());
+    ui->SubmitPanelSprite(x, y, units_per_px, h, true, draw_state_default());
 }
 
 void UIRenderer_SubmitDigitSprites(int32_t center_x, int32_t y, int32_t w, int32_t h, int64_t value)
@@ -206,26 +197,24 @@ void UIRenderer_SubmitDigitSprites(int32_t center_x, int32_t y, int32_t w, int32
     {
         const struct TbSprite* spr = get_button_sprite((short)((v % 10) + GBS_fontchars_number_dig0));
         SpriteHandle hspr = RendererResolveSprite(spr);
-        ui->SubmitScaledSprite(pos_x, y, w, h, hspr, display_draw_state());
+        ui->SubmitScaledSprite(pos_x, y, w, h, hspr, draw_state_default());
         pos_x -= w;
     }
 }
 
-void UIRenderer_SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h, const struct TbSprite *spr)
+void UIRenderer_SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h, const struct TbSprite *spr, TbDrawFlagsMask draw_flags)
 {
     IUIRenderer* ui = RendererGetUIRenderer();
     if (ui) {
         SpriteHandle hspr = RendererResolveSprite(spr);
-        ui->SubmitScaledSprite(x, y, w, h, hspr, display_draw_state());
+        ui->SubmitScaledSprite(x, y, w, h, hspr, draw_state_make(draw_flags, 0));
     }
 }
 
 void UIRenderer_SubmitSolidBox(int32_t x, int32_t y, int32_t w, int32_t h, unsigned char color_idx)
 {
     IUIRenderer* ui = RendererGetUIRenderer();
-    // Transitional: build the draw descriptor from the still-live global; once
-    // call sites pass their own DrawState (Phase 4) this bridge and the read go away.
-    if (ui) ui->SubmitSolidBox(x, y, w, h, color_idx, display_draw_state());
+    if (ui) ui->SubmitSolidBox(x, y, w, h, color_idx, draw_state_default());
 }
 
 void UIRenderer_SubmitSolidBoxAlpha(int32_t x, int32_t y, int32_t w, int32_t h, unsigned char color_idx, float alpha)
@@ -305,7 +294,7 @@ void UIRenderer_SubmitTiledSprite(int32_t x, int32_t y, int units_per_px, const 
             if (spr_idx)
             {
                 SpriteHandle h = RendererResolveSprite(spr);
-                ui->SubmitScaledSprite(cur_x, cur_y, delta_x, delta_y, h, display_draw_state());
+                ui->SubmitScaledSprite(cur_x, cur_y, delta_x, delta_y, h, draw_state_default());
             }
             spr_idx++;
             cur_x += delta_x;
@@ -407,12 +396,16 @@ TbResult UIRenderer_SubmitRawSpriteRemap(long x, long y, const struct TbSprite* 
     if (!ui || !spr || !cmap) return Lb_FAIL;
     SpriteHandle h = RendererResolveSprite(spr);
     if (h == kInvalidSpriteHandle) return Lb_FAIL;
-    // Compute the remap row from the pointer offset into render_fade_tables.
-    // All creature/player colour remaps use rows within that table.
-    int remap_row = 0;
-    if (render_fade_tables && cmap >= render_fade_tables)
-        remap_row = (int)((cmap - render_fade_tables) / 256);
-    ui->SubmitPanelSpriteRemap((int32_t)x, (int32_t)y, 16, h, remap_row, draw_state_make(draw_flags, 0));
+    // The IR remap command carries a row into pixmap.fade_tables (64 rows),
+    // so only cmaps that alias a row of that table can defer. Anything else
+    // (white_pal, red_pal, ghost rows) must return Lb_FAIL so the caller's
+    // immediate CPU path draws with the true cmap.
+    if (!render_fade_tables || cmap < render_fade_tables)
+        return Lb_FAIL;
+    const ptrdiff_t offset = cmap - render_fade_tables;
+    if (offset >= 64 * 256 || (offset % 256) != 0)
+        return Lb_FAIL;
+    ui->SubmitPanelSpriteRemap((int32_t)x, (int32_t)y, 16, h, (int)(offset / 256), draw_state_make(draw_flags, 0));
     return Lb_OK;
 }
 
