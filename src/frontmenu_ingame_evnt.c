@@ -796,6 +796,8 @@ void draw_frametime()
     if (tx_units_per_px < 16)
         tx_units_per_px = 16;
 
+    UIRenderer_BeginTopOverlay();
+
     int iStartLine = (RendererGetScreenHeight() / tx_units_per_px) / 2 + 1;
     memset(text, 0, sizeof(text));
     if(debug_display_frametime == 1) {
@@ -804,7 +806,7 @@ void draw_frametime()
         snprintf(text, sizeof(text), "%-7s | %-7s | %-10s", "Current", "Min", "Max");
     }
     if (text[0] != 0)
-        LbTextDrawResized(RendererGetScreenWidth(), (iStartLine)*tx_units_per_px, tx_units_per_px, text, Lb_TEXT_HALIGN_RIGHT);
+        LbTextStringDraw(RendererGetScreenWidth(), (iStartLine)*tx_units_per_px, tx_units_per_px, text, Fnt_RightJustify, Lb_TEXT_HALIGN_LEFT);
 
     iStartLine += 1;
     // Frametimes
@@ -833,7 +835,7 @@ void draw_frametime()
             }
         }
         if (text[0] != 0)
-            LbTextDrawResized(RendererGetScreenWidth(), (iStartLine+i)*tx_units_per_px, tx_units_per_px, text, Lb_TEXT_HALIGN_RIGHT);
+            LbTextStringDraw(RendererGetScreenWidth(), (iStartLine+i)*tx_units_per_px, tx_units_per_px, text, Fnt_RightJustify, Lb_TEXT_HALIGN_LEFT);
     }
 
     // Framerates
@@ -860,9 +862,11 @@ void draw_frametime()
             }
         }
         if (text[0] > 0)
-            LbTextDrawResized(RendererGetScreenWidth(), (iStartLine+i)*tx_units_per_px, tx_units_per_px, text, Lb_TEXT_HALIGN_RIGHT);
+            LbTextStringDraw(RendererGetScreenWidth(), (iStartLine+i)*tx_units_per_px, tx_units_per_px, text, Fnt_RightJustify, Lb_TEXT_HALIGN_LEFT);
     }
 
+    UIRenderer_EndTopOverlay();
+    LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
 }
 
 void draw_network_stats()
@@ -872,6 +876,8 @@ void draw_network_stats()
     int tx_units_per_px = (11 * units_per_pixel) / LbTextLineHeight();
     if (tx_units_per_px < 16)
         tx_units_per_px = 16;
+
+    UIRenderer_BeginTopOverlay();
 
     unsigned long ping = GetPing(my_player_number);
     unsigned long half_ping = ping / 2;
@@ -892,29 +898,32 @@ void draw_network_stats()
     }
 
     snprintf(text, sizeof(text), "Full ping: %lums", ping);
-    LbTextDrawResized(0, 0, tx_units_per_px, text, Lb_TEXT_HALIGN_RIGHT);
+    LbTextStringDraw(RendererGetScreenWidth(), 0, tx_units_per_px, text, Fnt_RightJustify, Lb_TEXT_HALIGN_LEFT);
     snprintf(text, sizeof(text), "Half ping: %lums", half_ping);
-    LbTextDrawResized(0, tx_units_per_px, tx_units_per_px, text, Lb_TEXT_HALIGN_RIGHT);
+    LbTextStringDraw(RendererGetScreenWidth(), tx_units_per_px, tx_units_per_px, text, Fnt_RightJustify, Lb_TEXT_HALIGN_LEFT);
     snprintf(text, sizeof(text), "Input lag: %d turns (%dms)",
         input_lag, input_lag_ms);
-    LbTextDrawResized(0, tx_units_per_px * 2, tx_units_per_px, text, Lb_TEXT_HALIGN_RIGHT);
+    LbTextStringDraw(RendererGetScreenWidth(), tx_units_per_px * 2, tx_units_per_px, text, Fnt_RightJustify, Lb_TEXT_HALIGN_LEFT);
     snprintf(text, sizeof(text), "Download: %u.%u KB/s",
         incoming_rate_kb10 / 10, incoming_rate_kb10 % 10);
-    LbTextDrawResized(0, tx_units_per_px * 3, tx_units_per_px, text, Lb_TEXT_HALIGN_RIGHT);
+    LbTextStringDraw(RendererGetScreenWidth(), tx_units_per_px * 3, tx_units_per_px, text, Fnt_RightJustify, Lb_TEXT_HALIGN_LEFT);
     snprintf(text, sizeof(text), "Upload: %u.%u KB/s",
         outgoing_rate_kb10 / 10, outgoing_rate_kb10 % 10);
-    LbTextDrawResized(0, tx_units_per_px * 4, tx_units_per_px, text, Lb_TEXT_HALIGN_RIGHT);
+    LbTextStringDraw(RendererGetScreenWidth(), tx_units_per_px * 4, tx_units_per_px, text, Fnt_RightJustify, Lb_TEXT_HALIGN_LEFT);
     snprintf(text, sizeof(text), "Congestion: %u bytes", transit);
-    LbTextDrawResized(0, tx_units_per_px * 5, tx_units_per_px, text, Lb_TEXT_HALIGN_RIGHT);
+    LbTextStringDraw(RendererGetScreenWidth(), tx_units_per_px * 5, tx_units_per_px, text, Fnt_RightJustify, Lb_TEXT_HALIGN_LEFT);
     snprintf(text, sizeof(text), "Loss rate: %u%%", packet_loss_percent);
-    LbTextDrawResized(0, tx_units_per_px * 6, tx_units_per_px, text, Lb_TEXT_HALIGN_RIGHT);
+    LbTextStringDraw(RendererGetScreenWidth(), tx_units_per_px * 6, tx_units_per_px, text, Fnt_RightJustify, Lb_TEXT_HALIGN_LEFT);
     snprintf(text, sizeof(text), "Lost packets: %u", lost_packet_count);
-    LbTextDrawResized(0, tx_units_per_px * 7, tx_units_per_px, text, Lb_TEXT_HALIGN_RIGHT);
+    LbTextStringDraw(RendererGetScreenWidth(), tx_units_per_px * 7, tx_units_per_px, text, Fnt_RightJustify, Lb_TEXT_HALIGN_LEFT);
     snprintf(text, sizeof(text), "Micro stutters: %d%%", stutter_detection_average);
-    LbTextDrawResized(0, tx_units_per_px * 8, tx_units_per_px, text, Lb_TEXT_HALIGN_RIGHT);
+    LbTextStringDraw(RendererGetScreenWidth(), tx_units_per_px * 8, tx_units_per_px, text, Fnt_RightJustify, Lb_TEXT_HALIGN_LEFT);
     snprintf(text, sizeof(text), "Turn length: %" PRId64, turn_length_ns);
-    LbTextDrawResized(0, tx_units_per_px * 9, tx_units_per_px, text, Lb_TEXT_HALIGN_RIGHT);
+    LbTextStringDraw(RendererGetScreenWidth(), tx_units_per_px * 9, tx_units_per_px, text, Fnt_RightJustify, Lb_TEXT_HALIGN_LEFT);
     snprintf(text, sizeof(text), "Gameturn: %u", get_gameturn());
-    LbTextDrawResized(0, tx_units_per_px * 10, tx_units_per_px, text, Lb_TEXT_HALIGN_RIGHT);
+    LbTextStringDraw(RendererGetScreenWidth(), tx_units_per_px * 10, tx_units_per_px, text, Fnt_RightJustify, Lb_TEXT_HALIGN_LEFT);
+
+    UIRenderer_EndTopOverlay();
+    LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
 }
 /******************************************************************************/
