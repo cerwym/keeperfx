@@ -756,6 +756,8 @@ static inline uint32_t rotr32(uint32_t value, unsigned bits)
   return (value >> bits) | (value << (32 - bits));
 }
 
+/** Bullfrog's original LCG; 9377/9439 must not change — synced seed streams
+ *  must match every client, including upstream builds. */
 unsigned long LbRandomSeries(unsigned long range, uint32_t *seed, const char *func_name, unsigned long place)
 {
   if (range == 0)
