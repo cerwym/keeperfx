@@ -3325,6 +3325,19 @@ void draw_gui(void)
 {
     SYNCDBG(6,"Starting");
     LbTextSetFont(winfont);
+    {
+        static TbBool dims_logged = false;
+        if (!dims_logged) {
+            dims_logged = true;
+            if ((RendererScreenWidth() != RendererGetScreenWidth()) || (RendererScreenHeight() != RendererGetScreenHeight())) {
+                WARNLOG("draw_gui: screen dimension mismatch - RendererScreenWidth/Height=%ld/%ld vs RendererGetScreenWidth/Height=%d/%d",
+                        (long)RendererScreenWidth(), (long)RendererScreenHeight(),
+                        (int)RendererGetScreenWidth(), (int)RendererGetScreenHeight());
+            } else {
+                SYNCLOG("draw_gui: screen dimensions match - %ld/%ld", (long)RendererScreenWidth(), (long)RendererScreenHeight());
+            }
+        }
+    }
     LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
     update_fade_active_menus();
     draw_active_menus_buttons();
