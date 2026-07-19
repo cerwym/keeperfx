@@ -197,9 +197,9 @@ TbBool parchment_copy_background_at(const struct TbRect *bkgnd_area, int units_p
     // Burning candle flames — submitted via UIRenderer so they composite on top
     // of the GPU parchment blit quad without writing into the CPU staging buffer.
     const struct TbSprite* spr = get_button_sprite(GBS_parchment_map_screen_flame_1 + (get_gameturn() & 3));
-    UIRenderer_SubmitScaledSprite(bkgnd_area->left+(36*units_per_px/(pixel_size << shift)),(bkgnd_area->top+0*units_per_px/(16*pixel_size)), spr->SWidth*units_per_px/16, spr->SHeight*units_per_px/16, spr);
+    UIRenderer_SubmitScaledSprite(bkgnd_area->left+(36*units_per_px/(pixel_size << shift)),(bkgnd_area->top+0*units_per_px/(16*pixel_size)), spr->SWidth*units_per_px/16, spr->SHeight*units_per_px/16, spr, 0);
     spr = get_button_sprite(GBS_parchment_map_screen_flame_5+(get_gameturn() & 3));
-    UIRenderer_SubmitScaledSprite(bkgnd_area->left+(574*units_per_px/(pixel_size << shift)),(bkgnd_area->top+0*units_per_px/(16*pixel_size)), spr->SWidth*units_per_px/16, spr->SHeight*units_per_px/16, spr);
+    UIRenderer_SubmitScaledSprite(bkgnd_area->left+(574*units_per_px/(pixel_size << shift)),(bkgnd_area->top+0*units_per_px/(16*pixel_size)), spr->SWidth*units_per_px/16, spr->SHeight*units_per_px/16, spr, 0);
     return true;
 }
 

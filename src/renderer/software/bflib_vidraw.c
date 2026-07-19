@@ -1600,7 +1600,7 @@ TbResult LbSpriteDrawScaled(long xpos, long ypos, const struct TbSprite *sprite,
     if ((dest_width <= 0) || (dest_height <= 0))
       return 1;
     if (!lb_in_sprite_submit) {
-        UIRenderer_SubmitScaledSprite((int32_t)xpos, (int32_t)ypos, (int32_t)dest_width, (int32_t)dest_height, sprite);
+        UIRenderer_SubmitScaledSprite((int32_t)xpos, (int32_t)ypos, (int32_t)dest_width, (int32_t)dest_height, sprite, draw_flags);
         return Lb_SUCCESS;
     }
     if ((lb_draw_flags & Lb_TEXT_UNDERLNSHADOW) != 0)

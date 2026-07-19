@@ -742,7 +742,7 @@ void RendererSubmitButton(const RendererUIButtonDesc* desc);
 /** Submit a sprite with explicit pixel dimensions to the GPU batch.
  *  Called by game-logic hooks (draw_status_sprites, draw_engine_number, etc.)
  *  instead of LbSpriteDrawScaled when the GPU renderer is active. */
-void UIRenderer_SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h, const struct TbSprite *spr);
+void UIRenderer_SubmitScaledSprite(int32_t x, int32_t y, int32_t w, int32_t h, const struct TbSprite *spr, TbDrawFlagsMask draw_flags);
 
 /** Submit a solid-color rectangle to the GPU batch.
  *  Called instead of LbDrawBox when the GPU renderer is active.

@@ -5341,7 +5341,7 @@ void draw_status_sprites(long scrpos_x, long scrpos_y, struct Thing *thing)
         spr = get_button_sprite(GBS_creature_states_cloud);
         w = (base_size * spr->SWidth * bs_units_per_px / 16) >> 13;
         h = (base_size * spr->SHeight * bs_units_per_px / 16) >> 13;
-        UIRenderer_SubmitScaledSprite(scrpos_x - w / 2, scrpos_y - h, w, h, spr);
+        UIRenderer_SubmitScaledSprite(scrpos_x - w / 2, scrpos_y - h, w, h, spr, 0);
     }
 
     if (((get_gameturn() % (8 * gui_blink_rate)) < 4 * gui_blink_rate) && (anger_spridx > 0))
@@ -5349,7 +5349,7 @@ void draw_status_sprites(long scrpos_x, long scrpos_y, struct Thing *thing)
         spr = get_button_sprite(anger_spridx);
         w = (base_size * spr->SWidth * bs_units_per_px / 16) >> 13;
         h = (base_size * spr->SHeight * bs_units_per_px / 16) >> 13;
-        UIRenderer_SubmitScaledSprite(scrpos_x - w / 2, scrpos_y - h, w, h, spr);
+        UIRenderer_SubmitScaledSprite(scrpos_x - w / 2, scrpos_y - h, w, h, spr, 0);
         spr = get_button_sprite_for_player(state_spridx, thing->owner);
         h_add += spr->SHeight * bs_units_per_px / 16;
     }
@@ -5358,7 +5358,7 @@ void draw_status_sprites(long scrpos_x, long scrpos_y, struct Thing *thing)
         spr = get_button_sprite_for_player(state_spridx, thing->owner);
         w = (base_size * spr->SWidth * bs_units_per_px / 16) >> 13;
         h = (base_size * spr->SHeight * bs_units_per_px / 16) >> 13;
-        UIRenderer_SubmitScaledSprite(scrpos_x - w / 2, scrpos_y - h, w, h, spr);
+        UIRenderer_SubmitScaledSprite(scrpos_x - w / 2, scrpos_y - h, w, h, spr, 0);
         h_add += h;
     }
 
@@ -5373,7 +5373,7 @@ void draw_status_sprites(long scrpos_x, long scrpos_y, struct Thing *thing)
         w = (base_size * spr->SWidth * bs_units_per_px / 16) >> 13;
         h = (base_size * spr->SHeight * bs_units_per_px / 16) >> 13;
         // Flash effect not yet implemented on GPU; render normal health sprite.
-        UIRenderer_SubmitScaledSprite(scrpos_x - w / 2, scrpos_y - h - h_add, w, h, spr);
+        UIRenderer_SubmitScaledSprite(scrpos_x - w / 2, scrpos_y - h - h_add, w, h, spr, 0);
     }
     else
     {
@@ -5422,12 +5422,12 @@ void draw_status_sprites(long scrpos_x, long scrpos_y, struct Thing *thing)
                 spr = get_button_sprite_for_player(health_spridx, thing->owner);
                 w = (base_size * spr->SWidth * bs_units_per_px / 16) >> 13;
                 h = (base_size * spr->SHeight * bs_units_per_px / 16) >> 13;
-                UIRenderer_SubmitScaledSprite(scrpos_x - w / 2, scrpos_y - h - h_add, w, h, spr);
+                UIRenderer_SubmitScaledSprite(scrpos_x - w / 2, scrpos_y - h - h_add, w, h, spr, 0);
             }
             spr = get_button_sprite(GBS_creature_flower_level_01 + exp_level);
             w = (base_size * spr->SWidth * bs_units_per_px / 16) >> 13;
             h = (base_size * spr->SHeight * bs_units_per_px / 16) >> 13;
-            UIRenderer_SubmitScaledSprite(scrpos_x - w / 2, scrpos_y - h - h_add, w, h, spr);
+            UIRenderer_SubmitScaledSprite(scrpos_x - w / 2, scrpos_y - h - h_add, w, h, spr, 0);
         }
     }
 }
@@ -5450,7 +5450,7 @@ static void draw_room_flag_top(long x, long y, int units_per_px, const struct Ro
     {
         long fw = spr->SWidth * ps_units_per_px / 16;
         long fh = spr->SHeight * ps_units_per_px / 16;
-        UIRenderer_SubmitScaledSprite(x, y, fw, fh, spr);
+        UIRenderer_SubmitScaledSprite(x, y, fw, fh, spr, 0);
     }
     struct RoomConfigStats *roomst;
     roomst = get_room_kind_stats(room->kind);
@@ -5460,7 +5460,7 @@ static void draw_room_flag_top(long x, long y, int units_per_px, const struct Ro
     {
         long sw = spr->SWidth * ps_units_per_px / 16;
         long sh = spr->SHeight * ps_units_per_px / 16;
-        UIRenderer_SubmitScaledSprite(x - 2*units_per_px/16, y - 4*units_per_px/16, sw, sh, spr);
+        UIRenderer_SubmitScaledSprite(x - 2*units_per_px/16, y - 4*units_per_px/16, sw, sh, spr, 0);
     }
     bar_fill = ROOM_FLAG_PROGRESS_BAR_WIDTH;
     bar_empty = 0;
