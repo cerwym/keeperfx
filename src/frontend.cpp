@@ -1304,7 +1304,7 @@ void draw_scrolling_button_string(struct GuiButton *gbtn, const char *text)
   if (scrollwnd == NULL)
   {
       ERRORLOG("Cannot have a TEXT_SCROLLING box type without a pointer to a TextScrollWindow");
-      LbTextSetWindow(0, 0, RendererScreenHeight(), RendererScreenWidth());
+      LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
       return;
   }
   area_height = gbtn->height;
@@ -1373,7 +1373,7 @@ void draw_scrolling_button_string(struct GuiButton *gbtn, const char *text)
   // Finally, draw the text
   LbTextDrawResized(0, scrollwnd->start_y, tx_units_per_px, text, Lb_TEXT_HALIGN_CENTER);
   // And restore default drawing options
-  LbTextSetWindow(0, 0, RendererScreenHeight(), RendererScreenWidth());
+  LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
 }
 
 void gui_area_scroll_window(struct GuiButton *gbtn)
