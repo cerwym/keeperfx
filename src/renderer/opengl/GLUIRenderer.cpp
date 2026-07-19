@@ -274,7 +274,6 @@ void GLUIRenderer::SubmitSlabSelector(int x1, int y1, int x2, int y2, unsigned c
     }
 }
 
-extern "C" unsigned char EngineSpriteDrawUsingAlpha;
 
 // Returns the alpha that should be applied to a submitted UI element based
 // on captured Bullfrog draw flags.

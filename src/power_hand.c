@@ -655,12 +655,11 @@ void draw_power_hand(void)
                 else if (crconf->transparency_flags == TRF_Transpar_4)
                     draw_flags = Lb_SPRITE_TRANSPAR4;
                 else if(crconf->transparency_flags == TRF_Transpar_Alpha)
-                    EngineSpriteDrawUsingAlpha = 1;
+                    draw_flags = Lb_SPRITE_ALPHA_ADDITIVE;
 
                 CursorLayer_SubmitKeeperHandSprite(inputpos_x / pixel_size, inputpos_y / pixel_size,
                     picktng->anim_sprite, 0, picktng->current_frame, scale_ui_value(64*global_hand_scale),
                     draw_flags);
-                EngineSpriteDrawUsingAlpha = 0;
             } else
             {
                 inputpos_x = GetMouseX() + scale_ui_value(11*global_hand_scale);

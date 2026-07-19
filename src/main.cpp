@@ -211,7 +211,7 @@ char *level_names_data;
 char *end_level_names_data;
 unsigned char *frontend_backup_palette;
 unsigned char zoom_to_heart_palette[768];
-unsigned char EngineSpriteDrawUsingAlpha;
+
 unsigned char temp_pal[768];
 unsigned char *lightning_palette;
 

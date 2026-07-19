@@ -107,7 +107,8 @@ void SWCursorLayer::SubmitKeeperHandSprite(short x, short y,
                                            int32_t scale,
                                            TbDrawFlagsMask draw_flags)
 {
-    process_keeper_sprite_ex(x, y, kspr_base, angle, sprgroup, scale, draw_flags, 0);
+    process_keeper_sprite_ex(x, y, kspr_base, angle, sprgroup, scale, draw_flags,
+                             (draw_flags & Lb_SPRITE_ALPHA_ADDITIVE) != 0);
 }
 
 void SWCursorLayer::Draw()

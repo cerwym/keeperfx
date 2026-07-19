@@ -28,13 +28,10 @@
 #include "renderer/opengl/GLUIRenderer.h"
 #include "renderer/opengl/GLWorldViewRenderer.h"
 #include "renderer/opengl/GLSpriteAtlas.h"
-#include "engine_render.h"     // process_keeper_sprite_ex, EngineSpriteDrawUsingAlpha
+#include "engine_render.h"     // process_keeper_sprite_ex
 #include "globals.h"
 #include <glad/glad.h>
 #include "post_inc.h"
-
-// Read at SubmitKeeperHandSprite time (game thread — all access is safe here).
-extern "C" unsigned char EngineSpriteDrawUsingAlpha;
 
 /******************************************************************************/
 
@@ -68,7 +65,7 @@ void GLCursorLayer::SubmitKeeperHandSprite(short x, short y,
     // which calls DrawCursorKeeperSprites() — no game globals are ever touched there.
     m_wvr->BeginCursorCapture();
     process_keeper_sprite_ex(x, y, kspr_base, angle, sprgroup, scale,
-                             draw_flags, EngineSpriteDrawUsingAlpha);
+                             draw_flags, (draw_flags & Lb_SPRITE_ALPHA_ADDITIVE) != 0);
     m_wvr->EndCursorCapture();
 }
 

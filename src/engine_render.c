@@ -7753,11 +7753,11 @@ static void draw_keepersprite(long x, long y, const struct KeeperSprite * kspr, 
         || ((kspr_idx >= KEEPSPRITE_LENGTH) && (kspr_idx < KEEPERSPRITE_ADD_OFFSET))
         || (kspr_idx > (KEEPERSPRITE_ADD_NUM + KEEPERSPRITE_ADD_OFFSET))) {
         WARNDBG(9,"Invalid KeeperSprite %ld at (%ld,%ld) size (%u,%u) alpha %d",
-            kspr_idx, x, y, kspr->SWidth, kspr->SHeight, (int)EngineSpriteDrawUsingAlpha);
+            kspr_idx, x, y, kspr->SWidth, kspr->SHeight, (int)((draw_flags & Lb_SPRITE_ALPHA_ADDITIVE) != 0));
         return;
     }
     SYNCDBG(17,"Drawing %ld at (%ld,%ld) size (%u,%u) alpha %d",
-        kspr_idx, x, y, kspr->SWidth, kspr->SHeight, (int)EngineSpriteDrawUsingAlpha);
+        kspr_idx, x, y, kspr->SWidth, kspr->SHeight, (int)((draw_flags & Lb_SPRITE_ALPHA_ADDITIVE) != 0));
     const long clipped_height = kspr->SHeight - water_source_cutoff;
     if (clipped_height <= 0) {
         return;
@@ -7791,13 +7791,9 @@ static void draw_keepersprite(long x, long y, const struct KeeperSprite * kspr, 
             screen_w = g_sprite_scale_dst_w;
             screen_h = g_sprite_scale_dst_h;
         }
-        // Fold EngineSpriteDrawUsingAlpha into draw_flags so the GPU path can
-        // choose the correct blend (Lb_SPRITE_ALPHA_ADDITIVE = glow/fire additive).
-        unsigned int gpu_flags = draw_flags;
-        if (EngineSpriteDrawUsingAlpha) gpu_flags |= Lb_SPRITE_ALPHA_ADDITIVE;
         if (try_submit_keepersprite_to_render_system(screen_x, screen_y, screen_w, screen_h,
                                                      *sprite_data_ptr, kspr->SWidth, clipped_height,
-                                                     gpu_flags, lbSpriteReMapPtr, kspr_idx)) {
+                                                     draw_flags, lbSpriteReMapPtr, kspr_idx)) {
             return;
         }
     }
@@ -7807,7 +7803,7 @@ static void draw_keepersprite(long x, long y, const struct KeeperSprite * kspr, 
         clipped_height,
         kspr->SWidth,
     };
-    if ( EngineSpriteDrawUsingAlpha ) {
+    if ((draw_flags & Lb_SPRITE_ALPHA_ADDITIVE) != 0) {
         DrawAlphaSpriteUsingScalingData(x, y, &buffer, draw_flags);
     } else {
         LbSpriteDrawUsingScalingData(x, y, &buffer, draw_flags);
@@ -7965,7 +7961,10 @@ void process_keeper_sprite(short x, short y, unsigned short kspr_base, short ksp
         work_flags = draw_flags | Lb_SPRITE_FLIP_HORIZ;
     else
         work_flags = draw_flags & ~Lb_SPRITE_FLIP_HORIZ;
-    EngineSpriteDrawUsingAlpha = alpha;
+    if (alpha)
+        work_flags |= Lb_SPRITE_ALPHA_ADDITIVE;
+    else
+        work_flags &= ~Lb_SPRITE_ALPHA_ADDITIVE;
     sprite_group = sprgroup;
     kspr_idx = keepersprite_index(kspr_base);
     global_scaler = scale;
