@@ -111,6 +111,12 @@ void draw_slab64k_background(long pos_x, long pos_y, long width, long height)
     // GPU path: submit tiled slab quad to back layer; staging buffer stays clean in that area.
     if (UIRenderer_SubmitSlabBackground(pos_x, pos_y, width, height))
         return;
+    // No CPU staging buffer is available (always true in GL mode). If the GPU
+    // path above declined (e.g. slab texture not yet uploaded on the first
+    // frame(s)), skip rather than dereferencing a NULL screen pointer — matches
+    // the guard used by IUIRenderer::SetupMinimapBackground and SWCursorLayer.
+    if (RendererGetWScreen() == NULL)
+        return;
     long i;
     long scr_x = pos_x / pixel_size;
     long scr_y = pos_y / pixel_size;

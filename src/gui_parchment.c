@@ -923,6 +923,15 @@ void draw_zoom_box_terrain(long scrtop_x, long scrtop_y, int stl_x, int stl_y, P
     }
 
     // Software path: direct pixel write via the SW rasteriser.
+    // Only reachable on tile_buf allocation failure (OOM). In GL mode there is no
+    // CPU staging buffer (RendererGetWScreen() is always NULL — same class of bug
+    // as draw_slab64k_background); setup_vecs() would silently leave vec_screen
+    // unset, and draw_texture() below writes through it directly. Bail out instead.
+    if (RendererGetWScreen() == NULL)
+    {
+        WARNLOG("Zoom box tile buffer allocation failed and no CPU screen buffer is available; skipping terrain fallback draw");
+        return;
+    }
     setup_vecs(RendererGetWScreen(), NULL, (unsigned int)RendererScreenWidth(), (unsigned int)RendererScreenWidth(), (unsigned int)RendererScreenHeight());
     int scr_y = scrtop_y;
     for (int map_dy = 0; map_dy < draw_tiles_y; map_dy++)
