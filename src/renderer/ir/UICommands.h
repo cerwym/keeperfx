@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <cstddef>
 #include <utility>
+#include <vector>
 #include "renderer/SpriteHandle.h"
 #include "renderer/GpuTypes.h"
 #include "renderer/ir/IRCommandBuffer.h"
@@ -128,6 +129,45 @@ struct IRUISpriteColoredCmd
 };
 
 /******************************************************************************/
+// Clip state
+/******************************************************************************/
+
+/** Set the software clip window at replay time. Ordered against sprites/text
+ *  via the shared seq so deferred draws between a Begin/End pair replay under
+ *  the same clip they were submitted under. w<=0 restores the full screen. */
+struct IRUIViewportCmd
+{
+    int32_t  x   = 0;
+    int32_t  y   = 0;
+    int32_t  w   = 0;
+    int32_t  h   = 0;
+    uint32_t seq = 0; /**< Global submission order across all IR command types. */
+};
+
+/** Software minimap background sampling, run at replay time: the sampled
+ *  pixels (panel sprites under the minimap circle) are produced by the IR
+ *  replay itself, so sampling at submit time would read a stale frame. */
+struct IRUIMinimapBgSetupCmd
+{
+    int32_t  diaglen = 0;
+    int32_t  panel_x = 0;
+    int32_t  panel_y = 0;
+    uint32_t seq     = 0; /**< Global submission order across all IR command types. */
+};
+
+/** Software minimap replay blit. The minimap is rasterised into WScreen
+ *  mid-frame, before the deferred panel background replays over it; this
+ *  circle-span pixel snapshot re-applies it at its submission seq. */
+struct UIMinimapBlit
+{
+    int32_t  x    = 0;
+    int32_t  y    = 0;
+    int32_t  size = 0;
+    uint32_t seq  = 0;
+    bool     set  = false;
+};
+
+/******************************************************************************/
 // Special / composite
 /******************************************************************************/
 
@@ -191,6 +231,14 @@ struct UICommandBuffers
     IRCommandBuffer<IRUISpriteColoredCmd>    sprites_colored;
     IRCommandBuffer<IRUISlabSelectorCmd>     slab_selectors;
     IRCommandBuffer<IRUICursorPointerCmd>    cursor_pointers;
+    IRCommandBuffer<IRUIViewportCmd>         viewports;
+    IRCommandBuffer<IRUIMinimapBgSetupCmd>   minimap_bg_setups;
+
+    /** At most one minimap blit per frame (see UIMinimapBlit). */
+    UIMinimapBlit        minimap_blit;
+    /** size*size square snapshot backing minimap_blit; only the circle spans
+     *  (MapShapeStart/End) hold valid pixels. */
+    std::vector<uint8_t> minimap_pixels;
 
     /** Game viewport captured at SetGameViewport() — restored by ExecuteUIFromIR(). */
     UIGameViewport game_vp;
@@ -218,6 +266,10 @@ struct UICommandBuffers
         sprites_colored.Reset();
         slab_selectors.Reset();
         cursor_pointers.Reset();
+        viewports.Reset();
+        minimap_bg_setups.Reset();
+        minimap_blit = {};
+        minimap_pixels.clear();
         game_vp   = {};
         ir_active = false;
         next_seq  = 0;
@@ -232,6 +284,7 @@ struct UICommandBuffers
         sprites_colored.Reserve(sprites_n / 4);
         slab_selectors.Reserve(8);
         cursor_pointers.Reserve(4);
+        viewports.Reserve(8);
     }
 
     /** Returns true if any drawable commands were submitted this frame.
@@ -254,6 +307,10 @@ struct UICommandBuffers
         sprites_colored.Swap(other.sprites_colored);
         slab_selectors.Swap(other.slab_selectors);
         cursor_pointers.Swap(other.cursor_pointers);
+        viewports.Swap(other.viewports);
+        minimap_bg_setups.Swap(other.minimap_bg_setups);
+        std::swap(minimap_blit,   other.minimap_blit);
+        std::swap(minimap_pixels, other.minimap_pixels);
         std::swap(game_vp,   other.game_vp);
         std::swap(ir_active, other.ir_active);
         std::swap(next_seq,  other.next_seq);

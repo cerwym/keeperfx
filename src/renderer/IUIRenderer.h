@@ -406,6 +406,11 @@ public:
     virtual void DrawWorldSprites() {}
 
 protected:
+    /** Immediate WScreen sampling body of SetupMinimapBackground; also invoked
+     *  by the software IR executor when the setup was deferred (the sampled
+     *  pixels only exist after the panel sprites have replayed). */
+    void SampleMinimapBackground(int diaglen, int panel_x, int panel_y);
+
     /** Sprite handle → raw TbSprite* map, used by CPU default implementations. */
     std::unordered_map<SpriteHandle, const struct TbSprite*> m_handle_to_sprite;
 

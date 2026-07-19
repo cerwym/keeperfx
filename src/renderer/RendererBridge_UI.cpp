@@ -407,12 +407,16 @@ TbResult UIRenderer_SubmitRawSpriteRemap(long x, long y, const struct TbSprite* 
     if (!ui || !spr || !cmap) return Lb_FAIL;
     SpriteHandle h = RendererResolveSprite(spr);
     if (h == kInvalidSpriteHandle) return Lb_FAIL;
-    // Compute the remap row from the pointer offset into render_fade_tables.
-    // All creature/player colour remaps use rows within that table.
-    int remap_row = 0;
-    if (render_fade_tables && cmap >= render_fade_tables)
-        remap_row = (int)((cmap - render_fade_tables) / 256);
-    ui->SubmitPanelSpriteRemap((int32_t)x, (int32_t)y, 16, h, remap_row, draw_state_make(draw_flags, 0));
+    // The IR remap command carries a row into pixmap.fade_tables (64 rows),
+    // so only cmaps that alias a row of that table can defer. Anything else
+    // (white_pal, red_pal, ghost rows) must return Lb_FAIL so the caller's
+    // immediate CPU path draws with the true cmap.
+    if (!render_fade_tables || cmap < render_fade_tables)
+        return Lb_FAIL;
+    const ptrdiff_t offset = cmap - render_fade_tables;
+    if (offset >= 64 * 256 || (offset % 256) != 0)
+        return Lb_FAIL;
+    ui->SubmitPanelSpriteRemap((int32_t)x, (int32_t)y, 16, h, (int)(offset / 256), draw_state_make(draw_flags, 0));
     return Lb_OK;
 }
 
