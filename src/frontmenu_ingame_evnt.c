@@ -540,6 +540,7 @@ void draw_gameturn_timer(void)
     long scr_y = RendererGetScreenHeight() - height - 16 * units_per_pixel / 16;
 
     LbTextSetWindow(scr_x, scr_y, width, height);
+    UIRenderer_BeginTopOverlay();
     //draw_slab64k(scr_x, scr_y, units_per_pixel, width, height);
     int tx_units_per_px;
     int y;
@@ -559,6 +560,7 @@ void draw_gameturn_timer(void)
         y = 0;
     }
     LbTextDrawResized(0, y, tx_units_per_px, text, Lb_TEXT_HALIGN_CENTER);
+    UIRenderer_EndTopOverlay();
     LbTextSetWindow(0, 0, RendererScreenWidth(), RendererScreenHeight());
 }
 
