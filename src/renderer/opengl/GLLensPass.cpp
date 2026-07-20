@@ -111,6 +111,17 @@ bool GLLensPassBase::CompilePass(const char* frag_src)
     return true;
 }
 
+// ToDo : Honestly this should be a dead pattern.
+bool GLLensPassBase::EnsureCompiled()
+{
+    if (m_prog)
+        return true;
+    if (m_compile_attempted)
+        return false;
+    m_compile_attempted = true;
+    return CompileShaders();
+}
+
 void GLLensPassBase::BindPass(unsigned int src_tex, unsigned int dst_fbo, int w, int h)
 {
     glBindFramebuffer(GL_FRAMEBUFFER, dst_fbo);
@@ -153,6 +164,7 @@ bool GLDisplacementPass::Init()
 
 void GLDisplacementPass::Apply(unsigned int src_tex, unsigned int dst_fbo, int w, int h)
 {
+    if (!EnsureCompiled()) return;
     BindPass(src_tex, dst_fbo, w, h);
     m_time += 0.016f; // ~60fps tick
     if (m_loc_time >= 0)      glUniform1f(m_loc_time, m_time);
@@ -181,6 +193,7 @@ bool GLMistPass::Init()
 
 void GLMistPass::Apply(unsigned int src_tex, unsigned int dst_fbo, int w, int h)
 {
+    if (!EnsureCompiled()) return;
     BindPass(src_tex, dst_fbo, w, h);
     m_time += 0.016f;
     if (m_loc_time >= 0)       glUniform1f(m_loc_time, m_time);
@@ -208,6 +221,7 @@ bool GLFlyeyePass::Init()
 
 void GLFlyeyePass::Apply(unsigned int src_tex, unsigned int dst_fbo, int w, int h)
 {
+    if (!EnsureCompiled()) return;
     BindPass(src_tex, dst_fbo, w, h);
     if (m_loc_hex_size >= 0)   glUniform1f(m_loc_hex_size, m_hex_size);
     if (m_loc_resolution >= 0) glUniform2f(m_loc_resolution, (float)w, (float)h);
@@ -254,6 +268,15 @@ bool GLOverlayPass::Init()
 
 void GLOverlayPass::Apply(unsigned int src_tex, unsigned int dst_fbo, int w, int h)
 {
+    if (!EnsureCompiled()) return;
+    // Deferred render-thread upload of the overlay image staged by Configure()
+    // on the game thread (GL uploads must not run there).
+    if (m_overlay_dirty)
+    {
+        if (m_pending_overlay != nullptr)
+            UploadOverlay(m_pending_overlay, m_pending_w, m_pending_h);
+        m_overlay_dirty = false;
+    }
     BindPass(src_tex, dst_fbo, w, h);
     // Always bind a valid texture to unit 1 — use the uploaded overlay when
     // available, otherwise the 1×1 transparent fallback so the sampler is never

@@ -165,6 +165,19 @@ public:
                            const unsigned char* data, int src_w, int src_h,
                            unsigned int draw_flags, const unsigned char* remap,
                            int32_t sprite_id) override;
+
+    /** IWorldViewRenderer: fill-time world-sprite capture (game thread).
+     *  Sets the NDC depth and composite sort key for the sprite entry about to
+     *  be processed; subsequent SubmitKeeperSprite() calls inherit both.
+     *  Returns 1 — the GL path always consumes world sprites as IR. */
+    int BeginWorldSpriteCapture(int32_t bucket_idx) override;
+
+    /** IWorldViewRenderer: the GL path consumes world content at fill time
+     *  whenever an IR write target is active. */
+    int UsesFillTimeWorldSubmit() const override
+    {
+        return (m_initialized && (m_pip_capture || m_world_write_cmds != nullptr)) ? 1 : 0;
+    }
     int SubmitWorldShadowCmd(const IRWorldShadowCmd& cmd) override;
 
     // IWorldViewRenderer: clear per-level atlas cache.
@@ -314,9 +327,6 @@ private:
     int  resolve_shadow_silhouette_layer(const IRWorldShadowCmd& sc);
     void append_shadow_instance(const IRWorldShadowCmd& sc, int screen_w, int screen_h);
     void flush_shadow_instances();
-
-    // Setup world sprite processing for a bucket (sets m_current_sprite_z — GT only)
-    void setup_world_sprite_processing(int32_t bucket_num);
 
     using ShadowCmd = IRWorldShadowCmd;
 
@@ -500,6 +510,7 @@ private:
     GLint  m_kspr_inst_edge_loc_viewport    = -1;
     std::vector<KsprInstance>        m_kspr_instances;         // RT: batch scratch
     std::vector<KsprOutlineInstance> m_kspr_outline_instances; // RT: batch scratch
+    std::vector<int>                 m_kspr_sorted_idx;        // RT: depth-sort scratch
 
     // Full OS-window dimensions — set by SetFullScreenSize(), used in
     // BeginHandSpriteRendering() and gpu_execute_passes() for full-screen viewport.
@@ -518,6 +529,14 @@ private:
     int            m_pitch      = 0;       // GT: staging buffer row stride (bytes)
     int            m_current_bucket   = 0;   // GT: bucket index being processed
     float          m_current_sprite_z = 0.0f; // GT: NDC depth for current bucket's sprites
+    // Composite sort key for the world-sprite entry being captured:
+    // (bucket_idx << 16) | entry sequence number.  A descending stable sort on
+    // this key reproduces the legacy bucket walk exactly: buckets high→low,
+    // entries within a bucket in reverse submission order (LIFO insertion),
+    // multi-sprite entries (base + flame) in emission order.
+    uint32_t       m_current_sprite_sort_key = 0;  // GT:
+    uint32_t       m_sprite_entry_seq        = 0;  // GT: reset per world pass
+    size_t         m_kspr_pass_start         = 0;  // GT: kspr IR size at BeginWorldPass
     int            m_draw_screen_w = 0;   // RT: active viewport width for GL draw calls
     int            m_draw_screen_h = 0;   // RT: active viewport height for GL draw calls
 

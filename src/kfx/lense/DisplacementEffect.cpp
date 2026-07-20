@@ -198,20 +198,11 @@ TbBool DisplacementEffect::Setup(long lens_idx)
     }
     if (m_gpu_pass != nullptr)
     {
-        if (m_gpu_pass->Init())
-        {
-            LensGPUPassParams params;
-            params.displace_algorithm = (int)m_algorithm;
-            params.displace_magnitude = (float)m_magnitude;
-            params.displace_period    = (float)m_period;
-            m_gpu_pass->Configure(params);
-        }
-        else
-        {
-            SYNCDBG(7, "GPU displacement pass init failed — CPU fallback");
-            delete m_gpu_pass;
-            m_gpu_pass = nullptr;
-        }
+        LensGPUPassParams params;
+        params.displace_algorithm = (int)m_algorithm;
+        params.displace_magnitude = (float)m_magnitude;
+        params.displace_period    = (float)m_period;
+        m_gpu_pass->Configure(params);
     }
 
     SYNCDBG(7, "Displacement effect ready (algo=%d, mag=%d, period=%d)",

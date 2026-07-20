@@ -9,6 +9,8 @@
 
 #include "renderer/IMapFadePass.h"
 
+#include <vector>
+
 /******************************************************************************/
 
 /**
@@ -30,6 +32,9 @@ public:
     const char* GetName() const override { return "SOFTWARE"; }
 
 protected:
+    void EnsureBuffers();
+
+    std::vector<unsigned char> m_fade_buffer;
     unsigned char* m_map_fade_ghost_table = nullptr;
     unsigned char* m_map_fade_dest = nullptr;
     unsigned char* m_map_fade_src = nullptr;

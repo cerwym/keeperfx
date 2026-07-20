@@ -837,6 +837,20 @@ int WorldViewRenderer_SubmitWorldShadow(const struct WorldShadowSubmitCmd* cmd)
     return SubmitWorldShadowCmd(ir_cmd);
 }
 
+int WorldViewRenderer_BeginWorldSpriteCapture(int bucket_idx)
+{
+    if (RendererGetWorldViewRenderer())
+        return RendererGetWorldViewRenderer()->BeginWorldSpriteCapture(bucket_idx);
+    return 0;
+}
+
+int WorldViewRenderer_UsesFillTimeWorldSubmit(void)
+{
+    if (RendererGetWorldViewRenderer())
+        return RendererGetWorldViewRenderer()->UsesFillTimeWorldSubmit();
+    return 0;
+}
+
 void WorldViewRenderer_ClearKeeperSpriteAtlas(void)
 {
     if (RendererGetWorldViewRenderer())

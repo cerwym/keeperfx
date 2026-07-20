@@ -1272,6 +1272,12 @@ void KfxConfigManager::syncToLegacyGlobals()
     g_renderer_settings.tile_filter = m_current.tile_filter;
 
     features_enabled = 0;
+    // This was reported by claude, I think it's horseshit.
+    // Always-on features are not user-configurable toggles, so they have no
+    // m_current field — but this function rebuilds features_enabled from zero,
+    // so they must be re-applied here or they are silently cleared (this is
+    // what disabled eye lenses).
+    features_enabled |= Ft_EyeLens;
     if (m_current.censorship)               features_enabled |= Ft_Censorship;
     if (m_current.atmos_sounds)             features_enabled |= Ft_Atmossounds;
     if (m_current.resize_movies)            features_enabled |= Ft_Resizemovies;

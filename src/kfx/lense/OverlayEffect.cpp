@@ -285,21 +285,12 @@ TbBool OverlayEffect::Setup(long lens_idx)
     }
     if (m_gpu_pass != nullptr)
     {
-        if (m_gpu_pass->Init())
-        {
-            LensGPUPassParams params;
-            params.overlay_data  = renderer->GetData();
-            params.overlay_w     = renderer->GetWidth();
-            params.overlay_h     = renderer->GetHeight();
-            params.overlay_alpha = renderer->GetAlphaF();
-            m_gpu_pass->Configure(params);
-        }
-        else
-        {
-            SYNCDBG(7, "GPU overlay pass init failed — CPU fallback");
-            delete m_gpu_pass;
-            m_gpu_pass = nullptr;
-        }
+        LensGPUPassParams params;
+        params.overlay_data  = renderer->GetData();
+        params.overlay_w     = renderer->GetWidth();
+        params.overlay_h     = renderer->GetHeight();
+        params.overlay_alpha = renderer->GetAlphaF();
+        m_gpu_pass->Configure(params);
     }
 
     SYNCDBG(7, "Overlay effect ready");

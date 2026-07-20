@@ -26,6 +26,12 @@ protected:
     // Vertex shader is always PALETTE_BLIT_VERTEX_SHADER (pos+uv fullscreen quad).
     bool CompilePass(const char* frag_src);
 
+    // Lazily compile shaders on first use.  GL resource creation must run on
+    // the thread that owns the GL context (the render thread); effect Setup()
+    // runs on the game thread, so Apply() calls this at its top rather than
+    // compiling eagerly in Init().  Retries are suppressed after one failure.
+    bool EnsureCompiled();
+
     // Bind the fullscreen quad, set the source texture on unit 0, bind the
     // destination FBO, draw, and unbind.  Derived classes should set their
     // own uniforms between calling BindPass() and DrawPass().
@@ -35,6 +41,7 @@ protected:
     unsigned int m_prog = 0;
     unsigned int m_vao  = 0;
     unsigned int m_vbo  = 0;
+    bool         m_compile_attempted = false;
 };
 
 /******************************************************************************/
@@ -118,10 +125,13 @@ public:
     void Free() override;
     const char* RendererName() const override { return "GLOverlayPass"; }
 
+    // Stores the overlay source for a render-thread upload on the next Apply();
+    // the actual GL upload must not run here (Setup() is on the game thread).
     void Configure(const LensGPUPassParams& params) override {
-        if (params.overlay_data != nullptr) {
-            UploadOverlay(params.overlay_data, params.overlay_w, params.overlay_h);
-        }
+        m_pending_overlay = params.overlay_data;
+        m_pending_w       = params.overlay_w;
+        m_pending_h       = params.overlay_h;
+        m_overlay_dirty   = (params.overlay_data != nullptr);
         SetOverlayAlpha(params.overlay_alpha);
     }
 
@@ -135,6 +145,11 @@ private:
     int          m_overlay_w         = 0;
     int          m_overlay_h         = 0;
     float        m_alpha             = 1.0f;
+    // Overlay source pending a render-thread upload (see Configure()).
+    const unsigned char* m_pending_overlay = nullptr;
+    int          m_pending_w         = 0;
+    int          m_pending_h         = 0;
+    bool         m_overlay_dirty     = false;
 };
 
 /******************************************************************************/

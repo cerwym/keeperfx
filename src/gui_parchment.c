@@ -72,6 +72,9 @@ unsigned short engine_remap_texture_blocks(long stl_x, long stl_y, unsigned shor
 /******************************************************************************/
 int parchment_loaded;
 unsigned char *hires_parchment;
+/* Low-res parchment image (320x200); allocated on first use.  The hires
+ * variant is allocated by the gui_load_files_640 resource table. */
+static unsigned char *lores_parchment = NULL;
 /******************************************************************************/
 void load_parchment_file(void)
 {
@@ -91,7 +94,9 @@ void reload_parchment_file(TbBool hires)
   } else
   {
       fname = prepare_file_path(FGrp_StdData,"gmap32.raw");
-      LbFileLoadAt(fname, poly_pool);
+      if (lores_parchment == NULL)
+          lores_parchment = (unsigned char *)KfxAlloc(320*200);
+      LbFileLoadAt(fname, lores_parchment);
   }
   parchment_loaded = 1;
 }
@@ -173,7 +178,7 @@ TbBool parchment_copy_background_at(const struct TbRect *bkgnd_area, int units_p
     {
         img_width = 320;
         img_height = 200;
-        srcbuf = poly_pool;
+        srcbuf = lores_parchment;
         shift = 5;
     } else
     {

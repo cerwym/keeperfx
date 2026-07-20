@@ -1094,8 +1094,7 @@ void GLUIRenderer::DrawWorldSprites()
 {
     ASSERT_RENDER_THREAD();
     // Flush any WorldOverlay sprites submitted via SetWorldOverlay() since
-    // the last call.  Called from the render thread once per CMD_SPRITES bucket,
-    // after draw_3d_sprites_for_bucket() has pushed all sprite quads for that depth.
+    // the last call.
     // Depth test is already active (set up by GLWorldViewRenderer geometry pass);
     // enable blend here since the geometry pass disables it after the shadow sub-pass.
     if (m_quads[kLayerWorldOverlay].empty() && m_lines[kLayerWorldOverlay].empty()) return;

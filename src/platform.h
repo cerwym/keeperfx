@@ -28,10 +28,6 @@ const char * PlatformManager_GetSavePath(void);
  *  Desktop platforms use argv[0] to find the executable directory. */
 void PlatformManager_SetArgv(int argc, char** argv);
 
-/** Returns the size in bytes to allocate for the polygon pool.
- *  Desktop: 16MB (original), Vita: 4MB (reduced for BSS). */
-size_t PlatformManager_GetPolyPoolSize(void);
-
 /** Returns the refresh rate (Hz) of the display the game window is on, or 0 if unavailable. */
 int PlatformManager_GetDisplayRefreshRate(void);
 

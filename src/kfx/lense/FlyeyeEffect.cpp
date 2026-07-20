@@ -371,17 +371,8 @@ TbBool FlyeyeEffect::Setup(long lens_idx)
     }
     if (m_gpu_pass != nullptr)
     {
-        if (m_gpu_pass->Init())
-        {
-            LensGPUPassParams params;
-            m_gpu_pass->Configure(params);
-        }
-        else
-        {
-            SYNCDBG(7, "GPU flyeye pass init failed — CPU fallback");
-            delete m_gpu_pass;
-            m_gpu_pass = nullptr;
-        }
+        LensGPUPassParams params;
+        m_gpu_pass->Configure(params);
     }
 
     SYNCDBG(7, "Flyeye effect ready");

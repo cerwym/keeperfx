@@ -253,22 +253,13 @@ TbBool MistEffect::Setup(long lens_idx)
     }
     if (m_gpu_pass != nullptr)
     {
-        if (m_gpu_pass->Init())
-        {
-            LensGPUPassParams params;
-            params.mist_data       = (const unsigned char*)eye_lens_memory;
-            params.mist_pos_x_step = (unsigned char)cfg->mist_pos_x_step;
-            params.mist_pos_y_step = (unsigned char)cfg->mist_pos_y_step;
-            params.mist_sec_x_step = (unsigned char)cfg->mist_sec_x_step;
-            params.mist_sec_y_step = (unsigned char)cfg->mist_sec_y_step;
-            m_gpu_pass->Configure(params);
-        }
-        else
-        {
-            SYNCDBG(7, "GPU mist pass init failed — CPU fallback");
-            delete m_gpu_pass;
-            m_gpu_pass = nullptr;
-        }
+        LensGPUPassParams params;
+        params.mist_data       = (const unsigned char*)eye_lens_memory;
+        params.mist_pos_x_step = (unsigned char)cfg->mist_pos_x_step;
+        params.mist_pos_y_step = (unsigned char)cfg->mist_pos_y_step;
+        params.mist_sec_x_step = (unsigned char)cfg->mist_sec_x_step;
+        params.mist_sec_y_step = (unsigned char)cfg->mist_sec_y_step;
+        m_gpu_pass->Configure(params);
     }
 
     SYNCDBG(7, "Mist effect ready");

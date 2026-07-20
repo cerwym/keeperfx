@@ -306,6 +306,16 @@ int WorldViewRenderer_SubmitKeeperSprite(int32_t dst_x, int32_t dst_y, int32_t d
                                          unsigned int draw_flags, const unsigned char* remap,
                                          int32_t sprite_id);
 
+/** Begin fill-time IR capture for one world-sprite entry at the given depth
+ *  bucket.  Returns 1 when the active backend consumes world sprites as IR at
+ *  submit time — the caller must process the sprite immediately (GL path).
+ *  Returns 0 when the caller must queue to the bucket list (software path). */
+int WorldViewRenderer_BeginWorldSpriteCapture(int bucket_idx);
+
+/** Returns 1 when the active backend consumes world content (sprites and
+ *  overlay elements) at fill time; 0 when it must be queued to buckets. */
+int WorldViewRenderer_UsesFillTimeWorldSubmit(void);
+
 /** Clear the keeper-sprite decode atlas and reset the layer index.
  *  Must be called before each level load so stale data-pointer mappings
  *  from the previous level are not reused. */
