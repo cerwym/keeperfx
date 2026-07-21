@@ -70,15 +70,12 @@ public:
     TbBool IsEnabled() const { return m_enabled; }
 
     /**
-     * Returns a GPU post-process pass for this effect, or nullptr if the
-     * effect is CPU-only (the default).  RendererVita calls this each frame
-     * to run GPU passes instead of the CPU Draw() path.
-     *
-     * The returned pointer is owned by the LensEffect subclass.
-     * It is valid for as long as the effect is active (between Setup and
-     * Cleanup calls).
+     * Fill `out` with this effect's GPU pass parameters (pure data) and return
+     * true if the effect has a GPU realization; return false for CPU-only
+     * effects (the default). The backend's ILensRenderer maps this effect's
+     * type + params to a concrete pass — the game side owns no renderer object.
      */
-    virtual class IPostProcessPass* GetGPUPass() { return nullptr; }
+    virtual bool BuildGPUParams(struct LensGPUPassParams& /*out*/) const { return false; }
     
     // Identification
     LensEffectType GetType() const { return m_type; }

@@ -27,19 +27,12 @@ class RendererSoftware : public IRenderer {
 private:
     class IWorldViewRenderer* m_worldViewRenderer = nullptr;
     class IMapFadePass* m_mapFadePass = nullptr;
+    class ILensRenderer* m_lensRenderer = nullptr;
     class ITextRenderer* m_textRenderer = nullptr;
     class IUIRenderer* m_uiRenderer = nullptr;
     class ICursorLayer* m_cursorLayer = nullptr;
     int m_screenW = 0;
     int m_screenH = 0;
-    bool m_lens_capture_active = false;
-    unsigned char* m_saved_wscreen = nullptr;
-    int m_saved_graphics_w = 0;
-    int m_saved_graphics_h = 0;
-    TbGraphicsWindow m_saved_viewport = {};
-    unsigned char* m_lens_buffer = nullptr;
-    unsigned int m_lens_buffer_w = 0;
-    unsigned int m_lens_buffer_h = 0;
 
     // ── Software IR executor ──────────────────────────────────────────────────
     // The software backend defers UI + text submissions into this graph during
@@ -77,8 +70,6 @@ public:
     // Swipe overlay — software renderer draws sprites directly to WScreen.
     void     DrawSwipeOverlay(struct TbSpriteSheet* sprites, int frame,
                               bool draw_lr, int engine_window_x) override;
-    void     BeginLensCapture() override;
-    void     EndLensCapture() override;
  
     /** Save the current lbDrawSurface to @p path.
      *  Called while the screen is locked, so lbDrawSurface pixels are valid. */
@@ -97,6 +88,7 @@ public:
     // Sub-renderer access
     IWorldViewRenderer* GetWorldViewRenderer() override;
     IMapFadePass* GetMapFadePass() override;
+    ILensRenderer* GetLensRenderer() override;
     ITextRenderer* GetTextRenderer() override;
     IUIRenderer* GetUIRenderer() override;
     ICursorLayer* GetCursorLayer() override;

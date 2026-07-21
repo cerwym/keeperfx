@@ -65,7 +65,7 @@ short get_td_animation_sprite(short animation_sprite)
 
 unsigned short get_render_animation_sprite(unsigned short animation_sprite)
 {
-    if ((lens_mode == 2) || (lens_mode == 3)) {
+    if (lens_mode == 2) {
         if (animation_sprite < FP_TD_ANIMATION_COUNT) {
             short fp_sprite = td_to_fp_animation[animation_sprite];
             if (fp_sprite >= 0) {

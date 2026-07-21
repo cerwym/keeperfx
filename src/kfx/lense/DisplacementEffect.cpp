@@ -189,24 +189,18 @@ TbBool DisplacementEffect::Setup(long lens_idx)
 
     m_current_lens = lens_idx;
 
-    if (m_gpu_pass == nullptr)
-    {
-        if (IRenderer* active_renderer = RendererGetActive())
-        {
-            m_gpu_pass = active_renderer->CreateLensPass(LensEffectType::Displacement);
-        }
-    }
-    if (m_gpu_pass != nullptr)
-    {
-        LensGPUPassParams params;
-        params.displace_algorithm = (int)m_algorithm;
-        params.displace_magnitude = (float)m_magnitude;
-        params.displace_period    = (float)m_period;
-        m_gpu_pass->Configure(params);
-    }
-
     SYNCDBG(7, "Displacement effect ready (algo=%d, mag=%d, period=%d)",
            m_algorithm, m_magnitude, m_period);
+    return true;
+}
+
+bool DisplacementEffect::BuildGPUParams(LensGPUPassParams& out) const
+{
+    if (m_current_lens < 0)
+        return false;
+    out.displace_algorithm = (int)m_algorithm;
+    out.displace_magnitude = (float)m_magnitude;
+    out.displace_period    = (float)m_period;
     return true;
 }
 
@@ -214,12 +208,6 @@ void DisplacementEffect::Cleanup()
 {
     FreeLookupTable();
     m_current_lens = -1;
-    if (m_gpu_pass != nullptr)
-    {
-        m_gpu_pass->Free();
-        delete m_gpu_pass;
-        m_gpu_pass = nullptr;
-    }
 }
 
 TbBool DisplacementEffect::Draw(LensRenderContext* ctx)

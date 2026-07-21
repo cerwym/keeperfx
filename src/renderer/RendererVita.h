@@ -18,7 +18,7 @@
 
 #include <vitaGL.h>
 #include "renderer/vita/VitaBlitShader.h"
-#include "renderer/vita/VitaPassthroughPass.h"
+#include "renderer/vita/VitaLensRenderer.h"
 
 /**
  * Vita renderer backend — vitaGL GPU palette shader path.
@@ -53,13 +53,10 @@ public:
     // here, created in Init(), destroyed in Shutdown().
     IWorldViewRenderer* GetWorldViewRenderer() override { return m_worldViewRenderer; }
     IMapFadePass*        GetMapFadePass()        override { return m_mapFadePass; }
+    ILensRenderer*       GetLensRenderer()       override { return m_lensRenderer; }
     ITextRenderer*       GetTextRenderer()       override { return m_textRenderer; }
     IUIRenderer*         GetUIRenderer()         override { return m_uiRenderer; }
     ICursorLayer*        GetCursorLayer()        override { return m_cursorLayer; }
-
-    /** Create a Vita GPU post-process pass for the given lens effect type.
-     *  Ownership transfers to the caller (LensEffect). */
-    class IPostProcessPass* CreateLensPass(LensEffectType type) override;
 
 private:
     static const int k_gameW = 640;
@@ -69,6 +66,7 @@ private:
 
     IWorldViewRenderer* m_worldViewRenderer = nullptr;
     IMapFadePass*       m_mapFadePass       = nullptr;
+    VitaLensRenderer*   m_lensRenderer      = nullptr;
     ITextRenderer*      m_textRenderer      = nullptr;
     IUIRenderer*        m_uiRenderer        = nullptr;
     ICursorLayer*       m_cursorLayer       = nullptr;
@@ -77,17 +75,7 @@ private:
     GLuint m_palette_tex = 0;   /**< 256×1  GL_RGBA:       expanded palette colours */
 
     VitaBlitShader m_blit;      /**< fullscreen palette-decode blit shader */
-    VitaPassthroughPass m_passthrough; /**< stage-3 final blit to screen (960x544) */
 
-    /** Post-process FBOs — ping-pong between m_pass_fbo_a/b for GPU passes.
-     *  m_scene_fbo holds the RGBA-decoded scene produced by m_blit.
-     *  Each IPostProcessPass reads from the src texture and writes to the dst FBO. */
-    GLuint m_scene_fbo   = 0;   /**< decoded RGBA 640×480 scene render target */
-    GLuint m_scene_tex   = 0;
-    GLuint m_pass_fbo_a  = 0;   /**< ping-pong FBO A */
-    GLuint m_pass_tex_a  = 0;
-    GLuint m_pass_fbo_b  = 0;   /**< ping-pong FBO B */
-    GLuint m_pass_tex_b  = 0;
 };
 
 #endif // PLATFORM_VITA

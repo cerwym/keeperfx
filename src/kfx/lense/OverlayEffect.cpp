@@ -276,24 +276,19 @@ TbBool OverlayEffect::Setup(long lens_idx)
     m_user_data = renderer;
     m_current_lens = lens_idx;
 
-    if (m_gpu_pass == nullptr)
-    {
-        if (IRenderer* active_renderer = RendererGetActive())
-        {
-            m_gpu_pass = active_renderer->CreateLensPass(LensEffectType::Overlay);
-        }
-    }
-    if (m_gpu_pass != nullptr)
-    {
-        LensGPUPassParams params;
-        params.overlay_data  = renderer->GetData();
-        params.overlay_w     = renderer->GetWidth();
-        params.overlay_h     = renderer->GetHeight();
-        params.overlay_alpha = renderer->GetAlphaF();
-        m_gpu_pass->Configure(params);
-    }
-
     SYNCDBG(7, "Overlay effect ready");
+    return true;
+}
+
+bool OverlayEffect::BuildGPUParams(LensGPUPassParams& out) const
+{
+    if (m_current_lens < 0 || m_user_data == NULL)
+        return false;
+    COverlayRenderer* renderer = static_cast<COverlayRenderer*>(m_user_data);
+    out.overlay_data  = renderer->GetData();
+    out.overlay_w     = renderer->GetWidth();
+    out.overlay_h     = renderer->GetHeight();
+    out.overlay_alpha = renderer->GetAlphaF();
     return true;
 }
 
@@ -307,12 +302,6 @@ void OverlayEffect::Cleanup()
             m_user_data = NULL;
         }
         m_current_lens = -1;
-        if (m_gpu_pass != nullptr)
-        {
-            m_gpu_pass->Free();
-            delete m_gpu_pass;
-            m_gpu_pass = nullptr;
-        }
         SYNCDBG(9, "Overlay effect cleaned up");
     }
 }

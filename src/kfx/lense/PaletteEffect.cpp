@@ -69,8 +69,11 @@ void PaletteEffect::Cleanup()
 
 TbBool PaletteEffect::Draw(LensRenderContext* ctx)
 {
-    // Palette effects don't directly modify buffers - they change global state
-    // Return false to indicate we didn't write to dstbuf
+    // Palette is a side-channel effect: Setup() sets player->lens_palette, and
+    // PaletteSetPlayerPalette() applies it each frame via the normal palette upload.
+    // There is no pixel-buffer draw step — return false so LensManager::Draw()
+    // executes the standard copy fallback.
+    (void)ctx;
     return false;
 }
 

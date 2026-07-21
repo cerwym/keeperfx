@@ -244,25 +244,20 @@ TbBool MistEffect::Setup(long lens_idx)
     m_user_data = renderer;
     m_current_lens = lens_idx;
 
-    if (m_gpu_pass == nullptr)
-    {
-        if (IRenderer* active_renderer = RendererGetActive())
-        {
-            m_gpu_pass = active_renderer->CreateLensPass(LensEffectType::Mist);
-        }
-    }
-    if (m_gpu_pass != nullptr)
-    {
-        LensGPUPassParams params;
-        params.mist_data       = (const unsigned char*)eye_lens_memory;
-        params.mist_pos_x_step = (unsigned char)cfg->mist_pos_x_step;
-        params.mist_pos_y_step = (unsigned char)cfg->mist_pos_y_step;
-        params.mist_sec_x_step = (unsigned char)cfg->mist_sec_x_step;
-        params.mist_sec_y_step = (unsigned char)cfg->mist_sec_y_step;
-        m_gpu_pass->Configure(params);
-    }
-
     SYNCDBG(7, "Mist effect ready");
+    return true;
+}
+
+bool MistEffect::BuildGPUParams(LensGPUPassParams& out) const
+{
+    if (m_current_lens < 0)
+        return false;
+    const struct LensConfig* cfg = &lenses_conf.lenses[m_current_lens];
+    out.mist_data       = (const unsigned char*)eye_lens_memory;
+    out.mist_pos_x_step = (unsigned char)cfg->mist_pos_x_step;
+    out.mist_pos_y_step = (unsigned char)cfg->mist_pos_y_step;
+    out.mist_sec_x_step = (unsigned char)cfg->mist_sec_x_step;
+    out.mist_sec_y_step = (unsigned char)cfg->mist_sec_y_step;
     return true;
 }
 
@@ -277,12 +272,6 @@ void MistEffect::Cleanup()
             m_user_data = NULL;
         }
         m_current_lens = -1;
-        if (m_gpu_pass != nullptr)
-        {
-            m_gpu_pass->Free();
-            delete m_gpu_pass;
-            m_gpu_pass = nullptr;
-        }
     }
 }
 

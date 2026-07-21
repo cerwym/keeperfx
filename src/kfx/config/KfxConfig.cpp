@@ -100,6 +100,7 @@ const KfxConfigFieldDesc k_field_descs[] = {
     {KfxField_ZoomBoxMode,            "ZOOM_BOX_MODE",                    false},
     {KfxField_RendererMenuPause,      "RENDERER_MENU_PAUSE",              false},
     {KfxField_FxSprAnimSelectDir,     "FXSPR_ANIM_SELECT_DIR",            false},
+    {KfxField_LensPaletteAffectsUI,   "RENDERER_LENS_PALETTE_UI",         false},
 };
 
 enum class BoolTextStyle {
@@ -287,6 +288,7 @@ bool field_equals(const KfxConfig& lhs, const KfxConfig& rhs, KfxField field)
     case KfxField_ZoomBoxMode:            return lhs.zoom_box_mode == rhs.zoom_box_mode;
     case KfxField_RendererMenuPause:      return lhs.menu_pause == rhs.menu_pause;
     case KfxField_FxSprAnimSelectDir:     return lhs.fxspr_anim_select_dir == rhs.fxspr_anim_select_dir;
+    case KfxField_LensPaletteAffectsUI:   return lhs.lens_palette_affects_ui == rhs.lens_palette_affects_ui;
     case KfxField_COUNT:                  return true;
     }
     return true;
@@ -463,6 +465,9 @@ bool get_field_value_string(const KfxConfig& cfg, KfxField field, char* buf, siz
     case KfxField_FxSprAnimSelectDir:
         std::snprintf(buf, buflen, "%s", bool_text(cfg.fxspr_anim_select_dir, get_bool_style(field)));
         return true;
+    case KfxField_LensPaletteAffectsUI:
+        std::snprintf(buf, buflen, "%s", bool_text(cfg.lens_palette_affects_ui, get_bool_style(field)));
+        return true;
     case KfxField_COUNT:
         return false;
     }
@@ -563,6 +568,7 @@ void KfxConfigManager::setDefaults()
     m_current.tile_filter = RENDERER_FILTER_NEAREST;
     m_current.menu_pause = true;
     m_current.fxspr_anim_select_dir = false;
+    m_current.lens_palette_affects_ui = false;
     m_current.censorship = false;
     m_current.atmos_sounds = false;
     m_current.freeze_on_focus_lost = false;
@@ -1141,6 +1147,11 @@ bool KfxConfigManager::parseFile(const char* path)
             }
             m_current.fxspr_anim_select_dir = (i == 1);
             break;
+        case 53:
+            if (get_conf_parameter_single(buf, &pos, len, word_buf, sizeof(word_buf)) > 0) {
+                m_current.lens_palette_affects_ui = (std::atoi(word_buf) != 0);
+            }
+            break;
         case ccr_comment:
         case ccr_endOfFile:
             break;
@@ -1263,6 +1274,7 @@ void KfxConfigManager::syncToLegacyGlobals()
     cfg_renderer_type = m_current.renderer_type;
     cfg_renderer_menu_pause = m_current.menu_pause ? 1 : 0;
     cfg_fxspr_anim_select_dir = m_current.fxspr_anim_select_dir ? 1 : 0;
+    cfg_lens_palette_affects_ui = m_current.lens_palette_affects_ui ? 1 : 0;
     g_renderer_settings.palette_mode = m_current.palette_mode;
     g_renderer_settings.zoom_box_mode = m_current.zoom_box_mode;
     g_renderer_settings.shade_fullbright = m_current.shade_fullbright;
@@ -1341,6 +1353,7 @@ void KfxConfigManager::syncFromLegacyGlobals()
     snapshot.tile_filter = g_renderer_settings.tile_filter;
     snapshot.menu_pause = (cfg_renderer_menu_pause != 0);
     snapshot.fxspr_anim_select_dir = (cfg_fxspr_anim_select_dir != 0);
+    snapshot.lens_palette_affects_ui = (cfg_lens_palette_affects_ui != 0);
     snapshot.censorship = ((features_enabled & Ft_Censorship) != 0);
     snapshot.atmos_sounds = ((features_enabled & Ft_Atmossounds) != 0);
     snapshot.freeze_on_focus_lost = ((features_enabled & Ft_FreezeOnLoseFocus) != 0);

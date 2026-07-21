@@ -111,7 +111,6 @@ bool GLLensPassBase::CompilePass(const char* frag_src)
     return true;
 }
 
-// ToDo : Honestly this should be a dead pattern.
 bool GLLensPassBase::EnsureCompiled()
 {
     if (m_prog)
@@ -159,7 +158,10 @@ bool GLDisplacementPass::CompileShaders()
 
 bool GLDisplacementPass::Init()
 {
-    return CompileShaders();
+    // GL resource creation must run on the render thread (which owns the GL
+    // context), but Init() is called from the game thread by LensEffect::Setup().
+    // Shader compilation is deferred to the first Apply() call via EnsureCompiled().
+    return true;
 }
 
 void GLDisplacementPass::Apply(unsigned int src_tex, unsigned int dst_fbo, int w, int h)
@@ -188,7 +190,8 @@ bool GLMistPass::CompileShaders()
 
 bool GLMistPass::Init()
 {
-    return CompileShaders();
+    // Deferred to EnsureCompiled() on first Apply() — see GLDisplacementPass::Init().
+    return true;
 }
 
 void GLMistPass::Apply(unsigned int src_tex, unsigned int dst_fbo, int w, int h)
@@ -216,7 +219,8 @@ bool GLFlyeyePass::CompileShaders()
 
 bool GLFlyeyePass::Init()
 {
-    return CompileShaders();
+    // Deferred to EnsureCompiled() on first Apply() — see GLDisplacementPass::Init().
+    return true;
 }
 
 void GLFlyeyePass::Apply(unsigned int src_tex, unsigned int dst_fbo, int w, int h)
@@ -263,7 +267,8 @@ bool GLOverlayPass::CompileShaders()
 
 bool GLOverlayPass::Init()
 {
-    return CompileShaders();
+    // Deferred to EnsureCompiled() on first Apply() — see GLDisplacementPass::Init().
+    return true;
 }
 
 void GLOverlayPass::Apply(unsigned int src_tex, unsigned int dst_fbo, int w, int h)

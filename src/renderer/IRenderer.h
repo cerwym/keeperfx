@@ -24,6 +24,7 @@
 // Forward declarations
 class IWorldViewRenderer;
 class IMapFadePass;
+class ILensRenderer;
 struct TbSpriteSheet;
 class ITextRenderer;
 class IUIRenderer;
@@ -163,16 +164,6 @@ public:
                                   bool draw_lr, int engine_window_x)
     { (void)sprites; (void)frame; (void)draw_lr; (void)engine_window_x; }
 
-    /** Called immediately before engine() during first-person creature view.
-     *  SW: if a lens effect is active, redirects WScreen to the lens capture buffer.
-     *  GPU: no-op (lens applied as post-process in EndFrame). */
-    virtual void BeginLensCapture() {}
-
-    /** Called immediately after draw_swipe_graphic() during first-person creature view.
-     *  SW: applies the lens distortion from the capture buffer to WScreen and restores it.
-     *  GPU: no-op. */
-    virtual void EndLensCapture() {}
- 
     /** GPU path for the overhead (parchment) map tile colours.
      *
      *  The caller builds a tiles_x × tiles_y byte buffer containing one
@@ -259,6 +250,12 @@ public:
      *  Each renderer type creates the appropriate implementation internally. */
     virtual class IMapFadePass* GetMapFadePass() = 0;
 
+    /** Returns the lens renderer managed by this backend, or nullptr if the
+     *  backend has no lens realization. Owns the concrete lens passes; the
+     *  game-side lens system reaches it via RendererGetLensRenderer().
+     *  Default: nullptr. */
+    virtual class ILensRenderer* GetLensRenderer() { return nullptr; }
+
     /** Returns the text renderer managed by this backend.
      *  Each renderer type creates the appropriate implementation internally. */
     virtual class ITextRenderer* GetTextRenderer() = 0;
@@ -299,14 +296,6 @@ public:
     virtual void SubmitPiPRender(struct Camera* /*cam*/,
                                  int /*x*/, int /*y*/,
                                  int /*w*/, int /*h*/) {}
-
-    /** Create a GPU post-process pass for the given lens effect type.
-     *  Called once by the owning LensEffect::Setup() (game thread) when the
-     *  effect activates. Ownership transfers to the caller: LensEffect must
-     *  call Free() then delete the returned pass in Cleanup().
-     *  Backends without GPU lens support return nullptr (default), which the
-     *  caller treats as "fall back to CPU LensEffect::Draw()". */
-    virtual class IPostProcessPass* CreateLensPass(LensEffectType /*type*/) { return nullptr; }
 };
 
 /******************************************************************************/

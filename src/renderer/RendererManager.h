@@ -902,6 +902,8 @@ IRenderer* RendererGetActive();
 IWorldViewRenderer* RendererGetWorldViewRenderer();
 /* C++ only: direct access to the active IMapFadePass* */
 IMapFadePass* RendererGetMapFadePass();
+/* C++ only: direct access to the active ILensRenderer* (may be nullptr) */
+class ILensRenderer* RendererGetLensRenderer();
 /* C++ only: direct access to the active ITextRenderer* */
 ITextRenderer* RendererGetTextRenderer();
 /* C++ only: direct access to the active IUIRenderer* */

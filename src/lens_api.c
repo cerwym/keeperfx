@@ -199,8 +199,8 @@ void draw_lens_effect(unsigned char *dstbuf, long dstpitch, unsigned char *srcbu
         }
     }
     
-    // Draw via LensManager (handles all fallbacks internally)
-    LensManager_Draw(mgr, srcbuf, dstbuf, srcpitch, dstpitch, width, height, viewport_x);
+    // Draw via LensManager software path (handles all fallbacks internally)
+    LensManager_DrawSoftware(mgr, srcbuf, dstbuf, srcpitch, dstpitch, width, height, viewport_x);
 }
 
 /**

@@ -48,7 +48,7 @@ public:
     virtual void Cleanup() override;
     virtual TbBool Draw(LensRenderContext* ctx) override;
 
-    virtual class IPostProcessPass* GetGPUPass() override { return m_gpu_pass; }
+    virtual bool BuildGPUParams(struct LensGPUPassParams& out) const override;
 
 private:
     void BuildLookupTable(long width, long height);
@@ -63,10 +63,6 @@ private:
     DisplaceLookupEntry* m_lookup_table;
     long m_table_width;
     long m_table_height;
-
-    // Owned; created via RendererGetActive()->CreateLensPass() in Setup(),
-    // freed in Cleanup(). nullptr on backends without GPU lens support.
-    class IPostProcessPass* m_gpu_pass = nullptr;
 };
 
 /******************************************************************************/

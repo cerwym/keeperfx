@@ -362,20 +362,16 @@ TbBool FlyeyeEffect::Setup(long lens_idx)
     FreeLookupTable();
     m_current_lens = lens_idx;
 
-    if (m_gpu_pass == nullptr)
-    {
-        if (IRenderer* active_renderer = RendererGetActive())
-        {
-            m_gpu_pass = active_renderer->CreateLensPass(LensEffectType::Flyeye);
-        }
-    }
-    if (m_gpu_pass != nullptr)
-    {
-        LensGPUPassParams params;
-        m_gpu_pass->Configure(params);
-    }
-
     SYNCDBG(7, "Flyeye effect ready");
+    return true;
+}
+
+bool FlyeyeEffect::BuildGPUParams(LensGPUPassParams& out) const
+{
+    if (m_current_lens < 0)
+        return false;
+    // Flyeye uses the pass defaults (hex size); nothing lens-specific to set.
+    (void)out;
     return true;
 }
 
@@ -383,12 +379,6 @@ void FlyeyeEffect::Cleanup()
 {
     FreeLookupTable();
     m_current_lens = -1;
-    if (m_gpu_pass != nullptr)
-    {
-        m_gpu_pass->Free();
-        delete m_gpu_pass;
-        m_gpu_pass = nullptr;
-    }
 }
 
 TbBool FlyeyeEffect::Draw(LensRenderContext* ctx)
