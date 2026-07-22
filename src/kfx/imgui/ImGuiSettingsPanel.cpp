@@ -80,6 +80,11 @@ const ComboOption kTileFilterOptions[] = {
     {"Linear", RENDERER_FILTER_LINEAR},
 };
 
+const ComboOption kLensColorOptions[] = {
+    {"Accurate", RENDERER_LENS_COLOR_ACCURATE},
+    {"Truecolor", RENDERER_LENS_COLOR_TRUECOLOR},
+};
+
 const ComboOption kAtmosVolumeOptions[] = {
     {"Low", 64},
     {"Medium", 128},
@@ -204,6 +209,12 @@ void DrawDisplayTab(KfxConfig& cfg, KfxConfigManager& mgr)
         mgr.markDirty(KfxField_RendererShadeGamma);
     if (DrawComboField("Tile Filter", &cfg.tile_filter, kTileFilterOptions, IM_ARRAYSIZE(kTileFilterOptions)))
         mgr.markDirty(KfxField_RendererTileFilter);
+    // Lens colour mode is a live renderer knob (shared with the F9 menu), not a
+    // keeperfx.cfg field — bind directly to g_renderer_settings and persist to
+    // renderer_prefs.ini on change so both panels stay in sync.
+    if (DrawComboField("Lens Colour Mode", &g_renderer_settings.lens_color_mode,
+                       kLensColorOptions, IM_ARRAYSIZE(kLensColorOptions)))
+        RendererSettings_Save();
     if (ImGui::Checkbox("Menu Pause", &cfg.menu_pause))
         mgr.markDirty(KfxField_RendererMenuPause);
     if (ImGui::Checkbox("FxSpr Anim SelectDir", &cfg.fxspr_anim_select_dir))

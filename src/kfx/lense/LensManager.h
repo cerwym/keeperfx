@@ -106,14 +106,14 @@ public:
      *  if no GPU passes are active / the backend doesn't support them).
      *  Called by RendererOpenGL::EndFrame(), mirroring
      *  IMapFadePass::FlushToRenderGraph(). */
-    void FlushToRenderGraph(class RenderGraph& graph);
+    void FlushToRenderGraph(class RenderGraph& graph, int render_w, int render_h);
 
     /** Collect active GPU lens passes into an IRLensCmd without touching a
      *  RenderGraph. Used by RendererVita::EndFrame(), which has no
      *  RenderGraph/thread split and consumes the result in the same call —
      *  same data shape as FlushToRenderGraph() for architectural symmetry,
      *  without inventing double-buffering for a single-threaded backend. */
-    IRLensCmd CollectGPULensCmd() const;
+    IRLensCmd CollectGPULensCmd(int render_w, int render_h);
     
     // Helper: Copy buffer with pitch
     static void CopyBuffer(unsigned char *dst, long dstpitch,

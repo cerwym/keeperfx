@@ -63,6 +63,12 @@ struct IRLensEffect
     std::vector<unsigned char> mist_pixels;
     /// Owned overlay image (overlay_w * overlay_h * 4, RGBA). Empty unless this is an overlay effect.
     std::vector<unsigned char> overlay_pixels;
+    /// Owned geometric remap table (remap_w * remap_h * 4 bytes = two uint16 per
+    /// pixel: src_x, src_y). Only populated on the frame the table changes
+    /// (params.remap_version bumps); empty on unchanged frames — the backend keeps
+    /// the previously-uploaded texture keyed by remap_version. Empty for non-remap
+    /// effects (Mist / Overlay / Palette).
+    std::vector<unsigned char> remap_pixels;
 };
 struct IRLensCmd
 {

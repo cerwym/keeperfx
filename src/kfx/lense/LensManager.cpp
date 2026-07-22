@@ -276,7 +276,7 @@ void LensManager::DrawSoftware(unsigned char* srcbuf, unsigned char* dstbuf,
     }
 }
 
-IRLensCmd LensManager::CollectGPULensCmd() const
+IRLensCmd LensManager::CollectGPULensCmd(int render_w, int render_h)
 {
     IRLensCmd cmd;
 
@@ -287,6 +287,10 @@ IRLensCmd LensManager::CollectGPULensCmd() const
     {
         if (!effect->IsEnabled())
             continue;
+        // Advance any time-based animation (mist drift) by this frame's
+        // game.delta_time so the GPU path is frame-rate independent and matches
+        // the software path. Only effects with animation override this.
+        effect->AdvanceAnimation(game.delta_time);
         LensGPUPassParams params;
         if (!effect->BuildGPUParams(params))
             continue;
@@ -298,6 +302,14 @@ IRLensCmd LensManager::CollectGPULensCmd() const
         IRLensEffect& e = cmd.effects[cmd.count];
         e.type   = effect->GetType();
         e.params = params;
+
+        // Geometric effects (Displacement / Flyeye) hand over their exact
+        // per-pixel source lookup table as an owned, self-contained RG16 payload.
+        // BuildRemap fills e.remap_pixels only on the frame the table changes
+        // (params.remap_version bumps); the backend keeps its uploaded texture
+        // keyed by that version, so unchanged frames carry no pixel bytes.
+        effect->BuildRemap(render_w, render_h, e.remap_pixels,
+                           e.params.remap_w, e.params.remap_h, e.params.remap_version);
 
         // Detach the two raw pointers that reference game-thread-owned memory into
         // owned, by-value storage, then null them in the stored params. This is
@@ -333,7 +345,7 @@ IRLensCmd LensManager::CollectGPULensCmd() const
     return cmd;
 }
 
-void LensManager::FlushToRenderGraph(RenderGraph& graph)
+void LensManager::FlushToRenderGraph(RenderGraph& graph, int render_w, int render_h)
 {
     // GPU lens passes are only meaningful in PVM_CreatureView (lens_mode == 2),
     if (lens_mode != 2)
@@ -341,7 +353,7 @@ void LensManager::FlushToRenderGraph(RenderGraph& graph)
         graph.GetPostProcessBuffers().lens = std::nullopt;
         return;
     }
-    IRLensCmd cmd = CollectGPULensCmd();
+    IRLensCmd cmd = CollectGPULensCmd(render_w, render_h);
     const bool has_work = (cmd.count > 0) || cmd.has_palette;
     graph.GetPostProcessBuffers().lens = has_work ? std::optional<IRLensCmd>(cmd) : std::nullopt;
 }

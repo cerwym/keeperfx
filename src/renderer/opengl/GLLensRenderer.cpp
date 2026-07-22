@@ -16,6 +16,9 @@
 #include "renderer/ir/PostProcessCommands.h"    // IRLensCmd / LensScope
 
 #include <cstring>
+#include <cstdint>
+#include <vector>
+#include <queue>
 #include "globals.h"                            // SYNCDBG / ERRORLOG
 
 #include "post_inc.h"
@@ -74,8 +77,8 @@ IPostProcessPass* GLLensRenderer::CreatePass(LensEffectType type)
     switch (type)
     {
         case LensEffectType::Mist:         return new GLMistPass();
-        case LensEffectType::Displacement: return new GLDisplacementPass();
-        case LensEffectType::Flyeye:       return new GLFlyeyePass();
+        case LensEffectType::Displacement: return new GLRemapPass();
+        case LensEffectType::Flyeye:       return new GLRemapPass();
         case LensEffectType::Overlay:      return new GLOverlayPass();
         default:                           return nullptr;
     }
@@ -102,26 +105,37 @@ IPostProcessPass* GLLensRenderer::AcquireConfiguredPass(const IRLensEffect& effe
     // itself never carries a live pointer (they were detached into the owned
     // vectors on the game thread), so nothing here can dangle when the game thread
     // frees the source lens buffers/objects on depossess.
-    LensGPUPassParams params = effect.params;
-    if (!effect.mist_pixels.empty())    params.mist_data    = effect.mist_pixels.data();
-    if (!effect.overlay_pixels.empty()) params.overlay_data = effect.overlay_pixels.data();
+    //
+    // Change detection is done first so the mist texture (unlike its per-frame
+    // animation offsets, which live in effect.params and change every frame) is only
+    // handed to the pass on the frame its bytes actually change — otherwise the pass
+    // would re-stage a texture upload every frame just because the offsets moved.
+    const bool mist_changed    = (s.last_mist    != effect.mist_pixels);
+    const bool overlay_changed = (s.last_overlay != effect.overlay_pixels);
+    const bool remap_changed   = (s.last_remap   != effect.remap_pixels);
 
-    // Re-configure only when the parameters or the owned payload actually change.
-    // last_params is compared pointer-free (effect.params has null pointers), and
-    // the payload change is caught by the vector comparisons — so a stable overlay
-    // is not re-uploaded every frame (GLOverlayPass marks its texture dirty on
-    // every Configure()).
+    LensGPUPassParams params = effect.params;
+    if (mist_changed    && !effect.mist_pixels.empty())    params.mist_data    = effect.mist_pixels.data();
+    if (!effect.overlay_pixels.empty()) params.overlay_data = effect.overlay_pixels.data();
+    if (!effect.remap_pixels.empty())   params.remap_data   = effect.remap_pixels.data();
+
+    // Re-configure when the parameters (including the per-frame mist offsets) or the
+    // owned payload change. last_params is compared pointer-free (effect.params has
+    // null pointers); the mist offsets in effect.params drive a per-frame reconfigure
+    // so the drift advances, while mist_data above is gated to real texture changes.
     const bool changed =
         !s.configured
         || std::memcmp(&s.last_params, &effect.params, sizeof(effect.params)) != 0
-        || s.last_mist    != effect.mist_pixels
-        || s.last_overlay != effect.overlay_pixels;
+        || mist_changed
+        || overlay_changed
+        || remap_changed;
     if (changed)
     {
         s.pass->Configure(params);
         s.last_params  = effect.params;   // pointer-free snapshot for next-frame compare
         s.last_mist    = effect.mist_pixels;
         s.last_overlay = effect.overlay_pixels;
+        s.last_remap   = effect.remap_pixels;
         s.configured   = true;
     }
 
@@ -215,6 +229,81 @@ bool GLLensRenderer::BeginSceneCapture(const IRLensCmd& cmd, int w, int h)
     return true;
 }
 
+void GLLensRenderer::EnsureReverseLUT(const uint8_t* pal768)
+{
+    if (pal768 == nullptr)
+        return;
+    // Rebuild only when the applied palette actually changed.
+    if (m_rgb2idx_valid && m_rgb2idx_tex &&
+        std::memcmp(m_rgb2idx_palette, pal768, 768) == 0)
+        return;
+
+    constexpr int N = 64;                 // 6-bit per channel
+    constexpr int NN = N * N * N;         // 262144 cells
+    auto cell = [](int r, int g, int b) { return (b * N + g) * N + r; };
+
+    std::vector<uint8_t> lut(NN, 0);
+    std::vector<uint8_t> seen(NN, 0);
+    std::queue<int> bfs;
+
+    // Seed every palette entry at its exact 6-bit cell. First writer wins on
+    // collisions (identical-colour indices are interchangeable for the fade).
+    for (int i = 0; i < 256; ++i)
+    {
+        int r = pal768[i * 3 + 0]; if (r > 63) r = 63; if (r < 0) r = 0;
+        int g = pal768[i * 3 + 1]; if (g > 63) g = 63; if (g < 0) g = 0;
+        int b = pal768[i * 3 + 2]; if (b > 63) b = 63; if (b < 0) b = 0;
+        int c = cell(r, g, b);
+        if (!seen[c])
+        {
+            seen[c]  = 1;
+            lut[c]   = (uint8_t)i;
+            bfs.push(c);
+        }
+    }
+
+    // Multi-source 6-connected BFS → each empty cell takes the nearest seed's index.
+    while (!bfs.empty())
+    {
+        int c = bfs.front(); bfs.pop();
+        int r = c % N;
+        int g = (c / N) % N;
+        int b = c / (N * N);
+        const uint8_t idx = lut[c];
+        const int dr[6] = {-1, 1,  0, 0,  0, 0};
+        const int dg[6] = { 0, 0, -1, 1,  0, 0};
+        const int db[6] = { 0, 0,  0, 0, -1, 1};
+        for (int k = 0; k < 6; ++k)
+        {
+            int nr = r + dr[k], ng = g + dg[k], nb = b + db[k];
+            if (nr < 0 || nr >= N || ng < 0 || ng >= N || nb < 0 || nb >= N)
+                continue;
+            int nc = cell(nr, ng, nb);
+            if (seen[nc])
+                continue;
+            seen[nc] = 1;
+            lut[nc]  = idx;
+            bfs.push(nc);
+        }
+    }
+
+    if (!m_rgb2idx_tex)
+        glGenTextures(1, &m_rgb2idx_tex);
+    glBindTexture(GL_TEXTURE_3D, m_rgb2idx_tex);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glTexImage3D(GL_TEXTURE_3D, 0, GL_R8, N, N, N, 0, GL_RED, GL_UNSIGNED_BYTE, lut.data());
+    glBindTexture(GL_TEXTURE_3D, 0);
+
+    std::memcpy(m_rgb2idx_palette, pal768, 768);
+    m_rgb2idx_valid = true;
+    SYNCDBG(7, "Lens reverse RGB->index LUT rebuilt (%d cells)", NN);
+}
+
 void GLLensRenderer::ResolveAndApply(const IRLensCmd& cmd, int w, int h)
 {
     if (cmd.count <= 0)
@@ -235,6 +324,24 @@ void GLLensRenderer::ResolveAndApply(const IRLensCmd& cmd, int w, int h)
         IPostProcessPass* pass = AcquireConfiguredPass(cmd.effects[i]);
         if (pass == nullptr)
             continue;
+        // Accurate (paletted) mist needs the shared palette + fade textures and the
+        // reverse RGB→index LUT. Hand them over each frame; the pass gates their use
+        // on its own mode (mist_truecolor) and on non-zero handles. Zero handles
+        // (fade table not ready, or truecolor mode) cleanly force the truecolor path.
+        if (cmd.effects[i].type == LensEffectType::Mist)
+        {
+            GLMistPass* mp = static_cast<GLMistPass*>(pass);
+            if (!cmd.effects[i].params.mist_truecolor &&
+                m_renderer->m_texPalette && m_renderer->m_texFade)
+            {
+                EnsureReverseLUT(m_renderer->m_rt_frame_state.palette);
+                mp->SetAccurateResources(m_renderer->m_texPalette, m_renderer->m_texFade, m_rgb2idx_tex);
+            }
+            else
+            {
+                mp->SetAccurateResources(0, 0, 0);
+            }
+        }
         unsigned int dst_fbo = flip ? m_lens_pass_fbo_b : m_lens_pass_fbo_a;
         unsigned int dst_tex = flip ? m_lens_pass_tex_b : m_lens_pass_tex_a;
         pass->Apply(src_tex, dst_fbo, w, h);
@@ -285,6 +392,8 @@ void GLLensRenderer::ReleaseAll()
         }
         s.configured = false;
     }
+    if (m_rgb2idx_tex) { glDeleteTextures(1, &m_rgb2idx_tex); m_rgb2idx_tex = 0; }
+    m_rgb2idx_valid = false;
     DestroyFBOs();
 }
 

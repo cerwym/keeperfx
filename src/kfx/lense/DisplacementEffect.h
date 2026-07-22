@@ -50,6 +50,10 @@ public:
 
     virtual bool BuildGPUParams(struct LensGPUPassParams& out) const override;
 
+    virtual bool BuildRemap(int render_w, int render_h,
+                            std::vector<unsigned char>& out_pixels,
+                            int& out_w, int& out_h, uint32_t& io_version) override;
+
 private:
     void BuildLookupTable(long width, long height);
     void FreeLookupTable();
@@ -63,6 +67,11 @@ private:
     DisplaceLookupEntry* m_lookup_table;
     long m_table_width;
     long m_table_height;
+
+    // Remap-table versioning for the GPU backend (bumped on every rebuild;
+    // emitted-version tracks the last frame the packed bytes were handed to the IR).
+    uint32_t m_remap_version = 0;
+    uint32_t m_remap_emitted_version = 0;
 };
 
 /******************************************************************************/

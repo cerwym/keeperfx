@@ -21,6 +21,9 @@
 
 #include "../../bflib_basics.h"
 
+#include <cstdint>
+#include <vector>
+
 /**
  * Effect rendering context - passed to all effect draw methods.
  */
@@ -76,6 +79,35 @@ public:
      * type + params to a concrete pass — the game side owns no renderer object.
      */
     virtual bool BuildGPUParams(struct LensGPUPassParams& /*out*/) const { return false; }
+
+    /**
+     * Geometric effects (Displacement / Flyeye) pre-compute an exact per-output-
+     * pixel source lookup table at the given render resolution and hand it to the
+     * backend as a tightly-packed RG16 image (two uint16 per pixel: src_x, src_y,
+     * row-major, top row first) so GL/Vita resample the scene identically to the
+     * software path.
+     *
+     * Returns true for geometric effects. `out_w`/`out_h` and `io_version` are
+     * always set to the current table dimensions/version. `out_pixels` is filled
+     * ONLY when the table changed since the last call (version bump on lens or
+     * resolution change); on unchanged frames it is left empty and the backend
+     * reuses the texture it already uploaded for that version. Non-geometric
+     * effects return false (the default).
+     */
+    virtual bool BuildRemap(int /*render_w*/, int /*render_h*/,
+                            std::vector<unsigned char>& /*out_pixels*/,
+                            int& /*out_w*/, int& /*out_h*/,
+                            uint32_t& /*io_version*/) { return false; }
+
+    /**
+     * Advance any time-based animation this effect owns by `delta` game-turns
+     * worth of time (i.e. game.delta_time: 1.0 == one turn at the target frame
+     * rate). Called once per rendered frame on the game thread. Keeping the
+     * animation phase here — rather than self-accumulating inside a GPU pass —
+     * makes the drift speed frame-rate independent and identical across the
+     * software and GPU backends. Default: no-op (static effects).
+     */
+    virtual void AdvanceAnimation(float /*delta*/) {}
     
     // Identification
     LensEffectType GetType() const { return m_type; }

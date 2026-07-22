@@ -33,11 +33,20 @@ public:
     virtual TbBool Draw(LensRenderContext* ctx) override;
 
     virtual bool BuildGPUParams(struct LensGPUPassParams& out) const override;
+    virtual void AdvanceAnimation(float delta) override;
 
 private:
     TbBool LoadMistTexture(const char* filename);
 
     long m_current_lens;
+
+    // Animation phase (single source of truth, shared by software + GPU paths).
+    // Offsets wrap at 256; velocities are the signed per-turn drift, derived from
+    // the lens config steps in Setup() and applied as offset += vel * delta.
+    float m_pos_x = 0.0f,  m_pos_y = 0.0f;
+    float m_sec_x = 50.0f, m_sec_y = 128.0f;
+    float m_vel_pos_x = 0.0f, m_vel_pos_y = 0.0f;
+    float m_vel_sec_x = 0.0f, m_vel_sec_y = 0.0f;
 };
 
 /******************************************************************************/

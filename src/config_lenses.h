@@ -54,6 +54,12 @@ struct LensConfig {
     short displace_period;
     char overlay_file[DISKPATH_SIZE];
     short overlay_alpha;
+    /* Colour-fidelity override for this lens's mist fade (OpenGL only):
+     *  -1 = inherit the global g_renderer_settings.lens_color_mode (default),
+     *   0 = force Accurate (paletted, bit-exact with software),
+     *   1 = force Truecolor (smooth RGBA blend for truecolor lens textures).
+     * A framework for future per-creature lens customisation. */
+    short truecolor;
 };
 
 struct LensesConfig {

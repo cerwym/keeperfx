@@ -182,7 +182,7 @@ void RendererVita::EndFrame()
         {
             LensManager* lm = LensManager::GetInstance();
             if (lm && lm->IsReady()) {
-                lens_cmd = lm->CollectGPULensCmd();
+                lens_cmd = lm->CollectGPULensCmd(k_gameW, k_gameH);
             }
         }
 

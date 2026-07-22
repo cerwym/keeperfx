@@ -813,7 +813,7 @@ void RendererOpenGL::EndFrame()
 
     // Flush active GPU lens passes to the render graph's write-side post-process
     // buffers, mirroring the map-fade flush above. Must happen before Flip().
-    if (LensManager* lm = LensManager::GetInstance()) lm->FlushToRenderGraph(m_render_graph);
+    if (LensManager* lm = LensManager::GetInstance()) lm->FlushToRenderGraph(m_render_graph, m_screenW, m_screenH);
 
     {
         const UICommandBuffers& wui [[maybe_unused]] = m_render_graph.GetWriteUIBuffers();

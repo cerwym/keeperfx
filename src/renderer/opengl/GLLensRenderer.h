@@ -86,6 +86,7 @@ private:
         LensGPUPassParams last_params;             // pointer fields always null (compare key)
         std::vector<unsigned char> last_mist;      // last configured mist payload
         std::vector<unsigned char> last_overlay;   // last configured overlay payload
+        std::vector<unsigned char> last_remap;     // last configured remap payload
         bool              configured = false;
     };
 
@@ -103,6 +104,12 @@ private:
     void EnsureFBOs(int w, int h);
     /** Free the compositing FBOs and passthrough shader (GL context must be current). */
     void DestroyFBOs();
+
+    /** Ensure the 64³ reverse RGB→palette-index LUT (m_rgb2idx_tex) reflects the
+     *  given applied 6-bit palette, rebuilding it (multi-source BFS flood fill)
+     *  only when the palette bytes change. Used by the accurate mist path to
+     *  recover each scene pixel's palette index. GL context must be current. */
+    void EnsureReverseLUT(const uint8_t* pal768);
 
     RendererOpenGL* m_renderer = nullptr;
 
@@ -122,6 +129,15 @@ private:
     int          m_lens_fbo_h          = 0;
     // Passthrough blit shader: copies final lens texture to default framebuffer.
     unsigned int m_passthrough_shader  = 0;
+
+    // ── Accurate-mist reverse LUT (owned) ────────────────────────────────────
+    // 64×64×64 GL_R8 3D texture: value at cell (r6,g6,b6) = palette index whose
+    // 6-bit RGB is nearest. Lets the accurate mist shader recover a scene pixel's
+    // palette index so it can run the exact software fade table. Rebuilt only when
+    // the applied palette changes (see m_rgb2idx_palette snapshot).
+    unsigned int m_rgb2idx_tex         = 0;
+    uint8_t      m_rgb2idx_palette[768] = {}; // snapshot the LUT was built from
+    bool         m_rgb2idx_valid       = false;
 };
 
 /******************************************************************************/
