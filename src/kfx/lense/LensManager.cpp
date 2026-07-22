@@ -19,6 +19,7 @@
 /******************************************************************************/
 #include "kfx_memory.h"
 #include "../../pre_inc.h"
+#include <cstring>       // std::memcpy
 #include "renderer/RendererManager.h"
 #include "renderer/RenderGraph.h"
 #include "renderer/IPostProcessPass.h"
@@ -37,6 +38,8 @@
 #include "../../lens_api.h"
 #include "../../vidmode.h"
 #include "../../game_legacy.h"
+#include "../../player_data.h"     // get_my_player, struct PlayerInfo
+#include "../../engine_lenses.h"  // lens_mode
 
 #include "../../keeperfx.hpp"
 #include "../../renderer/RendererManager.h"
@@ -110,7 +113,7 @@ TbBool LensManager::Init()
     m_initialized = true;
     set_flag(game.mode_flags, MFlg_EyeLensReady);
     
-    SYNCDBG(7, "Lens manager initialized with %d effects", (int)m_effects.size());
+    SYNCDBG("Lens manager initialized with %d effects", (int)m_effects.size());
     return true;
 }
 
@@ -220,17 +223,14 @@ TbBool LensManager::SetLens(long lens_idx)
     return success;
 }
 
-void LensManager::Draw(unsigned char* srcbuf, unsigned char* dstbuf, 
+void LensManager::DrawSoftware(unsigned char* srcbuf, unsigned char* dstbuf,
                       long srcpitch, long dstpitch, 
                       long width, long height, long viewport_x)
 {
-    SYNCDBG(0, "LensManager::Draw() called: m_initialized=%d, m_applied_lens=%ld, m_active_custom_lens='%s'",
+    SYNCDBG(0, "LensManager::DrawSoftware() called: m_initialized=%d, m_applied_lens=%ld, m_active_custom_lens='%s'",
            m_initialized, m_applied_lens, m_active_custom_lens.c_str());
     
-    // Setup render context
-    LensRenderContext ctx;
-    ctx.srcbuf = srcbuf;
-    ctx.dstbuf = dstbuf;
+    LensRenderContext ctx = {};
     ctx.srcpitch = srcpitch;
     ctx.dstpitch = dstpitch;
     ctx.width = width;
@@ -256,19 +256,13 @@ void LensManager::Draw(unsigned char* srcbuf, unsigned char* dstbuf,
         // Custom lens failed, fall through to standard effects or fallback
     }
     
-    // Apply standard effects in order
+    // Apply standard effects in order (CPU software path). GPU backends never
+    // reach this method — they consume the pure-data IRLensCmd built by
+    // CollectGPULensCmd()/FlushToRenderGraph() instead.
+    // I really think it's smelly but it'll do.
     TbBool rendered = false;
     for (LensEffect* effect : m_effects) {
         if (effect->IsEnabled()) {
-            // When the active renderer supports GPU post-process passes and
-            // this effect provides one, skip the CPU Draw() path — the GPU
-            // renderer handles it in EndFrame().  GetGPUPass() returns nullptr
-            // and SupportsGPUPasses() returns false on all CPU-only platforms,
-            // so this condition is always false there at zero cost.
-            if (effect->GetGPUPass() != nullptr && RendererGetActive()->GetCapabilities().supportsGPUPasses) {
-                rendered = true; // treat as rendered so fallback copy is suppressed
-                continue;
-            }
             if (effect->Draw(&ctx)) {
                 rendered = true;
             }
@@ -282,35 +276,86 @@ void LensManager::Draw(unsigned char* srcbuf, unsigned char* dstbuf,
     }
 }
 
-IRLensCmd LensManager::CollectGPULensCmd() const
+IRLensCmd LensManager::CollectGPULensCmd(int render_w, int render_h)
 {
     IRLensCmd cmd;
 
-    if (!m_initialized || !RendererGetActive()->GetCapabilities().supportsGPUPasses)
+    if (!m_initialized)
         return cmd;
 
     for (LensEffect* effect : m_effects)
     {
         if (!effect->IsEnabled())
             continue;
-        IPostProcessPass* pass = effect->GetGPUPass();
-        if (pass == nullptr)
+        // Advance any time-based animation (mist drift) by this frame's
+        // game.delta_time so the GPU path is frame-rate independent and matches
+        // the software path. Only effects with animation override this.
+        effect->AdvanceAnimation(game.delta_time);
+        LensGPUPassParams params;
+        if (!effect->BuildGPUParams(params))
             continue;
         if (cmd.count >= kMaxLensGPUPasses)
         {
             WARNLOG("LensManager: more than %d active GPU lens passes — dropping extras", kMaxLensGPUPasses);
             break;
         }
-        cmd.passes[cmd.count++] = pass;
+        IRLensEffect& e = cmd.effects[cmd.count];
+        e.type   = effect->GetType();
+        e.params = params;
+
+        // Geometric effects (Displacement / Flyeye) hand over their exact
+        // per-pixel source lookup table as an owned, self-contained RG16 payload.
+        // BuildRemap fills e.remap_pixels only on the frame the table changes
+        // (params.remap_version bumps); the backend keeps its uploaded texture
+        // keyed by that version, so unchanged frames carry no pixel bytes.
+        effect->BuildRemap(render_w, render_h, e.remap_pixels,
+                           e.params.remap_w, e.params.remap_h, e.params.remap_version);
+
+        // Detach the two raw pointers that reference game-thread-owned memory into
+        // owned, by-value storage, then null them in the stored params. This is
+        // what makes the IR safe. Without this unpossesing a creature has a dangling pointer to the lens memory.
+        if (params.mist_data != nullptr)
+        {
+            // Mist amplitude texture is a fixed 256x256 single-channel image.
+            e.mist_pixels.assign(params.mist_data, params.mist_data + (256 * 256));
+            e.params.mist_data = nullptr;
+        }
+        if (params.overlay_data != nullptr && params.overlay_w > 0 && params.overlay_h > 0)
+        {
+            const size_t n = (size_t)params.overlay_w * (size_t)params.overlay_h * 4u; // RGBA
+            e.overlay_pixels.assign(params.overlay_data, params.overlay_data + n);
+            e.params.overlay_data = nullptr;
+        }
+        cmd.count++;
+    }
+
+    // It's a pallette effect if the lens mode is 2 (PVM_CreatureView) and the player has a lens palette set.
+    if (lens_mode == 2)
+    {
+        struct PlayerInfo* player = get_my_player();
+        if (player != nullptr && player->lens_palette != nullptr && engine_palette != nullptr)
+        {
+            cmd.has_palette   = true;
+            cmd.palette_scope = cfg_lens_palette_affects_ui ? LensScope::FullFrame
+                                                            : LensScope::WorldOnly;
+            std::memcpy(cmd.palette.data(), engine_palette, cmd.palette.size());
+        }
     }
 
     return cmd;
 }
 
-void LensManager::FlushToRenderGraph(RenderGraph& graph)
+void LensManager::FlushToRenderGraph(RenderGraph& graph, int render_w, int render_h)
 {
-    IRLensCmd cmd = CollectGPULensCmd();
-    graph.GetPostProcessBuffers().lens = (cmd.count > 0) ? std::optional<IRLensCmd>(cmd) : std::nullopt;
+    // GPU lens passes are only meaningful in PVM_CreatureView (lens_mode == 2),
+    if (lens_mode != 2)
+    {
+        graph.GetPostProcessBuffers().lens = std::nullopt;
+        return;
+    }
+    IRLensCmd cmd = CollectGPULensCmd(render_w, render_h);
+    const bool has_work = (cmd.count > 0) || cmd.has_palette;
+    graph.GetPostProcessBuffers().lens = has_work ? std::optional<IRLensCmd>(cmd) : std::nullopt;
 }
 
 void LensManager::LoadAccessibilityConfig()
@@ -580,11 +625,11 @@ TbBool LensManager_IsReady(void* mgr)
     return static_cast<LensManager*>(mgr)->IsReady();
 }
 
-void LensManager_Draw(void* mgr, unsigned char* srcbuf, unsigned char* dstbuf,
+void LensManager_DrawSoftware(void* mgr, unsigned char* srcbuf, unsigned char* dstbuf,
                       long srcpitch, long dstpitch, long width, long height, long viewport_x)
 {
     if (mgr != nullptr) {
-        static_cast<LensManager*>(mgr)->Draw(srcbuf, dstbuf, srcpitch, dstpitch,
+        static_cast<LensManager*>(mgr)->DrawSoftware(srcbuf, dstbuf, srcpitch, dstpitch,
                                              width, height, viewport_x);
     }
 }

@@ -25,11 +25,13 @@
 #include "bflib_video.h"
 #include "globals.h"
 #include "renderer/IPostProcessPass.h"
+#include "renderer/ILensRenderer.h"
 #include "renderer/ir/PostProcessCommands.h"
 #include "renderer/vita/VitaMistPass.h"
 #include "renderer/vita/VitaDisplacePass.h"
 #include "renderer/vita/VitaFlyeyePass.h"
 #include "renderer/vita/VitaOverlayPass.h"
+#include "renderer/vita/VitaLensRenderer.h"
 #include "kfx/lense/LensManager.h"
 #include "renderer/backends/SoftwareWorldViewRenderer.h"
 #include "renderer/backends/SoftwareMapFadePass.h"
@@ -53,30 +55,6 @@ static const float k_quad_pos[4][2] = {
     { -1.0f, -1.0f },
     {  1.0f, -1.0f },
 };
-
-/** Allocate a RGBA render target FBO with a backing texture.
- *  Returns false and logs an error if the FBO is incomplete. */
-static bool create_rgba_fbo(int w, int h, GLuint& out_fbo, GLuint& out_tex)
-{
-    glGenTextures(1, &out_tex);
-    glBindTexture(GL_TEXTURE_2D, out_tex);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-
-    glGenFramebuffers(1, &out_fbo);
-    glBindFramebuffer(GL_FRAMEBUFFER, out_fbo);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, out_tex, 0);
-    GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    if (status != GL_FRAMEBUFFER_COMPLETE) {
-        ERRORLOG("[vitaGL] FBO incomplete: 0x%x", status);
-        return false;
-    }
-    return true;
-}
 
 /******************************************************************************/
 // RendererVita
@@ -122,26 +100,21 @@ bool RendererVita::Init()
             return false;
         }
 
-        if (!m_passthrough.Init()) {
-            Shutdown();
-            return false;
-        }
-
-        if (!create_rgba_fbo(k_gameW, k_gameH, m_scene_fbo, m_scene_tex) ||
-            !create_rgba_fbo(k_gameW, k_gameH, m_pass_fbo_a, m_pass_tex_a) ||
-            !create_rgba_fbo(k_gameW, k_gameH, m_pass_fbo_b, m_pass_tex_b)) {
-            Shutdown();
-            return false;
-        }
         glDisable(GL_DEPTH_TEST);
         glDisable(GL_BLEND);
 
         // Own the software sub-renderers (CPU staging path for UI/text/world/fade).
         m_worldViewRenderer = new SoftwareWorldViewRenderer();
         m_mapFadePass       = new SoftwareMapFadePass();
+        m_lensRenderer      = new VitaLensRenderer();
         m_textRenderer      = new SoftwareTextRenderer();
         m_uiRenderer        = new SoftwareUIRenderer();
         m_cursorLayer       = new SWCursorLayer();
+
+        if (!m_lensRenderer->Init(k_gameW, k_gameH)) {
+            Shutdown();
+            return false;
+        }
 
         m_initialized = true;
         SYNCLOG("RendererVita: vitaGL palette shader initialised (%dx%d -> 960x544)", k_gameW, k_gameH);
@@ -154,20 +127,12 @@ void RendererVita::Shutdown()
     if (!m_initialized) return;
 
     m_blit.Free();
-    m_passthrough.Free();
     if (m_index_tex)   { glDeleteTextures(1, &m_index_tex);   m_index_tex   = 0; }
     if (m_palette_tex) { glDeleteTextures(1, &m_palette_tex); m_palette_tex = 0; }
 
-    auto del_fbo = [](GLuint& fbo, GLuint& tex) {
-        if (fbo) { glDeleteFramebuffers(1, &fbo); fbo = 0; }
-        if (tex) { glDeleteTextures(1, &tex);      tex = 0; }
-    };
-    del_fbo(m_scene_fbo,  m_scene_tex);
-    del_fbo(m_pass_fbo_a, m_pass_tex_a);
-    del_fbo(m_pass_fbo_b, m_pass_tex_b);
-
     delete m_worldViewRenderer; m_worldViewRenderer = nullptr;
     delete m_mapFadePass;       m_mapFadePass       = nullptr;
+    delete m_lensRenderer;      m_lensRenderer      = nullptr;
     delete m_textRenderer;      m_textRenderer      = nullptr;
     delete m_uiRenderer;        m_uiRenderer        = nullptr;
     delete m_cursorLayer;       m_cursorLayer       = nullptr;
@@ -178,18 +143,6 @@ void RendererVita::Shutdown()
 bool RendererVita::BeginFrame()
 {
     return m_initialized;
-}
-
-IPostProcessPass* RendererVita::CreateLensPass(LensEffectType type)
-{
-    switch (type)
-    {
-        case LensEffectType::Mist:         return new VitaMistPass();
-        case LensEffectType::Displacement: return new VitaDisplacePass();
-        case LensEffectType::Flyeye:       return new VitaFlyeyePass();
-        case LensEffectType::Overlay:      return new VitaOverlayPass();
-        default:                           return nullptr;
-    }
 }
 
 void RendererVita::EndFrame()
@@ -225,32 +178,15 @@ void RendererVita::EndFrame()
             { 0.0f, 0.0f }, { u1, 0.0f }, { 0.0f, v1 }, { u1, v1 },
         };
 
-        // Collect GPU-side post-process passes from active lens effects.
-        // These run on the GPU instead of the CPU lens path in LensManager.
-        // Vita has no RenderGraph/thread split, so the IRLensCmd is built and
-        // consumed in the same call — same data shape as
-        // RendererOpenGL::EndFrame()'s FlushToRenderGraph() for architectural
-        // symmetry, without a double-buffer flip.
-        // TODO : Actually port the fucking thing to the Graph.
         IRLensCmd lens_cmd;
         {
             LensManager* lm = LensManager::GetInstance();
             if (lm && lm->IsReady()) {
-                lens_cmd = lm->CollectGPULensCmd();
+                lens_cmd = lm->CollectGPULensCmd(k_gameW, k_gameH);
             }
         }
 
-        // Stage 1 — palette decode: index_tex + palette_tex → (scene FBO when GPU
-        //   passes are active, directly to screen when running CPU-only effects).
-        if (lens_cmd.count == 0) {
-            // Direct-to-screen path: ensure we're rendering to the default
-            // framebuffer at the full display size.
-            glBindFramebuffer(GL_FRAMEBUFFER, 0);
-            glViewport(0, 0, 960, 544);
-        } else {
-            glBindFramebuffer(GL_FRAMEBUFFER, m_scene_fbo);
-            glViewport(0, 0, k_gameW, k_gameH);
-        }
+        const bool lens_scene = m_lensRenderer && m_lensRenderer->BeginSceneCapture(lens_cmd);
 
         // Explicitly (re-)bind both textures.  vitaGL's glUseProgram marks
         // uniforms dirty but the sampler bindings come from glUniform1i which
@@ -268,21 +204,10 @@ void RendererVita::EndFrame()
         glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, dyn_uv);
         glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
-        if (lens_cmd.count > 0) {
-            // Stage 2 — ping-pong each GPU pass over the decoded scene.
-            GLuint src_tex = m_scene_tex;
-            bool   flip    = false;
-            for (int i = 0; i < lens_cmd.count; ++i) {
-                IPostProcessPass* pass = lens_cmd.passes[i];
-                GLuint dst_fbo = flip ? m_pass_fbo_b : m_pass_fbo_a;
-                GLuint dst_tex = flip ? m_pass_tex_b : m_pass_tex_a;
-                pass->Apply(src_tex, dst_fbo, k_gameW, k_gameH);
-                src_tex = dst_tex;
-                flip    = !flip;
-            }
-
-            // Stage 3 — final blit to screen (960×544 upscale/stretch).
-            m_passthrough.Apply(src_tex, 0, k_gameW, k_gameH);
+        if (lens_scene) {
+            // Ping-pong the GPU passes over the decoded scene and
+            // blit the final result to the screen. Owned by the lens sub-renderer.
+            m_lensRenderer->ResolveAndApply(lens_cmd);
         }
         vglSwapBuffers(GL_FALSE);
     }

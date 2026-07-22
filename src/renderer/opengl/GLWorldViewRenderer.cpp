@@ -19,10 +19,10 @@
 #include "renderer/RendererOpenGL.h"   // for RendererOpenGL class
 #include "renderer/VecMath.h"
 
-#include "engine_buckets.h"   // QKinds enum, BasicQ, BucketKind* structs, buckets[]
+#include "engine_buckets.h"   // QKinds enum, BasicQ, BucketKind* structs
 #include "engine_textures.h"  // TEXTURE_BLOCKS_COUNT
 #include "renderer/TileAtlasPacker.h" // GetTileUV
-#include "engine_render.h"    // draw_3d_sprites_for_bucket()
+#include "engine_render.h"    // render_fade_tables, engine window state
 #include "bflib_basics.h"      // ERRORLOG / SYNCLOG / WARNLOG
 #include "renderer/opengl/GLUIRenderer.h"
 #include "creature_graphics.h" // KeeperSprite structure
@@ -31,6 +31,7 @@
 #include "game_legacy.h"       // game.lish.subtile_lightness (lightmap snapshot in FlipBuffers)
 
 #include <glad/glad.h>
+#include <algorithm>
 #include <cassert>
 #include <chrono>
 #include <cstddef>   // offsetof (instanced sprite attrib layout)
@@ -1442,6 +1443,7 @@ int GLWorldViewRenderer::SubmitKeeperSprite(
     cmd.owner         = (int8_t)WorldViewRenderer_GetCurrentSpriteOwner();
     cmd.wants_outline = (int8_t)WorldViewRenderer_GetCurrentSpriteWantsOutline();
     cmd.sprite_id     = sprite_id;
+    cmd.sort_key      = m_current_sprite_sort_key;
     kspr_buf.push_back(cmd);
     return 1;
 }
@@ -1985,19 +1987,24 @@ void GLWorldViewRenderer::DrawKeeperSpriteGL(const IRWorldKeeperSpriteCmd& cmd)
 
 /******************************************************************************/
 
-// Game-thread: sets m_current_sprite_z for SubmitKeeperSprite to capture into IR.
-void GLWorldViewRenderer::setup_world_sprite_processing(int32_t bucket_num)
+int GLWorldViewRenderer::BeginWorldSpriteCapture(int32_t bucket_idx)
 {
-    if (!m_initialized) {
-        ERRORLOG("setup_world_sprite_processing: renderer not initialised — sprite processing skipped");
-        return;
-    }
-    //  biased half a bucket closer to the camera, so sprites always pass the depth test against same-bucket ground polygons
-    // (avoids z-fighting between coplanar sprites and tiles).
-    const float sprite_z = 2.0f * ((float)bucket_num - 0.5f) / (float)(BUCKETS_COUNT - 1) - 1.0f;
-    // Stored here so that keeper-sprite (KSprite) render passes and UIRenderer
-    // (JontySprites) both receive the same biased z via UIRenderer_BeginWorldOverlay().
-    m_current_sprite_z = sprite_z;
+    // Without an IR write target the pass's sprite range is never recorded, so
+    // fill-time capture would leak orphaned IR entries — fall back to buckets.
+    if (!UsesFillTimeWorldSubmit())
+        return 0;
+    if (bucket_idx >= BUCKETS_COUNT)
+        bucket_idx = BUCKETS_COUNT - 1;
+    else if (bucket_idx < 0)
+        bucket_idx = 0;
+    // Biased half a bucket closer to the camera, so sprites always pass the
+    // depth test against same-bucket ground polygons (avoids z-fighting
+    // between coplanar sprites and tiles).  Shared with UIRenderer overlays
+    // via UIRenderer_BeginWorldOverlay().
+    m_current_sprite_z = 2.0f * ((float)bucket_idx - 0.5f) / (float)(BUCKETS_COUNT - 1) - 1.0f;
+    m_current_sprite_sort_key = ((uint32_t)bucket_idx << 16)
+                              | (m_sprite_entry_seq++ & 0xFFFFu);
+    return 1;
 }
 
 /******************************************************************************/
@@ -2008,7 +2015,7 @@ void GLWorldViewRenderer::BeginWorldPass(unsigned char* framebuf, int pitch,
     KFX_ZONE("WVR::BeginWorldPass");
     ASSERT_GAME_THREAD();
 
-    // Since the render thread no longer accesses poly_pool (bucket bucket-walks moved
+    // Since the render thread no longer accesses the world draw list (walks moved
     // to the game thread in Phase 1), no fence wait is needed here.
 
     m_screen_w        = w;
@@ -2021,6 +2028,10 @@ void GLWorldViewRenderer::BeginWorldPass(unsigned char* framebuf, int pitch,
     m_world_pass_active  = true;
     m_kspr_atlas_hits    = 0;
     m_kspr_atlas_misses  = 0;
+    m_sprite_entry_seq   = 0;
+    // Sprites captured at fill time (BeginWorldSpriteCapture) between this call
+    // and DrawIsometricView()/DrawFrontView() form one whole-pass IR range.
+    m_kspr_pass_start    = (m_pip_capture ? m_pip_kspr_ir : m_kspr_ir).size();
 
     // Flush any tile batch from the *previous* sub-pass before starting the
     // new one — but do NOT clear the draw list.  Multiple sub-passes per frame
@@ -2818,6 +2829,19 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl, int screen_w
 
             UIRenderer_SetScreenSize(screen_w, screen_h);
 
+            // Depth-order each pass's sprite range by sort_key, descending far-> near
+            auto sort_range = [&](const DrawCmd& cmd) -> const std::vector<int>& {
+                m_kspr_sorted_idx.clear();
+                const int end = cmd.sprite_ir_start + cmd.sprite_ir_count;
+                for (int i = cmd.sprite_ir_start; i < end; ++i)
+                    m_kspr_sorted_idx.push_back(i);
+                std::stable_sort(m_kspr_sorted_idx.begin(), m_kspr_sorted_idx.end(),
+                                 [&kspr_ir](int a, int b) {
+                                     return kspr_ir[a].sort_key > kspr_ir[b].sort_key;
+                                 });
+                return m_kspr_sorted_idx;
+            };
+
             const bool use_instancing = (m_kspr_inst_shader != 0) && (m_kspr_sprite_array != 0);
             if (use_instancing)
             {
@@ -2826,8 +2850,7 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl, int screen_w
                 for (const auto& cmd : m_rt_draw_cmds)
                 {
                     if (cmd.type != DrawCmd::CMD_IR_KEEPER_SPRITES) continue;
-                    const int end = cmd.sprite_ir_start + cmd.sprite_ir_count;
-                    for (int i = cmd.sprite_ir_start; i < end; ++i)
+                    for (int i : sort_range(cmd))
                         append_keeper_sprite_instance(kspr_ir[i]);
                 }
                 flush_keeper_sprite_instances();
@@ -2837,8 +2860,7 @@ void GLWorldViewRenderer::gpu_execute_passes(int vp_x, int vp_y_gl, int screen_w
                 for (const auto& cmd : m_rt_draw_cmds)
                 {
                     if (cmd.type != DrawCmd::CMD_IR_KEEPER_SPRITES) continue;
-                    const int end = cmd.sprite_ir_start + cmd.sprite_ir_count;
-                    for (int i = cmd.sprite_ir_start; i < end; ++i)
+                    for (int i : sort_range(cmd))
                         DrawKeeperSpriteGL(kspr_ir[i]);
                 }
             }
@@ -2905,29 +2927,28 @@ void GLWorldViewRenderer::DrawIsometricView()
     std::vector<DrawCmd>&        draw_cmds   = m_pip_capture ? m_pip_draw_cmds      : m_draw_cmds;
     std::vector<FlatPolyVertex>& fpverts     = m_pip_capture ? m_pip_flatpoly_verts : m_world_write_cmds->flat_poly_verts;
 
-    // Walk the depth-sorted bucket list back-to-front (painter's algorithm).
-    // For each bucket:
-    //   Geometry types are accumulated in the VBO (batched across buckets for
-    //   efficiency).  When a bucket contains 3D entity sprites (JontySprite /
-    //   JontyISOSprite), the accumulated tile geometry is flushed to GL first,
-    //   the sprite draw functions are called (which queue quads to the GPU
-    //   sprite backend), then the sprite quads are immediately flushed.
-    // Non-spatial elements (status, text, room flags) are submitted via
-    // draw_nonspatial_sprites_gpu() which the caller invokes after this function.
-    // bi >= 0: the GPU renderer must include bucket 0 (tiles with z < 32 in
+    // Walk the depth-sorted world draw list back-to-front (painter's
+    // algorithm): entries far→near, LIFO within a depth bucket.  Geometry
+    // accumulates in the VBO batched across buckets; a bucket containing
+    // flat-colour polys closes the tile batch so the flat-poly command lands
+    // at the right depth position in the stream.
+    // The GPU renderer consumes bucket 0 too (tiles with z < 32 in
     // fill_in_points_isometric are clamped to z=0 → bucket_index=0).  The
     // software renderer skips bucket 0 because its scan-converter can't handle
     // near-plane vertices, but OpenGL clips natively so they're always safe.
-    for (int bi = BUCKETS_COUNT - 1; bi >= 0; bi--)
+    long ir_count = 0;
+    const struct WorldIREntry* ir = world_ir_entries(&ir_count);
+    long ir_pos = 0;
+    while (ir_pos < ir_count)
     {
+        const int bi = (int)(ir[ir_pos].key >> 32);
         m_current_bucket = bi;
-        bool bucket_has_3d_sprites = false;
         bool bucket_has_flat_polys = false;
         const int flatpoly_vert_start = (int)fpverts.size();
 
-        struct BasicQ* q = buckets[bi];
-        while (q != nullptr)
+        for (; ir_pos < ir_count && (int)(ir[ir_pos].key >> 32) == bi; ir_pos++)
         {
+            struct BasicQ* q = ir[ir_pos].item;
             switch (q->kind)
             {
                 // ── Full PolyPoint (fixed-point 16:16) geometry ─────────────
@@ -3018,39 +3039,12 @@ void GLWorldViewRenderer::DrawIsometricView()
                     bucket_has_flat_polys = true;
                     break;
 
-                // ── 3D entity sprites: mark for depth-correct flush below ────
-                case QK_JontySprite:
-                case QK_JontyISOSprite:
-                    bucket_has_3d_sprites = true;
-                    break;
-
-                // ── All other types go to draw_nonspatial_sprites_gpu() ──
+                // World sprites and nonspatial overlays are submitted as IR at
+                // fill time (do_map_who → BeginWorldSpriteCapture / direct
+                // UIRenderer submits) — never registered in the draw list on
+                // the GL path.
                 default:
                     break;
-            }
-            q = q->next;
-        }
-
-        // Commit accumulated tile geometry as a batch command, then walk the
-        // bucket's sprite list on the game thread (Option A).
-        // The walk calls SubmitKeeperSprite() which appends IRWorldKeeperSpriteCmd
-        // entries to kspr_buf; we record a CMD_IR_KEEPER_SPRITES referencing those.
-        if (bucket_has_3d_sprites)
-        {
-            gpu_flush();
-
-            auto& kspr_buf  = m_pip_capture ? m_pip_kspr_ir : m_kspr_ir;
-            setup_world_sprite_processing(bi);
-            const int ir_start = (int)kspr_buf.size();
-            draw_3d_sprites_for_bucket(bi);
-            const int ir_count = (int)kspr_buf.size() - ir_start;
-            if (ir_count > 0)
-            {
-                DrawCmd cmd;
-                cmd.type             = DrawCmd::CMD_IR_KEEPER_SPRITES;
-                cmd.sprite_ir_start  = ir_start;
-                cmd.sprite_ir_count  = ir_count;
-                draw_cmds.push_back(cmd);
             }
         }
 
@@ -3074,9 +3068,23 @@ void GLWorldViewRenderer::DrawIsometricView()
     // m_vert_count == m_cmd_vert_start (no open batch) at flip time.
     gpu_flush();
 
-    // draw_nonspatial_sprites_gpu() is intentionally NOT called here.
-    // It is called from engine_render.c immediately after WorldViewRenderer_DrawIsometricView(),
-    // guarded by cam->view_mode so it only runs for isometric/creature views (not parchment map).
+    // Record the whole-pass range of sprites captured at fill time
+    // (do_map_who -> BeginWorldSpriteCapture -> SubmitKeeperSprite).  The render
+    // thread depth-sorts each range by sort_key before drawing, so a single
+    // range per pass suffices.
+    {
+        auto& kspr_buf = m_pip_capture ? m_pip_kspr_ir : m_kspr_ir;
+        const int ir_count = (int)(kspr_buf.size() - m_kspr_pass_start);
+        if (ir_count > 0)
+        {
+            DrawCmd cmd;
+            cmd.type            = DrawCmd::CMD_IR_KEEPER_SPRITES;
+            cmd.sprite_ir_start = (int)m_kspr_pass_start;
+            cmd.sprite_ir_count = ir_count;
+            draw_cmds.push_back(cmd);
+            m_kspr_pass_start = kspr_buf.size();
+        }
+    }
 }
 
 bool GLWorldViewRenderer::append_frontview_quad(const struct BucketKindTexturedQuad* txquad)
@@ -3134,55 +3142,42 @@ void GLWorldViewRenderer::DrawFrontView(struct Camera* cam)
 
     std::vector<DrawCmd>& draw_cmds = m_pip_capture ? m_pip_draw_cmds : m_draw_cmds;
 
-    // Walk the front-view bucket list back-to-front (painter's algorithm).
-    // Front view populates buckets with QK_TextureQuad (floor/wall/ceiling tiles)
-    // and creature/thing sprites.  All other overlay types (status flowers, gold text,
-    // room flags, slab selector) are handled by draw_nonspatial_sprites_gpu() which
-    // the caller (draw_frontview_engine) already invokes after this function.
-    for (int bi = BUCKETS_COUNT - 1; bi >= 0; bi--)
+    // Walk the depth-sorted world draw list back-to-front (painter's
+    // algorithm).  Front view registers QK_TextureQuad records (floor/wall/
+    // ceiling tiles); sprites and overlays go through the fill-time IR path.
+    long ir_count = 0;
+    const struct WorldIREntry* ir = world_ir_entries(&ir_count);
+    for (long i = 0; i < ir_count; i++)
     {
-        m_current_bucket = bi;
-        bool bucket_has_sprites = false;
-
-        for (struct BasicQ* q = buckets[bi]; q != nullptr; q = q->next)
+        m_current_bucket = (int)(ir[i].key >> 32);
+        struct BasicQ* q = ir[i].item;
+        switch (q->kind)
         {
-            switch (q->kind)
-            {
-                case QK_TextureQuad:
-                    append_frontview_quad(reinterpret_cast<const struct BucketKindTexturedQuad*>(q));
-                    break;
-
-                case QK_JontySprite:
-                case QK_JontyISOSprite:
-                    bucket_has_sprites = true;
-                    break;
-
-                default:
-                    break;
-            }
-        }
-
-        if (bucket_has_sprites)
-        {
-            gpu_flush();
-
-            auto& kspr_buf  = m_pip_capture ? m_pip_kspr_ir : m_kspr_ir;
-            setup_world_sprite_processing(bi);
-            const int ir_start = (int)kspr_buf.size();
-            draw_frontview_3d_sprites_for_bucket_current(bi);
-            const int ir_count = (int)kspr_buf.size() - ir_start;
-            if (ir_count > 0)
-            {
-                DrawCmd cmd;
-                cmd.type             = DrawCmd::CMD_IR_KEEPER_SPRITES;
-                cmd.sprite_ir_start  = ir_start;
-                cmd.sprite_ir_count  = ir_count;
-                draw_cmds.push_back(cmd);
-            }
+            case QK_TextureQuad:
+                append_frontview_quad(reinterpret_cast<const struct BucketKindTexturedQuad*>(q));
+                break;
+            default:
+                break;
         }
     }
 
     gpu_flush(); // commit any trailing tile geometry
+
+    // Record the whole-pass range of sprites captured at fill time (see
+    // DrawIsometricView for details).
+    {
+        auto& kspr_buf = m_pip_capture ? m_pip_kspr_ir : m_kspr_ir;
+        const int ir_count = (int)(kspr_buf.size() - m_kspr_pass_start);
+        if (ir_count > 0)
+        {
+            DrawCmd cmd;
+            cmd.type            = DrawCmd::CMD_IR_KEEPER_SPRITES;
+            cmd.sprite_ir_start = (int)m_kspr_pass_start;
+            cmd.sprite_ir_count = ir_count;
+            draw_cmds.push_back(cmd);
+            m_kspr_pass_start = kspr_buf.size();
+        }
+    }
 }
 
 /******************************************************************************/

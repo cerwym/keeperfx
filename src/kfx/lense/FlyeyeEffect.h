@@ -40,7 +40,11 @@ public:
     virtual void Cleanup() override;
     virtual TbBool Draw(LensRenderContext* ctx) override;
 
-    virtual class IPostProcessPass* GetGPUPass() override { return m_gpu_pass; }
+    virtual bool BuildGPUParams(struct LensGPUPassParams& out) const override;
+
+    virtual bool BuildRemap(int render_w, int render_h,
+                            std::vector<unsigned char>& out_pixels,
+                            int& out_w, int& out_h, uint32_t& io_version) override;
 
 private:
     void BuildLookupTable(long width, long height);
@@ -53,9 +57,9 @@ private:
     long m_table_width;
     long m_table_height;
 
-    // Owned; created via RendererGetActive()->CreateLensPass() in Setup(),
-    // freed in Cleanup(). nullptr on backends without GPU lens support.
-    class IPostProcessPass* m_gpu_pass = nullptr;
+    // Remap-table versioning for the GPU backend (see DisplacementEffect).
+    uint32_t m_remap_version = 0;
+    uint32_t m_remap_emitted_version = 0;
 };
 
 /******************************************************************************/

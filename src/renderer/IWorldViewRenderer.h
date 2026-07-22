@@ -97,6 +97,18 @@ public:
         return 0;
     }
 
+    /** Begin fill-time IR capture for one world-sprite entry at the given
+     *  depth bucket.  Returns 1 when the backend consumes world sprites as IR
+     *  at submit time — the caller must process the sprite immediately instead
+     *  of queueing it to the bucket list.  Returns 0 (default) when the caller
+     *  must queue to buckets for the walk-time path (software rasterizer). */
+    virtual int BeginWorldSpriteCapture(int32_t /*bucket_idx*/) { return 0; }
+
+    /** Returns 1 when the backend consumes world content (sprites and overlay
+     *  elements) at fill time; 0 (default) when the caller must queue to the
+     *  bucket list for the walk-time path. */
+    virtual int UsesFillTimeWorldSubmit() const { return 0; }
+
     /** Clear the keeper sprite atlas (called between levels).
      *  GPU backends should flush their per-level sprite cache here.
      *  Default: no-op. */

@@ -17,6 +17,13 @@
 #include <cstdint>
 #include <optional>
 #include <utility>
+#include <vector>
+
+#include "renderer/IPostProcessPass.h"   // LensGPUPassParams (pure data)
+
+// Forward-declared with a fixed underlying type (opaque enum), so it is a
+// complete type usable by value here without pulling in the kfx/lense header.
+enum class LensEffectType;
 
 /******************************************************************************/
 // Map-fade transition
@@ -39,14 +46,40 @@ struct IRMapFadeCmd
  *  (Mist, Displacement, Flyeye, Overlay). Palette has no GPU pass. */
 inline constexpr int kMaxLensGPUPasses = 4;
 
-/** 0..N active GPU lens passes for this frame, in LensManager registration
- *  order. Written by LensManager::FlushToRenderGraph() on the game thread.
- *  Consumed by the GL/Vita backend's frame compositing (ping-pong FBO
- *  chain), analogous to IMapFadePass::ExecuteFromIR(). */
+/** UI scope for the palette lens.
+ *  - FullFrame: palette recolors world AND UI/text (legacy / accurate).
+ *  - WorldOnly: palette recolors world only; UI/text keep the base palette. */
+enum class LensScope : uint8_t { FullFrame = 0, WorldOnly = 1 };
+
+/** One GPU-capable lens effect as pure, self-contained data: which effect + its
+ *  parameters + any pixel payload the effect needs, copied BY VALUE.
+ */
+struct IRLensEffect
+{
+    LensEffectType    type{};   ///< GPU-capable effect kind (opaque enum, value only).
+    LensGPUPassParams params{}; ///< Pure-data effect parameters (pointer fields always null).
+
+    /// Owned mist amplitude texture (256x256, single channel). Empty unless this is a mist effect.
+    std::vector<unsigned char> mist_pixels;
+    /// Owned overlay image (overlay_w * overlay_h * 4, RGBA). Empty unless this is an overlay effect.
+    std::vector<unsigned char> overlay_pixels;
+    /// Owned geometric remap table (remap_w * remap_h * 4 bytes = two uint16 per
+    /// pixel: src_x, src_y). Only populated on the frame the table changes
+    /// (params.remap_version bumps); empty on unchanged frames — the backend keeps
+    /// the previously-uploaded texture keyed by remap_version. Empty for non-remap
+    /// effects (Mist / Overlay / Palette).
+    std::vector<unsigned char> remap_pixels;
+};
 struct IRLensCmd
 {
-    std::array<class IPostProcessPass*, kMaxLensGPUPasses> passes{};
+    std::array<IRLensEffect, kMaxLensGPUPasses> effects{};
     int count = 0;
+
+    // Palette lens side-channel (pure data). `has_palette` means a lens palette
+    // is active this frame
+    bool                    has_palette   = false;
+    LensScope               palette_scope = LensScope::FullFrame;
+    std::array<uint8_t, 768> palette{};   ///< Base (non-lens) UI palette, 6-bit RGB values.
 };
 
 /******************************************************************************/

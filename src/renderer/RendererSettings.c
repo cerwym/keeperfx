@@ -63,6 +63,9 @@ void RendererSettings_Reset(void)
     g_renderer_settings.fog_speed             = 1.0f;
     g_renderer_settings.fog_density           = 0.4f;
 
+    /* Lens colour fidelity — default accurate (paletted, matches software) */
+    g_renderer_settings.lens_color_mode       = RENDERER_LENS_COLOR_ACCURATE;
+
     /* Creature outline */
     g_renderer_settings.creature_outline_mode      = RENDERER_OUTLINE_SILHOUETTE;
     g_renderer_settings.creature_outline_alpha      = 0.5f;
@@ -90,6 +93,7 @@ void RendererSettings_Sanitize(void)
     /* Int enum fields */
     RS_CLAMP_I(palette_mode,              0, 1);
     RS_CLAMP_I(darkness_mode,             0, 2);
+    RS_CLAMP_I(lens_color_mode,           0, 1);
     RS_CLAMP_I(lighting_mode,             0, 1);
     RS_CLAMP_I(tile_filter,               0, 1);
     RS_CLAMP_I(ui_sprite_filter,          0, 1);
@@ -170,6 +174,7 @@ void RendererSettings_Load(void)
 
         if      (strcmp(key, "palette_mode")               == 0) g_renderer_settings.palette_mode               = ival;
         else if (strcmp(key, "darkness_mode")              == 0) g_renderer_settings.darkness_mode              = ival;
+        else if (strcmp(key, "lens_color_mode")            == 0) g_renderer_settings.lens_color_mode            = ival;
         else if (strcmp(key, "fog_speed")                  == 0) g_renderer_settings.fog_speed                  = fval;
         else if (strcmp(key, "fog_density")                == 0) g_renderer_settings.fog_density                = fval;
         else if (strcmp(key, "tile_filter")                == 0) g_renderer_settings.tile_filter                = ival;
@@ -245,6 +250,7 @@ void RendererSettings_Save(void)
     fprintf(f, "darkness_mode           = %d\n",   g_renderer_settings.darkness_mode);
     fprintf(f, "fog_speed               = %.4f\n", g_renderer_settings.fog_speed);
     fprintf(f, "fog_density             = %.4f\n", g_renderer_settings.fog_density);
+    fprintf(f, "lens_color_mode         = %d\n",   g_renderer_settings.lens_color_mode);
     fprintf(f, "\n");
     fprintf(f, "tile_filter             = %d\n",   g_renderer_settings.tile_filter);
     fprintf(f, "ui_sprite_filter        = %d\n",   g_renderer_settings.ui_sprite_filter);

@@ -104,8 +104,6 @@ struct stripey_line {
 };
 
 extern struct stripey_line colored_stripey_lines[];
-extern unsigned char *poly_pool;
-extern unsigned char *poly_pool_end;
 extern long cells_away;
 extern float hud_scale;
 extern int creature_status_size;
@@ -227,22 +225,30 @@ void engine_restore_render_state(const struct EngineRenderState *s);
 void draw_status_sprites(long a1, long a2, struct Thing *thing);
 void draw_map_volume_box(long cor1_x, long cor1_y, long cor2_x, long cor2_y, long floor_height_z, unsigned char color);
 
+/** Presented-frame counter; incremented once per screen redraw. Guards
+ *  per-frame work (thing interpolation) against draw_view() re-runs in the
+ *  same frame (PiP capture, map-fade transition). */
+extern uint32_t render_frame_number;
+
 void update_engine_settings(struct PlayerInfo *player);
 void draw_view(struct Camera *cam, unsigned char a2);
 void draw_frontview_engine(struct Camera *cam);
 
+/** One fill-time world draw record.  key = (bucket << 32) | submission seq;
+ *  iterating sorted by key descending reproduces the legacy bucket walk
+ *  exactly: buckets far→near, reverse submission (LIFO) within a bucket. */
+struct WorldIREntry {
+    uint64_t key;
+    struct BasicQ *item;
+};
+
+/** Depth-sorted world draw list for the current fill (sorts lazily on first
+ *  call after the fill).  Both renderers' walkers consume this. */
+const struct WorldIREntry *world_ir_entries(long *count);
+
 /** Bucket-list draw — called by SoftwareWorldViewRenderer. */
 void display_drawlist(void);
 void display_fast_drawlist(struct Camera *cam);
-
-/** Draw only depth-positioned 3D entity sprites for one bucket.
- *  Called by GLWorldViewRenderer between gpu_flush() and RenderPass_DrawNow(). */
-void draw_3d_sprites_for_bucket(long bucket_num);
-
-/** Front-view equivalent of draw_3d_sprites_for_bucket().
- *  Calls draw_fastview_mapwho() instead of draw_jonty_mapwho(). */
-void draw_frontview_3d_sprites_for_bucket(long bucket_num, struct Camera *cam);
-void draw_frontview_3d_sprites_for_bucket_current(long bucket_num);
 
 /** Submits non-spatial UI elements (status flowers, floating gold text,
  *  room flags, slab selector) to the UIRenderer for batched compositing. */

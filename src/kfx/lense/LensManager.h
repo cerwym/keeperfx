@@ -55,7 +55,7 @@ struct LensAccessibilityConfig {
  *   LensManager* mgr = LensManager::GetInstance();
  *   mgr->Init();
  *   mgr->SetLens(lens_idx);
- *   mgr->Draw(srcbuf, dstbuf, ...);
+ *   mgr->DrawSoftware(srcbuf, dstbuf, ...);  // software backend only
  *   mgr->Reset();
  */
 class LensManager {
@@ -72,8 +72,14 @@ public:
     long GetActiveLens() const { return m_active_lens; }
     long GetAppliedLens() const { return m_applied_lens; }
     
-    // Rendering (always succeeds - handles fallback internally)
-    void Draw(unsigned char* srcbuf, unsigned char* dstbuf, 
+    // Software (CPU) immediate-mode lens rendering. Takes the captured 3D-view
+    // pixel buffer and writes the distorted result straight into the destination
+    // screen buffer. This is the SOFTWARE backend path ONLY, reached via
+    // RendererSoftware::EndLensCapture() -> draw_lens_effect(). GPU backends
+    // (OpenGL/Vita) never call this — they consume the pure-data IRLensCmd built
+    // by CollectGPULensCmd()/FlushToRenderGraph(). Always succeeds (falls back to
+    // a plain buffer copy when no effect renders).
+    void DrawSoftware(unsigned char* srcbuf, unsigned char* dstbuf,
              long srcpitch, long dstpitch, 
              long width, long height, long viewport_x);
     
@@ -100,14 +106,14 @@ public:
      *  if no GPU passes are active / the backend doesn't support them).
      *  Called by RendererOpenGL::EndFrame(), mirroring
      *  IMapFadePass::FlushToRenderGraph(). */
-    void FlushToRenderGraph(class RenderGraph& graph);
+    void FlushToRenderGraph(class RenderGraph& graph, int render_w, int render_h);
 
     /** Collect active GPU lens passes into an IRLensCmd without touching a
      *  RenderGraph. Used by RendererVita::EndFrame(), which has no
      *  RenderGraph/thread split and consumes the result in the same call —
      *  same data shape as FlushToRenderGraph() for architectural symmetry,
      *  without inventing double-buffering for a single-threaded backend. */
-    IRLensCmd CollectGPULensCmd() const;
+    IRLensCmd CollectGPULensCmd(int render_w, int render_h);
     
     // Helper: Copy buffer with pitch
     static void CopyBuffer(unsigned char *dst, long dstpitch,

@@ -189,33 +189,49 @@ TbBool DisplacementEffect::Setup(long lens_idx)
 
     m_current_lens = lens_idx;
 
-    if (m_gpu_pass == nullptr)
-    {
-        if (IRenderer* active_renderer = RendererGetActive())
-        {
-            m_gpu_pass = active_renderer->CreateLensPass(LensEffectType::Displacement);
-        }
-    }
-    if (m_gpu_pass != nullptr)
-    {
-        if (m_gpu_pass->Init())
-        {
-            LensGPUPassParams params;
-            params.displace_algorithm = (int)m_algorithm;
-            params.displace_magnitude = (float)m_magnitude;
-            params.displace_period    = (float)m_period;
-            m_gpu_pass->Configure(params);
-        }
-        else
-        {
-            SYNCDBG(7, "GPU displacement pass init failed — CPU fallback");
-            delete m_gpu_pass;
-            m_gpu_pass = nullptr;
-        }
-    }
-
     SYNCDBG(7, "Displacement effect ready (algo=%d, mag=%d, period=%d)",
            m_algorithm, m_magnitude, m_period);
+    return true;
+}
+
+bool DisplacementEffect::BuildGPUParams(LensGPUPassParams& out) const
+{
+    (void)out;
+    // Displacement is a GPU effect, but all of its realization data is the
+    // per-pixel remap table produced by BuildRemap(); no scalar params needed.
+    return m_current_lens >= 0;
+}
+
+bool DisplacementEffect::BuildRemap(int render_w, int render_h,
+                                    std::vector<unsigned char>& out_pixels,
+                                    int& out_w, int& out_h, uint32_t& io_version)
+{
+    if (m_current_lens < 0 || render_w <= 0 || render_h <= 0)
+        return false;
+
+    if (m_lookup_table == nullptr ||
+        m_table_width != render_w || m_table_height != render_h)
+    {
+        BuildLookupTable(render_w, render_h);
+        if (m_lookup_table == nullptr)
+            return false;
+        ++m_remap_version;
+    }
+
+    out_w = (int)m_table_width;
+    out_h = (int)m_table_height;
+    io_version = m_remap_version;
+
+    // Emit the packed bytes only on the frame the table changed. The entries are
+    // {short src_x, src_y} contiguous — identical to the RG16 layout the backend
+    // uploads — so a straight copy suffices (coords are always non-negative).
+    if (m_remap_version != m_remap_emitted_version)
+    {
+        const size_t n = (size_t)m_table_width * (size_t)m_table_height * sizeof(DisplaceLookupEntry);
+        const unsigned char* src = reinterpret_cast<const unsigned char*>(m_lookup_table);
+        out_pixels.assign(src, src + n);
+        m_remap_emitted_version = m_remap_version;
+    }
     return true;
 }
 
@@ -223,12 +239,6 @@ void DisplacementEffect::Cleanup()
 {
     FreeLookupTable();
     m_current_lens = -1;
-    if (m_gpu_pass != nullptr)
-    {
-        m_gpu_pass->Free();
-        delete m_gpu_pass;
-        m_gpu_pass = nullptr;
-    }
 }
 
 TbBool DisplacementEffect::Draw(LensRenderContext* ctx)

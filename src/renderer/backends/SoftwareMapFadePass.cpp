@@ -56,13 +56,21 @@ void SoftwareMapFadePass::PrepareBuffers(uint8_t* fade_src, uint8_t* fade_dest, 
     }
 }
  
+void SoftwareMapFadePass::EnsureBuffers()
+{
+    const size_t ghost_bytes = (size_t)PALETTE_COLORS * PALETTE_COLORS;
+    const size_t capture_extent = 320 * (size_t)RendererScreenHeight() + RendererScreenWidth();
+    m_fade_buffer.resize(ghost_bytes + 320 * 200 + capture_extent);
+    m_map_fade_ghost_table = m_fade_buffer.data();
+    m_map_fade_src = m_map_fade_ghost_table + ghost_bytes;
+    m_map_fade_dest = m_map_fade_src + 320 * 200;
+}
+
 int32_t SoftwareMapFadePass::StepFadeIn(int32_t step)
 {
     if (step == 0)
     {
-        m_map_fade_ghost_table = poly_pool;
-        m_map_fade_src = poly_pool + PALETTE_COLORS * PALETTE_COLORS;
-        m_map_fade_dest = m_map_fade_src + 320 * 200;
+        EnsureBuffers();
         PrepareBuffers(m_map_fade_src, m_map_fade_dest, 320, RendererScreenHeight());
         generate_map_fade_ghost_table("data/mapfadeg.dat", engine_palette, m_map_fade_ghost_table);
     }
@@ -75,9 +83,7 @@ int32_t SoftwareMapFadePass::StepFadeOut(int32_t step)
 {
     if (step == 32)
     {
-        m_map_fade_ghost_table = poly_pool;
-        m_map_fade_src = poly_pool + PALETTE_COLORS * PALETTE_COLORS;
-        m_map_fade_dest = m_map_fade_src + 320 * 200;
+        EnsureBuffers();
         PrepareBuffers(m_map_fade_src, m_map_fade_dest, 320, RendererScreenHeight());
         generate_map_fade_ghost_table("data/mapfadeg.dat", engine_palette, m_map_fade_ghost_table);
     }

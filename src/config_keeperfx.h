@@ -130,6 +130,9 @@ extern int cfg_renderer_type;
 extern TbBool cfg_renderer_menu_pause;
 /** If non-zero, creature directional group selection uses FxSprAnimTable::selectDir path. Default: 0 (legacy). */
 extern TbBool cfg_fxspr_anim_select_dir;
+/** OpenGL only: if non-zero, an active lens palette also tints the UI/text (legacy-accurate).
+ *  Default: 0 (UI excluded from the lens palette on GL). Software always includes the UI. */
+extern TbBool cfg_lens_palette_affects_ui;
 extern char cmd_char;
 extern short api_enabled;
 extern uint16_t api_port;

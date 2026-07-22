@@ -891,61 +891,110 @@ void main() {
 
 // ── GPU Lens Effect Shaders ──────────────────────────────────────────────────
 
-// Displacement lens: distorts the scene using a sinusoidal displacement map.
-constexpr const char* LENS_DISPLACEMENT_FRAGMENT_SHADER = R"glsl(
+// Geometric remap lens (Displacement + Flyeye): resamples the scene through an
+// exact per-output-pixel source lookup table computed game-side (identical to the
+// software path). u_remap is an RG16UI texture holding (src_x, src_y) pixel
+// coordinates for every output pixel; sampled NEAREST so each fragment reads its
+// own entry, then the scene is sampled at that source location. This reproduces
+// the software effect pixel-for-pixel instead of approximating it procedurally.
+constexpr const char* LENS_REMAP_FRAGMENT_SHADER = R"glsl(
 #version 330 core
 in  vec2 v_uv;
 out vec4 fragColor;
-uniform sampler2D u_texture;
-uniform float u_time;
-uniform float u_magnitude;
-uniform float u_period;
+uniform sampler2D  u_texture;    // decoded RGBA scene
+uniform usampler2D u_remap;      // RG16UI (src_x, src_y) per output pixel
+uniform vec2       u_remap_dim;  // remap/scene resolution in pixels
 void main()
 {
-    vec2 uv = v_uv;
-    float dx = sin(uv.y * u_period + u_time) * u_magnitude;
-    float dy = cos(uv.x * u_period + u_time * 0.7) * u_magnitude;
-    uv += vec2(dx, dy);
-    uv = clamp(uv, 0.0, 1.0);
+    uvec2 s = texture(u_remap, v_uv).rg;
+    vec2  uv = (vec2(s) + 0.5) / u_remap_dim;
     fragColor = texture(u_texture, uv);
 }
 )glsl";
 
-// Mist lens: blends a fog colour over the scene based on a noise pattern.
+// Mist lens: faithful port of CMistFade — two layers of the real 256x256 mist
+// amplitude texture drift across the scene (in 640x480 reference space) and their
+// combined amplitude `n` (0..32) fades the scene toward the fog colour. The
+// per-index paletted fade of the software path is approximated in RGBA by a blend
+// toward u_mist_color, but the drifting two-layer *pattern and motion* are exact.
 constexpr const char* LENS_MIST_FRAGMENT_SHADER = R"glsl(
 #version 330 core
 in  vec2 v_uv;
 out vec4 fragColor;
-uniform sampler2D u_texture;
-uniform float u_time;
-uniform vec4  u_mist_color;  // RGB + density
+uniform sampler2D u_texture;   // decoded RGBA scene
+uniform sampler2D u_mist;      // 256x256 R8 mist amplitude texture (NEAREST/REPEAT)
+uniform vec2      u_pos;       // primary layer offset  (0..255)
+uniform vec2      u_sec;       // secondary layer offset (0..255)
+uniform vec4      u_mist_color;// fog rgb + density
 void main()
 {
+    // Reference 640x480 virtual coordinates (resolution-independent, as software).
+    float vx = v_uv.x * 640.0;
+    float vy = v_uv.y * 480.0;
+
+    // Primary layer: col p2 = pos.x + vx, row c2 = pos.y + vy.
+    vec2 primary   = vec2(u_pos.x + vx, u_pos.y + vy) / 256.0;
+    // Secondary layer: col p1 = sec.x - vy, row c1 = sec.y - vx.
+    vec2 secondary = vec2(u_sec.x - vy, u_sec.y - vx) / 256.0;
+
+    float k = texture(u_mist, primary).r   * 255.0;
+    float i = texture(u_mist, secondary).r * 255.0;
+    float n = clamp(floor((k + i) / 8.0), 0.0, 32.0);
+
     vec4 scene = texture(u_texture, v_uv);
-    // Simple animated noise-based fog
-    float n = fract(sin(dot(v_uv + u_time * 0.01, vec2(12.9898, 78.233))) * 43758.5453);
-    float fog = smoothstep(0.3, 0.7, n) * u_mist_color.a;
-    fragColor = mix(scene, vec4(u_mist_color.rgb, 1.0), fog * 0.4);
+    float fog  = (n / 32.0) * u_mist_color.a;
+    fragColor  = vec4(mix(scene.rgb, u_mist_color.rgb, fog), 1.0);
 }
 )glsl";
 
-// Flyeye lens: compound eye (hexagonal tiling) post-process effect.
-constexpr const char* LENS_FLYEYE_FRAGMENT_SHADER = R"glsl(
+// Mist lens — ACCURATE (paletted) variant. Bit-exact with the software renderer.
+// The software path fades a pixel as fade_data[(n<<8)+src], where
+//   fade_data = &pixmap.fade_tables[mist_lightness*256]   (row base)
+//   src       = the pixel's 8-bit palette index
+//   n         = the two-layer mist amplitude (0..32)
+// The GL scene FBO stores DECODED RGBA (the index was lost when the world was
+// drawn), so we recover it: u_rgb2idx is a 64x64x64 R8 reverse-LUT whose value at
+// cell (r6,g6,b6) is the palette index whose 6-bit RGB is nearest. NEAREST 3D
+// sampling of scene.rgb recovers the exact index for on-palette pixels (the world
+// upload is 6-bit VGA<<2, so scene channels are multiples of 4 and land dead-centre
+// in their cell). We then run the exact fade table and re-decode via the palette —
+// identical banding to software. Blended/AA edge pixels degrade gracefully.
+constexpr const char* LENS_MIST_ACCURATE_FRAGMENT_SHADER = R"glsl(
 #version 330 core
 in  vec2 v_uv;
 out vec4 fragColor;
-uniform sampler2D u_texture;
-uniform float u_hex_size;     // hexagon size in UV space
-uniform vec2  u_resolution;   // screen resolution
+uniform sampler2D u_texture;   // decoded RGBA scene
+uniform sampler2D u_mist;      // 256x256 R8 mist amplitude texture (NEAREST/REPEAT)
+uniform sampler3D u_rgb2idx;   // 64^3 R8 reverse LUT: scene.rgb -> palette index/255
+uniform sampler2D u_fade;      // 256x256 R8 fade table (render_fade_tables)
+uniform sampler2D u_palette;   // 256x1 RGBA8 game palette
+uniform vec2      u_pos;       // primary layer offset  (0..255)
+uniform vec2      u_sec;       // secondary layer offset (0..255)
+uniform float     u_mist_lightness; // fade table row base (== cfg mist_lightness)
 void main()
 {
-    vec2 uv = v_uv;
-    // Hexagonal grid quantisation
-    float aspect = u_resolution.x / u_resolution.y;
-    vec2 hex_uv = uv * vec2(aspect, 1.0) / u_hex_size;
-    vec2 center = (floor(hex_uv) + 0.5) * u_hex_size / vec2(aspect, 1.0);
-    // Sample from hex cell center
-    fragColor = texture(u_texture, center);
+    // Reference 640x480 virtual coordinates (resolution-independent, as software).
+    float vx = v_uv.x * 640.0;
+    float vy = v_uv.y * 480.0;
+
+    vec2 primary   = vec2(u_pos.x + vx, u_pos.y + vy) / 256.0;
+    vec2 secondary = vec2(u_sec.x - vy, u_sec.y - vx) / 256.0;
+
+    float k = texture(u_mist, primary).r   * 255.0;
+    float i = texture(u_mist, secondary).r * 255.0;
+    float n = clamp(floor((k + i) / 8.0), 0.0, 32.0);
+
+    // Recover this pixel's palette index from the decoded scene colour.
+    vec4  scene   = texture(u_texture, v_uv);
+    float src_idx = texture(u_rgb2idx, scene.rgb).r;   // index/255, matches u_fade col convention
+
+    // fade_data[(n<<8)+src]: row = mist_lightness + n, column = src palette index.
+    float row = (u_mist_lightness + n + 0.5) / 256.0;
+    float out_idx = texture(u_fade, vec2(src_idx, row)).r;
+
+    // Re-decode the faded index through the game palette.
+    vec4 pal = texture(u_palette, vec2(out_idx, 0.5));
+    fragColor = vec4(pal.rgb, 1.0);
 }
 )glsl";
 

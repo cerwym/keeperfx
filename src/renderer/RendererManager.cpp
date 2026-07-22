@@ -17,6 +17,7 @@
 #include "renderer/RendererSoftware.h"
 #include "renderer/backends/SoftwareWorldViewRenderer.h"
 #include "renderer/backends/SoftwareMapFadePass.h"
+#include "renderer/ILensRenderer.h"
 #include "renderer/backends/SoftwareTextRenderer.h"
 #include "renderer/backends/SoftwareUIRenderer.h"
 #ifdef RENDERER_OPENGL_ENABLED
@@ -151,14 +152,14 @@ void RendererDrawSwipeOverlay(struct TbSpriteSheet* sprites, int frame,
 
 void RendererBeginLensCapture(void)
 {
-    IRenderer* rend = RendererGetActive();
-    if (rend) rend->BeginLensCapture();
+    ILensRenderer* lens = RendererGetLensRenderer();
+    if (lens) lens->BeginWorldCapture();
 }
 
 void RendererEndLensCapture(void)
 {
-    IRenderer* rend = RendererGetActive();
-    if (rend) rend->EndLensCapture();
+    ILensRenderer* lens = RendererGetLensRenderer();
+    if (lens) lens->EndWorldCapture();
 }
  
 TbBool RendererSubmitOverheadMap(const unsigned char* tile_colors, int tiles_x, int tiles_y,
@@ -421,6 +422,11 @@ IWorldViewRenderer* RendererGetWorldViewRenderer()
 IMapFadePass* RendererGetMapFadePass()
 {
     return s_activeRenderer ? s_activeRenderer->GetMapFadePass() : nullptr;
+}
+
+ILensRenderer* RendererGetLensRenderer()
+{
+    return s_activeRenderer ? s_activeRenderer->GetLensRenderer() : nullptr;
 }
 
 ITextRenderer* RendererGetTextRenderer()
@@ -835,6 +841,20 @@ int WorldViewRenderer_SubmitWorldShadow(const struct WorldShadowSubmitCmd* cmd)
     ir_cmd.wz            = cmd->wz;
     ir_cmd.sort_key      = cmd->sort_key;
     return SubmitWorldShadowCmd(ir_cmd);
+}
+
+int WorldViewRenderer_BeginWorldSpriteCapture(int bucket_idx)
+{
+    if (RendererGetWorldViewRenderer())
+        return RendererGetWorldViewRenderer()->BeginWorldSpriteCapture(bucket_idx);
+    return 0;
+}
+
+int WorldViewRenderer_UsesFillTimeWorldSubmit(void)
+{
+    if (RendererGetWorldViewRenderer())
+        return RendererGetWorldViewRenderer()->UsesFillTimeWorldSubmit();
+    return 0;
 }
 
 void WorldViewRenderer_ClearKeeperSpriteAtlas(void)

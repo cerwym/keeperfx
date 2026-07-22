@@ -129,6 +129,7 @@ const struct NamedCommand renderer_zoom_box_mode_names[] = {
 int cfg_renderer_type = RENDERER_AUTO;
 TbBool cfg_renderer_menu_pause = 1;
 TbBool cfg_fxspr_anim_select_dir = 0;
+TbBool cfg_lens_palette_affects_ui = 0;
 
 const struct NamedCommand atmos_volume[] = {
   {"LOW",     64},
@@ -197,6 +198,7 @@ const struct NamedCommand conf_commands[] = {
   {"RENDERER_MENU_PAUSE"           , 50},
   {"ZOOM_TO_MOUSE"                 , 51},
   {"FXSPR_ANIM_SELECT_DIR"         , 52},
+  {"RENDERER_LENS_PALETTE_UI"      , 53},
   {NULL,                   0},
   };
 

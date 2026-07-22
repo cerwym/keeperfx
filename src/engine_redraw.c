@@ -1073,6 +1073,7 @@ void redraw_display(void)
 TbBool keeper_screen_redraw(void)
 {
     SYNCDBG(5,"Starting");
+    render_frame_number++;
     struct PlayerInfo* player = get_my_player();
     if (lens_mode != 0) {
         RendererClearScreen(144); // Very dark green

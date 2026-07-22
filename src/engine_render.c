@@ -19,6 +19,7 @@
 #include "kfx_memory.h"
 #include "pre_inc.h"
 #include <stddef.h>
+#include <stdlib.h>
 
 #include "engine_render.h"
 #include "engine_buckets.h"
@@ -173,10 +174,6 @@ unsigned char const height_masks[] = {
 
 // View distance related
 struct MinMax minmaxs[MINMAX_LENGTH];
-unsigned char *getpoly;
-unsigned char *poly_pool = NULL;
-unsigned char *poly_pool_end;
-struct BasicQ *buckets[BUCKETS_COUNT];
 long cells_away;
 long max_i_can_see;
 const int MAX_I_CAN_SEE_OVERHEAD = (MINMAX_LENGTH/2)-2;
@@ -308,6 +305,11 @@ static int render_sprite_debug_level = 0;
 void draw_keepsprite_unscaled_in_buffer(unsigned short kspr_n, short angle, unsigned char current_frame, unsigned char *outbuf);
 static void draw_jonty_mapwho(struct BucketKindJontySprite *jspr);
 static long heap_manage_keepersprite(unsigned short kspr_idx);
+static TbBool nsp_direct_line(long x1, long y1, long x2, long y2, TbPixel color, long bckt_idx, TbBool scale_coords);
+static TbBool nsp_direct_status_box_iso(struct Thing *thing, long x, long y, int z_val);
+static TbBool nsp_direct_status_box(struct Thing *thing, long x, long y, long bckt_idx);
+static TbBool nsp_direct_number(long x, long y, long number, long bckt_idx);
+static TbBool nsp_direct_room_flag(long x, long y, long room_idx, long bckt_idx, TbBool flag_top);
 
 static TbBool animation_sprite_id_invalid(unsigned short animation_sprite)
 {
@@ -371,9 +373,18 @@ float interpolate_angle(float variable_to_interpolate, float previous, float cur
     return result;
 }
 
+uint32_t render_frame_number = 0;
+
 void interpolate_thing(struct Thing *thing)
 {
     // Note: if delta_time is off the interpolated position will also reflect that
+
+    // At most one interpolation advance per presented frame; draw_view() may
+    // run several times per frame (PiP capture, map-fade transition).
+    if (thing->interp_render_frame == render_frame_number) {
+        return;
+    }
+    thing->interp_render_frame = render_frame_number;
 
     if (thing->creation_turn == get_gameturn()-1 || get_gameturn() - thing->last_turn_drawn > 1 ) {
         // Set initial interp position when either Thing has just been created or goes off camera then comes back on camera
@@ -555,19 +566,59 @@ void update_engine_settings(struct PlayerInfo *player)
     thing_pointed_at = NULL;
 }
 
-/**
- * Sets the reserved amount of poly pool entries.
- * Entries which are reserved won't be filled by standard rendering items, even if the queue is full.
- * @param nitems
- */
-static void poly_pool_end_reserve(int nitems)
+/* Growable chunked arena backing the fill's draw records.  Chunks are
+ * retained across frames, so steady-state allocation settles at the scene's
+ * high-water mark; records are zeroed at allocation, so no whole-pool clear
+ * is needed and there is no record-count ceiling. */
+#define WORLD_POOL_CHUNK_BYTES (2u << 20)
+
+struct WorldPoolChunk {
+    struct WorldPoolChunk *next;
+    size_t used;
+    unsigned char data[WORLD_POOL_CHUNK_BYTES];
+};
+
+static struct WorldPoolChunk *world_pool_head = NULL;
+static struct WorldPoolChunk *world_pool_cur = NULL;
+
+static void world_pool_reset(void)
 {
-    poly_pool_end = poly_pool + PlatformManager_GetPolyPoolSize() - (nitems*sizeof(struct BucketKindSlabSelector));
+    world_pool_cur = world_pool_head;
+    if (world_pool_cur != NULL)
+        world_pool_cur->used = 0;
 }
 
-static TbBool is_free_space_in_poly_pool(int nitems)
+static void *world_pool_alloc(size_t size)
 {
-    return (getpoly+(nitems*sizeof(struct BucketKindSlabSelector)) <= poly_pool_end);
+    size = (size + 7) & ~(size_t)7;
+    if (world_pool_cur == NULL || world_pool_cur->used + size > WORLD_POOL_CHUNK_BYTES)
+    {
+        struct WorldPoolChunk *chunk;
+        if (world_pool_cur != NULL && world_pool_cur->next != NULL)
+        {
+            chunk = world_pool_cur->next;
+        }
+        else
+        {
+            chunk = (struct WorldPoolChunk *)malloc(sizeof(*chunk));
+            if (chunk == NULL)
+            {
+                // Dropped record — same outcome as the old full fixed pool.
+                return NULL;
+            }
+            chunk->next = NULL;
+            if (world_pool_cur != NULL)
+                world_pool_cur->next = chunk;
+            else
+                world_pool_head = chunk;
+        }
+        chunk->used = 0;
+        world_pool_cur = chunk;
+    }
+    void *ptr = world_pool_cur->data + world_pool_cur->used;
+    world_pool_cur->used += size;
+    memset(ptr, 0, size);
+    return ptr;
 }
 
 static void rotpers_parallel_3(struct EngineCoord *epos, struct M33 *matx, long zoom)
@@ -760,13 +811,76 @@ struct WibbleTable *get_wibble_from_table(struct Camera *cam, long table_index, 
     return &blank_wibble_table[table_index];
 }
 
+/* Depth index over the fill's bucket records.  Replaces the per-bucket
+ * intrusive lists: producers register each record with its bucket, and both
+ * renderers' walkers iterate the array sorted by key descending — which
+ * reproduces the legacy bucket walk exactly (buckets far→near, reverse
+ * submission order within a bucket). */
+static struct WorldIREntry *world_ir_index = NULL;
+static long world_ir_count = 0;
+static long world_ir_capacity = 0;
+static uint32_t world_ir_seq = 0;
+static TbBool world_ir_is_sorted = false;
+
+static void world_ir_reset(void)
+{
+    world_ir_count = 0;
+    world_ir_seq = 0;
+    world_ir_is_sorted = false;
+    world_pool_reset();
+}
+
+static void world_ir_link(struct BasicQ *item, QKind kind, long bckt_idx)
+{
+    if (bckt_idx >= BUCKETS_COUNT)
+        bckt_idx = BUCKETS_COUNT - 1;
+    else if (bckt_idx < 0)
+        bckt_idx = 0;
+    item->next = NULL;
+    item->kind = kind;
+    if (world_ir_count >= world_ir_capacity)
+    {
+        long grown_cap = (world_ir_capacity > 0) ? world_ir_capacity * 2 : 16384;
+        struct WorldIREntry *grown = (struct WorldIREntry *)realloc(world_ir_index, grown_cap * sizeof(*grown));
+        if (grown == NULL)
+        {
+            // Record stays allocated in the pool but undrawn — same outcome as
+            // a full poly pool.
+            return;
+        }
+        world_ir_index = grown;
+        world_ir_capacity = grown_cap;
+    }
+    world_ir_index[world_ir_count].key = ((uint64_t)bckt_idx << 32) | world_ir_seq++;
+    world_ir_index[world_ir_count].item = item;
+    world_ir_count++;
+    world_ir_is_sorted = false;
+}
+
+static int world_ir_compare_desc(const void *a, const void *b)
+{
+    uint64_t key_a = ((const struct WorldIREntry *)a)->key;
+    uint64_t key_b = ((const struct WorldIREntry *)b)->key;
+    if (key_a > key_b)
+        return -1;
+    if (key_a < key_b)
+        return 1;
+    return 0;
+}
+
+const struct WorldIREntry *world_ir_entries(long *count)
+{
+    if (!world_ir_is_sorted)
+    {
+        qsort(world_ir_index, world_ir_count, sizeof(*world_ir_index), world_ir_compare_desc);
+        world_ir_is_sorted = true;
+    }
+    *count = world_ir_count;
+    return world_ir_index;
+}
+
 static struct BasicQ *get_bucket_item(int min_cor_z, enum QKinds kind, size_t size)
 {
-    if (getpoly >= poly_pool_end)
-    {
-        return NULL;
-    }
-
     int bckt_idx = min_cor_z / BUCKETS_STEP;
     if (bckt_idx < 0)
     {
@@ -776,12 +890,12 @@ static struct BasicQ *get_bucket_item(int min_cor_z, enum QKinds kind, size_t si
     {
         bckt_idx = BUCKETS_COUNT-2;
     }
-    struct BasicQ * kspr;
-    kspr = (struct BasicQ *)getpoly;
-    getpoly += size;
-    kspr->next = buckets[bckt_idx];
-    kspr->kind = kind;
-    buckets[bckt_idx] = (struct BasicQ *)kspr;
+    struct BasicQ *kspr = (struct BasicQ *)world_pool_alloc(size);
+    if (kspr == NULL)
+    {
+        return NULL;
+    }
+    world_ir_link(kspr, kind, bckt_idx);
     return kspr;
 }
 
@@ -2174,20 +2288,17 @@ int floor_height_for_volume_box(PlayerNumber plyr_idx, MapSlabCoord slb_x, MapSl
 static void create_line_element(long a1, long a2, long a3, long a4, long bckt_idx, TbPixel color)
 {
     struct BucketKindSlabSelector *poly;
-    if (!is_free_space_in_poly_pool(1))
-    {
+    if (nsp_direct_line(a1, a2, a3, a4, color, bckt_idx, true))
         return;
-    }
     if (bckt_idx >= BUCKETS_COUNT)
         bckt_idx = BUCKETS_COUNT-1;
     else
     if (bckt_idx < 0)
         bckt_idx = 0;
-    poly = (struct BucketKindSlabSelector *)getpoly;
-    getpoly += sizeof(struct BucketKindSlabSelector);
-    poly->b.next = buckets[bckt_idx];
-    poly->b.kind = QK_SlabSelector;
-    buckets[bckt_idx] = (struct BasicQ *)poly;
+    poly = (struct BucketKindSlabSelector *)world_pool_alloc(sizeof(struct BucketKindSlabSelector));
+    if (poly == NULL)
+        return;
+    world_ir_link(&poly->b, QK_SlabSelector, bckt_idx);
     if (pixel_size > 0)
     {
         poly->p.X = a1 / pixel_size;
@@ -2202,13 +2313,15 @@ static void create_line_segment(struct EngineCoord *start, struct EngineCoord *e
 {
     struct BucketKindSlabSelector *poly;
     long bckt_idx;
-    if (!is_free_space_in_poly_pool(1))
-        return;
 
     // Reducing line_z will make the lines look cleaner, but the "fancy_map_volume_box" vertical lines become more visible.
     float line_z = 0.994;
     bckt_idx = (( (start->z*line_z) + (end->z*line_z) ) / 32) - 2;
     // Original calculation:  bckt_idx = (start->z+end->z)/2 / 16 - 2;
+
+    if (nsp_direct_line(start->view_width, start->view_height,
+                        end->view_width, end->view_height, color, bckt_idx, false))
+        return;
 
     if (bckt_idx >= BUCKETS_COUNT)
         bckt_idx = BUCKETS_COUNT-1;
@@ -2216,11 +2329,10 @@ static void create_line_segment(struct EngineCoord *start, struct EngineCoord *e
     if (bckt_idx < 0)
         bckt_idx = 0;
     // Add to bucket
-    poly = (struct BucketKindSlabSelector *)getpoly;
-    getpoly += sizeof(struct BucketKindSlabSelector);
-    poly->b.next = buckets[bckt_idx];
-    poly->b.kind = QK_SlabSelector;
-    buckets[bckt_idx] = (struct BasicQ *)poly;
+    poly = (struct BucketKindSlabSelector *)world_pool_alloc(sizeof(struct BucketKindSlabSelector));
+    if (poly == NULL)
+        return;
+    world_ir_link(&poly->b, QK_SlabSelector, bckt_idx);
     // Fill parameters
     if (pixel_size > 0)
     {
@@ -2699,16 +2811,14 @@ static void do_a_trig_gourad_tr(struct EngineCoord *engine_coordinate_1, struct 
         if (engine_coordinate_3->z > choose_largest_z)
             choose_largest_z = engine_coordinate_3->z;
         int divided_z = choose_largest_z / 16;
-        if (getpoly < poly_pool_end)
         {
             if ((((uint8_t)coordinate_3_frustum | (uint8_t)(coordinate_2_frustum | coordinate_1_frustum)) & 3) != 0)
             {
-                triangle_bucket_near_1 = (struct BucketKindPolygonNearFP *)getpoly;
-                getpoly += sizeof(struct BucketKindPolygonNearFP);
+                triangle_bucket_near_1 = (struct BucketKindPolygonNearFP *)world_pool_alloc(sizeof(struct BucketKindPolygonNearFP));
+                if (triangle_bucket_near_1 == NULL)
+                    return;
                 triangle_bucket_near_1->subtype = splittypes[16 * (engine_coordinate_3->clip_flags & 3) + 4 * (engine_coordinate_1->clip_flags & 3) + (engine_coordinate_2->clip_flags & 3)];
-                triangle_bucket_near_1->b.next = buckets[divided_z];
-                triangle_bucket_near_1->b.kind = QK_PolygonNearFP;
-                buckets[divided_z] = &triangle_bucket_near_1->b;
+                world_ir_link(&triangle_bucket_near_1->b, QK_PolygonNearFP, divided_z);
                 triangle_bucket_near_1->block = textr_idx;
                 triangle_bucket_near_1->vertex_first.X = engine_coordinate_1->view_width;
                 triangle_bucket_near_1->vertex_first.Y = engine_coordinate_1->view_height;
@@ -2812,12 +2922,11 @@ static void do_a_trig_gourad_tr(struct EngineCoord *engine_coordinate_1, struct 
                         }
                         else
                         {
-                            triangle_bucket_near_4 = (struct BucketKindPolygonNearFP *)getpoly;
-                            getpoly += sizeof(struct BucketKindPolygonNearFP);
+                            triangle_bucket_near_4 = (struct BucketKindPolygonNearFP *)world_pool_alloc(sizeof(struct BucketKindPolygonNearFP));
+                            if (triangle_bucket_near_4 == NULL)
+                                return;
                             triangle_bucket_near_4->subtype = splittypes[16 * (engine_coordinate_3->clip_flags & 3) + 4 * (engine_coordinate_1->clip_flags & 3) + (engine_coordinate_2->clip_flags & 3)];
-                            triangle_bucket_near_4->b.next = buckets[divided_z];
-                            triangle_bucket_near_4->b.kind = QK_PolygonNearFP;
-                            buckets[divided_z] = &triangle_bucket_near_4->b;
+                            world_ir_link(&triangle_bucket_near_4->b, QK_PolygonNearFP, divided_z);
                             triangle_bucket_near_4->block = textr_idx;
                             triangle_bucket_near_1->coordinate_first.x = engine_coordinate_1->x;
                             triangle_bucket_near_1->coordinate_first.y = engine_coordinate_1->y;
@@ -2864,12 +2973,11 @@ static void do_a_trig_gourad_tr(struct EngineCoord *engine_coordinate_1, struct 
                     }
                     else if (coordinate_3_z >= 32)
                     {
-                        triangle_bucket_near_3 = (struct BucketKindPolygonNearFP *)getpoly;
-                        getpoly += sizeof(struct BucketKindPolygonNearFP);
+                        triangle_bucket_near_3 = (struct BucketKindPolygonNearFP *)world_pool_alloc(sizeof(struct BucketKindPolygonNearFP));
+                        if (triangle_bucket_near_3 == NULL)
+                            return;
                         triangle_bucket_near_3->subtype = splittypes[16 * (engine_coordinate_3->clip_flags & 3) + 4 * (engine_coordinate_1->clip_flags & 3) + (engine_coordinate_2->clip_flags & 3)];
-                        triangle_bucket_near_3->b.next = buckets[divided_z];
-                        triangle_bucket_near_3->b.kind = QK_PolygonNearFP;
-                        buckets[divided_z] = &triangle_bucket_near_3->b;
+                        world_ir_link(&triangle_bucket_near_3->b, QK_PolygonNearFP, divided_z);
                         triangle_bucket_near_3->block = textr_idx;
                         triangle_bucket_near_1->coordinate_first.x = engine_coordinate_1->x;
                         triangle_bucket_near_1->coordinate_first.y = engine_coordinate_1->y;
@@ -2948,12 +3056,11 @@ static void do_a_trig_gourad_tr(struct EngineCoord *engine_coordinate_1, struct 
                 {
                     if (engine_coordinate_3->z >= 32)
                     {
-                        triangle_bucket_near_2 = (struct BucketKindPolygonNearFP *)getpoly;
-                        getpoly += sizeof(struct BucketKindPolygonNearFP);
+                        triangle_bucket_near_2 = (struct BucketKindPolygonNearFP *)world_pool_alloc(sizeof(struct BucketKindPolygonNearFP));
+                        if (triangle_bucket_near_2 == NULL)
+                            return;
                         triangle_bucket_near_2->subtype = splittypes[16 * (engine_coordinate_3->clip_flags & 3) + 4 * (engine_coordinate_1->clip_flags & 3) + (engine_coordinate_2->clip_flags & 3)];
-                        triangle_bucket_near_2->b.next = buckets[divided_z];
-                        triangle_bucket_near_2->b.kind = QK_PolygonNearFP;
-                        buckets[divided_z] = &triangle_bucket_near_2->b;
+                        world_ir_link(&triangle_bucket_near_2->b, QK_PolygonNearFP, divided_z);
                         triangle_bucket_near_2->block = textr_idx;
                         triangle_bucket_near_1->coordinate_second.x = engine_coordinate_2->x;
                         triangle_bucket_near_1->coordinate_second.y = engine_coordinate_2->y;
@@ -3053,11 +3160,10 @@ static void do_a_trig_gourad_tr(struct EngineCoord *engine_coordinate_1, struct 
             }
             else
             {
-                triangle_bucket_far = (struct BucketKindPolygonStandard *)getpoly;
-                getpoly += sizeof(struct BucketKindPolygonStandard);
-                triangle_bucket_far->b.next = buckets[divided_z];
-                triangle_bucket_far->b.kind = QK_PolygonStandard;
-                buckets[divided_z] = &triangle_bucket_far->b;
+                triangle_bucket_far = (struct BucketKindPolygonStandard *)world_pool_alloc(sizeof(struct BucketKindPolygonStandard));
+                if (triangle_bucket_far == NULL)
+                    return;
+                world_ir_link(&triangle_bucket_far->b, QK_PolygonStandard, divided_z);
 
                 triangle_bucket_far->block = textr_idx;
                 triangle_bucket_far->camera_z_first  = engine_coordinate_1->z;
@@ -3180,16 +3286,14 @@ static void do_a_trig_gourad_bl(struct EngineCoord *engine_coordinate_1, struct 
         if (choose_smallest_z < engine_coordinate_3->z)
             choose_smallest_z = engine_coordinate_3->z;
         int divided_z = choose_smallest_z / 16;
-        if (getpoly < poly_pool_end)
         {
             if ((((uint8_t)coordinate_1_frustum | (uint8_t)(coordinate_3_frustum | coordinate_2_frustum)) & 3) != 0)
             {
-                triangle_bucket_near_1 = (struct BucketKindPolygonNearFP *)getpoly;
-                getpoly += sizeof(struct BucketKindPolygonNearFP);
+                triangle_bucket_near_1 = (struct BucketKindPolygonNearFP *)world_pool_alloc(sizeof(struct BucketKindPolygonNearFP));
+                if (triangle_bucket_near_1 == NULL)
+                    return;
                 triangle_bucket_near_1->subtype = splittypes[16 * (engine_coordinate_3->clip_flags & 3) + 4 * (engine_coordinate_1->clip_flags & 3) + (engine_coordinate_2->clip_flags & 3)];
-                triangle_bucket_near_1->b.next = buckets[divided_z];
-                triangle_bucket_near_1->b.kind = QK_PolygonNearFP;
-                buckets[divided_z] = &triangle_bucket_near_1->b;
+                world_ir_link(&triangle_bucket_near_1->b, QK_PolygonNearFP, divided_z);
                 triangle_bucket_near_1->block = argument4;
 
                 triangle_bucket_near_1->vertex_first.X = engine_coordinate_1->view_width;
@@ -3294,12 +3398,11 @@ static void do_a_trig_gourad_bl(struct EngineCoord *engine_coordinate_1, struct 
                         }
                         else
                         {
-                            triangle_bucket_near_4 = (struct BucketKindPolygonNearFP *)getpoly;
-                            getpoly += sizeof(struct BucketKindPolygonNearFP);
+                            triangle_bucket_near_4 = (struct BucketKindPolygonNearFP *)world_pool_alloc(sizeof(struct BucketKindPolygonNearFP));
+                            if (triangle_bucket_near_4 == NULL)
+                                return;
                             triangle_bucket_near_4->subtype = splittypes[16 * (engine_coordinate_3->clip_flags & 3) + 4 * (engine_coordinate_1->clip_flags & 3) + (engine_coordinate_2->clip_flags & 3)];
-                            triangle_bucket_near_4->b.next = buckets[divided_z];
-                            triangle_bucket_near_4->b.kind = QK_PolygonNearFP;
-                            buckets[divided_z] = &triangle_bucket_near_4->b;
+                            world_ir_link(&triangle_bucket_near_4->b, QK_PolygonNearFP, divided_z);
                             triangle_bucket_near_4->block = argument4;
                             triangle_bucket_near_1->coordinate_first.x = engine_coordinate_1->x;
                             triangle_bucket_near_1->coordinate_first.y = engine_coordinate_1->y;
@@ -3346,12 +3449,11 @@ static void do_a_trig_gourad_bl(struct EngineCoord *engine_coordinate_1, struct 
                     }
                     else if (coordinate_3_z >= 32)
                     {
-                        triangle_bucket_near_3 = (struct BucketKindPolygonNearFP *)getpoly;
-                        getpoly += sizeof(struct BucketKindPolygonNearFP);
+                        triangle_bucket_near_3 = (struct BucketKindPolygonNearFP *)world_pool_alloc(sizeof(struct BucketKindPolygonNearFP));
+                        if (triangle_bucket_near_3 == NULL)
+                            return;
                         triangle_bucket_near_3->subtype = splittypes[16 * (engine_coordinate_3->clip_flags & 3) + 4 * (engine_coordinate_1->clip_flags & 3) + (engine_coordinate_2->clip_flags & 3)];
-                        triangle_bucket_near_3->b.next = buckets[divided_z];
-                        triangle_bucket_near_3->b.kind = QK_PolygonNearFP;
-                        buckets[divided_z] = &triangle_bucket_near_3->b;
+                        world_ir_link(&triangle_bucket_near_3->b, QK_PolygonNearFP, divided_z);
                         triangle_bucket_near_3->block = argument4;
                         triangle_bucket_near_1->coordinate_first.x = engine_coordinate_1->x;
                         triangle_bucket_near_1->coordinate_first.y = engine_coordinate_1->y;
@@ -3430,12 +3532,11 @@ static void do_a_trig_gourad_bl(struct EngineCoord *engine_coordinate_1, struct 
                 {
                     if (engine_coordinate_3->z >= 32)
                     {
-                        triangle_bucket_near_2 = (struct BucketKindPolygonNearFP *)getpoly;
-                        getpoly += sizeof(struct BucketKindPolygonNearFP);
+                        triangle_bucket_near_2 = (struct BucketKindPolygonNearFP *)world_pool_alloc(sizeof(struct BucketKindPolygonNearFP));
+                        if (triangle_bucket_near_2 == NULL)
+                            return;
                         triangle_bucket_near_2->subtype = splittypes[16 * (engine_coordinate_3->clip_flags & 3) + 4 * (engine_coordinate_1->clip_flags & 3) + (engine_coordinate_2->clip_flags & 3)];
-                        triangle_bucket_near_2->b.next = buckets[divided_z];
-                        triangle_bucket_near_2->b.kind = QK_PolygonNearFP;
-                        buckets[divided_z] = &triangle_bucket_near_2->b;
+                        world_ir_link(&triangle_bucket_near_2->b, QK_PolygonNearFP, divided_z);
                         triangle_bucket_near_2->block = argument4;
                         triangle_bucket_near_1->coordinate_second.x = engine_coordinate_2->x;
                         triangle_bucket_near_1->coordinate_second.y = engine_coordinate_2->y;
@@ -3535,11 +3636,10 @@ static void do_a_trig_gourad_bl(struct EngineCoord *engine_coordinate_1, struct 
             }
             else
             {
-                triangle_bucket_far = (struct BucketKindPolygonStandard *)getpoly;
-                getpoly += sizeof(struct BucketKindPolygonStandard);
-                triangle_bucket_far->b.next = buckets[divided_z];
-                triangle_bucket_far->b.kind = QK_PolygonStandard;
-                buckets[divided_z] = &triangle_bucket_far->b;
+                triangle_bucket_far = (struct BucketKindPolygonStandard *)world_pool_alloc(sizeof(struct BucketKindPolygonStandard));
+                if (triangle_bucket_far == NULL)
+                    return;
+                world_ir_link(&triangle_bucket_far->b, QK_PolygonStandard, divided_z);
                 triangle_bucket_far->block = argument4;
                 triangle_bucket_far->camera_z_first  = engine_coordinate_1->z;
                 triangle_bucket_far->camera_z_second = engine_coordinate_2->z;
@@ -3996,6 +4096,9 @@ static void add_draw_status_box(struct Thing *thing, struct EngineCoord *ecor)
     if (z_val < BUCKETS_STEP)
         return;
 
+    if (nsp_direct_status_box_iso(thing, coord.view_width, coord.view_height, z_val))
+        return;
+
     struct BucketKindCreatureStatus* poly = (struct BucketKindCreatureStatus*)get_bucket_item(z_val, QK_CreatureStatus, sizeof(struct BucketKindCreatureStatus));
     if (poly == NULL)
         return;
@@ -4178,7 +4281,6 @@ static void do_a_gpoly_gourad_tr(struct EngineCoord *ec1, struct EngineCoord *ec
     struct BucketKindPolygonStandard *current_polygon_bucket;
     int bucket_index;
     struct BucketKindPolygonStandard *polygon_bucket_ptr;
-    struct BasicQ *previous_bucket_item;
     struct PolyPoint *polypoint1;
     struct PolyPoint *polypoint2;
     struct PolyPoint *polypoint3;
@@ -4195,17 +4297,13 @@ static void do_a_gpoly_gourad_tr(struct EngineCoord *ec1, struct EngineCoord *ec
         z = ec2->z;
         if ( z < ec3->z )
         z = ec3->z;
-        current_polygon_bucket = (struct BucketKindPolygonStandard *)getpoly;
+        current_polygon_bucket = (struct BucketKindPolygonStandard *)world_pool_alloc(sizeof(struct BucketKindPolygonStandard));
         bucket_index = z / 16;
-        if ( getpoly < poly_pool_end )
+        if ( current_polygon_bucket != NULL )
         {
-            polygon_bucket_ptr = (struct BucketKindPolygonStandard *)getpoly;
-            previous_bucket_item = buckets[bucket_index];
-            getpoly += sizeof(struct BucketKindPolygonStandard);
-            current_polygon_bucket->b.next = previous_bucket_item;
+            polygon_bucket_ptr = current_polygon_bucket;
+            world_ir_link(&current_polygon_bucket->b, QK_PolygonStandard, bucket_index);
             polypoint1 = &current_polygon_bucket->vertex_first;
-            current_polygon_bucket->b.kind = 0;
-            buckets[bucket_index] = &current_polygon_bucket->b;
             current_polygon_bucket->block = textr_id;
             current_polygon_bucket->camera_z_first  = ec1->z;
             current_polygon_bucket->camera_z_second = ec2->z;
@@ -4256,7 +4354,6 @@ static void do_a_gpoly_unlit_tr(struct EngineCoord *ec1, struct EngineCoord *ec2
     struct BucketKindPolygonStandard *current_polygon_bucket;
     int bucket_index;
     struct BucketKindPolygonStandard *polygon_bucket;
-    struct BasicQ *previous_bucket_item;
 
     if ( (ec1->clip_flags & (uint16_t)(ec2->clip_flags & ec3->clip_flags) & 0x1F8) == 0
         && (ec3->view_width - ec2->view_width) * (ec1->view_height - ec2->view_height)
@@ -4267,16 +4364,12 @@ static void do_a_gpoly_unlit_tr(struct EngineCoord *ec1, struct EngineCoord *ec2
         z = ec2->z;
         if ( z < ec3->z )
         z = ec3->z;
-        current_polygon_bucket = (struct BucketKindPolygonStandard *)getpoly;
+        current_polygon_bucket = (struct BucketKindPolygonStandard *)world_pool_alloc(sizeof(struct BucketKindPolygonStandard));
         bucket_index = z / 16;
-        if ( getpoly < poly_pool_end )
+        if ( current_polygon_bucket != NULL )
         {
-            polygon_bucket = (struct BucketKindPolygonStandard *)getpoly;
-            previous_bucket_item = buckets[bucket_index];
-            getpoly += sizeof(struct BucketKindPolygonStandard);
-            current_polygon_bucket->b.next = previous_bucket_item;
-            current_polygon_bucket->b.kind = 0;
-            buckets[bucket_index] = &current_polygon_bucket->b;
+            polygon_bucket = current_polygon_bucket;
+            world_ir_link(&current_polygon_bucket->b, QK_PolygonStandard, bucket_index);
             current_polygon_bucket->block = textr_id;
             current_polygon_bucket->camera_z_first  = ec1->z;
             current_polygon_bucket->camera_z_second = ec2->z;
@@ -4315,7 +4408,6 @@ static void do_a_gpoly_unlit_bl(struct EngineCoord *ec1, struct EngineCoord *ec2
     int z;
     struct BucketKindPolygonStandard *current_polygon_bucket;
     int bucket_index;
-    struct BasicQ *next_bucket_item;
 
     if ( (ec1->clip_flags & (uint16_t)(ec2->clip_flags & ec3->clip_flags) & 0x1F8) == 0
         && (ec3->view_width - ec2->view_width) * (ec1->view_height - ec2->view_height)
@@ -4326,15 +4418,11 @@ static void do_a_gpoly_unlit_bl(struct EngineCoord *ec1, struct EngineCoord *ec2
         z = ec2->z;
         if ( z < ec3->z )
         z = ec3->z;
-        current_polygon_bucket = (struct BucketKindPolygonStandard *)getpoly;
+        current_polygon_bucket = (struct BucketKindPolygonStandard *)world_pool_alloc(sizeof(struct BucketKindPolygonStandard));
         bucket_index = z / 16;
-        if ( getpoly < poly_pool_end )
+        if ( current_polygon_bucket != NULL )
         {
-        next_bucket_item = buckets[bucket_index];
-        getpoly += sizeof(struct BucketKindPolygonStandard);
-        current_polygon_bucket->b.next = next_bucket_item;
-        current_polygon_bucket->b.kind = 0;
-        buckets[bucket_index] = &current_polygon_bucket->b;
+        world_ir_link(&current_polygon_bucket->b, QK_PolygonStandard, bucket_index);
         current_polygon_bucket->block = textr_id;
         current_polygon_bucket->camera_z_first  = ec1->z;
         current_polygon_bucket->camera_z_second = ec2->z;
@@ -4374,7 +4462,6 @@ static void do_a_gpoly_gourad_bl(struct EngineCoord *ec1, struct EngineCoord *ec
     struct BucketKindPolygonStandard *current_polygon_bucket;
     int zdiv16;
     struct BucketKindPolygonStandard *poly_ptr;
-    struct BasicQ *previous_bucket_item;
     int ec1_fieldA;
     int ec2_fieldA;
     int ec3_fieldA;
@@ -4391,17 +4478,13 @@ static void do_a_gpoly_gourad_bl(struct EngineCoord *ec1, struct EngineCoord *ec
         z = ec2->z;
         if ( z < ec3->z )
         z = ec3->z;
-        current_polygon_bucket = (struct BucketKindPolygonStandard *)getpoly;
+        current_polygon_bucket = (struct BucketKindPolygonStandard *)world_pool_alloc(sizeof(struct BucketKindPolygonStandard));
         zdiv16 = z / 16;
-        if ( getpoly < poly_pool_end )
+        if ( current_polygon_bucket != NULL )
         {
-            poly_ptr = (struct BucketKindPolygonStandard *)getpoly;
-            previous_bucket_item = buckets[zdiv16];
-            getpoly += sizeof(struct BucketKindPolygonStandard);
-            current_polygon_bucket->b.next = previous_bucket_item;
+            poly_ptr = current_polygon_bucket;
+            world_ir_link(&current_polygon_bucket->b, QK_PolygonStandard, zdiv16);
             polypoint1 = &current_polygon_bucket->vertex_first;
-            current_polygon_bucket->b.kind = 0;
-            buckets[zdiv16] = &current_polygon_bucket->b;
             current_polygon_bucket->block = textr_id;
             current_polygon_bucket->camera_z_first  = ec1->z;
             current_polygon_bucket->camera_z_second = ec2->z;
@@ -6557,22 +6640,27 @@ void display_drawlist(void) // Draws isometric and 1st person view. Not frontvie
         struct BucketKindFloatingGoldText *floatingGoldText;
         struct BucketKindRoomFlag *roomFlag;
     } item;
-    long bucket_num;
     struct PolyPoint point_a;
     struct PolyPoint point_b;
     struct PolyPoint point_c;
+    long entry_count;
+    long i;
     SYNCDBG(9,"Starting");
     // Color rendering array pointers used by draw_keepersprite()
     render_fade_tables = pixmap.fade_tables;
     render_problems = 0;
     thing_pointed_at = 0;
 
-    // The bucket list is the final step in drawing something to the screen. Visuals are added to the bucket list in previous functions.
-    for (bucket_num = BUCKETS_COUNT-1; bucket_num > 0; bucket_num--)
+    // The sorted world draw list is the final step in drawing something to the
+    // screen: entries far→near, LIFO within a depth bucket.  The iso walk
+    // never consumes bucket 0 (near-plane clamped records), which sorts last.
+    const struct WorldIREntry *entries = world_ir_entries(&entry_count);
+    for (i = 0; i < entry_count; i++)
     {
-        for (item.b = buckets[bucket_num]; item.b != NULL; item.b = item.b->next)
+        if ((entries[i].key >> 32) == 0)
+            break;
         {
-            //JUSTLOG("%d",(int)item.b->kind);
+            item.b = entries[i].item;
             switch ( item.b->kind )
             {
             case QK_PolygonStandard: // All textured polygons for isometric and 'far' textures in 1st person view
@@ -6741,80 +6829,153 @@ void display_drawlist(void) // Draws isometric and 1st person view. Not frontvie
       WARNLOG("Incurred %lu rendering problems; last was with poly kind %ld",render_problems,render_prob_kind);
 }
 
-/** Draws only the depth-positioned 3D entity sprites (JontySprite /
- *  JontyISOSprite) for a single bucket index.  Called by
- *  GLWorldViewRenderer::DrawIsometricView() between gpu_flush() and
- *  RenderPass_DrawNow() so the sprite quads are composited at the correct
- *  depth in the painter's-algorithm bucket walk. */
-void draw_3d_sprites_for_bucket(long bucket_num)
+/******************************************************************************/
+/* Fill-time (GL) submission of nonspatial overlay elements — the same
+ * UIRenderer submissions draw_nonspatial_sprites_gpu() below makes at walk
+ * time.  Each producer tries its nsp_direct_* function first; a true return
+ * means the direct path owns the element and nothing is queued.  The software
+ * renderer keeps the bucket path (NspDirect_Inactive). */
+
+/* Set by draw_view() for the parchment camera, matching the walk-time
+ * draw_nonspatial_sprites_gpu() guard. */
+static TbBool nsp_direct_suppressed = false;
+
+enum NspDirectState {
+    NspDirect_Inactive = 0, /**< Software/parchment — caller queues to buckets. */
+    NspDirect_Dropped,      /**< Direct path owns it, but the walk would not have drawn it. */
+    NspDirect_Submit,       /**< Direct path — submit using the filled context. */
+};
+
+struct NspDirectCtx {
+    long bucket; /**< Clamped bucket index, always > 0. */
+    long vp_x;   /**< Viewport origin — bucket coords are viewport-relative. */
+    long vp_y;
+};
+
+static enum NspDirectState nsp_direct_begin(long bckt_idx, struct NspDirectCtx *ctx)
 {
-    struct PlayerInfo *player;
-    const struct Camera *cam;
-    union {
-        struct BasicQ *b;
-        struct BucketKindJontySprite *jontySprite;
-    } item;
-
-    render_fade_tables = pixmap.fade_tables;
-
-    for (item.b = buckets[bucket_num]; item.b != NULL; item.b = item.b->next)
-    {
-        switch (item.b->kind)
-        {
-        case QK_JontySprite:
-            draw_jonty_mapwho(item.jontySprite);
-            break;
-        case QK_JontyISOSprite:
-            player = get_my_player();
-            cam = get_local_active_camera(player->id_number);
-            if (cam != NULL)
-            {
-                if (cam->view_mode == PVM_IsoWibbleView || cam->view_mode == PVM_IsoStraightView)
-                    draw_jonty_mapwho(item.jontySprite);
-            }
-            break;
-        default:
-            break;
-        }
-    }
-}
-
-void draw_frontview_3d_sprites_for_bucket(long bucket_num, struct Camera *cam)
-{
-    union {
-        struct BasicQ *b;
-        struct BucketKindJontySprite *jontySprite;
-    } item;
-
-    render_fade_tables = pixmap.fade_tables;
-
-    for (item.b = buckets[bucket_num]; item.b != NULL; item.b = item.b->next)
-    {
-        switch (item.b->kind)
-        {
-        case QK_JontySprite:
-            draw_fastview_mapwho(cam, item.jontySprite);
-            break;
-        case QK_JontyISOSprite:
-            draw_fastview_mapwho(cam, item.jontySprite);
-            break;
-        default:
-            break;
-        }
-    }
-}
-
-/** GPU-renderer convenience: fetches the front-view camera from the local
- *  player and calls draw_frontview_3d_sprites_for_bucket().  This avoids
- *  exposing struct Camera in the C++ renderer headers. */
-void draw_frontview_3d_sprites_for_bucket_current(long bucket_num)
-{
+    if (nsp_direct_suppressed || !WorldViewRenderer_UsesFillTimeWorldSubmit())
+        return NspDirect_Inactive;
+    if (bckt_idx >= BUCKETS_COUNT)
+        bckt_idx = BUCKETS_COUNT - 1;
+    else if (bckt_idx < 0)
+        bckt_idx = 0;
+    // The walk never consumes bucket 0 (bucket_num > 0).
+    if (bckt_idx <= 0 || pixel_size <= 0)
+        return NspDirect_Dropped;
     struct PlayerInfo *player = get_my_player();
-    struct Camera *cam = get_local_active_camera(player->id_number);
-    if (cam != NULL)
-        draw_frontview_3d_sprites_for_bucket(bucket_num, cam);
+    ctx->bucket = bckt_idx;
+    ctx->vp_x = player->engine_window_x;
+    ctx->vp_y = player->engine_window_y;
+    return NspDirect_Submit;
 }
 
+/* NDC z for a bucket, biased half a bucket toward the camera — identical to
+ * the walk-time formula in draw_nonspatial_sprites_gpu(). */
+static float nsp_bucket_ndc_z(long bckt_idx)
+{
+    return 2.0f * ((float)bckt_idx - 0.5f) / (float)(BUCKETS_COUNT - 1) - 1.0f;
+}
+
+/** Slab-selector line.  @p scale_coords: create_line_element() passes raw
+ *  coords needing the pixel_size division; create_line_segment() passes
+ *  already-projected view coords. */
+static TbBool nsp_direct_line(long x1, long y1, long x2, long y2, TbPixel color, long bckt_idx, TbBool scale_coords)
+{
+    struct NspDirectCtx ctx;
+    enum NspDirectState state = nsp_direct_begin(bckt_idx, &ctx);
+    if (state != NspDirect_Submit)
+        return (state == NspDirect_Dropped);
+    if (scale_coords)
+    {
+        x1 /= pixel_size;
+        y1 /= pixel_size;
+        x2 /= pixel_size;
+        y2 /= pixel_size;
+    }
+    // Top-overlay: the selector is a cursor-driven affordance that must always
+    // be on top of everything — room flags, status flowers, all UI.
+    UIRenderer_BeginTopOverlay();
+    UIRenderer_SubmitSlabSelector(x1 + ctx.vp_x, y1 + ctx.vp_y, x2 + ctx.vp_x, y2 + ctx.vp_y,
+                                  color, (float)(ctx.bucket * BUCKETS_STEP) / (float)Z_DRAW_DISTANCE_MAX);
+    UIRenderer_EndTopOverlay();
+    return true;
+}
+
+/** Iso status flower: bucket derived from the projected z exactly as
+ *  get_bucket_item() derives it; coords are view coords (no scaling). */
+static TbBool nsp_direct_status_box_iso(struct Thing *thing, long x, long y, int z_val)
+{
+    long b = z_val / BUCKETS_STEP;
+    if (b > BUCKETS_COUNT - 2)
+        b = BUCKETS_COUNT - 2;
+    struct NspDirectCtx ctx;
+    enum NspDirectState state = nsp_direct_begin(b, &ctx);
+    if (state != NspDirect_Submit)
+        return (state == NspDirect_Dropped);
+    // Depth-tested: occlusion by walls is intentional for health/mood icons.
+    UIRenderer_BeginWorldOverlay(nsp_bucket_ndc_z(ctx.bucket));
+    draw_status_sprites(x + ctx.vp_x, y + ctx.vp_y, thing);
+    UIRenderer_EndWorldOverlay();
+    return true;
+}
+
+/** Front-view status flower (raw coords, pixel_size-scaled like the producer). */
+static TbBool nsp_direct_status_box(struct Thing *thing, long x, long y, long bckt_idx)
+{
+    struct NspDirectCtx ctx;
+    enum NspDirectState state = nsp_direct_begin(bckt_idx, &ctx);
+    if (state != NspDirect_Submit)
+        return (state == NspDirect_Dropped);
+    UIRenderer_BeginWorldOverlay(nsp_bucket_ndc_z(ctx.bucket));
+    draw_status_sprites(x / pixel_size + ctx.vp_x, y / pixel_size + ctx.vp_y, thing);
+    UIRenderer_EndWorldOverlay();
+    return true;
+}
+
+static TbBool nsp_direct_number(long x, long y, long number, long bckt_idx)
+{
+    struct NspDirectCtx ctx;
+    enum NspDirectState state = nsp_direct_begin(bckt_idx, &ctx);
+    if (state != NspDirect_Submit)
+        return (state == NspDirect_Dropped);
+    struct BucketKindFloatingGoldText num;
+    num.b.next = NULL;
+    num.b.kind = QK_FloatingGoldText;
+    num.x = x / pixel_size + ctx.vp_x;
+    num.y = y / pixel_size + ctx.vp_y;
+    num.lvl = number;
+    // No depth test — must stay visible above world geometry.
+    UIRenderer_BeginWorldOverlayFlat(nsp_bucket_ndc_z(ctx.bucket));
+    draw_engine_number(&num);
+    UIRenderer_EndWorldOverlayFlat();
+    return true;
+}
+
+static TbBool nsp_direct_room_flag(long x, long y, long room_idx, long bckt_idx, TbBool flag_top)
+{
+    struct NspDirectCtx ctx;
+    enum NspDirectState state = nsp_direct_begin(bckt_idx, &ctx);
+    if (state != NspDirect_Submit)
+        return (state == NspDirect_Dropped);
+    struct BucketKindRoomFlag rflg;
+    rflg.b.next = NULL;
+    rflg.b.kind = flag_top ? QK_RoomFlagStatusBox : QK_RoomFlagBottomPole;
+    rflg.x = x / pixel_size + ctx.vp_x;
+    rflg.y = y / pixel_size + ctx.vp_y;
+    rflg.lvl = room_idx;
+    // No depth test — room flags must not be occluded by world geometry or
+    // flat-poly placement previews.
+    UIRenderer_BeginWorldOverlayFlat(nsp_bucket_ndc_z(ctx.bucket));
+    if (flag_top)
+        draw_engine_room_flag_top(&rflg);
+    else
+        draw_engine_room_flagpole(&rflg);
+    UIRenderer_EndWorldOverlayFlat();
+    return true;
+}
+
+/******************************************************************************/
 
 /** Submits non-spatial UI elements (status flowers, floating gold text,
  *  room flags, slab selector) to the UIRenderer for batched compositing.
@@ -6828,7 +6989,8 @@ void draw_nonspatial_sprites_gpu(void)
         struct BucketKindFloatingGoldText *floatingGoldText;
         struct BucketKindRoomFlag *roomFlag;
     } item;
-    long bucket_num;
+    long entry_count;
+    long i;
 
     // Bucket coordinates are viewport-relative (project_point_helper uses engine_window_width
     // as the [0..w] range). The UI renderer works in full-screen pixel space, so add the
@@ -6837,8 +6999,14 @@ void draw_nonspatial_sprites_gpu(void)
     const int vp_x = player->engine_window_x;
     const int vp_y = player->engine_window_y;
 
-    for (bucket_num = BUCKETS_COUNT-1; bucket_num > 0; bucket_num--)
+    const struct WorldIREntry *entries = world_ir_entries(&entry_count);
+    for (i = 0; i < entry_count; i++)
     {
+        long bucket_num = (long)(entries[i].key >> 32);
+        // This walk never consumes bucket 0, which sorts last.
+        if (bucket_num == 0)
+            break;
+
         // NDC z for this bucket, biased half a bucket closer to the camera so
         // status sprites and floating text pass the depth test against same-bucket
         // ground polygons (avoids z-fighting).
@@ -6848,8 +7016,8 @@ void draw_nonspatial_sprites_gpu(void)
         // requires it; the actual depth testing uses ndc_z above.
         float z_depth = (float)(bucket_num * BUCKETS_STEP) / (float)Z_DRAW_DISTANCE_MAX;
 
-        for (item.b = buckets[bucket_num]; item.b != NULL; item.b = item.b->next)
         {
+            item.b = entries[i].item;
             switch (item.b->kind)
             {
             case QK_SlabSelector:
@@ -7009,6 +7177,14 @@ void draw_view(struct Camera *cam, unsigned char a2)
     long aposc;
     long bposc;
     SYNCDBG(9,"Starting");
+    // Fill-time sprite processing (GL path) runs draw_jonty_mapwho during the
+    // map walk below, so the fade tables must be valid before the fill — not
+    // just at bucket-walk time.
+    render_fade_tables = pixmap.fade_tables;
+    // NSP overlays (health bars, room flags, gold text, slab selector) do not
+    // belong in the overhead parchment map — same condition as the walk-time
+    // draw_nonspatial_sprites_gpu() guard below.
+    nsp_direct_suppressed = (cam->view_mode == PVM_ParchmentView);
     calculate_hud_scale(cam);
     camera_zoom = scale_camera_zoom_to_screen(cam->zoom);
     zoom_mem = cam->zoom;//TODO [zoom] remove when all cam->zoom will be changed to camera_zoom
@@ -7017,17 +7193,7 @@ void draw_view(struct Camera *cam, unsigned char a2)
     long y = cam->mappos.y.val; 
     long z = cam->mappos.z.val;
 
-    getpoly = poly_pool;
-    memset(buckets, 0, sizeof(buckets));
-    memset(poly_pool, 0, PlatformManager_GetPolyPoolSize());
-    if (map_volume_box.visible)
-    {
-        poly_pool_end_reserve(14);
-    }
-    else
-    {
-        poly_pool_end_reserve(4);
-    }
+    world_ir_reset();
     i = lens_mode;
     if ((i < 0) || (i >= PERS_ROUTINES_COUNT))
     {
@@ -7074,7 +7240,6 @@ void draw_view(struct Camera *cam, unsigned char a2)
 
     if ( (map_volume_box.visible) && (!game_is_busy_doing_gui()) )
     {
-        poly_pool_end_reserve(0);
         process_isometric_map_volume_box(x, y, z, my_player_number);
     }
 
@@ -7092,8 +7257,7 @@ void draw_view(struct Camera *cam, unsigned char a2)
 
 static void clear_fast_bucket_list(void)
 {
-    getpoly = poly_pool;
-    memset(buckets, 0, sizeof(buckets));
+    world_ir_reset();
 }
 
 static void draw_texturedquad_block(struct BucketKindTexturedQuad *txquad)
@@ -7142,7 +7306,6 @@ static void draw_texturedquad_block(struct BucketKindTexturedQuad *txquad)
 
 void display_fast_drawlist(struct Camera *cam) // Draws frontview only. Not isometric or 1st person view.
 {
-    int bucket_num;
     union {
         struct BasicQ *b;
         // Unused in display_fast_drawlist()
@@ -7166,15 +7329,20 @@ void display_fast_drawlist(struct Camera *cam) // Draws frontview only. Not isom
         struct BucketKindFloatingGoldText *floatingGoldText;
         struct BucketKindRoomFlag *roomFlag;
     } item;
+    long entry_count;
+    long i;
     // Color rendering array pointers used by draw_keepersprite()
     render_fade_tables = pixmap.fade_tables;
     render_problems = 0;
     thing_pointed_at = 0;
 
-    for (bucket_num = BUCKETS_COUNT-1; bucket_num >= 0; bucket_num--)
+    // Sorted world draw list: far→near, LIFO within a depth bucket.  Unlike
+    // the iso walk this one consumes bucket 0 too.
+    const struct WorldIREntry *entries = world_ir_entries(&entry_count);
+    for (i = 0; i < entry_count; i++)
     {
-        for (item.b = buckets[bucket_num]; item.b != NULL; item.b = item.b->next)
         {
+            item.b = entries[i].item;
             switch (item.b->kind)
             {
             case QK_JontySprite: // Creatures and things
@@ -7301,11 +7469,10 @@ static void add_thing_sprite_to_polypool(struct Thing *thing, long scr_x, long s
     else
     if (bckt_idx < 0)
         bckt_idx = 0;
-    poly = (struct BucketKindJontySprite *)getpoly;
-    getpoly += sizeof(struct BucketKindJontySprite);
-    poly->b.next = buckets[bckt_idx];
-    poly->b.kind = QK_JontySprite;
-    buckets[bckt_idx] = (struct BasicQ *)poly;
+    poly = (struct BucketKindJontySprite *)world_pool_alloc(sizeof(struct BucketKindJontySprite));
+    if (poly == NULL)
+        return;
+    world_ir_link(&poly->b, QK_JontySprite, bckt_idx);
     poly->thing = thing;
     if (pixel_size > 0)
     {
@@ -7323,11 +7490,10 @@ static void add_spinning_key_to_polypool(struct Thing *thing, long scr_x, long s
     else
     if (bckt_idx < 0)
       bckt_idx = 0;
-    poly = (struct BucketKindJontySprite *)getpoly;
-    getpoly += sizeof(struct BucketKindJontySprite);
-    poly->b.next = buckets[bckt_idx];
-    poly->b.kind = QK_JontyISOSprite;
-    buckets[bckt_idx] = (struct BasicQ *)poly;
+    poly = (struct BucketKindJontySprite *)world_pool_alloc(sizeof(struct BucketKindJontySprite));
+    if (poly == NULL)
+        return;
+    world_ir_link(&poly->b, QK_JontyISOSprite, bckt_idx);
     poly->thing = thing;
     if (pixel_size > 0)
     {
@@ -7341,17 +7507,18 @@ static void add_spinning_key_to_polypool(struct Thing *thing, long scr_x, long s
 static void create_status_box_element(struct Thing *thing, long a2, long a3, long a4, long bckt_idx) //
 {
     struct BucketKindCreatureStatus *poly;
+    if (nsp_direct_status_box(thing, a2, a3, bckt_idx))
+        return;
     if (bckt_idx >= BUCKETS_COUNT) {
       bckt_idx = BUCKETS_COUNT-1;
     } else
     if (bckt_idx < 0) {
       bckt_idx = 0;
     }
-    poly = (struct BucketKindCreatureStatus *)getpoly;
-    getpoly += sizeof(struct BucketKindCreatureStatus);
-    poly->b.next = buckets[bckt_idx];
-    poly->b.kind = QK_CreatureStatus;
-    buckets[bckt_idx] = (struct BasicQ *)poly;
+    poly = (struct BucketKindCreatureStatus *)world_pool_alloc(sizeof(struct BucketKindCreatureStatus));
+    if (poly == NULL)
+        return;
+    world_ir_link(&poly->b, QK_CreatureStatus, bckt_idx);
     poly->thing = thing;
     if (pixel_size > 0)
     {
@@ -7369,11 +7536,10 @@ static void add_textruredquad_to_polypool(long x, long y, long texture_idx, long
     } else if (bckt_idx < 0) {
       bckt_idx = 0;
     }
-    poly = (struct BucketKindTexturedQuad *)getpoly;
-    getpoly += sizeof(struct BucketKindTexturedQuad);
-    poly->b.next = buckets[bckt_idx];
-    poly->b.kind = QK_TextureQuad;
-    buckets[bckt_idx] = (struct BasicQ *)poly;
+    poly = (struct BucketKindTexturedQuad *)world_pool_alloc(sizeof(struct BucketKindTexturedQuad));
+    if (poly == NULL)
+        return;
+    world_ir_link(&poly->b, QK_TextureQuad, bckt_idx);
 
     poly->texture_idx = texture_idx;
     poly->texture_x = x;
@@ -7396,11 +7562,10 @@ static void add_lgttextrdquad_to_polypool(long x, long y, long texture_idx, long
     } else if (bckt_idx < 0) {
       bckt_idx = 0;
     }
-    poly = (struct BucketKindTexturedQuad *)getpoly;
-    getpoly += sizeof(struct BucketKindTexturedQuad);
-    poly->b.next = buckets[bckt_idx];
-    poly->b.kind = QK_TextureQuad;
-    buckets[bckt_idx] = (struct BasicQ *)poly;
+    poly = (struct BucketKindTexturedQuad *)world_pool_alloc(sizeof(struct BucketKindTexturedQuad));
+    if (poly == NULL)
+        return;
+    world_ir_link(&poly->b, QK_TextureQuad, bckt_idx);
 
     poly->texture_idx = texture_idx;
     poly->texture_x = x;
@@ -7418,16 +7583,17 @@ static void add_lgttextrdquad_to_polypool(long x, long y, long texture_idx, long
 static void add_number_to_polypool(long x, long y, long number, long bckt_idx)
 {
     struct BucketKindFloatingGoldText *poly;
+    if (nsp_direct_number(x, y, number, bckt_idx))
+        return;
     if (bckt_idx >= BUCKETS_COUNT) {
       bckt_idx = BUCKETS_COUNT-1;
     } else if (bckt_idx < 0) {
       bckt_idx = 0;
     }
-    poly = (struct BucketKindFloatingGoldText *)getpoly;
-    getpoly += sizeof(struct BucketKindFloatingGoldText);
-    poly->b.next = buckets[bckt_idx];
-    poly->b.kind = QK_FloatingGoldText;
-    buckets[bckt_idx] = (struct BasicQ *)poly;
+    poly = (struct BucketKindFloatingGoldText *)world_pool_alloc(sizeof(struct BucketKindFloatingGoldText));
+    if (poly == NULL)
+        return;
+    world_ir_link(&poly->b, QK_FloatingGoldText, bckt_idx);
     if (pixel_size > 0)
     {
       poly->x = x / pixel_size;
@@ -7439,16 +7605,17 @@ static void add_number_to_polypool(long x, long y, long number, long bckt_idx)
 static void add_room_flag_pole_to_polypool(long x, long y, long room_idx, long bckt_idx)
 {
     struct BucketKindRoomFlag *poly;
+    if (nsp_direct_room_flag(x, y, room_idx, bckt_idx, false))
+        return;
     if (bckt_idx >= BUCKETS_COUNT) {
       bckt_idx = BUCKETS_COUNT-1;
     } else if (bckt_idx < 0) {
       bckt_idx = 0;
     }
-    poly = (struct BucketKindRoomFlag *)getpoly;
-    getpoly += sizeof(struct BucketKindRoomFlag);
-    poly->b.next = buckets[bckt_idx];
-    poly->b.kind = QK_RoomFlagBottomPole;
-    buckets[bckt_idx] = (struct BasicQ *)poly;
+    poly = (struct BucketKindRoomFlag *)world_pool_alloc(sizeof(struct BucketKindRoomFlag));
+    if (poly == NULL)
+        return;
+    world_ir_link(&poly->b, QK_RoomFlagBottomPole, bckt_idx);
     if (pixel_size > 0)
     {
       poly->x = x / pixel_size;
@@ -7460,16 +7627,17 @@ static void add_room_flag_pole_to_polypool(long x, long y, long room_idx, long b
 static void add_room_flag_top_to_polypool(long x, long y, long room_idx, long bckt_idx)
 {
     struct BucketKindRoomFlag *poly;
+    if (nsp_direct_room_flag(x, y, room_idx, bckt_idx, true))
+        return;
     if (bckt_idx >= BUCKETS_COUNT) {
       bckt_idx = BUCKETS_COUNT-1;
     } else if (bckt_idx < 0) {
       bckt_idx = 0;
     }
-    poly = (struct BucketKindRoomFlag *)getpoly;
-    getpoly += sizeof(struct BucketKindRoomFlag);
-    poly->b.next = buckets[bckt_idx];
-    poly->b.kind = QK_RoomFlagStatusBox;
-    buckets[bckt_idx] = (struct BasicQ *)poly;
+    poly = (struct BucketKindRoomFlag *)world_pool_alloc(sizeof(struct BucketKindRoomFlag));
+    if (poly == NULL)
+        return;
+    world_ir_link(&poly->b, QK_RoomFlagStatusBox, bckt_idx);
     if (pixel_size > 0)
     {
       poly->x = x / pixel_size;
@@ -7519,9 +7687,6 @@ static void draw_element(struct Map *map, long lightness, long stl_x, long stl_y
     cube_itm = (qdrant + 2) & 3;
     delta_y = (zoom << 7) / 256;
     bckt_idx = myplyr->engine_window_height - (pos_y >> 8) + 64;
-    // Check if there's enough place to draw
-    if (!is_free_space_in_poly_pool(8))
-      return;
 
     // Prepare light intensity array
 
@@ -8957,10 +9122,29 @@ TbBool placing_same_room_type(RoomIndex room_index)
     return true;
 }
 
+/** Populates a stack bucket entry for fill-time sprite processing on the GL
+ *  path — no pool allocation.  Field values mirror
+ *  add_thing_sprite_to_polypool(). */
+static void fill_stack_jonty_sprite(struct BucketKindJontySprite *jspr, struct Thing *thing, long scr_x, long scr_y, long depth_fade)
+{
+    jspr->b.next = NULL;
+    jspr->b.kind = QK_JontySprite;
+    jspr->thing = thing;
+    jspr->scr_x = 0;
+    jspr->scr_y = 0;
+    if (pixel_size > 0)
+    {
+        jspr->scr_x = scr_x / pixel_size;
+        jspr->scr_y = scr_y / pixel_size;
+    }
+    jspr->depth_fade = depth_fade;
+}
+
 static void do_map_who_for_thing(struct Thing *thing)
 {
     int bckt_idx;
     struct EngineCoord ecor;
+    struct EngineCoord status_ecor;
     struct NearestLights nearlgt;
 
     interpolate_thing(thing);
@@ -9020,20 +9204,38 @@ static void do_map_who_for_thing(struct Thing *thing)
 
         if (thing->class_id == TCls_Creature)
         {
-            add_draw_status_box(thing, &ecor);
+            // Pre-projection coords for the status box below; rotpers()
+            // transforms ecor in place.
+            status_ecor = ecor;
             // Draw path the creature is following
             if ((start_params.debug_flags & DFlg_CreatrPaths) != 0) {
                 draw_mapwho_ariadne_path(thing);
             }
         }
         rotpers(&ecor, &camera_matrix);
-        if (getpoly < poly_pool_end && ecor.z >= 64)
+        if (ecor.z >= 64)
         {
             if ( lens_mode )
               bckt_idx = (ecor.z - 64) / 16;
             else
               bckt_idx = (ecor.z - 64) / 16;
-            add_thing_sprite_to_polypool(thing, ecor.view_width, ecor.view_height, ecor.z, bckt_idx);
+            if (WorldViewRenderer_BeginWorldSpriteCapture(bckt_idx))
+            {
+                struct BucketKindJontySprite jspr;
+                fill_stack_jonty_sprite(&jspr, thing, ecor.view_width, ecor.view_height, ecor.z);
+                draw_jonty_mapwho(&jspr);
+            }
+            else
+            {
+                add_thing_sprite_to_polypool(thing, ecor.view_width, ecor.view_height, ecor.z, bckt_idx);
+            }
+        }
+        // The status box must be submitted after the sprite: the fill-time
+        // direct path reads thing_pointed_at, which the sprite's pointer test
+        // above sets for the hovered creature.
+        if (thing->class_id == TCls_Creature)
+        {
+            add_draw_status_box(thing, &status_ecor);
         }
         break;
     case ODC_DrawAtOrigin:
@@ -9051,10 +9253,7 @@ static void do_map_who_for_thing(struct Thing *thing)
         ecor.z = (map_y_pos - render_pos_z);
         ecor.y = (render_pos_y - map_z_pos);
         rotpers(&ecor, &camera_matrix);
-        if (getpoly < poly_pool_end)
-        {
-            add_number_to_polypool(ecor.view_width, ecor.view_height, thing->price_effect.number, 1);
-        }
+        add_number_to_polypool(ecor.view_width, ecor.view_height, thing->price_effect.number, 1);
         break;
     case ODC_RoomStatusFlag:
         // Hide status flags when full zoomed out, for atmospheric overview
@@ -9071,7 +9270,7 @@ static void do_map_who_for_thing(struct Thing *thing)
         ecor.z = (map_y_pos - render_pos_z);
         ecor.y = (render_pos_y - map_z_pos);
         rotpers(&ecor, &camera_matrix);
-        if (getpoly < poly_pool_end && ecor.z >= 64)
+        if (ecor.z >= 64)
         {
             if (get_gameturn() - thing->roomflag.last_turn_drawn == 1)
             {
@@ -9088,10 +9287,7 @@ static void do_map_who_for_thing(struct Thing *thing)
             {
                 bckt_idx = (ecor.z - 64) / 16 - 6;
                 add_room_flag_pole_to_polypool(ecor.view_width, ecor.view_height, thing->roomflag.room_idx, bckt_idx);
-                if (getpoly < poly_pool_end)
-                {
-                    add_room_flag_top_to_polypool(ecor.view_width, ecor.view_height, thing->roomflag.room_idx, 1);
-                }
+                add_room_flag_top_to_polypool(ecor.view_width, ecor.view_height, thing->roomflag.room_idx, 1);
             }
         }
         break;
@@ -9100,8 +9296,26 @@ static void do_map_who_for_thing(struct Thing *thing)
         ecor.z = (map_y_pos - render_pos_z);
         ecor.y = (render_pos_y - map_z_pos);
         rotpers(&ecor, &camera_matrix);
-        if (getpoly < poly_pool_end) {
-            add_spinning_key_to_polypool(thing, ecor.view_width, ecor.view_height, ecor.z, 1);
+        {
+            if (WorldViewRenderer_BeginWorldSpriteCapture(1))
+            {
+                // Spinning keys draw only in the iso views; the 1st-person and
+                // parchment cameras skip them (matches the QK_JontyISOSprite
+                // guard in the bucket walk).
+                struct PlayerInfo *player = get_my_player();
+                struct Camera *cam = get_local_active_camera(player->id_number);
+                if ((cam != NULL) && (cam->view_mode == PVM_IsoWibbleView || cam->view_mode == PVM_IsoStraightView))
+                {
+                    struct BucketKindJontySprite jspr;
+                    fill_stack_jonty_sprite(&jspr, thing, ecor.view_width, ecor.view_height, ecor.z);
+                    jspr.b.kind = QK_JontyISOSprite;
+                    draw_jonty_mapwho(&jspr);
+                }
+            }
+            else
+            {
+                add_spinning_key_to_polypool(thing, ecor.view_width, ecor.view_height, ecor.z, 1);
+            }
         }
         break;
     default:
@@ -9158,21 +9372,24 @@ static void draw_frontview_thing_on_element(struct Thing *thing, struct Map *map
     {
     case ODC_Default: // Things
         convert_world_coord_to_front_view_screen_coord(&thing->interp_mappos,cam,&cx,&cy,&cz);
-        if (is_free_space_in_poly_pool(1))
+        if (WorldViewRenderer_BeginWorldSpriteCapture(cz-3))
+        {
+            struct BucketKindJontySprite jspr;
+            fill_stack_jonty_sprite(&jspr, thing, cx, cy, cy);
+            draw_fastview_mapwho(cam, &jspr);
+        }
+        else
         {
             add_thing_sprite_to_polypool(thing, cx, cy, cy, cz-3);
-            if ((thing->class_id == TCls_Creature) && is_free_space_in_poly_pool(1))
-            {
-                create_status_box_element(thing, cx, cy, cy, 1);
-            }
+        }
+        if (thing->class_id == TCls_Creature)
+        {
+            create_status_box_element(thing, cx, cy, cy, 1);
         }
         break;
     case ODC_RoomPrice: // Floating gold text when buying and selling
         convert_world_coord_to_front_view_screen_coord(&thing->interp_mappos,cam,&cx,&cy,&cz);
-        if (is_free_space_in_poly_pool(1))
-        {
-            add_number_to_polypool(cx, cy, thing->creature.gold_carried, 1);
-        }
+        add_number_to_polypool(cx, cy, thing->creature.gold_carried, 1);
         break;
     case ODC_RoomStatusFlag: // Room Status flags
         // Hide status flags when full zoomed out, for atmospheric overview
@@ -9186,7 +9403,6 @@ static void draw_frontview_thing_on_element(struct Thing *thing, struct Map *map
         }
 
         convert_world_coord_to_front_view_screen_coord(&thing->interp_mappos,cam,&cx,&cy,&cz);
-        if (is_free_space_in_poly_pool(1))
         {
             if (get_gameturn() - thing->roomflag.last_turn_drawn == 1)
             {
@@ -9202,16 +9418,20 @@ static void draw_frontview_thing_on_element(struct Thing *thing, struct Map *map
             if (thing->roomflag.display_timer == 10)
             {
                 add_room_flag_pole_to_polypool(cx, cy, thing->roomflag.room_idx, cz-3);
-                if (is_free_space_in_poly_pool(1))
-                {
-                    add_room_flag_top_to_polypool(cx, cy, thing->roomflag.room_idx, 1);
-                }
+                add_room_flag_top_to_polypool(cx, cy, thing->roomflag.room_idx, 1);
             }
         }
         break;
     case ODC_SpinningKey:
         convert_world_coord_to_front_view_screen_coord(&thing->interp_mappos,cam,&cx,&cy,&cz);
-        if (is_free_space_in_poly_pool(1))
+        if (WorldViewRenderer_BeginWorldSpriteCapture(cz-3))
+        {
+            struct BucketKindJontySprite jspr;
+            fill_stack_jonty_sprite(&jspr, thing, cx, cy, cy);
+            jspr.b.kind = QK_JontyISOSprite;
+            draw_fastview_mapwho(cam, &jspr);
+        }
+        else
         {
             add_spinning_key_to_polypool(thing, cx, cy, cy, cz-3);
         }
@@ -9275,6 +9495,11 @@ void draw_frontview_engine(struct Camera *cam)
     long long lbbb;
     int32_t i;
     SYNCDBG(9,"Starting");
+    // Fill-time sprite processing (GL path) needs valid fade tables before the
+    // element walk below, not just at bucket-walk time.
+    render_fade_tables = pixmap.fade_tables;
+    // Front view always draws NSP overlays (no parchment camera reaches here).
+    nsp_direct_suppressed = false;
     player = get_my_player();
     if (cam->zoom > FRONTVIEW_CAMERA_ZOOM_MAX)
         cam->zoom = FRONTVIEW_CAMERA_ZOOM_MAX;

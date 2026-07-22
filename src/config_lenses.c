@@ -69,6 +69,7 @@ const struct NamedField lenses_data_named_fields[] = {
     {"PALETTE",           0, field_t(struct LensConfig, palette),                  0,        0,        0, NULL,         value_pallete,   assign_null},
     {"OVERLAY",           0, field_t(struct LensConfig, overlay_file),             0,        0,        0, NULL,         value_overlay,   assign_null},
     {"OVERLAY",           1, field_t(struct LensConfig, overlay_alpha),          128,        0,      255, NULL,         value_default,   assign_default},
+    {"TRUECOLOR",         0, field_t(struct LensConfig, truecolor),               -1,       -1,        1, NULL,         value_default,   assign_default},
     {NULL},
 };
 

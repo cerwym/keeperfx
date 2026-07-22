@@ -22,6 +22,7 @@ class GLTileAtlas;
 class GLSpriteAtlas;
 class GLFontAtlas;
 class GLMapFadePass;
+class GLLensRenderer;
 class GLTextRenderer;
 class ICursorLayer;
 
@@ -37,6 +38,8 @@ class ICursorLayer;
  * palette texture) and manages all sub-renderers internally.
  */
 class RendererOpenGL : public IRenderer {
+    friend class GLLensRenderer;
+
 private:
     // Typed GL sub-renderer pointers — created and owned by this backend in
     // Init(), destroyed in Shutdown().  Non-null on a successful Init(); a GL
@@ -44,6 +47,7 @@ private:
     // the manager retries with RendererSoftware, see main.cpp).
     GLTextRenderer*      m_textRenderer    = nullptr;
     GLMapFadePass*       m_gl_mapfade      = nullptr;
+    GLLensRenderer*      m_gl_lens         = nullptr;
     GLUIRenderer*        m_gl_ui_renderer  = nullptr;
     ICursorLayer*        m_cursor          = nullptr;
 
@@ -126,13 +130,10 @@ public:
     // Sub-renderer access
     IWorldViewRenderer* GetWorldViewRenderer() override;
     IMapFadePass* GetMapFadePass() override;
+    ILensRenderer* GetLensRenderer() override;
     ITextRenderer* GetTextRenderer() override;
     IUIRenderer* GetUIRenderer() override;
     ICursorLayer* GetCursorLayer() override;
-
-    /** Create a GL post-process pass for the given lens effect type.
-     *  Ownership transfers to the caller (LensEffect). */
-    class IPostProcessPass* CreateLensPass(LensEffectType type) override;
 
     // Sprite-atlas accessor — kept for RendererManager's sprite-handle registry.
     GLSpriteAtlas* GetSpriteAtlas() const { return m_sprite_atlas; }
@@ -174,6 +175,7 @@ public:
 private:
     bool compile_shaders();
     void upload_palette_texture();
+    void upload_palette_buffer(const unsigned char* pal768);
     bool init_tile_atlas();
     bool init_fade_table_texture();
 
@@ -369,22 +371,6 @@ private:
     // the function return and the stack frame is recycled.
     uint8_t m_palette_upload_buf[256 * 4] = {};
 
-    // ── Lens post-process pass infrastructure ─────────────────────────────
-    // Scene FBO: world geometry renders here (via FlushSceneToLensFBO) when
-    // lens effects are active, instead of the default framebuffer.
-    unsigned int m_lens_scene_fbo       = 0;
-    unsigned int m_lens_scene_tex       = 0;  // GL_RGBA8 — decoded scene
-    unsigned int m_lens_scene_depth_rb  = 0;  // GL_DEPTH_COMPONENT24
-    // Ping-pong pair for chaining multiple GPU lens passes.
-    unsigned int m_lens_pass_fbo_a      = 0;
-    unsigned int m_lens_pass_tex_a      = 0;
-    unsigned int m_lens_pass_fbo_b      = 0;
-    unsigned int m_lens_pass_tex_b      = 0;
-    int          m_lens_fbo_w           = 0;
-    int          m_lens_fbo_h           = 0;
-    // Passthrough blit shader: copies final lens texture to default framebuffer.
-    unsigned int m_passthrough_shader   = 0;
-    bool         m_lens_active          = false;  // true when lens FBO is bound this frame
 
     // scRGB fake-HDR gamma lift pass: applied before every buffer swap when the
     // backbuffer is a linear float surface.  Reads the completed SDR frame via
@@ -407,9 +393,6 @@ private:
     unsigned int              m_swipe_vao    = 0;
     unsigned int              m_swipe_vbo    = 0;
     void FlushSwipeQuads();
-
-    void ApplyLensGPUPasses();
-    void EnsureLensFBOs();
 
     /** (Re-)create (or resize) FBO slot at index @p idx to at least w×h. */
     void ensure_pip_fbo(std::size_t idx, int w, int h);

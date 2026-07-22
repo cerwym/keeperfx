@@ -286,10 +286,6 @@ struct BucketKindRoomFlag {
 };
 
 /******************************************************************************/
-/* Bucket list — indexed by Z depth, one linked list per bucket */
-extern struct BasicQ *buckets[BUCKETS_COUNT];
-
-/******************************************************************************/
 #ifdef __cplusplus
 }
 #endif

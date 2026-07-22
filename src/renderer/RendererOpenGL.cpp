@@ -24,6 +24,7 @@
 #include "renderer/opengl/GLCursorLayer.h"
 #include "renderer/opengl/GLShaders.h"
 #include "renderer/opengl/GLLensPass.h"
+#include "renderer/opengl/GLLensRenderer.h"
 #include "kfx/profiling/KfxProfiling.h"
 #include "kfx/lense/LensManager.h"
 #include "kfx/lense/LensEffect.h"
@@ -539,6 +540,7 @@ bool RendererOpenGL::Init()
     // retries with RendererSoftware (see main.cpp).
     CreateGLWorldViewRenderer();
     CreateGLMapFadePass();
+    m_gl_lens = new GLLensRenderer(this);
     if (!CreateGLTextRenderer())
     {
         ERRORLOG("RendererOpenGL::Init: GLTextRenderer initialisation failed");
@@ -580,6 +582,7 @@ void RendererOpenGL::Shutdown()
     delete m_textRenderer;    m_textRenderer    = nullptr;
     delete m_world_renderer;  m_world_renderer  = nullptr;
     delete m_gl_mapfade;      m_gl_mapfade      = nullptr;
+    delete m_gl_lens;         m_gl_lens         = nullptr;
 
     delete m_tile_atlas;
     m_tile_atlas = nullptr;
@@ -612,18 +615,6 @@ void RendererOpenGL::Shutdown()
         if (slot.depth_rb)  { glDeleteRenderbuffers(1,  &slot.depth_rb);  slot.depth_rb  = 0; }
     }
     m_pip_fbos.clear();
-
-    // Lens post-process FBOs
-    if (m_lens_scene_fbo)      { glDeleteFramebuffers(1, &m_lens_scene_fbo);       m_lens_scene_fbo = 0; }
-    if (m_lens_scene_tex)      { glDeleteTextures(1, &m_lens_scene_tex);           m_lens_scene_tex = 0; }
-    if (m_lens_scene_depth_rb) { glDeleteRenderbuffers(1, &m_lens_scene_depth_rb); m_lens_scene_depth_rb = 0; }
-    if (m_lens_pass_fbo_a)     { glDeleteFramebuffers(1, &m_lens_pass_fbo_a);      m_lens_pass_fbo_a = 0; }
-    if (m_lens_pass_tex_a)     { glDeleteTextures(1, &m_lens_pass_tex_a);          m_lens_pass_tex_a = 0; }
-    if (m_lens_pass_fbo_b)     { glDeleteFramebuffers(1, &m_lens_pass_fbo_b);      m_lens_pass_fbo_b = 0; }
-    if (m_lens_pass_tex_b)     { glDeleteTextures(1, &m_lens_pass_tex_b);          m_lens_pass_tex_b = 0; }
-    if (m_passthrough_shader)  { glDeleteProgram(m_passthrough_shader);             m_passthrough_shader = 0; }
-    m_lens_fbo_w = 0;
-    m_lens_fbo_h = 0;
 
     if (m_scrgb_lift_shader) { glDeleteProgram(m_scrgb_lift_shader);  m_scrgb_lift_shader = 0; }
     if (m_scrgb_lift_tex)    { glDeleteTextures(1, &m_scrgb_lift_tex); m_scrgb_lift_tex = 0; }
@@ -822,7 +813,7 @@ void RendererOpenGL::EndFrame()
 
     // Flush active GPU lens passes to the render graph's write-side post-process
     // buffers, mirroring the map-fade flush above. Must happen before Flip().
-    if (LensManager* lm = LensManager::GetInstance()) lm->FlushToRenderGraph(m_render_graph);
+    if (LensManager* lm = LensManager::GetInstance()) lm->FlushToRenderGraph(m_render_graph, m_screenW, m_screenH);
 
     {
         const UICommandBuffers& wui [[maybe_unused]] = m_render_graph.GetWriteUIBuffers();
@@ -984,19 +975,15 @@ void RendererOpenGL::EndFrame_GL()
 
     // ── Lens FBO redirect
     // redirect world rendering to the lens scene FBO so GPU post-process
-    // passes can operate on the result before it reaches the screen.
-    m_lens_active = false;
+    // passes can operate on the result before it reaches the screen. The lens
+    // compositing (FBOs, passes, passthrough blit) is owned by GLLensRenderer.
+    bool lens_active = false;
     {
         const PostProcessCommandBuffers& pp = m_render_graph.GetPostProcessBuffersRT();
-        if (m_rt_frame_state.lens_mode == 2 && pp.lens.has_value() && pp.lens->count > 0)
+        if (m_rt_frame_state.lens_mode == 2 && pp.lens.has_value() && m_gl_lens)
         {
-            EnsureLensFBOs();
-            if (m_lens_scene_fbo)
-            {
-                glBindFramebuffer(GL_FRAMEBUFFER, m_lens_scene_fbo);
-                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-                m_lens_active = true;
-            }
+            lens_active = m_gl_lens->BeginSceneCapture(
+                *pp.lens, m_rt_frame_state.screen_w, m_rt_frame_state.screen_h);
         }
     }
 
@@ -1012,11 +999,23 @@ void RendererOpenGL::EndFrame_GL()
 
     // If lens FBO was active, apply GPU post-process passes and blit result
     // back to the default framebuffer.
-    if (m_lens_active)
+    if (lens_active && m_gl_lens)
     {
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        ApplyLensGPUPasses();
-        m_lens_active = false;
+        const PostProcessCommandBuffers& pp = m_render_graph.GetPostProcessBuffersRT();
+        if (pp.lens.has_value())
+            m_gl_lens->ResolveAndApply(*pp.lens, m_rt_frame_state.screen_w, m_rt_frame_state.screen_h);
+    }
+
+    // Palette-lens UI exclusion (OpenGL only) — owned by GLLensRenderer. When a
+    // lens palette is active with WorldOnly scope, it re-uploads the shared
+    // palette texture with the base (non-lens) palette so the subsequent
+    // UI/text/overhead draws decode without the lens tint (world tinted, UI clean).
+    // FullFrame scope or no lens palette leaves the applied palette in place.
+    if (m_gl_lens)
+    {
+        const PostProcessCommandBuffers& pp = m_render_graph.GetPostProcessBuffersRT();
+        if (pp.lens.has_value())
+            m_gl_lens->ApplyPaletteUIExclusion(*pp.lens);
     }
 
     // Map-fade GPU compose pass — active during PVM_ParchFadeIn / ParchFadeOut.
@@ -1886,168 +1885,6 @@ void RendererOpenGL::FlushSwipeQuads()
     m_rt_swipe_verts.clear();
 }
 
-/******************************************************************************/
-// Lens Post-Process Infrastructure 
-// TODO : Move.
-/******************************************************************************/
-
-static unsigned int create_rgba_texture(int w, int h, const char* label)
-{
-    unsigned int tex;
-    glGenTextures(1, &tex);
-    glBindTexture(GL_TEXTURE_2D, tex);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    (void)label;
-    return tex;
-}
-
-static unsigned int create_fbo_with_texture(unsigned int color_tex, unsigned int depth_rb)
-{
-    unsigned int fbo;
-    glGenFramebuffers(1, &fbo);
-    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, color_tex, 0);
-    if (depth_rb)
-        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depth_rb);
-    GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    if (status != GL_FRAMEBUFFER_COMPLETE)
-    {
-        ERRORLOG("Lens FBO incomplete: status=0x%X", status);
-        glDeleteFramebuffers(1, &fbo);
-        return 0;
-    }
-    return fbo;
-}
-
-void RendererOpenGL::EnsureLensFBOs()
-{
-    if (m_lens_fbo_w == m_rt_frame_state.screen_w && m_lens_fbo_h == m_rt_frame_state.screen_h && m_lens_scene_fbo)
-        return;
-
-    // Free existing
-    if (m_lens_scene_fbo)      { glDeleteFramebuffers(1, &m_lens_scene_fbo);       m_lens_scene_fbo = 0; }
-    if (m_lens_scene_tex)      { glDeleteTextures(1, &m_lens_scene_tex);           m_lens_scene_tex = 0; }
-    if (m_lens_scene_depth_rb) { glDeleteRenderbuffers(1, &m_lens_scene_depth_rb); m_lens_scene_depth_rb = 0; }
-    if (m_lens_pass_fbo_a)     { glDeleteFramebuffers(1, &m_lens_pass_fbo_a);      m_lens_pass_fbo_a = 0; }
-    if (m_lens_pass_tex_a)     { glDeleteTextures(1, &m_lens_pass_tex_a);          m_lens_pass_tex_a = 0; }
-    if (m_lens_pass_fbo_b)     { glDeleteFramebuffers(1, &m_lens_pass_fbo_b);      m_lens_pass_fbo_b = 0; }
-    if (m_lens_pass_tex_b)     { glDeleteTextures(1, &m_lens_pass_tex_b);          m_lens_pass_tex_b = 0; }
-
-    int w = m_rt_frame_state.screen_w;
-    int h = m_rt_frame_state.screen_h;
-
-    // Scene FBO — world renders here instead of default framebuffer
-    m_lens_scene_tex = create_rgba_texture(w, h, "Lens/SceneTex");
-
-    glGenRenderbuffers(1, &m_lens_scene_depth_rb);
-    glBindRenderbuffer(GL_RENDERBUFFER, m_lens_scene_depth_rb);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, w, h);
-    glBindRenderbuffer(GL_RENDERBUFFER, 0);
-
-    m_lens_scene_fbo = create_fbo_with_texture(m_lens_scene_tex, m_lens_scene_depth_rb);
-
-    // Ping-pong FBOs (no depth needed — post-process only)
-    m_lens_pass_tex_a = create_rgba_texture(w, h, "Lens/PassTexA");
-    m_lens_pass_fbo_a = create_fbo_with_texture(m_lens_pass_tex_a, 0);
-
-    m_lens_pass_tex_b = create_rgba_texture(w, h, "Lens/PassTexB");
-    m_lens_pass_fbo_b = create_fbo_with_texture(m_lens_pass_tex_b, 0);
-
-    m_lens_fbo_w = w;
-    m_lens_fbo_h = h;
-
-    // Compile passthrough shader (blit final texture to screen)
-    if (!m_passthrough_shader)
-    {
-        {
-            auto cs = [](GLenum type, const char* src) -> unsigned int {
-                unsigned int s = glCreateShader(type);
-                glShaderSource(s, 1, &src, nullptr);
-                glCompileShader(s);
-                int ok = 0;
-                glGetShaderiv(s, GL_COMPILE_STATUS, &ok);
-                if (!ok) { glDeleteShader(s); return 0; }
-                return s;
-            };
-            unsigned int vs = cs(GL_VERTEX_SHADER,   PALETTE_BLIT_VERTEX_SHADER);
-            unsigned int fs = cs(GL_FRAGMENT_SHADER, PASSTHROUGH_FRAGMENT_SHADER);
-            if (vs && fs)
-            {
-                m_passthrough_shader = glCreateProgram();
-                glAttachShader(m_passthrough_shader, vs);
-                glAttachShader(m_passthrough_shader, fs);
-                glLinkProgram(m_passthrough_shader);
-                glUseProgram(m_passthrough_shader);
-                glUniform1i(glGetUniformLocation(m_passthrough_shader, "u_texture"), 0);
-            }
-            if (vs) glDeleteShader(vs);
-            if (fs) glDeleteShader(fs);
-        }
-    }
-
-    SYNCDBG(7, "Lens FBOs created: %dx%d (scene=%u passA=%u passB=%u)",
-            w, h, m_lens_scene_fbo, m_lens_pass_fbo_a, m_lens_pass_fbo_b);
-}
-
-IPostProcessPass* RendererOpenGL::CreateLensPass(LensEffectType type)
-{
-    switch (type)
-    {
-        case LensEffectType::Mist:         return new GLMistPass();
-        case LensEffectType::Displacement: return new GLDisplacementPass();
-        case LensEffectType::Flyeye:       return new GLFlyeyePass();
-        case LensEffectType::Overlay:      return new GLOverlayPass();
-        default:                           return nullptr;
-    }
-}
-
-void RendererOpenGL::ApplyLensGPUPasses()
-{
-    const PostProcessCommandBuffers& pp = m_render_graph.GetPostProcessBuffersRT();
-    if (!pp.lens.has_value() || pp.lens->count <= 0)
-        return;
-
-    EnsureLensFBOs();
-    if (!m_lens_pass_fbo_a || !m_lens_pass_fbo_b)
-        return;
-
-    // Ping-pong: scene_tex → pass_a → pass_b → ...
-    unsigned int src_tex = m_lens_scene_tex;
-    bool flip = false;
-    for (int i = 0; i < pp.lens->count; ++i)
-    {
-        IPostProcessPass* pass = pp.lens->passes[i];
-        unsigned int dst_fbo = flip ? m_lens_pass_fbo_b : m_lens_pass_fbo_a;
-        unsigned int dst_tex = flip ? m_lens_pass_tex_b : m_lens_pass_tex_a;
-        pass->Apply(src_tex, dst_fbo, m_rt_frame_state.screen_w, m_rt_frame_state.screen_h);
-        src_tex = dst_tex;
-        flip = !flip;
-    }
-
-    // Blit final result to default framebuffer
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glViewport(0, 0, m_rt_frame_state.screen_w, m_rt_frame_state.screen_h);
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glDisable(GL_BLEND);
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, src_tex);
-    glUseProgram(m_passthrough_shader);
-    glBindVertexArray(m_vao);
-    glDrawArrays(GL_TRIANGLES, 0, 6);
-    glBindVertexArray(0);
-
-    glDepthMask(GL_TRUE);
-    glUseProgram(0);
-}
-
 bool RendererOpenGL::SubmitOverheadMap(const uint8_t* tile_colors, int tiles_x, int tiles_y,
                                         int dst_x, int dst_y, int dst_w, int dst_h)
 {
@@ -2337,6 +2174,11 @@ IMapFadePass* RendererOpenGL::GetMapFadePass()
     return m_gl_mapfade;
 }
 
+ILensRenderer* RendererOpenGL::GetLensRenderer()
+{
+    return m_gl_lens;
+}
+
 ITextRenderer* RendererOpenGL::GetTextRenderer()
 {
     return m_textRenderer;
@@ -2499,25 +2341,32 @@ bool RendererOpenGL::CompileSubRendererShaders()
     return true;
 }
 
-void RendererOpenGL::upload_palette_texture()
+void RendererOpenGL::upload_palette_buffer(const unsigned char* pal768)
 {
-    // Read from the per-frame snapshot — not from live lbPalette — so the render
-    // thread never races against a concurrent LbPaletteSet() on the game thread.
-    // Use m_palette_upload_buf (member, heap-allocated) rather than a local stack
-    // array.  NVIDIA's Threaded Optimisation can defer reading the glTexSubImage2D
-    // pixel pointer past the function return; a stack buffer would be recycled by
-    // then.  The member buffer lives for the lifetime of the renderer.
+    // Expand a 6-bit indexed palette (768 bytes RGB) into the RGBA palette
+    // texture. Uses m_palette_upload_buf (member, heap-allocated) rather than a
+    // local stack array — NVIDIA's Threaded Optimisation can defer reading the
+    // glTexSubImage2D pixel pointer past the function return; a stack buffer
+    // would be recycled by then. The member buffer lives for the renderer's life.
     for (int i = 0; i < 256; ++i)
     {
-        m_palette_upload_buf[i * 4 + 0] = (uint8_t)(m_rt_frame_state.palette[i * 3 + 0] << 2);
-        m_palette_upload_buf[i * 4 + 1] = (uint8_t)(m_rt_frame_state.palette[i * 3 + 1] << 2);
-        m_palette_upload_buf[i * 4 + 2] = (uint8_t)(m_rt_frame_state.palette[i * 3 + 2] << 2);
+        m_palette_upload_buf[i * 4 + 0] = (uint8_t)(pal768[i * 3 + 0] << 2);
+        m_palette_upload_buf[i * 4 + 1] = (uint8_t)(pal768[i * 3 + 1] << 2);
+        m_palette_upload_buf[i * 4 + 2] = (uint8_t)(pal768[i * 3 + 2] << 2);
         m_palette_upload_buf[i * 4 + 3] = 255;
     }
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, m_texPalette);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 256, 1, GL_RGBA, GL_UNSIGNED_BYTE, m_palette_upload_buf);
     glActiveTexture(GL_TEXTURE0);
+}
+
+void RendererOpenGL::upload_palette_texture()
+{
+    // Read from the per-frame snapshot — not from live lbPalette — so the render
+    // thread never races against a concurrent LbPaletteSet() on the game thread.
+    // TODO : Pallete code owned by renderer, not copy of lbPalette.  Then we can remove the snapshot and just use the renderer's copy.
+    upload_palette_buffer(m_rt_frame_state.palette);
 }
 
 bool RendererOpenGL::init_fade_table_texture()

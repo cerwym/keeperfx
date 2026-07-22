@@ -15,6 +15,7 @@
 
 #include "renderer/backends/SoftwareWorldViewRenderer.h"
 #include "renderer/backends/SoftwareMapFadePass.h"
+#include "renderer/backends/SoftwareLensRenderer.h"
 #include "renderer/backends/SoftwareTextRenderer.h"
 #include "renderer/backends/SoftwareUIRenderer.h"
 #include "renderer/backends/SWCursorLayer.h"
@@ -126,6 +127,7 @@ bool RendererSoftware::Init()
     // Initialize sub-renderers
     m_worldViewRenderer = new SoftwareWorldViewRenderer();
     m_mapFadePass = new SoftwareMapFadePass();
+    m_lensRenderer = new SoftwareLensRenderer();
     m_textRenderer = new SoftwareTextRenderer();
     m_uiRenderer = new SoftwareUIRenderer();
     m_cursorLayer = new SWCursorLayer();
@@ -151,6 +153,8 @@ void RendererSoftware::Shutdown()
     m_worldViewRenderer = nullptr;
     delete m_mapFadePass;
     m_mapFadePass = nullptr;
+    delete m_lensRenderer;
+    m_lensRenderer = nullptr;
     delete m_textRenderer;
     m_textRenderer = nullptr;
     delete m_uiRenderer;
@@ -522,57 +526,6 @@ void RendererSoftware::DrawSwipeOverlay(struct TbSpriteSheet* sprites, int frame
     }
 }
 
-void RendererSoftware::BeginLensCapture()
-{
-    m_lens_capture_active = false;
-    if (!lens_is_ready())
-        return;
-
-    m_lens_buffer = lens_get_render_target();
-    m_lens_buffer_w = lens_get_render_target_width();
-    m_lens_buffer_h = lens_get_render_target_height();
-    if (!m_lens_buffer || m_lens_buffer_w == 0 || m_lens_buffer_h == 0)
-        return;
-
-    m_saved_wscreen = RendererGetWScreen();
-    m_saved_graphics_w = RendererScreenWidth();
-    m_saved_graphics_h = RendererScreenHeight();
-    RendererStoreViewport(&m_saved_viewport);
-
-    memset(m_lens_buffer, 0, (size_t)m_lens_buffer_w * (size_t)m_lens_buffer_h * sizeof(TbPixel));
-    RendererSetWScreen(m_lens_buffer);
-    RendererSetScreenDimensions((int)m_lens_buffer_w, (int)m_lens_buffer_h);
-    RendererSetViewport(0, 0, RendererScreenWidth(), RendererScreenHeight());
-    setup_engine_window(0, 0, RendererGetScreenWidth(), RendererGetScreenHeight());
-    m_lens_capture_active = true;
-}
-
-void RendererSoftware::EndLensCapture()
-{
-    if (!m_lens_capture_active)
-        return;
-
-    struct PlayerInfo* player = get_my_player();
-    const long view_width = player->engine_window_width / pixel_size;
-    const long view_height = player->engine_window_height / pixel_size;
-    const long view_x = player->engine_window_x / pixel_size;
-    const long view_y = player->engine_window_y / pixel_size;
-
-    RendererSetWScreen(m_saved_wscreen);
-    RendererSetScreenDimensions(m_saved_graphics_w, m_saved_graphics_h);
-    RendererLoadViewport(&m_saved_viewport);
-    setup_engine_window(0, 0, RendererGetScreenWidth(), RendererGetScreenHeight());
-
-    const long dst_offset = view_y * RendererScreenWidth() + view_x;
-    draw_lens_effect(RendererGetWScreen() + dst_offset, RendererScreenWidth(),
-        m_lens_buffer, m_lens_buffer_w, view_width, view_height, view_x, game.applied_lens_type);
-
-    m_lens_capture_active = false;
-    m_lens_buffer = nullptr;
-    m_lens_buffer_w = 0;
-    m_lens_buffer_h = 0;
-}
- 
 const char* RendererSoftware::GetName() const
 {
     return "Software";
@@ -586,6 +539,11 @@ IWorldViewRenderer* RendererSoftware::GetWorldViewRenderer()
 IMapFadePass* RendererSoftware::GetMapFadePass()
 {
     return m_mapFadePass;
+}
+
+ILensRenderer* RendererSoftware::GetLensRenderer()
+{
+    return m_lensRenderer;
 }
 
 ITextRenderer* RendererSoftware::GetTextRenderer()

@@ -80,6 +80,19 @@ extern "C" {
 #define RENDERER_DARKNESS_FOG        2
 
 /* ---------------------------------------------------------------------------
+ * Lens colour-fidelity mode constants (lens_color_mode field)
+ * ------------------------------------------------------------------------- */
+/** Accurate: possessed-creature lens effects (currently the Mist fade) are
+ *  reproduced in 8-bit palette-index space — the scene is reverse-mapped to a
+ *  palette index, run through the original DK fade table, then re-decoded. Bit
+ *  for bit identical to the software renderer (banding included).  Default. */
+#define RENDERER_LENS_COLOR_ACCURATE  0
+/** Truecolor: lens effects operate directly on the decoded RGBA scene (smooth,
+ *  no 8-bit quantisation) so modders can supply truecolor lens textures that
+ *  look 1:1 with what they authored.  Cosmetic; OpenGL only. */
+#define RENDERER_LENS_COLOR_TRUECOLOR 1
+
+/* ---------------------------------------------------------------------------
  * Lighting pipeline mode constants (lighting_mode field)
  * ------------------------------------------------------------------------- */
 /** Software-accurate lighting: per-vertex Gouraud shade from the DK fade table.
@@ -264,6 +277,17 @@ typedef struct RendererSettings {
     /** Fog density / opacity (darkness_mode == FOG only).  Range [0,1].
      *  0.0 = transparent; 1.0 = fully opaque fog.  Default: 0.4. */
     float fog_density;
+
+    /* --- Lens colour fidelity (possession eye-lens effects) --- */
+
+    /** Colour mode for possessed-creature lens effects (currently the Mist fade).
+     *  RENDERER_LENS_COLOR_ACCURATE (0)  = 8-bit paletted fade, bit-exact with the
+     *      software renderer (default).
+     *  RENDERER_LENS_COLOR_TRUECOLOR (1) = smooth RGBA blend, so modder-supplied
+     *      truecolor lens textures look 1:1 with what they authored.
+     *  OpenGL only; the software renderer is always paletted.  A per-lens
+     *  lenses.cfg field may override this default per creature. */
+    int   lens_color_mode;
 
     /* --- Creature depth-fail outline --- */
 

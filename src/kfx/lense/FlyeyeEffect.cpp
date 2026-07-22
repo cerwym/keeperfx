@@ -362,29 +362,45 @@ TbBool FlyeyeEffect::Setup(long lens_idx)
     FreeLookupTable();
     m_current_lens = lens_idx;
 
-    if (m_gpu_pass == nullptr)
+    SYNCDBG(7, "Flyeye effect ready");
+    return true;
+}
+
+bool FlyeyeEffect::BuildGPUParams(LensGPUPassParams& out) const
+{
+    (void)out;
+    // Flyeye is a GPU effect realized entirely through the per-pixel remap table
+    // produced by BuildRemap(); no scalar params are needed.
+    return m_current_lens >= 0;
+}
+
+bool FlyeyeEffect::BuildRemap(int render_w, int render_h,
+                              std::vector<unsigned char>& out_pixels,
+                              int& out_w, int& out_h, uint32_t& io_version)
+{
+    if (m_current_lens < 0 || render_w <= 0 || render_h <= 0)
+        return false;
+
+    if (m_lookup_table == nullptr ||
+        m_table_width != render_w || m_table_height != render_h)
     {
-        if (IRenderer* active_renderer = RendererGetActive())
-        {
-            m_gpu_pass = active_renderer->CreateLensPass(LensEffectType::Flyeye);
-        }
-    }
-    if (m_gpu_pass != nullptr)
-    {
-        if (m_gpu_pass->Init())
-        {
-            LensGPUPassParams params;
-            m_gpu_pass->Configure(params);
-        }
-        else
-        {
-            SYNCDBG(7, "GPU flyeye pass init failed — CPU fallback");
-            delete m_gpu_pass;
-            m_gpu_pass = nullptr;
-        }
+        BuildLookupTable(render_w, render_h);
+        if (m_lookup_table == nullptr)
+            return false;
+        ++m_remap_version;
     }
 
-    SYNCDBG(7, "Flyeye effect ready");
+    out_w = (int)m_table_width;
+    out_h = (int)m_table_height;
+    io_version = m_remap_version;
+
+    if (m_remap_version != m_remap_emitted_version)
+    {
+        const size_t n = (size_t)m_table_width * (size_t)m_table_height * sizeof(FlyeyeLookupEntry);
+        const unsigned char* src = reinterpret_cast<const unsigned char*>(m_lookup_table);
+        out_pixels.assign(src, src + n);
+        m_remap_emitted_version = m_remap_version;
+    }
     return true;
 }
 
@@ -392,12 +408,6 @@ void FlyeyeEffect::Cleanup()
 {
     FreeLookupTable();
     m_current_lens = -1;
-    if (m_gpu_pass != nullptr)
-    {
-        m_gpu_pass->Free();
-        delete m_gpu_pass;
-        m_gpu_pass = nullptr;
-    }
 }
 
 TbBool FlyeyeEffect::Draw(LensRenderContext* ctx)

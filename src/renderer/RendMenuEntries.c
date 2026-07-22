@@ -65,6 +65,7 @@ static const char* s_glow_blend_opts[]  = { "Additive", "Screen" };
 static const char* s_zoom_opts[]        = { "Overhead", "Isometric" };
 static const char* s_shadow_type_opts[] = { "Off", "1", "2", "3", "4", "Circle" };
 static const char* s_outline_mode_opts[]= { "Off", "Silhouette", "Edge" };
+static const char* s_lens_color_opts[]  = { "Accurate", "Truecolor" };
 
 /* ---------------------------------------------------------------------------
  * Entry table
@@ -247,6 +248,16 @@ static RendMenuEntry s_entries[] = {
       en_outline_enabled,
       .w.slider_f = { &g_renderer_settings.creature_outline_alpha,
                       0.0f, 1.0f, 0.05f } },
+
+    /* ------------------------------------------------------------------ */
+    { RMENU_WIDGET_SECTION, "LENS" },
+
+    { RMENU_WIDGET_CYCLE, "Lens colour mode",
+      "Possession lens colour fidelity.  Accurate: 8-bit paletted, bit-exact "
+      "with software.  Truecolor: smooth RGBA (for truecolor lens textures)",
+      en_gpu,
+      .w.cycle = { &g_renderer_settings.lens_color_mode,
+                   s_lens_color_opts, 2 } },
 
     /* ------------------------------------------------------------------ */
     { RMENU_WIDGET_SECTION, "VIEW" },

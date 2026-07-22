@@ -23,14 +23,17 @@
 #include "MistEffect.h"
 
 #include <string.h>
+#include <cmath>
 #include "../../config_lenses.h"
 #include "../../lens_api.h"
+#include "../../game_legacy.h"
 #include "../../custom_sprites.h"
 #include "../../globals.h"
 #include "../../vidmode.h"
 #include "../../vidfade.h"
 #include "renderer/RendererManager.h"
 #include "renderer/IPostProcessPass.h"
+#include "renderer/RendererSettings.h"
 
 #include "../../keeperfx.hpp"
 #include "../../post_inc.h"
@@ -52,6 +55,7 @@ public:
                unsigned char pos_x_step, unsigned char pos_y_step,
                unsigned char sec_x_step, unsigned char sec_y_step);
     void SetAnimation(long counter, long speed);
+    void SetOffsets(int pos_x, int pos_y, int sec_x, int sec_y);
     void Render(unsigned char *dstbuf, long dstpitch, 
                unsigned char *srcbuf, long srcpitch,
                long width, long height);
@@ -108,6 +112,14 @@ void CMistFade::SetAnimation(long a1, long a2)
 {
     this->animation_counter = a1;
     this->animation_speed = a2;
+}
+
+void CMistFade::SetOffsets(int pos_x, int pos_y, int sec_x, int sec_y)
+{
+    this->position_offset_x  = (unsigned char)(pos_x & 0xFF);
+    this->position_offset_y  = (unsigned char)(pos_y & 0xFF);
+    this->secondary_offset_x = (unsigned char)(sec_x & 0xFF);
+    this->secondary_offset_y = (unsigned char)(sec_y & 0xFF);
 }
 
 void CMistFade::Animate()
@@ -240,39 +252,67 @@ TbBool MistEffect::Setup(long lens_idx)
                    (unsigned char)cfg->mist_sec_y_step);
     renderer->SetAnimation(0, 1024);
 
+    m_pos_x = 0.0f;   m_pos_y = 0.0f;
+    m_sec_x = 50.0f;  m_sec_y = 128.0f;
+    m_vel_pos_x =  (float)(signed char)(unsigned char)cfg->mist_pos_x_step;
+    m_vel_pos_y =  (float)(signed char)(unsigned char)cfg->mist_pos_y_step;
+    m_vel_sec_x = -(float)(signed char)(unsigned char)cfg->mist_sec_x_step; // subtracted in software
+    m_vel_sec_y =  (float)(signed char)(unsigned char)cfg->mist_sec_y_step;
+
     // Store renderer in user data (we'll manage it through the base class)
     m_user_data = renderer;
     m_current_lens = lens_idx;
 
-    if (m_gpu_pass == nullptr)
-    {
-        if (IRenderer* active_renderer = RendererGetActive())
-        {
-            m_gpu_pass = active_renderer->CreateLensPass(LensEffectType::Mist);
-        }
-    }
-    if (m_gpu_pass != nullptr)
-    {
-        if (m_gpu_pass->Init())
-        {
-            LensGPUPassParams params;
-            params.mist_data       = (const unsigned char*)eye_lens_memory;
-            params.mist_pos_x_step = (unsigned char)cfg->mist_pos_x_step;
-            params.mist_pos_y_step = (unsigned char)cfg->mist_pos_y_step;
-            params.mist_sec_x_step = (unsigned char)cfg->mist_sec_x_step;
-            params.mist_sec_y_step = (unsigned char)cfg->mist_sec_y_step;
-            m_gpu_pass->Configure(params);
-        }
-        else
-        {
-            SYNCDBG(7, "GPU mist pass init failed — CPU fallback");
-            delete m_gpu_pass;
-            m_gpu_pass = nullptr;
-        }
-    }
-
     SYNCDBG(7, "Mist effect ready");
     return true;
+}
+
+bool MistEffect::BuildGPUParams(LensGPUPassParams& out) const
+{
+    if (m_current_lens < 0)
+        return false;
+    const struct LensConfig* cfg = &lenses_conf.lenses[m_current_lens];
+    out.mist_data       = (const unsigned char*)eye_lens_memory;
+    out.mist_pos_x_step = (unsigned char)cfg->mist_pos_x_step;
+    out.mist_pos_y_step = (unsigned char)cfg->mist_pos_y_step;
+    out.mist_sec_x_step = (unsigned char)cfg->mist_sec_x_step;
+    out.mist_sec_y_step = (unsigned char)cfg->mist_sec_y_step;
+    // Current animation offsets, advanced by AdvanceAnimation() on the game thread.
+    // The GPU pass consumes these directly instead of self-accumulating per frame.
+    out.mist_pos_x = m_pos_x;
+    out.mist_pos_y = m_pos_y;
+    out.mist_sec_x = m_sec_x;
+    out.mist_sec_y = m_sec_y;
+    // Fog tint the amplitude field fades toward. The software path fades per
+    // palette index via a fade table; on GL (RGBA scene) we approximate that with
+    // a blend toward a dark "dirt" fog. r,g,b,density.
+    out.mist_color[0] = 0.22f;
+    out.mist_color[1] = 0.20f;
+    out.mist_color[2] = 0.16f;
+    out.mist_color[3] = 0.65f;
+    // Fade-table row base (software: fade_data = &pixmap.fade_tables[mist_lightness*256]).
+    out.mist_lightness = (int)cfg->mist_lightness;
+    // Colour fidelity: per-lens override (>=0) wins, otherwise the global default.
+    if (cfg->truecolor >= 0)
+        out.mist_truecolor = (cfg->truecolor != 0);
+    else
+        out.mist_truecolor = (g_renderer_settings.lens_color_mode == RENDERER_LENS_COLOR_TRUECOLOR);
+    return true;
+}
+
+void MistEffect::AdvanceAnimation(float delta)
+{
+    if (m_current_lens < 0)
+        return;
+    auto wrap256 = [](float v) -> float {
+        v = std::fmod(v, 256.0f);
+        if (v < 0.0f) v += 256.0f;
+        return v;
+    };
+    m_pos_x = wrap256(m_pos_x + m_vel_pos_x * delta);
+    m_pos_y = wrap256(m_pos_y + m_vel_pos_y * delta);
+    m_sec_x = wrap256(m_sec_x + m_vel_sec_x * delta);
+    m_sec_y = wrap256(m_sec_y + m_vel_sec_y * delta);
 }
 
 void MistEffect::Cleanup()
@@ -286,12 +326,6 @@ void MistEffect::Cleanup()
             m_user_data = NULL;
         }
         m_current_lens = -1;
-        if (m_gpu_pass != nullptr)
-        {
-            m_gpu_pass->Free();
-            delete m_gpu_pass;
-            m_gpu_pass = nullptr;
-        }
     }
 }
 
@@ -310,10 +344,13 @@ TbBool MistEffect::Draw(LensRenderContext* ctx)
     // Mist reads from viewport-aligned source
     unsigned char* viewport_src = ctx->srcbuf + ctx->viewport_x;
     
-    // Render mist effect
+    // Push the shared animation phase into the renderer, draw, then advance the
+    // phase by this frame's game.delta_time so the drift speed is frame-rate
+    // independent (identical to the GPU path, which consumes the same offsets).
+    renderer->SetOffsets((int)m_pos_x, (int)m_pos_y, (int)m_sec_x, (int)m_sec_y);
     renderer->Render(ctx->dstbuf, ctx->dstpitch, viewport_src, ctx->srcpitch,
                     ctx->width, ctx->height);
-    renderer->Animate();
+    AdvanceAnimation(game.delta_time);
     
     ctx->buffer_copied = true;  // Mist writes to dstbuf
     return true;

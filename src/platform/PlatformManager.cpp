@@ -219,11 +219,6 @@ extern "C" size_t PlatformManager_GetScratchSize()
     return PlatformManager::Get()->GetScratchSize();
 }
 
-extern "C" size_t PlatformManager_GetPolyPoolSize()
-{
-    return PlatformManager::Get()->GetPolyPoolSize();
-}
-
 extern "C" TbBool PlatformManager_ForcesAllModesAvailable()
 {
     IPlatform* p = PlatformManager::Get();

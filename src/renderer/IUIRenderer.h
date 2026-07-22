@@ -399,8 +399,7 @@ public:
     virtual void PopulateFromIR(const UICommandBuffers& /*cmds*/, const FrameState& /*fs*/) {}
 
     /** Flush any WorldOverlay sprites submitted via SetWorldOverlay() since
-     *  the last call.  Called from the render thread during the world bucket walk,
-     *  once per bucket after draw_3d_sprites_for_bucket().
+     *  the last call.
      *  GPU: flushes the WorldOverlay quad queue to the GPU and clears it.
      *  CPU default: no-op. */
     virtual void DrawWorldSprites() {}
