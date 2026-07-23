@@ -136,21 +136,18 @@ TbBool reset_all_minimap_interpolation = false;
 
 /******************************************************************************/
 
-// Writes a single minimap pixel.
-// If the renderer provided a pixel buffer (s_minimap_pixels != NULL), writes
-// into it at (x, y) with stride = MapDiagonalLength.
-// Otherwise writes directly to RendererGetWScreen() (software mode).
+// Writes a single minimap pixel into the renderer-owned buffer at (x, y),
+// stride = MapDiagonalLength.  Every backend supplies a buffer, so game code
+// never touches the framebuffer here.
 void panel_map_draw_pixel(RealScreenCoord x, RealScreenCoord y, TbPixel col)
 {
+    if (s_minimap_pixels == NULL)
+        return;
     if ((y >= 0) && (y < MapDiagonalLength))
     {
         if ((x >= MapShapeStart[y]) && (x < MapShapeEnd[y]))
         {
-            if (s_minimap_pixels != NULL) {
-                s_minimap_pixels[y * MapDiagonalLength + x] = col;
-            } else {
-                RendererGetWScreen()[(PanelMapY + y) * RendererScreenWidth() + (PanelMapX + x)] = col;
-            }
+            s_minimap_pixels[y * MapDiagonalLength + x] = col;
         }
     }
 }
@@ -1300,8 +1297,6 @@ void panel_map_draw_slabs(long x, long y, long units_per_px, long zoom)
     // auto_gen_tables sets MapDiagonalLength; acquire the GPU buffer afterwards so
     // AcquireMinimapBuffer receives the correct (non-zero) size on the very first frame.
     auto_gen_tables(units_per_px);
-    // In GPU mode, acquire a renderer-owned pixel buffer for this frame.
-    // In software mode, AcquireMinimapBuffer returns NULL and pixels go directly to WScreen.
     s_minimap_pixels = UIRenderer_AcquireMinimapBuffer(MapDiagonalLength);
     update_panel_colors();
     struct PlayerInfo *player = get_my_player();
@@ -1343,16 +1338,12 @@ void panel_map_draw_slabs(long x, long y, long units_per_px, long zoom)
 
     TbPixel *bkgnd_line;
     bkgnd_line = MapBackground;
-    TbPixel *out_line;
-    long out_stride;
-    if (s_minimap_pixels != NULL) {
-        // Buffer was already zeroed by AcquireMinimapBuffer; use it as output.
-        out_line   = s_minimap_pixels;
-        out_stride = MapDiagonalLength;
-    } else {
-        out_line   = &RendererGetWScreen()[PanelMapX + RendererScreenWidth() * PanelMapY];
-        out_stride = RendererScreenWidth();
-    }
+    if (s_minimap_pixels == NULL)
+        return;
+    // Buffer was already zeroed by AcquireMinimapBuffer; use it as output.
+    TbPixel *out_line   = s_minimap_pixels;
+    long     out_stride = MapDiagonalLength;
+    const TbBool bake_background = !RendererGetCapabilities().compositesMinimapBackground;
     int h;
     for (h = 0; h < MapDiagonalLength; h++)
     {
@@ -1396,12 +1387,13 @@ void panel_map_draw_slabs(long x, long y, long units_per_px, long zoom)
             int pnmap_idx;
             pnmap_idx = ((precor_x>>16)) + (((precor_y>>16)) * (game.map_subtiles_x + 1) );
             int pncol_idx;
-            if (s_minimap_pixels != NULL) {
-                // GPU mode: MapBackground is all-zeros; skip the multiply entirely.
-                pncol_idx = PanelMap[pnmap_idx];
-            } else {
+            if (bake_background) {
                 pncol_idx = PanelMap[pnmap_idx] + (*bkgnd * PnC_End);
                 bkgnd++;
+            } else {
+                // Backend composites the background itself; MapBackground is
+                // all-zeros there, so skip the multiply entirely.
+                pncol_idx = PanelMap[pnmap_idx];
             }
             *out = PanelColours[pncol_idx];
             precor_x += shift_y;
@@ -1417,12 +1409,8 @@ void panel_map_draw_slabs(long x, long y, long units_per_px, long zoom)
 
 /**
  * After panel_map_draw_slabs + panel_map_draw_overlay_things have finished
- * writing into the renderer-owned pixel buffer (GPU mode) or RendererGetWScreen() (software mode),
- * submit the minimap data to the UIRenderer so it appears in the frame.
- *
- * In GPU mode: triggers GLUIRenderer to upload the buffer to a GL_R8 texture and
- * queue a palette-lookup quad at (PanelMapX, PanelMapY).
- * In software mode: no-op — the draws already went directly to WScreen.
+ * writing into the renderer-owned pixel buffer, submit the minimap data to the
+ * UIRenderer so it appears in the frame.
  */
 void panel_map_submit_to_renderer(void)
 {

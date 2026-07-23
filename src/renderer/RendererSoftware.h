@@ -79,9 +79,7 @@ public:
 
     BackendCapabilities GetCapabilities() const override {
         BackendCapabilities c = {};
-        c.supportsRuntimeSwitch = 1;
         c.supportsMovieCapture  = 1;
-        c.supportsScreenshot    = 1;
         return c;
     }
 

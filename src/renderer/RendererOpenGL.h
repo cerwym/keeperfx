@@ -69,16 +69,7 @@ public:
         BackendCapabilities c = {};
         c.hasGPURenderPath        = 1;
         c.wantsFullscreenViewport = 1;
-        c.hasGPUOverheadMap       = 1;
-        c.hasGPUMapFade           = 1;
-        c.hasGPUOverlay           = 1;
-        c.hasGPULandviewZoom      = 1;
-        c.hasGPUVideoFrame        = 1;
-        c.hasGPUSprites           = 1;
-        c.hasSwipeOverlay         = 1;
-        c.supportsRuntimeSwitch   = 1;
-        c.supportsGPUPasses       = 1;
-        c.supportsScreenshot      = 1;
+        c.compositesMinimapBackground = 1;
         return c;
     }
 

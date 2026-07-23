@@ -108,59 +108,12 @@ void draw_lit_bar64k(long pos_x, long pos_y, int units_per_px, long width)
 
 void draw_slab64k_background(long pos_x, long pos_y, long width, long height)
 {
-    // GPU path: submit tiled slab quad to back layer; staging buffer stays clean in that area.
-    if (UIRenderer_SubmitSlabBackground(pos_x, pos_y, width, height))
-        return;
-    // No CPU staging buffer is available (always true in GL mode). If the GPU
-    // path above declined (e.g. slab texture not yet uploaded on the first
-    // frame(s)), skip rather than dereferencing a NULL screen pointer — matches
-    // the guard used by IUIRenderer::SetupMinimapBackground and SWCursorLayer.
-    if (RendererGetWScreen() == NULL)
-        return;
-    long i;
-    long scr_x = pos_x / pixel_size;
-    long scr_y = pos_y / pixel_size;
-    long scr_h = height / pixel_size;
-    long scr_w = width / pixel_size;
-    if (scr_x < 0)
-    {
-        i = scr_x + width / pixel_size;
-        scr_x = 0;
-        scr_w = i;
-    }
-    if (scr_y < 0)
-    {
-        i = scr_y + scr_h;
-        scr_y = 0;
-        scr_h = i;
-    }
-    i = RendererPhysicalWidth() * pixel_size;
-    if (scr_x + scr_w > i)
-        scr_w = i - scr_x;
-    i = RendererGetScreenHeight();
-    if (scr_y + scr_h > i)
-        scr_h = i - scr_y;
-    TbPixel* out = &RendererGetWScreen()[scr_x + RendererScreenWidth() * scr_y];
-    for (i=0; scr_h > i; i++)
-    {
-        TbPixel* inp = &gui_slab[GUI_SLAB_DIMENSION * (i % GUI_SLAB_DIMENSION)];
-        if (scr_w >= GUI_SLAB_DIMENSION)
-        {
-            for (int j = 0; j < GUI_SLAB_DIMENSION; j++) out[j] = inp[j] ? inp[j] : 1;
-            int k;
-            for (k = GUI_SLAB_DIMENSION; k < scr_w - GUI_SLAB_DIMENSION; k += GUI_SLAB_DIMENSION)
-            {
-                for (int j = 0; j < GUI_SLAB_DIMENSION; j++) (out + k)[j] = inp[j] ? inp[j] : 1;
-            }
-            if (width - k > 0) {
-                for (int j = 0; j < scr_w - k; j++) (out + k)[j] = inp[j] ? inp[j] : 1;
-            }
-        } else
-        {
-            for (int j = 0; j < scr_w; j++) out[j] = inp[j] ? inp[j] : 1;
-        }
-        out += RendererScreenWidth();
-    }
+    // Every backend realises this itself: GPU submits a tiled quad to the back
+    // layer, software tiles the slab into its own target.  A false return means
+    // the backend could not draw yet (e.g. slab texture not uploaded on the
+    // first frame) — there is nothing game code can do about that, and it has
+    // no framebuffer of its own to fall back to.
+    UIRenderer_SubmitSlabBackground(pos_x, pos_y, width, height);
 }
 
 void draw_slab64k(long pos_x, long pos_y, int units_per_px, long width, long height)

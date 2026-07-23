@@ -480,7 +480,7 @@ bool RendererOpenGL::Init()
     //            512 UI commands, 256 text glyphs.
     m_render_graph.Reserve(4096, 2048, 512,  /* world_tiles, sprites, shadows */
                            512,  256,        /* ui_cmds, text_cmds */
-                           0,    0);         /* shadow_cmds, debug_cmds */
+                           0);               /* shadow_cmds */
 
     // scRGB fake-HDR: compile sRGB→linear lift shader when backbuffer is float.
     if (platform_is_scrgb_surface())
@@ -970,8 +970,7 @@ void RendererOpenGL::EndFrame_GL()
                            m_world_renderer,
                            RendererGetUIRenderer(),
                            m_textRenderer,
-                           nullptr,  // IShadowRenderer — not yet implemented
-                           nullptr); // IDebugRenderer  — not yet implemented
+                           nullptr); // IShadowRenderer — not yet implemented
 
     // ── Lens FBO redirect
     // redirect world rendering to the lens scene FBO so GPU post-process
