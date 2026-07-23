@@ -595,6 +595,29 @@ int RendererIsScreenLocked(void)
     return s_screen_locked ? 1 : 0;
 }
 
+TbBool RendererReadFramePixels(RendererFramePixelsFn fn, void* user)
+{
+    if (!fn)
+        return false;
+    // Capture normally runs inside the engine's existing draw bracket; only take
+    // a lock of our own when one is not already held, and release exactly what
+    // we took.
+    const bool held = s_screen_locked;
+    if (!held && !RendererLockScreen())
+        return false;
+
+    TbBool ret = false;
+    if (s_wscreen != NULL)
+    {
+        ret = fn(s_wscreen, (int)RendererScreenWidth(), (int)RendererScreenHeight(),
+                 (int)s_graphicsScreenWidth, user);
+    }
+
+    if (!held)
+        RendererUnlockScreen();
+    return ret;
+}
+
 int RendererConsumeWorldDrawn(void)
 {
     int v = s_world_drawn_this_frame ? 1 : 0;

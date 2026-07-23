@@ -112,6 +112,14 @@ void RendererPresentFrame(void);
 /** Query whether the screen is currently locked (WScreen is valid). */
 int RendererIsScreenLocked(void);
 
+/** Callback receiving the current frame's CPU pixels.  The pointer is valid
+ *  ONLY for the duration of the call — do not retain it. */
+typedef TbBool (*RendererFramePixelsFn)(const unsigned char* pixels,
+                                        int width, int height, int pitch,
+                                        void* user);
+
+TbBool RendererReadFramePixels(RendererFramePixelsFn fn, void* user);
+
 /** Returns 1 (and resets) if the world was drawn this frame.
  *  Used by the software renderer to snapshot the clean world surface. */
 int RendererConsumeWorldDrawn(void);

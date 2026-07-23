@@ -104,20 +104,22 @@ TbBool movie_record_stop(void)
     return true;
 }
 
+/** Encode one movie frame from the renderer's pixels.  
+*/
+static TbBool movie_encode_frame_cb(const unsigned char *pixels,
+                                    int width, int height, int pitch, void *user)
+{
+    (void)width; (void)height; (void)pitch;
+    return anim_record_frame((unsigned char *)pixels, (unsigned char *)user);
+}
+
 TbBool movie_record_frame(void)
 {
     if (!RendererGetCapabilities().supportsMovieCapture) return true;
-    short lock_mem = RendererIsScreenLocked();
-    if (!lock_mem)
-    {
-        if (!RendererLockScreen())
-            return false;
-  }
-  RendererPaletteGet(cap_palette);
-  short result = anim_record_frame(RendererGetWScreen(), cap_palette);
-  if (!lock_mem)
-    RendererUnlockScreen();
-  return result;
+    RendererPaletteGet(cap_palette);
+    // The renderer owns the framebuffer and any locking around the read; game
+    // code never holds a pixel pointer of its own.
+    return RendererReadFramePixels(movie_encode_frame_cb, cap_palette);
 }
 
 /**
