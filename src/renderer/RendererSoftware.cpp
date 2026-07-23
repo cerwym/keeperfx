@@ -410,6 +410,13 @@ bool RendererSoftware::SubmitOverheadMap(const uint8_t* tile_colors, int tiles_x
             if (op == 0x00)
                 continue;
 
+            // r_val is a row in the GPU's combined colour-table texture, which is
+            // uploaded from pixmap.fade_tables.  TbColorTables packs fade_tables
+            // [64*256] immediately before ghost[256*256], so texture row N is
+            // ghost row N-64.  Undo that offset to index pixmap.ghost directly.
+            const unsigned int ghost_row = (r_val >= 64u) ? (unsigned int)(r_val - 64u) : 0u;
+            const unsigned int ghost_base = ghost_row << 8;
+
             for (int py = 0; py < block_h; ++py)
             {
                 uint8_t* dst = &dst_screen[(dst_y + ty * block_h + py) * screen_w + dst_x + tx * block_w];
@@ -421,13 +428,14 @@ bool RendererSoftware::SubmitOverheadMap(const uint8_t* tile_colors, int tiles_x
                         *dst = r_val;
                         break;
                     case 0x01:
-                        *dst = pixmap.ghost[((unsigned int)r_val << 8) | *dst];
+                        *dst = pixmap.ghost[ghost_base | *dst];
                         break;
                     case 0x02:
-                        *dst = (uint8_t)(102 + (pixmap.ghost[(64u << 8) | *dst] >> 6));
+                        // Gems: master uses ghost row 0 — 102 + (ghost[bg] >> 6).
+                        *dst = (uint8_t)(102 + (pixmap.ghost[ghost_base | *dst] >> 6));
                         break;
                     case 0x03:
-                        *dst = (uint8_t)(pixmap.ghost[((unsigned int)r_val << 8) | *dst] + 2);
+                        *dst = (uint8_t)(pixmap.ghost[ghost_base | *dst] + 2);
                         break;
                     default:
                         *dst = r_val;
