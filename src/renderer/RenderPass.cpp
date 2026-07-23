@@ -1,9 +1,7 @@
 #include "RenderPass.h"
-#include "backends/IBackend.h"
-#include "backends/SoftwareBackend.h"
-#if defined(__VITA__)
+// Included on every platform so `delete m_backend` sees a complete type; the
+// class itself compiles to stubs off-Vita.
 #include "backends/VitaGPUBackend.h"
-#endif
 #include "RenderPassProfiler.h"
 #include "bflib_basics.h"
 #include <cstdio>
@@ -42,28 +40,22 @@ bool RenderPassSystem::Initialize(BackendType backend)
         m_backend = nullptr;
     }
     
-    // Select backend
+    // Select backend.  The GPU sprite path exists only on Vita; every other
+    // platform submits sprites through the UIRenderer IR path instead.
     switch (backend) {
         case BACKEND_GPU_VITA:
-#if defined(__VITA__)
-            m_backend = new VitaGPUBackend();
-            break;
-#else
-            ERRORLOG("RenderPassSystem: GPU_VITA backend not available on this platform");
-            return false;
-#endif
-            
-        case BACKEND_SOFTWARE:
-            m_backend = new SoftwareBackend();
-            break;
-            
         case BACKEND_AUTO:
 #if defined(__VITA__)
             m_backend = new VitaGPUBackend();
-#else
-            m_backend = new SoftwareBackend();
-#endif
             break;
+#else
+            ERRORLOG("RenderPassSystem: GPU sprite backend is Vita-only");
+            return false;
+#endif
+
+        case BACKEND_SOFTWARE:
+            ERRORLOG("RenderPassSystem: no software sprite backend; sprites go through the UIRenderer IR path");
+            return false;
 
         default:
             ERRORLOG("RenderPassSystem: Unknown backend type: %d", backend);
@@ -78,8 +70,7 @@ bool RenderPassSystem::Initialize(BackendType backend)
     // For GPU_VITA backend, call Initialize() to set up GPU resources
 #if defined(__VITA__)
     if (backend == BACKEND_GPU_VITA || (backend == BACKEND_AUTO)) {
-        VitaGPUBackend* gpu_backend = dynamic_cast<VitaGPUBackend*>(m_backend);
-        if (gpu_backend && !gpu_backend->Initialize()) {
+        if (m_backend && !m_backend->Initialize()) {
             ERRORLOG("RenderPassSystem: GPU backend initialization failed");
             delete m_backend;
             m_backend = nullptr;

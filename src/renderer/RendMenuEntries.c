@@ -38,7 +38,7 @@ static int en_fog_mode(void)
 /** Settings that require the GPU render path (OpenGL / Vulkan). */
 static int en_gpu(void)
 {
-    return RendererHasGPURenderPath();
+    return RendererGetCapabilities().hasGPURenderPath;
 }
 
 /** Creature outline alpha is only editable when the outline is enabled. */

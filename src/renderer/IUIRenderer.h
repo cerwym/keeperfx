@@ -194,14 +194,14 @@ public:
 
     /**
      * Return a scratch buffer for minimap pixels.
-     * CPU default: returns nullptr (caller writes directly to lbDisplay.WScreen).
+     * CPU default: returns nullptr (caller writes directly to the CPU staging buffer).
      * GPU backends return a palette-index buffer; caller fills it then calls SubmitMinimap().
      */
     virtual uint8_t* AcquireMinimapBuffer(int size);
 
     /**
      * Finalise the minimap for this frame.
-     * CPU default: no-op (pixels were written directly to lbDisplay.WScreen).
+     * CPU default: no-op (pixels were written directly to the CPU staging buffer).
      */
     virtual void SubmitMinimap(int screen_x, int screen_y, int size);
 

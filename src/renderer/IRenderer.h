@@ -129,9 +129,9 @@ public:
     /** Composite a caller-owned buffer over the GPU frame with index-0 transparency.
      *
      *  Equivalent to SubmitStagingOverlay() but takes an external buffer rather
-     *  than reading from the CPU staging buffer (lbDisplay.WScreen).  Use this
+     *  than reading from the CPU staging buffer.  Use this
      *  when the caller has drawn into a local bounce buffer and must NOT write
-     *  to lbDisplay.WScreen (e.g. compressed_window_draw() in GL mode).
+     *  to the CPU staging buffer (e.g. compressed_window_draw() in GL mode).
      *
      *  The GL backend copies buf into its internal staging texture so the caller
      *  may free buf immediately after this call.

@@ -71,3 +71,5 @@ VITAGL_SECURITY_AUDIT.md
 /build/packaging/assets.local.json
 
 *.obj
+
+*.log

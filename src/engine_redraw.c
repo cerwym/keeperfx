@@ -260,7 +260,7 @@ void store_engine_window(TbGraphicsWindow *ewnd,int divider)
     ewnd->ptr = NULL;
 }
 
-// RENDER-SW-IMPL: software implementation of IMapFadePass — per-pixel wipe into lbDisplay.WScreen.
+// RENDER-SW-IMPL: software implementation of IMapFadePass — per-pixel wipe into the software draw surface (outbuf).
 // Hardcoded to 320×200; hardware path would use a UV-warp fragment shader at native resolution.
 // Called directly by SoftwareMapFadePass::StepFadeIn/StepFadeOut via map_fade_in/map_fade_out.
 void map_fade(unsigned char *outbuf, unsigned char *srcbuf1, unsigned char *srcbuf2, unsigned char *fade_tbl, unsigned char *ghost_tbl, long a6, long const xmax, long const ymax, long a9)

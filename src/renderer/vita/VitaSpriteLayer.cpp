@@ -15,7 +15,7 @@
 #include <string.h>
 #include "globals.h"
 #include "bflib_basics.h"
-#include "bflib_video.h"    // lbPalette, lbDisplay, Lb_SPRITE_* flags
+#include "bflib_video.h"    // lbPalette, Lb_SPRITE_* flags
 #include "renderer/vita/VitaPassCommon.h"
 #include "post_inc.h"
 

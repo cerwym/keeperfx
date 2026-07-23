@@ -3,7 +3,7 @@
 #include "bflib_basics.h"
 #include "bflib_sprite.h"
 
-class IBackend;
+class VitaGPUBackend;
 
 /**
  * RenderPassSystem
@@ -86,6 +86,6 @@ private:
     RenderPassSystem(const RenderPassSystem&) = delete;
     RenderPassSystem& operator=(const RenderPassSystem&) = delete;
     
-    IBackend* m_backend;
+    VitaGPUBackend* m_backend;
     static RenderPassSystem* s_instance;
 };

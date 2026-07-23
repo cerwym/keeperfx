@@ -172,8 +172,8 @@ extern unsigned char *dither_end;
 extern unsigned char *lbSpriteReMapPtr;
 extern long scale_up;
 /** Per-call draw flags for the software rasteriser.  Set by every Lb*
- *  entry point from either a caller-supplied parameter or lbDisplay.DrawFlags.
- *  Internal rasteriser routines read this instead of the global. */
+ *  entry point from its caller-supplied draw-flags parameter.
+ *  Internal rasteriser routines read this instead of a global. */
 extern TbDrawFlagsMask lb_draw_flags;
 extern int32_t xsteps_array[2*SPRITE_SCALING_XSTEPS];
 extern int32_t ysteps_array[2*SPRITE_SCALING_YSTEPS];

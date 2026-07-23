@@ -82,7 +82,7 @@ public:
      *  dst_x/y/w/h = screen destination rect (pixels).
      *  data        = raw RLE palette-index sprite data.
      *  src_w/h     = sprite source dimensions.
-     *  draw_flags  = lbDisplay.DrawFlags at time of call (flip, transpar, remap, additive).
+     *  draw_flags  = caller draw flags at time of call (flip, transpar, remap, additive).
      *  remap       = colour remap table (may be NULL).
      *  sprite_id   = frame-resolved global sprite index (stable cache key; -1 = unknown).
      *  Returns 1 if the GPU handled it (CPU blit should be skipped), 0 to fall back. */

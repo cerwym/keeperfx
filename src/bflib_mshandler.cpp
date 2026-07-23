@@ -35,8 +35,8 @@
 // Global variables
 int volatile lbMouseInstalled = false;
 int volatile lbMouseOffline = false;
-const struct TbSprite *lbMouseSprite = NULL; // current mouse cursor sprite (was lbDisplay.MouseSprite)
-struct TbMouseState lbMouse; // mouse input state (was embedded in lbDisplay)
+const struct TbSprite *lbMouseSprite = NULL; // current mouse cursor sprite
+struct TbMouseState lbMouse; // mouse input state
 class MouseStateHandler pointerHandler;
 
 /******************************************************************************/

@@ -104,8 +104,8 @@ private:
         int posx, posy, units_per_px;
         int wnd_x, wnd_y, wnd_width;        // lbTextJustifyWindow captured at queue time
         int clip_x, clip_y, clip_w, clip_h; // lbTextClipWindow captured at queue time
-        unsigned char  draw_colour;         // lbDisplay.DrawColour at queue time
-        uint32_t       draw_flags;          // lbDisplay.DrawFlags  at queue time
+        unsigned char  draw_colour;         // draw colour captured at queue time
+        uint32_t       draw_flags;          // draw flags captured at queue time
         std::string text;
         const struct TbSpriteSheet* font;   // Active font captured at call time
         const struct AsianFont* dbc_font;   // DBC font (nullptr when DBC off)
@@ -191,8 +191,8 @@ private:
     void FlushBatch();
 
     /** Emit GPU quads for one justified line segment [sbuf, ebuf).
-     *  Mirrors put_down_simpletext_sprites_resized.  Reads lbDisplay.DrawColour
-     *  and lbDisplay.DrawFlags as globals and updates them for any control codes
+     *  Mirrors put_down_simpletext_sprites_resized.  Reads and updates the
+     *  renderer's own draw colour/flags members for any control codes
      *  embedded in the segment (consistent with the software path).
      *  @param sbuf      Start of text segment (inclusive)
      *  @param ebuf      End of text segment (exclusive)

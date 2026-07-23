@@ -4,7 +4,7 @@
 /** @file SoftwareTextRenderer.cpp
  *     CPU software implementation of ITextRenderer.
  *     Owns font, DBC, and window state.  Drawing functions moved from
- *     bflib_sprfnt.c — sprite blits still go through lbDisplay globals.
+ *     bflib_sprfnt.c — glyph blits still go through the shared CPU rasteriser.
  */
 /******************************************************************************/
 #include "pre_inc.h"
@@ -339,7 +339,7 @@ TbBool SoftwareTextRenderer::DrawTextResized(int32_t posx, int32_t posy,
     RendererStoreViewport(&grwnd);
 
     // Load the clip window into the graphics window state so put_down functions
-    // write to the correct region of lbDisplay.WScreen.
+    // write to the correct region of the software draw surface.
     TbGraphicsWindow clip_grwnd;
     clip_grwnd.x      = m_clip_window.x;
     clip_grwnd.y      = m_clip_window.y;

@@ -34,7 +34,7 @@
 #include <algorithm>   // std::stable_sort (ExecuteImagePresentsFromIR)
 #include <utility>     // std::move
 
-#include "bflib_video.h"    // lbDisplay, RendererGetScreenWidth()/Height
+#include "bflib_video.h"    // RendererGetScreenWidth()/Height
 #include "bflib_sprite.h"   // TbSpriteSheet, get_sprite
 #include "kfx/assets/SpriteSheetManager.h" // deferred atlas rebuild drain
 #include "platform.h"       // platform_create_gl_context / swap / destroy

@@ -364,8 +364,8 @@ int RendererInit(RendererType type)
     SpriteSheetManager::Get().ScheduleRebuild();
 
     // Wire the LbSpriteDraw intercept for GPU sprite submission.
-    // Vita: route through VitaGPUBackend (IBackend path).
-    // OpenGL: route through UIRenderer (IR path) — no IBackend needed.
+    // Vita: route through VitaGPUBackend (the GPU sprite batch path).
+    // OpenGL: route through UIRenderer (IR path) — no sprite backend needed.
 #if defined(PLATFORM_VITA)
     if (type == RENDERER_VITA)
         RenderPass_Initialize(1); // BACKEND_GPU_VITA
@@ -474,11 +474,6 @@ TbBool RendererWantsFullscreenViewport()
     return (s_activeRenderer && s_activeRenderer->GetCapabilities().wantsFullscreenViewport) ? 1 : 0;
 }
 
-TbBool RendererHasGPURenderPath()
-{
-    return (s_activeRenderer && s_activeRenderer->GetCapabilities().hasGPURenderPath) ? 1 : 0;
-}
-
 struct BackendCapabilities RendererGetCapabilities()
 {
     if (s_activeRenderer)
@@ -535,7 +530,7 @@ void RendererClearScreen(unsigned char colour_index)
 /******************************************************************************/
 
 // Tracks whether the screen is currently locked (RendererLockScreen called, not yet unlocked).
-// Decoupled from lbDisplay.WScreen so that GPU mode (where WScreen is always null) works correctly.
+// Decoupled from any CPU framebuffer pointer so that GPU mode (no CPU framebuffer) works correctly.
 static bool s_screen_locked = false;
 static bool s_world_drawn_this_frame = false;
 
@@ -543,7 +538,7 @@ int RendererLockScreen(void)
 {
     if (!RendererBeginFrame())
         return 0;
-    if (RendererHasGPURenderPath()) {
+    if (RendererGetCapabilities().hasGPURenderPath) {
         // GPU mode: no CPU framebuffer. WScreen stays null for the entire frame.
         s_wscreen = NULL;
         s_graphicsWindowPtr = NULL;
@@ -709,7 +704,7 @@ void RendererSetScreenDimensions(int width, int height)
     s_graphicsScreenHeight         = height;
 }
 
-/** Set the physical (video-mode) resolution. Formerly lbDisplay.PhysicalScreen*. */
+/** Set the physical (video-mode) resolution. */
 void RendererSetPhysicalDimensions(int width, int height)
 {
     s_physicalScreenWidth  = width;
@@ -734,7 +729,7 @@ void RendererApplyPossessionPalette(long step, const unsigned char *main_palette
 {
     // GPU renderers use the screen tint overlay for possession/pain effects;
     // the software path must modify the INDEX8 surface palette directly.
-    if (RendererHasGPURenderPath())
+    if (RendererGetCapabilities().hasGPURenderPath)
         return;
     unsigned char palette[PALETTE_SIZE];
     for (int i = 0; i < PALETTE_COLORS; i++)

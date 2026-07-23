@@ -64,11 +64,6 @@ RendererType RendererGetActiveType(void);
  *  GPU renderers return true; software renderers return false. */
 TbBool RendererWantsFullscreenViewport(void);
 
-/** Returns true when the active renderer has a GPU-accelerated draw path.
- *  Use this instead of RendererGetActiveType() == RENDERER_OPENGL to avoid
- *  hard-coding backend checks.  True for GL and Vita; false for software. */
-TbBool RendererHasGPURenderPath(void);
-
 /** Returns a snapshot of the active backend's capability flags.
  *  Use specific fields (e.g. .supportsMovieCapture) instead of adding new
  *  boolean wrapper functions.  Returns an all-zero struct when no backend is
@@ -516,7 +511,7 @@ TbBool RendererSubmitLandviewZoom(const unsigned char* src_buf, int src_w, int s
                                   float scale);
 
 /** Composite an external palette-indexed buffer over the GPU frame with index-0
- *  transparency, without writing to lbDisplay.WScreen.
+ *  transparency, without writing to the CPU staging buffer.
  *  Use when game code has drawn into a local bounce buffer (e.g. in GL mode where
  *  WScreen must not be written).  The GL backend copies buf into its staging texture
  *  immediately so the caller may free buf after this call returns.
@@ -738,7 +733,7 @@ typedef struct RendererUIButtonDesc {
     struct { const struct TbSprite* spr; int32_t x, y; } segments[RENDERER_BUTTON_MAX_SEGMENTS];
     int32_t segment_count;
     int32_t units_per_px;
-    unsigned int label_draw_flags;           /**< lbDisplay.DrawFlags applied to the label draw. */
+    unsigned int label_draw_flags;           /**< Draw flags applied to the label draw. */
     const struct TbSpriteSheet* font;         /**< Label font; NULL (or text NULL) ⇒ no label. */
     const char* text;                         /**< Label text; NULL ⇒ no label. */
     int32_t text_x, text_y, text_w, text_h;   /**< Label text window (TextRenderer_SetWindow rect). */
@@ -781,7 +776,7 @@ TbBool UIRenderer_SubmitSlabBackground(int x, int y, int w, int h);
 /** Acquire the renderer's minimap pixel buffer for this frame.
  *  Returns a renderer-owned size×size buffer (GPU mode) that the caller fills
  *  with palette indices (0 = transparent), or NULL (software mode) in which case
- *  the caller writes directly to lbDisplay.WScreen at the minimap position.
+ *  the caller writes directly to the CPU staging buffer at the minimap position.
  *  Call UIRenderer_SubmitMinimap() once drawing into the buffer is complete. */
 unsigned char* UIRenderer_AcquireMinimapBuffer(int size);
 

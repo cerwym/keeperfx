@@ -121,9 +121,6 @@ unsigned short LbGraphicsScreenBPP(void)
     }
     // On error, return 0
     return 0;
-    // Old way - returns video BPP, not graphics BPP
-    // TbScreenModeInfo *mdinfo = LbScreenGetModeInfo(lbDisplay.ScreenMode);
-    // return mdinfo->BitsPerPixel;
 }
 
 TbScreenCoord LbGraphicsScreenWidth(void)
