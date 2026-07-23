@@ -23,8 +23,8 @@
 #include "bflib_video.h"
 #include "bflib_render.h"
 #include "bflib_sprite.h"    // TbSpriteSheet, get_sprite
-#include "bflib_vidraw.h"    // LbSpriteDrawResized
-#include "engine_render.h"   // draw_texture
+#include "bflib_vidraw.h"    // LbSpriteDrawResized, draw_texture
+#include "engine_render.h"
 #include "vidmode.h"
 #include "vidfade.h"         // pixmap ghost tables
 #include "renderer/RendererManager.h"
@@ -37,9 +37,6 @@
 #include <SDL3/SDL.h>
 #include <cstring>
 #include <cstdlib>
-
-extern "C" void draw_texture(int32_t texture_x, int32_t texture_y, int32_t texture_width, int32_t texture_height,
-                             int32_t texture_block_index, int32_t flags, int32_t fade_level);
 
 #include "post_inc.h"
 

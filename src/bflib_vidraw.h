@@ -190,6 +190,20 @@ void LbDrawCircle(long x, long y, long radius, TbPixel colour, TbDrawFlagsMask d
 
 void setup_vecs(unsigned char *screenbuf, unsigned char *nvec_map,
         unsigned int line_len, unsigned int width, unsigned int height);
+/** Texture-block orientation bits for draw_texture()'s `flags` parameter.
+ *  The eight legal values are exactly the combinations of these three bits;
+ *  any other bit set is rejected and nothing is drawn. */
+#define TMAP_FLIP_X      0x10  /**< sample the X axis right-to-left */
+#define TMAP_FLIP_Y      0x20  /**< sample the Y axis bottom-to-top */
+#define TMAP_TRANSPOSE   0x40  /**< swap the two texture axes (rotate) */
+#define TMAP_ORIENT_MASK (TMAP_FLIP_X | TMAP_FLIP_Y | TMAP_TRANSPOSE)
+
+/** Blit a scaled texture block into the rasteriser target set up by setup_vecs().
+ *  `flags` is a combination of TMAP_FLIP_X / TMAP_FLIP_Y / TMAP_TRANSPOSE;
+ *  `fade_level` >= 0 applies the matching pixmap.fade_tables row, < 0 draws
+ *  unfaded.  Implemented in renderer/software/bflib_render_tmap.c. */
+void draw_texture(int32_t texture_x, int32_t texture_y, int32_t texture_width, int32_t texture_height,
+        int32_t texture_block_index, int32_t flags, int32_t fade_level);
 void setup_steps(long posx, long posy, const struct TbSourceBuffer * src_buf, int32_t **xstep, int32_t **ystep, int *scanline);
 void setup_outbuf(const int32_t *xstep, const int32_t *ystep, uchar **outbuf, int *outheight);
 TbResult LbSpriteDrawUsingScalingData(long posx, long posy, const struct TbSourceBuffer *, TbDrawFlagsMask draw_flags);
