@@ -1975,7 +1975,7 @@ void RendererOpenGL::SubmitPiPRender(struct Camera* cam, int x, int y, int w, in
     }
 
     m_world_renderer->BeginPiPCapture();
-    m_world_renderer->BeginWorldPass(nullptr, 0, w, h, 0, 0);
+    m_world_renderer->BeginWorldPass(w, h, 0, 0);
     draw_view(cam, 0);
     cmd.world_capture = m_world_renderer->FinalizePiPCapture();
 

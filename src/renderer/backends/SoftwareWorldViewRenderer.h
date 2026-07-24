@@ -24,7 +24,7 @@ public:
     SoftwareWorldViewRenderer()  = default;
     ~SoftwareWorldViewRenderer() = default;
 
-    void BeginWorldPass(uint8_t* framebuf, int pitch, int w, int h,
+    void BeginWorldPass(int w, int h,
                         int vp_x, int vp_y) override;
     void DrawIsometricView() override;
     void DrawFrontView(struct Camera* cam) override;

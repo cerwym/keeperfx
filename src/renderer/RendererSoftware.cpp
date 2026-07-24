@@ -37,6 +37,7 @@
 #include <SDL3/SDL.h>
 #include <cstring>
 #include <cstdlib>
+#include <cmath>
 
 #include "post_inc.h"
 
@@ -385,6 +386,120 @@ bool RendererSoftware::SubmitTransparentBlit(const uint8_t* buf, int w, int h)
         if (buf[i] != 0)
             dst[i] = buf[i];
     }
+    return true;
+}
+
+bool RendererSoftware::SubmitLandviewZoom(const uint8_t* src_buf, int src_w, int /*src_h*/,
+                                          float center_map_x, float center_map_y,
+                                          float screen_cx, float screen_cy,
+                                          float scale)
+{
+    uint8_t* wscreen = RendererGetWScreen();
+    if (!src_buf || !wscreen)
+        return false;
+
+    // scale == src_delta/256 exactly (integer src_delta, 24-bit float mantissa
+    // covers the range), so this recovers the original integer step losslessly.
+    const long src_delta = lroundf(scale * 256.0f);
+    const long map_x  = (long)center_map_x;
+    const long map_y  = (long)center_map_y;
+    const long scr_x  = (long)screen_cx;
+    const long scr_y  = (long)screen_cy;
+    const long phys_w = RendererPhysicalWidth();
+    const long phys_h = RendererPhysicalHeight();
+
+    // ---- 4-quadrant zoom blit, relocated verbatim from frontzoom_to_point() ----
+    const uint8_t* src_start = &src_buf[src_w * map_y + map_x];
+    const long dst_scanln = RendererScreenWidth();
+    uint8_t* dst_buf = &wscreen[dst_scanln * scr_y + scr_x];
+    const uint8_t* src;
+    long bpos_x;
+    long bpos_y;
+    long x;
+    long y;
+    // Drawing first quadre
+    bpos_y = 0;
+    uint8_t* dst = dst_buf;
+    long dst_width  = scr_x;
+    long dst_height = scr_y;
+    for (y = 0; y <= dst_height; y++)
+    {
+        bpos_x = 0;
+        src = &src_start[-src_w * (bpos_y >> 8)];
+        for (x = 0; x <= dst_width; x++)
+        {
+            bpos_x += src_delta;
+            dst[-x] = src[-(bpos_x >> 8)];
+        }
+        dst -= dst_scanln;
+        bpos_y += src_delta;
+    }
+    // Drawing 2nd quadre
+    bpos_y = 0;
+    dst = dst_buf + 1;
+    dst_width  = -scr_x + phys_w - 1; // one pixel less in destination
+    dst_height = scr_y;
+    for (y = 0; y <= dst_height; y++)
+    {
+        bpos_x = (1 << 8); // one pixel less in source
+        src = &src_start[-src_w * (bpos_y >> 8)];
+        for (x = 0; x < dst_width; x++)
+        {
+            bpos_x += src_delta;
+            dst[x] = src[(bpos_x >> 8)];
+        }
+        dst -= dst_scanln;
+        bpos_y += src_delta;
+    }
+    // Drawing 3rd quadre
+    bpos_y = (1 << 8); // one pixel less in source
+    dst = dst_buf + dst_scanln;
+    dst_width  = scr_x;
+    dst_height = -scr_y + phys_h - 1; // one pixel less in destination
+    for (y = 0; y < dst_height; y++)
+    {
+        bpos_x = 0;
+        src = &src_start[src_w * (bpos_y >> 8)];
+        for (x = 0; x <= dst_width; x++)
+        {
+            bpos_x += src_delta;
+            dst[-x] = src[-(bpos_x >> 8)];
+        }
+        dst += dst_scanln;
+        bpos_y += src_delta;
+    }
+    // Drawing 4th quadre
+    bpos_y = (1 << 8);
+    dst = dst_buf + dst_scanln + 1;
+    dst_width  = -scr_x + phys_w - 1;
+    dst_height = -scr_y + phys_h - 1;
+    for (y = 0; y < dst_height; y++)
+    {
+        bpos_x = (1 << 8);
+        src = &src_start[src_w * (bpos_y >> 8)];
+        for (x = 0; x < dst_width; x++)
+        {
+            dst[x] = src[(bpos_x >> 8)];
+            bpos_x += src_delta;
+        }
+        dst += dst_scanln;
+        bpos_y += src_delta;
+    }
+    return true;
+}
+
+bool RendererSoftware::DrawLandviewFrame(const struct TbHugeSprite* spr, long sp_len,
+                                         int xshift, int yshift, int units_per_px)
+{
+    if (!spr || !RendererGetWScreen())
+        return false;
+    // Draw straight onto our framebuffer so the huge-sprite RLE keeps its own
+    // transparency (skipped runs stay clear; opaque pixels — index 0 included —
+    // are written).  This is what master did; routing through an index-0-keyed
+    // staging blit dropped the frame's black stone.
+    LbHugeSpriteDraw(spr, sp_len, RendererGetWScreen(),
+                     RendererScreenWidth(), RendererPhysicalHeight(),
+                     (short)xshift, (short)yshift, units_per_px);
     return true;
 }
 

@@ -62,6 +62,12 @@ public:
 
     void     NotifyFmvPalette(const uint8_t* bgra_1024) override;
     bool     SubmitTransparentBlit(const uint8_t* buf, int w, int h) override;
+    bool     SubmitLandviewZoom(const uint8_t* src_buf, int src_w, int src_h,
+                                float center_map_x, float center_map_y,
+                                float screen_cx, float screen_cy,
+                                float scale) override;
+    bool     DrawLandviewFrame(const struct TbHugeSprite* spr, long sp_len,
+                               int xshift, int yshift, int units_per_px) override;
     bool     SubmitOverheadMap(const uint8_t* tile_colors, int tiles_x, int tiles_y,
                                int dst_x, int dst_y, int dst_w, int dst_h) override;
     void     SubmitZoomBoxTiles(const uint16_t* tile_block_ids, int tiles_x, int tiles_y,

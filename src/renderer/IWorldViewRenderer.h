@@ -45,17 +45,15 @@ public:
     // =========================================================================
     // Frame setup
 
-    /** Bind the target CPU framebuffer and configure the rasterizer.
-     *  Must be called before any bucket-add calls for the current view.
-     *  @param framebuf  Pointer to the first scanline of the framebuffer
-     *                   (same pointer returned by RendererLockFramebuffer).
-     *  @param pitch     Row stride in bytes (may be wider than width).
+    /** Configure the rasterizer for the world view.  Must be called before any
+     *  bucket-add calls for the current view.  Each backend acquires whatever
+     *  target it needs internally (the software backend its CPU framebuffer, the
+     *  GPU backend nothing) — no pixel pointer crosses this interface.
      *  @param w         Viewport width in pixels.
      *  @param h         Viewport height in pixels.
      *  @param vp_x      Viewport left edge in screen pixels (0 if no sidebar).
      *  @param vp_y      Viewport top edge in screen pixels (0 if no sidebar). */
-    virtual void BeginWorldPass(uint8_t* framebuf, int pitch, int w, int h,
-                                int vp_x, int vp_y) = 0;
+    virtual void BeginWorldPass(int w, int h, int vp_x, int vp_y) = 0;
 
     // =========================================================================
     // Draw

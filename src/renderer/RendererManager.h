@@ -291,7 +291,7 @@ struct Camera; // forward declaration (defined in game_legacy.h)
  *  Call this once per view before adding geometry to the bucket list.
  *  vp_x/vp_y are the viewport's top-left corner in screen pixels (0,0 when
  *  no sidebar is present). */
-void WorldViewRenderer_BeginWorldPass(unsigned char* framebuf, int pitch, int w, int h,
+void WorldViewRenderer_BeginWorldPass(int w, int h,
                                       int vp_x, int vp_y);
 
 /** Draw the isometric/1st-person bucket list to the framebuffer.
@@ -528,6 +528,12 @@ TbBool RendererSubmitLandviewZoom(const unsigned char* src_buf, int src_w, int s
  *  @return true  (GL: queued; transparent blit runs at EndFrame).
  *          false (software renderer: caller should draw to WScreen + SubmitStagingOverlay). */
 TbBool RendererSubmitTransparentBlit(const unsigned char* buf, int w, int h);
+
+/** Draw the land-view ornate window frame (huge RLE sprite) onto the frame.
+ *  Software draws it directly with correct per-run transparency; returns false on
+ *  GPU backends, where the caller renders into a scratch buffer + transparent-blit. */
+TbBool RendererDrawLandviewFrame(const struct TbHugeSprite* spr, long sp_len,
+                                 int xshift, int yshift, int units_per_px);
 
 /** Draw the creature swipe overlay in possession mode.
  *  Delegates to the active renderer's DrawSwipeOverlay() which handles

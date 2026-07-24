@@ -9,14 +9,17 @@
 #include "renderer/backends/SoftwareWorldViewRenderer.h"
 #include "bflib_vidraw.h"
 #include "engine_render.h"
+#include "renderer/RendererManager.h"   // RendererGetGraphicsWindowPtr / RendererScreenWidth
 #include "post_inc.h"
 
 /******************************************************************************/
 
-void SoftwareWorldViewRenderer::BeginWorldPass(uint8_t* framebuf, int pitch, int w, int h,
-                                               int /*vp_x*/, int /*vp_y*/)
+void SoftwareWorldViewRenderer::BeginWorldPass(int w, int h, int /*vp_x*/, int /*vp_y*/)
 {
-    setup_vecs(framebuf, NULL, (unsigned int)pitch, (unsigned int)w, (unsigned int)h);
+    // The renderer owns the CPU framebuffer; point the rasteriser at the current
+    // graphics-window origin.  The engine no longer hands a pixel pointer in.
+    setup_vecs(RendererGetGraphicsWindowPtr(), NULL,
+               (unsigned int)RendererScreenWidth(), (unsigned int)w, (unsigned int)h);
 }
 
 void SoftwareWorldViewRenderer::DrawIsometricView()

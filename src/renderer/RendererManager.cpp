@@ -142,6 +142,14 @@ TbBool RendererSubmitTransparentBlit(const unsigned char* buf, int w, int h)
     return rend->SubmitTransparentBlit(buf, w, h) ? true : false;
 }
 
+TbBool RendererDrawLandviewFrame(const struct TbHugeSprite* spr, long sp_len,
+                                 int xshift, int yshift, int units_per_px)
+{
+    IRenderer* rend = RendererGetActive();
+    if (!rend) return false;
+    return rend->DrawLandviewFrame(spr, sp_len, xshift, yshift, units_per_px) ? true : false;
+}
+
 void RendererDrawSwipeOverlay(struct TbSpriteSheet* sprites, int frame,
                               int draw_lr, int engine_window_x)
 {
@@ -795,12 +803,11 @@ TbResult RendererWaitVbi(void)                   { return LbScreenWaitVbi(); }
 /* C-callable world-view renderer wrappers */
 /******************************************************************************/
 
-void WorldViewRenderer_BeginWorldPass(unsigned char* framebuf, int pitch, int w, int h,
-                                      int vp_x, int vp_y)
+void WorldViewRenderer_BeginWorldPass(int w, int h, int vp_x, int vp_y)
 {
     s_world_drawn_this_frame = true;
     if (RendererGetWorldViewRenderer())
-        RendererGetWorldViewRenderer()->BeginWorldPass(framebuf, pitch, w, h, vp_x, vp_y);
+        RendererGetWorldViewRenderer()->BeginWorldPass(w, h, vp_x, vp_y);
 }
 
 void WorldViewRenderer_DrawIsometricView(void)
