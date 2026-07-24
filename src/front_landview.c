@@ -779,15 +779,18 @@ void compressed_window_draw(void)
     long xshift = map_info.screen_shift_x * landview_frame_movement_scale_x / default_movement_scale / 2; // X speed is slower on aspect ratios wider than 4:3
     long yshift = map_info.screen_shift_y *landview_frame_movement_scale_y / default_movement_scale / 2; // Y speed is slower on aspect ratios taller than 4:3
 
-    // Software draws the huge sprite straight onto its framebuffer so the RLE
-    // transparency is honoured exactly (opaque index-0 stone stays; only the
-    // arch cut-out shows through).  GPU can't run the CPU sprite decoder, so it
-    // renders into a scratch buffer and composites that as an index-0-transparent
-    // overlay — acceptable there because the GPU frame path is a separate case.
+    // The renderer draws the frame so the huge-sprite RLE transparency is honoured
+    // exactly — opaque index-0 stone stays, only the arch cut-out shows through.
+    // Software rasterises it directly; OpenGL builds an explicit coverage mask and
+    // composites via the coverage shader.  Both keep index-0 as opaque paint.
     if (RendererDrawLandviewFrame(&map_window, map_window_len,
             xshift, yshift, units_per_pixel_landview_frame))
         return;
 
+    // Fallback for backends without a DrawLandviewFrame implementation (e.g. Vita):
+    // render into a scratch buffer and composite as an index-0-keyed overlay.  NOTE
+    // this drops opaque index-0 texels — the original long-standing bug — so it is a
+    // last resort until those backends implement coverage too.
     int w = RendererScreenWidth();
     int h = RendererPhysicalHeight();
     unsigned char* bounce = (unsigned char*)KfxCalloc((size_t)w, (size_t)h);
