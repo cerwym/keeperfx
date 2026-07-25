@@ -9514,7 +9514,7 @@ void draw_frontview_engine(struct Camera *cam)
     RendererStoreViewport(&grwnd);
     store_engine_window(&ewnd,pixel_size);
     RendererSetViewport(ewnd.x, ewnd.y, ewnd.width, ewnd.height);
-    WorldViewRenderer_BeginWorldPass(RendererGetGraphicsWindowPtr(), RendererScreenWidth(), ewnd.width, ewnd.height, ewnd.x, ewnd.y);
+    WorldViewRenderer_BeginWorldPass(ewnd.width, ewnd.height, ewnd.x, ewnd.y);
     // World-space overlay sprites (WorldOverlay/WorldOverlayFlat) no longer need
     // to be clipped out of the sidebar panel's screen area -- GameUI now draws
     // after them and is opaque where it draws, so it simply paints over

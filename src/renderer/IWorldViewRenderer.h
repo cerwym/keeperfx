@@ -45,17 +45,15 @@ public:
     // =========================================================================
     // Frame setup
 
-    /** Bind the target CPU framebuffer and configure the rasterizer.
-     *  Must be called before any bucket-add calls for the current view.
-     *  @param framebuf  Pointer to the first scanline of the framebuffer
-     *                   (same pointer returned by RendererLockFramebuffer).
-     *  @param pitch     Row stride in bytes (may be wider than width).
+    /** Configure the rasterizer for the world view.  Must be called before any
+     *  bucket-add calls for the current view.  Each backend acquires whatever
+     *  target it needs internally (the software backend its CPU framebuffer, the
+     *  GPU backend nothing) — no pixel pointer crosses this interface.
      *  @param w         Viewport width in pixels.
      *  @param h         Viewport height in pixels.
      *  @param vp_x      Viewport left edge in screen pixels (0 if no sidebar).
      *  @param vp_y      Viewport top edge in screen pixels (0 if no sidebar). */
-    virtual void BeginWorldPass(uint8_t* framebuf, int pitch, int w, int h,
-                                int vp_x, int vp_y) = 0;
+    virtual void BeginWorldPass(int w, int h, int vp_x, int vp_y) = 0;
 
     // =========================================================================
     // Draw
@@ -82,7 +80,7 @@ public:
      *  dst_x/y/w/h = screen destination rect (pixels).
      *  data        = raw RLE palette-index sprite data.
      *  src_w/h     = sprite source dimensions.
-     *  draw_flags  = lbDisplay.DrawFlags at time of call (flip, transpar, remap, additive).
+     *  draw_flags  = caller draw flags at time of call (flip, transpar, remap, additive).
      *  remap       = colour remap table (may be NULL).
      *  sprite_id   = frame-resolved global sprite index (stable cache key; -1 = unknown).
      *  Returns 1 if the GPU handled it (CPU blit should be skipped), 0 to fall back. */

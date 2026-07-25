@@ -231,6 +231,8 @@ void LensManager::DrawSoftware(unsigned char* srcbuf, unsigned char* dstbuf,
            m_initialized, m_applied_lens, m_active_custom_lens.c_str());
     
     LensRenderContext ctx = {};
+    ctx.srcbuf = srcbuf;
+    ctx.dstbuf = dstbuf;
     ctx.srcpitch = srcpitch;
     ctx.dstpitch = dstpitch;
     ctx.width = width;

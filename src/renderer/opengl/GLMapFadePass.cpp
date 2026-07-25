@@ -306,7 +306,7 @@ int32_t GLMapFadePass::StepFadeIn(int32_t step)
         struct EngineRenderState saved_state;
         engine_save_render_state(&saved_state);
         setup_engine_window(0, 0, m_screen_w, m_screen_h);
-        WorldViewRenderer_BeginWorldPass(nullptr, 0, m_screen_w, m_screen_h, 0, 0);
+        WorldViewRenderer_BeginWorldPass(m_screen_w, m_screen_h, 0, 0);
         struct Camera* cam;
         if (player->view_mode_restore == PVM_IsoWibbleView ||
             player->view_mode_restore == PVM_IsoStraightView)
@@ -357,7 +357,7 @@ int32_t GLMapFadePass::StepFadeOut(int32_t step)
         struct EngineRenderState saved_state;
         engine_save_render_state(&saved_state);
         setup_engine_window(0, 0, m_screen_w, m_screen_h);
-        WorldViewRenderer_BeginWorldPass(nullptr, 0, m_screen_w, m_screen_h, 0, 0);
+        WorldViewRenderer_BeginWorldPass(m_screen_w, m_screen_h, 0, 0);
         struct Camera* cam;
         if (player->view_mode_restore == PVM_IsoWibbleView ||
             player->view_mode_restore == PVM_IsoStraightView)

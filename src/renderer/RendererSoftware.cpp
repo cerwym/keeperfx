@@ -23,8 +23,8 @@
 #include "bflib_video.h"
 #include "bflib_render.h"
 #include "bflib_sprite.h"    // TbSpriteSheet, get_sprite
-#include "bflib_vidraw.h"    // LbSpriteDrawResized
-#include "engine_render.h"   // draw_texture
+#include "bflib_vidraw.h"    // LbSpriteDrawResized, draw_texture
+#include "engine_render.h"
 #include "vidmode.h"
 #include "vidfade.h"         // pixmap ghost tables
 #include "renderer/RendererManager.h"
@@ -37,9 +37,7 @@
 #include <SDL3/SDL.h>
 #include <cstring>
 #include <cstdlib>
-
-extern "C" void draw_texture(int32_t texture_x, int32_t texture_y, int32_t texture_width, int32_t texture_height,
-                             int32_t texture_block_index, int32_t flags, int32_t fade_level);
+#include <cmath>
 
 #include "post_inc.h"
 
@@ -168,10 +166,11 @@ bool RendererSoftware::BeginFrame()
     m_screenW = RendererPhysicalWidth();
     m_screenH = RendererPhysicalHeight();
 
-    // RendererBeginFrame() is not guarded and runs twice per present (once in
-    // RendererLockScreen, again in RendererPresentFrame).  Open the IR graph
-    // only once per frame — a second BeginFrame() would wipe the UI already
-    // appended this frame.  EndFrame() clears m_frame_open.
+    // RendererBeginFrame() is not guarded and runs more than once per present
+    // (the engine opens the frame, then RendererPresentFrame calls it again
+    // defensively).  Open the IR graph only once per frame — a second
+    // BeginFrame() would wipe the UI already appended this frame.  EndFrame()
+    // clears m_frame_open.
     if (m_frame_open)
         return true;
     m_frame_open = true;
@@ -210,11 +209,7 @@ void RendererSoftware::EndFrame()
     FrameState fs = {};
     m_render_graph.Flip(fs);
 
-    // The deferred UI+text replay and the cursor draw into the WScreen buffer,
-    // but RendererUnlockScreen() nulled it before present.  The draw-surface
-    // pixels are always valid (no real SDL lock needed), so point WScreen back
-    // at them with a full-screen graphics window for the replay, then clear it.
-    if (lbDrawSurface)
+    if (lbDrawSurface && LockFramebuffer(nullptr) != nullptr)
     {
         RendererSetWScreen(static_cast<TbPixel*>(lbDrawSurface->pixels));
         RendererSetScreenDimensions(lbDrawSurface->pitch, lbDrawSurface->h);
@@ -251,6 +246,7 @@ void RendererSoftware::EndFrame()
         CursorLayer_Draw();
 
         RendererSetWScreen(NULL);
+        UnlockFramebuffer(); // release before the blit — SDL rejects a locked surface
     }
 
     SDL_Window* win = static_cast<SDL_Window*>(platform_get_sdl_window());
@@ -391,6 +387,120 @@ bool RendererSoftware::SubmitTransparentBlit(const uint8_t* buf, int w, int h)
     return true;
 }
 
+bool RendererSoftware::SubmitLandviewZoom(const uint8_t* src_buf, int src_w, int /*src_h*/,
+                                          float center_map_x, float center_map_y,
+                                          float screen_cx, float screen_cy,
+                                          float scale)
+{
+    uint8_t* wscreen = RendererGetWScreen();
+    if (!src_buf || !wscreen)
+        return false;
+
+    // scale == src_delta/256 exactly (integer src_delta, 24-bit float mantissa
+    // covers the range), so this recovers the original integer step losslessly.
+    const long src_delta = lroundf(scale * 256.0f);
+    const long map_x  = (long)center_map_x;
+    const long map_y  = (long)center_map_y;
+    const long scr_x  = (long)screen_cx;
+    const long scr_y  = (long)screen_cy;
+    const long phys_w = RendererPhysicalWidth();
+    const long phys_h = RendererPhysicalHeight();
+
+    // ---- 4-quadrant zoom blit, relocated verbatim from frontzoom_to_point() ----
+    const uint8_t* src_start = &src_buf[src_w * map_y + map_x];
+    const long dst_scanln = RendererScreenWidth();
+    uint8_t* dst_buf = &wscreen[dst_scanln * scr_y + scr_x];
+    const uint8_t* src;
+    long bpos_x;
+    long bpos_y;
+    long x;
+    long y;
+    // Drawing first quadre
+    bpos_y = 0;
+    uint8_t* dst = dst_buf;
+    long dst_width  = scr_x;
+    long dst_height = scr_y;
+    for (y = 0; y <= dst_height; y++)
+    {
+        bpos_x = 0;
+        src = &src_start[-src_w * (bpos_y >> 8)];
+        for (x = 0; x <= dst_width; x++)
+        {
+            bpos_x += src_delta;
+            dst[-x] = src[-(bpos_x >> 8)];
+        }
+        dst -= dst_scanln;
+        bpos_y += src_delta;
+    }
+    // Drawing 2nd quadre
+    bpos_y = 0;
+    dst = dst_buf + 1;
+    dst_width  = -scr_x + phys_w - 1; // one pixel less in destination
+    dst_height = scr_y;
+    for (y = 0; y <= dst_height; y++)
+    {
+        bpos_x = (1 << 8); // one pixel less in source
+        src = &src_start[-src_w * (bpos_y >> 8)];
+        for (x = 0; x < dst_width; x++)
+        {
+            bpos_x += src_delta;
+            dst[x] = src[(bpos_x >> 8)];
+        }
+        dst -= dst_scanln;
+        bpos_y += src_delta;
+    }
+    // Drawing 3rd quadre
+    bpos_y = (1 << 8); // one pixel less in source
+    dst = dst_buf + dst_scanln;
+    dst_width  = scr_x;
+    dst_height = -scr_y + phys_h - 1; // one pixel less in destination
+    for (y = 0; y < dst_height; y++)
+    {
+        bpos_x = 0;
+        src = &src_start[src_w * (bpos_y >> 8)];
+        for (x = 0; x <= dst_width; x++)
+        {
+            bpos_x += src_delta;
+            dst[-x] = src[-(bpos_x >> 8)];
+        }
+        dst += dst_scanln;
+        bpos_y += src_delta;
+    }
+    // Drawing 4th quadre
+    bpos_y = (1 << 8);
+    dst = dst_buf + dst_scanln + 1;
+    dst_width  = -scr_x + phys_w - 1;
+    dst_height = -scr_y + phys_h - 1;
+    for (y = 0; y < dst_height; y++)
+    {
+        bpos_x = (1 << 8);
+        src = &src_start[src_w * (bpos_y >> 8)];
+        for (x = 0; x < dst_width; x++)
+        {
+            dst[x] = src[(bpos_x >> 8)];
+            bpos_x += src_delta;
+        }
+        dst += dst_scanln;
+        bpos_y += src_delta;
+    }
+    return true;
+}
+
+bool RendererSoftware::DrawLandviewFrame(const struct TbHugeSprite* spr, long sp_len,
+                                         int xshift, int yshift, int units_per_px)
+{
+    if (!spr || !RendererGetWScreen())
+        return false;
+    // Draw straight onto our framebuffer so the huge-sprite RLE keeps its own
+    // transparency (skipped runs stay clear; opaque pixels — index 0 included —
+    // are written).  This is what master did; routing through an index-0-keyed
+    // staging blit dropped the frame's black stone.
+    LbHugeSpriteDraw(spr, sp_len, RendererGetWScreen(),
+                     RendererScreenWidth(), RendererPhysicalHeight(),
+                     (short)xshift, (short)yshift, units_per_px);
+    return true;
+}
+
 bool RendererSoftware::SubmitOverheadMap(const uint8_t* tile_colors, int tiles_x, int tiles_y,
                                          int dst_x, int dst_y, int dst_w, int dst_h)
 {
@@ -413,6 +523,13 @@ bool RendererSoftware::SubmitOverheadMap(const uint8_t* tile_colors, int tiles_x
             if (op == 0x00)
                 continue;
 
+            // r_val is a row in the GPU's combined colour-table texture, which is
+            // uploaded from pixmap.fade_tables.  TbColorTables packs fade_tables
+            // [64*256] immediately before ghost[256*256], so texture row N is
+            // ghost row N-64.  Undo that offset to index pixmap.ghost directly.
+            const unsigned int ghost_row = (r_val >= 64u) ? (unsigned int)(r_val - 64u) : 0u;
+            const unsigned int ghost_base = ghost_row << 8;
+
             for (int py = 0; py < block_h; ++py)
             {
                 uint8_t* dst = &dst_screen[(dst_y + ty * block_h + py) * screen_w + dst_x + tx * block_w];
@@ -424,13 +541,14 @@ bool RendererSoftware::SubmitOverheadMap(const uint8_t* tile_colors, int tiles_x
                         *dst = r_val;
                         break;
                     case 0x01:
-                        *dst = pixmap.ghost[((unsigned int)r_val << 8) | *dst];
+                        *dst = pixmap.ghost[ghost_base | *dst];
                         break;
                     case 0x02:
-                        *dst = (uint8_t)(102 + (pixmap.ghost[(64u << 8) | *dst] >> 6));
+                        // Gems: master uses ghost row 0 — 102 + (ghost[bg] >> 6).
+                        *dst = (uint8_t)(102 + (pixmap.ghost[ghost_base | *dst] >> 6));
                         break;
                     case 0x03:
-                        *dst = (uint8_t)(pixmap.ghost[((unsigned int)r_val << 8) | *dst] + 2);
+                        *dst = (uint8_t)(pixmap.ghost[ghost_base | *dst] + 2);
                         break;
                     default:
                         *dst = r_val;

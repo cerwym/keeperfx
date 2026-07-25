@@ -84,8 +84,7 @@ public:
     void SetFadeTexture(GLuint tex) { m_fade_tex = tex; }
 
     // IWorldViewRenderer
-    void BeginWorldPass(unsigned char* framebuf, int pitch, int w, int h,
-                        int vp_x, int vp_y) override;
+    void BeginWorldPass(int w, int h, int vp_x, int vp_y) override;
     void DrawIsometricView() override;
     void DrawFrontView(struct Camera* cam) override;
     const char* GetName() const override { return "GLWorldViewRenderer"; }
@@ -525,8 +524,6 @@ private:
     int            m_screen_h   = 0;   // GT:
     int            m_vp_x       = 0;   // GT: viewport left edge in screen pixels
     int            m_vp_y       = 0;   // GT: viewport top edge in screen pixels
-    unsigned char* m_framebuf   = nullptr; // GT: viewport start in staging buffer
-    int            m_pitch      = 0;       // GT: staging buffer row stride (bytes)
     int            m_current_bucket   = 0;   // GT: bucket index being processed
     float          m_current_sprite_z = 0.0f; // GT: NDC depth for current bucket's sprites
     // Composite sort key for the world-sprite entry being captured:

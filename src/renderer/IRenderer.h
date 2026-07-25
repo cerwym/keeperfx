@@ -26,6 +26,7 @@ class IWorldViewRenderer;
 class IMapFadePass;
 class ILensRenderer;
 struct TbSpriteSheet;
+struct TbHugeSprite;
 class ITextRenderer;
 class IUIRenderer;
 class ICursorLayer;
@@ -129,9 +130,9 @@ public:
     /** Composite a caller-owned buffer over the GPU frame with index-0 transparency.
      *
      *  Equivalent to SubmitStagingOverlay() but takes an external buffer rather
-     *  than reading from the CPU staging buffer (lbDisplay.WScreen).  Use this
+     *  than reading from the CPU staging buffer.  Use this
      *  when the caller has drawn into a local bounce buffer and must NOT write
-     *  to lbDisplay.WScreen (e.g. compressed_window_draw() in GL mode).
+     *  to the CPU staging buffer (e.g. compressed_window_draw() in GL mode).
      *
      *  The GL backend copies buf into its internal staging texture so the caller
      *  may free buf immediately after this call.
@@ -146,6 +147,24 @@ public:
     virtual bool SubmitTransparentBlit(const uint8_t* buf, int w, int h)
     {
         (void)buf; (void)w; (void)h;
+        return false;
+    }
+
+    /** Draw the land-view ornate window frame (a huge RLE sprite) onto the frame.
+     *
+     *  The huge-sprite RLE encodes transparency as skipped runs, so opaque pixels
+     *  — INCLUDING palette index 0 (black) — must be preserved.  Rendering into a
+     *  flat index-0-keyed staging buffer would drop the frame's black areas (the
+     *  long-standing "frame improperly transparent" bug), so backends that can run
+     *  the CPU decoder draw the sprite straight onto their own target.
+     *
+     *  @return true  if handled (software: drew directly with correct transparency).
+     *          false if unhandled — the caller renders into a scratch buffer and
+     *                calls SubmitTransparentBlit() (GPU path; index-0 keyed). */
+    virtual bool DrawLandviewFrame(const struct TbHugeSprite* spr, long sp_len,
+                                   int xshift, int yshift, int units_per_px)
+    {
+        (void)spr; (void)sp_len; (void)xshift; (void)yshift; (void)units_per_px;
         return false;
     }
 

@@ -2009,8 +2009,7 @@ int GLWorldViewRenderer::BeginWorldSpriteCapture(int32_t bucket_idx)
 
 /******************************************************************************/
 
-void GLWorldViewRenderer::BeginWorldPass(unsigned char* framebuf, int pitch,
-                                          int w, int h, int vp_x, int vp_y)
+void GLWorldViewRenderer::BeginWorldPass(int w, int h, int vp_x, int vp_y)
 {
     KFX_ZONE("WVR::BeginWorldPass");
     ASSERT_GAME_THREAD();
@@ -2022,8 +2021,6 @@ void GLWorldViewRenderer::BeginWorldPass(unsigned char* framebuf, int pitch,
     m_screen_h        = h;
     m_vp_x            = vp_x;
     m_vp_y            = vp_y;
-    m_framebuf        = framebuf;
-    m_pitch           = pitch;
     m_current_bucket    = 0;
     m_world_pass_active  = true;
     m_kspr_atlas_hits    = 0;

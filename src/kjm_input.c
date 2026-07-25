@@ -440,12 +440,12 @@ void update_wheel_scrolled(void)
 }
 
 /**
- * Translates mouse input from lbDisplay struct into simple variables.
+ * Translates mouse input from lbMouse into simple variables.
  */
 void update_mouse(void)
 {
 #ifdef PLATFORM_VITA
-  // Drive lbDisplay button state from native SCE controller input so that
+  // Drive lbMouse button state from native SCE controller input so that
   // click/release detection (which reads lbMouse.MLeftButton) works for
   // face buttons.  The SDL joystick path only fires MActn_LBUTTONDOWN for R1;
   // Cross/Circle are never mapped to mouse clicks through SDL on Vita.

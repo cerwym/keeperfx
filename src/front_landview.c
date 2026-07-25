@@ -749,16 +749,11 @@ TbBool set_pointer_graphic_spland(long frame)
 
 void frontzoom_to_point(long map_x, long map_y, long zoom)
 {
-    unsigned char *src;
-    long bpos_x;
-    long x;
-    long y;
     long src_delta = (256 - zoom) * 16 / units_per_pixel_landview;
     long smap_x = scale_value_landview(map_x);
     long smap_y = scale_value_landview(map_y);
-    // Initializing variables used for all quadres of screen
-    // First find a quadres division place - coords bounding the quadres
-    // Make sure each quadre is at least one pixel wide and high
+    // First find a quadre division place - coords bounding the quadres.
+    // Make sure each quadre is at least one pixel wide and high.
     long scr_x = smap_x - scale_value_landview(map_info.screen_shift_x);
     if (scr_x > RendererPhysicalWidth()-1) scr_x = RendererPhysicalWidth()-1;
     if (scr_x < 1) scr_x = 1;
@@ -766,88 +761,15 @@ void frontzoom_to_point(long map_x, long map_y, long zoom)
     if (scr_y > RendererPhysicalHeight()-1) scr_y = RendererPhysicalHeight()-1;
     if (scr_y < 1) scr_y = 1;
 
-    // GPU path: upload map_screen as a GL_R8 texture and draw a fullscreen
-    // opaque quad; the fragment shader reproduces the same zoom arithmetic.
-    if (RendererSubmitLandviewZoom(
-            map_screen, LANDVIEW_MAP_WIDTH, LANDVIEW_MAP_HEIGHT,
-            (float)map_x, (float)map_y,
-            (float)scr_x, (float)scr_y,
-            (float)src_delta / 256.0f))
-        return;
-
-    // CPU fallback (software renderer).
-    unsigned char* src_buf = &map_screen[LANDVIEW_MAP_WIDTH * map_y + map_x];
-    long dst_scanln = RendererScreenWidth();
-    unsigned char* dst_buf = &RendererGetWScreen()[dst_scanln * scr_y + scr_x];
-    // Drawing first quadre
-    long bpos_y = 0;
-    unsigned char* dst = dst_buf;
-    long dst_width = scr_x;
-    long dst_height = scr_y;
-    // FIXME: I'm sure there's a less convoluted way of doing this, code below is setting off lots of cppcheck alarms
-    for (y=0; y <= dst_height; y++)
-    {
-        bpos_x = 0;
-        src = &src_buf[-LANDVIEW_MAP_WIDTH*(bpos_y >> 8)];
-        for (x=0; x <= dst_width; x++)
-        {
-          bpos_x += src_delta;
-          dst[-x] = src[-(bpos_x >> 8)];
-        }
-        dst -= dst_scanln;
-        bpos_y += src_delta;
-    }
-    // Drawing 2nd quadre
-    bpos_y = 0;
-    dst = dst_buf + 1;
-    dst_width = -scr_x + RendererPhysicalWidth() - 1; // one pixel less in destination
-    dst_height = scr_y;
-    for (y=0; y <= dst_height; y++)
-    {
-        bpos_x = (1 << 8); // one pixel less in source
-        src = &src_buf[-LANDVIEW_MAP_WIDTH*(bpos_y >> 8)];
-        for (x=0; x < dst_width; x++)
-        {
-          bpos_x += src_delta;
-          dst[x] = src[(bpos_x >> 8)];
-        }
-        dst -= dst_scanln;
-        bpos_y += src_delta;
-    }
-    // Drawing 3rd quadre
-    bpos_y = (1 << 8); // one pixel less in source
-    dst = dst_buf + dst_scanln;
-    dst_width = scr_x;
-    dst_height = -scr_y + RendererPhysicalHeight() - 1; // one pixel less in destination
-    for (y=0; y < dst_height; y++)
-    {
-        bpos_x = 0;
-        src = &src_buf[LANDVIEW_MAP_WIDTH*(bpos_y >> 8)];
-        for (x=0; x <= dst_width; x++)
-        {
-            bpos_x += src_delta;
-            dst[-x] = src[-(bpos_x >> 8)];
-        }
-        dst += dst_scanln;
-        bpos_y += src_delta;
-    }
-    // Drawing 4th quadre
-    bpos_y = (1 << 8);
-    dst = dst_buf + dst_scanln + 1;
-    dst_width = -scr_x + RendererPhysicalWidth() - 1;
-    dst_height = -scr_y + RendererPhysicalHeight() - 1;
-    for (y=0; y < dst_height; y++)
-    {
-        bpos_x = (1 << 8);
-        src = &src_buf[LANDVIEW_MAP_WIDTH*(bpos_y >> 8)];
-        for (x=0; x < dst_width; x++)
-        {
-            dst[x] = src[(bpos_x >> 8)];
-            bpos_x += src_delta;
-        }
-        dst += dst_scanln;
-        bpos_y += src_delta;
-    }
+    // Each backend realises the zoom itself: GPU uploads map_screen as a GL_R8
+    // texture and reproduces the arithmetic in a fragment shader; software runs
+    // the 4-quadrant CPU blit (RendererSoftware::SubmitLandviewZoom).  Game code
+    // holds no framebuffer pointer.
+    RendererSubmitLandviewZoom(
+        map_screen, LANDVIEW_MAP_WIDTH, LANDVIEW_MAP_HEIGHT,
+        (float)map_x, (float)map_y,
+        (float)scr_x, (float)scr_y,
+        (float)src_delta / 256.0f);
 }
 /** Draw the window frame on the campaign map (land view). */
 void compressed_window_draw(void)
@@ -857,24 +779,30 @@ void compressed_window_draw(void)
     long xshift = map_info.screen_shift_x * landview_frame_movement_scale_x / default_movement_scale / 2; // X speed is slower on aspect ratios wider than 4:3
     long yshift = map_info.screen_shift_y *landview_frame_movement_scale_y / default_movement_scale / 2; // Y speed is slower on aspect ratios taller than 4:3
 
+    // The renderer draws the frame so the huge-sprite RLE transparency is honoured
+    // exactly — opaque index-0 stone stays, only the arch cut-out shows through.
+    // Software rasterises it directly; OpenGL builds an explicit coverage mask and
+    // composites via the coverage shader.  Both keep index-0 as opaque paint.
+    if (RendererDrawLandviewFrame(&map_window, map_window_len,
+            xshift, yshift, units_per_pixel_landview_frame))
+        return;
+
+    // Fallback for backends without a DrawLandviewFrame implementation (e.g. Vita):
+    // render into a scratch buffer and composite as an index-0-keyed overlay.  NOTE
+    // this drops opaque index-0 texels — the original long-standing bug — so it is a
+    // last resort until those backends implement coverage too.
     int w = RendererScreenWidth();
     int h = RendererPhysicalHeight();
     unsigned char* bounce = (unsigned char*)KfxCalloc((size_t)w, (size_t)h);
-    if (bounce)
+    if (bounce == NULL)
     {
-        LbHugeSpriteDraw(&map_window, map_window_len,
-            bounce, w, h, xshift, yshift, units_per_pixel_landview_frame);
-        if (RendererSubmitTransparentBlit(bounce, w, h))
-        {
-            KfxFree(bounce);
-            return;
-        }
-        KfxFree(bounce);
+        WARNLOG("Landview frame scratch buffer allocation failed; frame not drawn");
+        return;
     }
-
     LbHugeSpriteDraw(&map_window, map_window_len,
-        RendererGetWScreen(), RendererScreenWidth(), RendererPhysicalHeight(),
-        xshift, yshift, units_per_pixel_landview_frame);
+        bounce, w, h, xshift, yshift, units_per_pixel_landview_frame);
+    RendererSubmitTransparentBlit(bounce, w, h);
+    KfxFree(bounce);
 }
 
 void unload_map_and_window(void)

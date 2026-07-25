@@ -21,7 +21,6 @@ void RenderGraph::FrameBuffers::Reset()
     ui.Reset();
     text.Reset();
     shadow.Reset();
-    debug.Reset();
     post_process.Reset();
     image_present.Reset();
 }
@@ -29,13 +28,12 @@ void RenderGraph::FrameBuffers::Reset()
 void RenderGraph::FrameBuffers::Reserve(
     size_t world_tiles, size_t world_sprites, size_t world_shadows,
     size_t ui_cmds,     size_t text_cmds,
-    size_t shadow_cmds, size_t debug_cmds)
+    size_t shadow_cmds)
 {
     world.Reserve(world_tiles, world_sprites, world_shadows);
     ui.Reserve(ui_cmds);
     text.Reserve(text_cmds);
     shadow.Reserve(shadow_cmds);
-    debug.Reserve(debug_cmds);
     // Full-screen presents are few per frame (usually 1); a small fixed reserve
     // avoids the first-frame realloc without over-allocating owned pixel buffers.
     image_present.Reserve(8);
@@ -47,7 +45,6 @@ void RenderGraph::FrameBuffers::Swap(FrameBuffers& other)
     ui.Swap(other.ui);
     text.Swap(other.text);
     shadow.Swap(other.shadow);
-    debug.Swap(other.debug);
     post_process.Swap(other.post_process);
     image_present.Swap(other.image_present);
 }
@@ -65,14 +62,14 @@ RenderGraph::RenderGraph()
 void RenderGraph::Reserve(
     size_t world_tiles, size_t world_sprites, size_t world_shadows,
     size_t ui_cmds,     size_t text_cmds,
-    size_t shadow_cmds, size_t debug_cmds)
+    size_t shadow_cmds)
 {
     // Reserve both write and read sides so neither triggers a realloc
     // during a frame.
     m_write.Reserve(world_tiles, world_sprites, world_shadows,
-                    ui_cmds, text_cmds, shadow_cmds, debug_cmds);
+                    ui_cmds, text_cmds, shadow_cmds);
     m_read.Reserve(world_tiles,  world_sprites, world_shadows,
-                   ui_cmds, text_cmds, shadow_cmds, debug_cmds);
+                   ui_cmds, text_cmds, shadow_cmds);
 }
 
 void RenderGraph::BeginFrame()
@@ -106,8 +103,7 @@ void RenderGraph::Execute(
     IWorldViewRenderer*  world,
     IUIRenderer*         ui,
     ITextRenderer*       text,
-    IShadowRenderer*     shadow,
-    IDebugRenderer*      debug)
+    IShadowRenderer*     shadow)
 {
     // -------------------------------------------------------------------------
     // Layer 1: Shadow pass (before world so shadows composite underneath)
@@ -128,14 +124,6 @@ void RenderGraph::Execute(
     // -------------------------------------------------------------------------
     // Layer 4: Text pass
     (void)text;
-
-    // -------------------------------------------------------------------------
-    // Layer 5: Debug pass (compiled away in release if KFX_DEBUG_RENDERER unset)
-    if (debug && caps.supportsDebugOverlay)
-    {
-        // TODO: dispatch DebugCommandBuffers to IDebugRenderer when implemented.
-        (void)debug;
-    }
 }
 
 /******************************************************************************/

@@ -62,6 +62,11 @@ struct IRImagePresentCmd
 
     std::vector<uint8_t> pixels;            ///< owned: indices (Indexed8) or RGBA (RGBA8).
     std::vector<uint8_t> embedded_palette;  ///< owned: 256×4 BGRA when palette == Embedded.
+    /** Optional per-pixel coverage for Transparent presents: 255 = opaque,
+     *  0 = transparent, same dimensions as `pixels`.  When non-empty it drives
+     *  transparency INSTEAD of the index-0 key, so a sprite may use palette index
+     *  0 (black) as an opaque colour (e.g. the land-view window frame). */
+    std::vector<uint8_t> coverage;
 
     // LandviewZoom only:
     float zoom_center_map_x = 0.f, zoom_center_map_y = 0.f;

@@ -3398,7 +3398,7 @@ short frontend_draw(void)
         return 0;
     }
 
-    if (!RendererLockScreen())
+    if (!RendererBeginFrame())
         return 2;
 
     result = 1;
@@ -3449,7 +3449,6 @@ short frontend_draw(void)
     }
     draw_debug_messages();
     perform_any_screen_capturing();
-    RendererUnlockScreen();
     last_draw_completed_time = get_time_tick_ns();
     return result;
 }

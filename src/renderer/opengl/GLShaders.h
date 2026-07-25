@@ -456,6 +456,32 @@ void main()
 }
 )glsl";
 
+// Coverage variant of PALETTE_BLIT: transparency comes from an explicit coverage
+// texture (255=opaque, 0=transparent) instead of the index-0 key, so palette
+// index 0 (black) can be an OPAQUE colour.  Used by the land-view window frame,
+// whose huge-sprite RLE carries its own transparency and legitimately paints
+// with index 0.
+constexpr const char* PALETTE_BLIT_COVERAGE_FRAGMENT_SHADER = R"glsl(
+#version 330 core
+in  vec2 v_uv;
+out vec4 fragColor;
+uniform sampler2D u_index;       // R8 — 8-bit palette index
+uniform sampler2D u_palette;     // RGBA8 — 256×1 palette
+uniform sampler2D u_coverage;    // R8 — 255=opaque, 0=transparent
+uniform float     u_tint_factor; // possession/pain red tint
+void main()
+{
+    float cov       = texture(u_coverage, v_uv).r;
+    float is_opaque = step(0.5, cov);
+    float idx       = texture(u_index, v_uv).r;
+    vec4  pal_color = texture(u_palette, vec2(idx, 0.5));
+    pal_color.a = 1.0;
+    // Opaque texels (incl. index 0): palette colour.  Transparent texels: the
+    // possession/pain tint with alpha = u_tint_factor (0 ⇒ fully clear).
+    fragColor = mix(vec4(1.0, 0.0, 0.0, u_tint_factor), pal_color, is_opaque);
+}
+)glsl";
+
 // Screen-tint overlay shaders — simple flat-colour fullscreen quad.
 // Used to composite palette effects (possession/pain tint, white flash) over
 // all rendered layers (tiles, sprites, UI, text) in GPU world mode.

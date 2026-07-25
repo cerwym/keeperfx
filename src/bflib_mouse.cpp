@@ -336,7 +336,7 @@ TbResult LbMouseChangeMoveRatio(long ratio_x, long ratio_y)
     SYNCLOG("New ratio %ldx%ld",ratio_x, ratio_y);
     // Currently we don't have two ratio factors, so let's store an average
     lbMouseMoveRatio = (ratio_x + ratio_y)/2;
-    //TODO INPUT Separate mouse ratios in X and Y direction when lbDisplay from DLL will no longer be used.
+    //TODO INPUT Separate mouse ratios in X and Y direction.
     //minfo.XMoveRatio = ratio_x;
     //minfo.YMoveRatio = ratio_y;
     return Lb_SUCCESS;

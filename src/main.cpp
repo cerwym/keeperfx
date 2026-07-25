@@ -2666,245 +2666,6 @@ void set_player_cameras_position(struct PlayerInfo *player, int32_t pos_x, int32
     camera_get_slot(player->id_number, CamIV_Isometric)->mappos.y.val = pos_y;
 }
 
-void scale_tmap2(long texture_block_index, long flags, long fade_level, long screen_x, long screen_y, long scaled_width, long scaled_height)
-{
-    if ((scaled_width == 0) || (scaled_height == 0)) {
-        return;
-    }
-    long xstart;
-    long ystart;
-    long xend;
-    long yend;
-    char orient;
-    switch (flags)
-    {
-    case 0:
-        xstart = 0;
-        ystart = 0;
-        xend = 2097151 / scaled_width;
-        yend = 2097151 / scaled_height;
-        orient = 0;
-        break;
-    case 0x10:
-        xstart = 2097151;
-        ystart = 0;
-        xend = -2097151 / scaled_width;
-        yend = 2097151 / scaled_height;
-        orient = 0;
-        break;
-    case 0x20:
-        xstart = 0;
-        ystart = 2097151;
-        xend = 2097151 / scaled_width;
-        yend = -2097151 / scaled_height;
-        orient = 0;
-        break;
-    case 0x30:
-        xstart = 2097151;
-        ystart = 2097151;
-        xend = -2097151 / scaled_width;
-        yend = -2097151 / scaled_height;
-        orient = 0;
-        break;
-    case 0x40:
-        ystart = 0;
-        xstart = 0;
-        yend = 2097151 / scaled_height;
-        xend = 2097151 / scaled_width;
-        orient = 1;
-        break;
-    case 0x50:
-        ystart = 0;
-        xstart = 2097151;
-        yend = 2097151 / scaled_height;
-        xend = -2097151 / scaled_width;
-        orient = 1;
-        break;
-    case 0x60:
-        ystart = 2097151;
-        xstart = 0;
-        yend = -2097151 / scaled_height;
-        xend = 2097151 / scaled_width;
-        orient = 1;
-        break;
-    case 0x70:
-        xstart = 2097151;
-        ystart = 2097151;
-        yend = -2097151 / scaled_height;
-        xend = -2097151 / scaled_width;
-        orient = 1;
-        break;
-    default:
-          return;
-    }
-    long local_screen_x;
-    long local_screen_y;
-    local_screen_x = screen_x;
-    if (local_screen_x < 0)
-    {
-        scaled_width += local_screen_x;
-        if (scaled_width < 0) {
-            return;
-        }
-        xstart -= xend * local_screen_x;
-        local_screen_x = 0;
-    }
-    if (local_screen_x + scaled_width > vec_window_width)
-    {
-        scaled_width = vec_window_width - local_screen_x;
-        if (scaled_width < 0) {
-            return;
-        }
-    }
-    local_screen_y = screen_y;
-    if (local_screen_y < 0)
-    {
-        scaled_height += local_screen_y;
-        if (scaled_height < 0) {
-            return;
-        }
-        ystart -= local_screen_y * yend;
-        local_screen_y = 0;
-    }
-    if (local_screen_y + scaled_height > vec_window_height)
-    {
-        scaled_height = vec_window_height - local_screen_y;
-        if (scaled_height < 0) {
-            return;
-        }
-    }
-    int i;
-    int32_t hlimits[480];
-    int32_t wlimits[640];
-    int32_t *xlim;
-    int32_t *ylim;
-    unsigned char *dbuf;
-    unsigned char *block;
-    if (!orient)
-    {
-        xlim = wlimits;
-        for (i = scaled_width; i > 0; i--)
-        {
-            *xlim = xstart;
-            xlim++;
-            xstart += xend;
-        }
-        ylim = hlimits;
-        for (i = scaled_height; i > 0; i--)
-        {
-            *ylim = ystart;
-            ylim++;
-            ystart += yend;
-        }
-        dbuf = &vec_screen[local_screen_x + local_screen_y * vec_screen_width];
-        block = block_ptrs[texture_block_index];
-        ylim = hlimits;
-        long px;
-        long py;
-        int srcx;
-        int srcy;
-        unsigned char *d;
-        if ( fade_level >= 0 )
-        {
-          for (py = scaled_height; py > 0; py--)
-          {
-              xlim = wlimits;
-              d = dbuf;
-              srcy = (((*ylim) & 0xFF0000u) >> 16);
-              for (px = scaled_width; px > 0; px--)
-              {
-                srcx = (((*xlim) & 0xFF0000u) >> 16);
-                xlim++;
-                *d = pixmap.fade_tables[256 * fade_level + block[(srcy << 8) + srcx]];
-                ++d;
-              }
-              dbuf += vec_screen_width;
-              ylim++;
-          }
-        } else
-        {
-          for (py = scaled_height; py > 0; py--)
-          {
-            xlim = wlimits;
-            d = dbuf;
-            srcy = (((*ylim) & 0xFF0000u) >> 16);
-            for (px = scaled_width; px > 0; px--)
-            {
-              srcx = (((*xlim) & 0xFF0000u) >> 16);
-              xlim++;
-              *d = block[(srcy << 8) + srcx];
-              ++d;
-            }
-            dbuf += vec_screen_width;
-            ylim++;
-          }
-        }
-    } else
-    {
-        ylim = wlimits;
-        for (i = scaled_height; i > 0; i--)
-        {
-          *ylim = ystart;
-          ylim++;
-          ystart += yend;
-        }
-        xlim = hlimits;
-        for (i = scaled_width; i > 0; i--)
-        {
-          *xlim = xstart;
-          xlim++;
-          xstart += xend;
-        }
-        dbuf = &vec_screen[local_screen_x + local_screen_y * vec_screen_width];
-        block = block_ptrs[texture_block_index];
-        ylim = wlimits;
-        long px;
-        long py;
-        int srcx;
-        int srcy;
-        unsigned char *d;
-        if ( fade_level >= 0 )
-        {
-          for (py = scaled_height; py > 0; py--)
-          {
-              xlim = hlimits;
-              d = dbuf;
-              srcy = (((*ylim) & 0xFF0000u) >> 16);
-              for (px = scaled_width; px > 0; px--)
-              {
-                srcx = (((*xlim) & 0xFF0000u) >> 16);
-                xlim++;
-                *d = pixmap.fade_tables[256 * fade_level + block[(srcx << 8) + srcy]];
-                ++d;
-              }
-              dbuf += vec_screen_width;
-              ylim++;
-          }
-        } else
-        {
-          for (py = scaled_height; py > 0; py--)
-          {
-            xlim = hlimits;
-            d = dbuf;
-            srcy = (((*ylim) & 0xFF0000u) >> 16);
-            for (px = scaled_width; px > 0; px--)
-            {
-              srcx = (((*xlim) & 0xFF0000u) >> 16);
-              xlim++;
-              *d = block[(srcx << 8) + srcy];
-              ++d;
-            }
-            dbuf += vec_screen_width;
-            ylim++;
-          }
-        }
-    }
-}
-
-void draw_texture(int32_t texture_x, int32_t texture_y, int32_t texture_width, int32_t texture_height, int32_t texture_block_index, int32_t flags, int32_t fade_level)
-{
-    scale_tmap2(texture_block_index, flags, fade_level, texture_x / pixel_size, texture_y / pixel_size, texture_width / pixel_size, texture_height / pixel_size);
-}
 
 void update_block_pointed(int i,long x, long x_frac, long y, long y_frac)
 {
@@ -3043,7 +2804,7 @@ void engine(struct PlayerInfo *player, struct Camera *cam)
     view_height_over_2 = ewnd.height/2;
     view_width_over_2 = ewnd.width/2;
     RendererSetViewport(ewnd.x, ewnd.y, ewnd.width, ewnd.height);
-    WorldViewRenderer_BeginWorldPass(RendererGetGraphicsWindowPtr(), RendererScreenWidth(),ewnd.width, ewnd.height, ewnd.x, ewnd.y);
+    WorldViewRenderer_BeginWorldPass(ewnd.width, ewnd.height, ewnd.x, ewnd.y);
     UIRenderer_SetGameViewport(ewnd.x, ewnd.y, ewnd.width, ewnd.height);
     camera_zoom = scale_camera_zoom_to_screen(cam->zoom);
     draw_view(cam, 0);
@@ -3292,12 +3053,11 @@ void gameplay_loop_draw()
     }
     keeper_wait_for_screen_focus();
     // Direct information/error messages
-    if (RendererLockScreen()) {
+    if (RendererBeginFrame()) {
         if ( do_draw ) {
             perform_any_screen_capturing();
         }
         draw_onscreen_direct_messages();
-        RendererUnlockScreen();
     }
     // Move the graphics window to center of screen buffer and swap screen
     if ( do_draw ) {

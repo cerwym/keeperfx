@@ -135,7 +135,7 @@ TbBool draw_onscreen_direct_messages(void)
     // Display in-game message for debug purposes
     if ((render_onscreen_msg_time > 0.0) || erstat_check())
     {
-        if (RendererIsScreenLocked())
+        if (RendererIsFrameOpen())
         {
             LbTextDrawResized(scale_value_by_horizontal_resolution(160), 0, tx_units_per_px, onscreen_msg_text, Lb_TEXT_HALIGN_LEFT);
         }
@@ -145,7 +145,7 @@ TbBool draw_onscreen_direct_messages(void)
     if ((game.system_flags & GSF_NetGameNoSync) != 0)
     {
         ERRORLOG("OUT OF SYNC (GameTurn %7u)", get_gameturn());
-        if (RendererIsScreenLocked())
+        if (RendererIsFrameOpen())
         {
             LbTextDrawResized(scale_value_by_horizontal_resolution(260), scale_value_by_vertical_resolution(msg_pos), tx_units_per_px, "OUT OF SYNC", Lb_TEXT_HALIGN_LEFT);
         }
@@ -154,7 +154,7 @@ TbBool draw_onscreen_direct_messages(void)
     if ((game.system_flags & GSF_NetSeedNoSync) != 0)
     {
         ERRORLOG("SEED OUT OF SYNC (GameTurn %7u)", get_gameturn());
-        if (RendererIsScreenLocked())
+        if (RendererIsFrameOpen())
         {
             LbTextDrawResized(scale_value_by_horizontal_resolution(260), scale_value_by_vertical_resolution(msg_pos), tx_units_per_px, "SEED OUT OF SYNC", Lb_TEXT_HALIGN_LEFT);
         }

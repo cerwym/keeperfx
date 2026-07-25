@@ -6,7 +6,7 @@
  * @par Purpose:
  *     Captures text draw calls made on the game thread (DrawTextResized,
  *     DrawTextAt) as self-contained commands the render thread can execute
- *     without reading lbDisplay globals or holding the game-thread text state.
+ *     without reading engine globals or holding the game-thread text state.
  *
  *     All window/clip/layout state is snapshotted at submission time;
  *     the text string is copied into a fixed-length inline buffer.  Very long
@@ -33,8 +33,8 @@ struct IRTextDrawCmd
     int32_t  pos_y          = 0;
     int32_t  units_per_px   = 16;    /**< 16 = 100% scale. */
     uint8_t  absolute       = 0;     /**< 1 = DrawTextAt (no window/wrap). */
-    uint8_t  draw_colour    = 0;     /**< Snapshot of lbDisplay.DrawColour. */
-    uint32_t draw_flags     = 0;     /**< Snapshot of lbDisplay.DrawFlags (TbDrawFlagsMask). */
+    uint8_t  draw_colour    = 0;     /**< Snapshot of the caller's draw colour. */
+    uint32_t draw_flags     = 0;     /**< Snapshot of the caller's draw flags (TbDrawFlagsMask). */
 
     /* Window / clipping state snapshot (for Resized path). */
     int32_t  justify_x      = 0;

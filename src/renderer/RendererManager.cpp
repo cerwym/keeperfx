@@ -65,7 +65,6 @@ extern "C" {
 }
 #include "thing_creature.h"    // swipe_sprites
 #include "front_torture.h"     // fronttorture_sprites, doors[]
-#include "renderer/RenderPass_C.h"
 #include <unordered_map>
 #include <vector>
 #include "post_inc.h"
@@ -88,6 +87,10 @@ static long                 s_graphicsWindowX      = 0;
 static long                 s_graphicsWindowY      = 0;
 static long                 s_graphicsWindowWidth  = 0;
 static long                 s_graphicsWindowHeight = 0;
+
+// Frame-lifecycle state (replaces the old per-draw-bracket screen lock).
+static bool                 s_frame_open           = false; // BeginFrame ran, EndFrame not yet
+static bool                 s_fb_locked            = false; // CPU framebuffer published this frame (software)
 
 /******************************************************************************/
 
@@ -140,6 +143,14 @@ TbBool RendererSubmitTransparentBlit(const unsigned char* buf, int w, int h)
     IRenderer* rend = RendererGetActive();
     if (!rend) return false;
     return rend->SubmitTransparentBlit(buf, w, h) ? true : false;
+}
+
+TbBool RendererDrawLandviewFrame(const struct TbHugeSprite* spr, long sp_len,
+                                 int xshift, int yshift, int units_per_px)
+{
+    IRenderer* rend = RendererGetActive();
+    if (!rend) return false;
+    return rend->DrawLandviewFrame(spr, sp_len, xshift, yshift, units_per_px) ? true : false;
 }
 
 void RendererDrawSwipeOverlay(struct TbSpriteSheet* sprites, int frame,
@@ -363,35 +374,12 @@ int RendererInit(RendererType type)
     }
     SpriteSheetManager::Get().ScheduleRebuild();
 
-    // Wire the LbSpriteDraw intercept for GPU sprite submission.
-    // Vita: route through VitaGPUBackend (IBackend path).
-    // OpenGL: route through UIRenderer (IR path) — no IBackend needed.
-#if defined(PLATFORM_VITA)
-    if (type == RENDERER_VITA)
-        RenderPass_Initialize(1); // BACKEND_GPU_VITA
-#elif defined(RENDERER_OPENGL_ENABLED)
-    if (type == RENDERER_OPENGL)
-        g_render_pass_active = 1; // UIRenderer handles sprites directly
-#endif
-    if (g_render_pass_active)
-    {
-#if defined(RENDERER_OPENGL_ENABLED)
-        SYNCLOG("Sprite intercept active: UIRenderer (IR)");
-#else
-        SYNCLOG("Sprite intercept active: %s", RenderPass_GetBackendName());
-#endif
-    }
 
     return true;
 }
 
 void RendererShutdown()
 {
-#if !defined(RENDERER_OPENGL_ENABLED)
-    // Vita/software only: UIRenderer handles the OpenGL sprite path.
-    RenderPass_Shutdown();
-#endif
-    g_render_pass_active = 0;
 
     // The backend owns its sub-renderers and destroys them inside Shutdown()
     // (after joining its render thread and while its GL context is still current),
@@ -474,11 +462,6 @@ TbBool RendererWantsFullscreenViewport()
     return (s_activeRenderer && s_activeRenderer->GetCapabilities().wantsFullscreenViewport) ? 1 : 0;
 }
 
-TbBool RendererHasGPURenderPath()
-{
-    return (s_activeRenderer && s_activeRenderer->GetCapabilities().hasGPURenderPath) ? 1 : 0;
-}
-
 struct BackendCapabilities RendererGetCapabilities()
 {
     if (s_activeRenderer)
@@ -515,13 +498,37 @@ int RendererBeginFrame(void)
 {
     if (!s_activeRenderer)
         return 0;
-    return s_activeRenderer->BeginFrame() ? 1 : 0;
+    if (!s_activeRenderer->BeginFrame())
+        return 0;
+    if (!s_fb_locked && !RendererGetCapabilities().hasGPURenderPath)
+    {
+        int pitch = 0;
+        unsigned char* pixels = RendererLockFramebuffer(&pitch);
+        if (!pixels)
+            return 0; // CPU framebuffer unavailable — frame not drawable
+        s_wscreen = pixels;
+        s_graphicsScreenWidth = pitch;
+        s_graphicsWindowPtr = &s_wscreen[s_graphicsWindowX +
+            s_graphicsScreenWidth * s_graphicsWindowY];
+        s_fb_locked = true;
+    }
+    s_frame_open = true;
+    return 1;
 }
 
 void RendererEndFrame(void)
 {
+    // Release the whole-frame CPU framebuffer lock BEFORE the backend's EndFrame.
+    if (s_fb_locked)
+    {
+        RendererUnlockFramebuffer();
+        s_fb_locked = false;
+    }
     if (s_activeRenderer)
         s_activeRenderer->EndFrame();
+    s_wscreen = NULL;
+    s_graphicsWindowPtr = NULL;
+    s_frame_open = false;
 }
 
 void RendererClearScreen(unsigned char colour_index)
@@ -534,52 +541,15 @@ void RendererClearScreen(unsigned char colour_index)
 /* High-level screen lifecycle (replaces LbScreen* trampolines)               */
 /******************************************************************************/
 
-// Tracks whether the screen is currently locked (RendererLockScreen called, not yet unlocked).
-// Decoupled from lbDisplay.WScreen so that GPU mode (where WScreen is always null) works correctly.
-static bool s_screen_locked = false;
 static bool s_world_drawn_this_frame = false;
-
-int RendererLockScreen(void)
-{
-    if (!RendererBeginFrame())
-        return 0;
-    if (RendererHasGPURenderPath()) {
-        // GPU mode: no CPU framebuffer. WScreen stays null for the entire frame.
-        s_wscreen = NULL;
-        s_graphicsWindowPtr = NULL;
-        s_screen_locked = true;
-        return 1;
-    }
-    int pitch = 0;
-    unsigned char *pixels = RendererLockFramebuffer(&pitch);
-    if (!pixels) {
-        s_graphicsWindowPtr = NULL;
-        s_wscreen = NULL;
-        return 0;
-    }
-    s_wscreen = pixels;
-    s_graphicsScreenWidth = pitch;
-    s_graphicsWindowPtr = &s_wscreen[s_graphicsWindowX +
-        s_graphicsScreenWidth * s_graphicsWindowY];
-    s_screen_locked = true;
-    return 1;
-}
-
-void RendererUnlockScreen(void)
-{
-    s_screen_locked = false;
-    s_wscreen = NULL;
-    s_graphicsWindowPtr = NULL;
-    RendererUnlockFramebuffer();
-}
 
 void RendererPresentFrame(void)
 {
     PlatformManager_FrameTick();
     // Ensure BeginFrame() has run — many call sites (fade loops, screen-mode
     // transitions, draw_clear_screen) do ClearScreen+PresentFrame without a
-    // preceding LockScreen/BeginFrame.  BeginFrame() is idempotent, so this
-    // is a no-op on the normal path where LockScreen was already called.
+    // preceding BeginFrame().  BeginFrame() is idempotent, so this is a no-op on
+    // the normal path where the frame was already opened.
     RendererBeginFrame();
     TbResult ret = LbMouseOnBeginSwap();
     if (ret != Lb_SUCCESS) {
@@ -595,9 +565,17 @@ void RendererPresentFrame(void)
     LbMouseOnEndSwap();
 }
 
-int RendererIsScreenLocked(void)
+int RendererIsFrameOpen(void)
 {
-    return s_screen_locked ? 1 : 0;
+    return s_frame_open ? 1 : 0;
+}
+
+TbBool RendererReadFramePixels(RendererFramePixelsFn fn, void* user)
+{
+    if (!fn || !s_wscreen)
+        return false;
+    return fn(s_wscreen, (int)RendererScreenWidth(), (int)RendererScreenHeight(),
+              (int)s_graphicsScreenWidth, user);
 }
 
 int RendererConsumeWorldDrawn(void)
@@ -709,11 +687,13 @@ void RendererSetScreenDimensions(int width, int height)
     s_graphicsScreenHeight         = height;
 }
 
-/** Set the physical (video-mode) resolution. Formerly lbDisplay.PhysicalScreen*. */
+/** Set the physical (video-mode) resolution. */
 void RendererSetPhysicalDimensions(int width, int height)
 {
     s_physicalScreenWidth  = width;
     s_physicalScreenHeight = height;
+    s_wscreen = NULL;
+    s_graphicsWindowPtr = NULL;
 }
 
 /******************************************************************************/
@@ -734,7 +714,7 @@ void RendererApplyPossessionPalette(long step, const unsigned char *main_palette
 {
     // GPU renderers use the screen tint overlay for possession/pain effects;
     // the software path must modify the INDEX8 surface palette directly.
-    if (RendererHasGPURenderPath())
+    if (RendererGetCapabilities().hasGPURenderPath)
         return;
     unsigned char palette[PALETTE_SIZE];
     for (int i = 0; i < PALETTE_COLORS; i++)
@@ -777,12 +757,11 @@ TbResult RendererWaitVbi(void)                   { return LbScreenWaitVbi(); }
 /* C-callable world-view renderer wrappers */
 /******************************************************************************/
 
-void WorldViewRenderer_BeginWorldPass(unsigned char* framebuf, int pitch, int w, int h,
-                                      int vp_x, int vp_y)
+void WorldViewRenderer_BeginWorldPass(int w, int h, int vp_x, int vp_y)
 {
     s_world_drawn_this_frame = true;
     if (RendererGetWorldViewRenderer())
-        RendererGetWorldViewRenderer()->BeginWorldPass(framebuf, pitch, w, h, vp_x, vp_y);
+        RendererGetWorldViewRenderer()->BeginWorldPass(w, h, vp_x, vp_y);
 }
 
 void WorldViewRenderer_DrawIsometricView(void)

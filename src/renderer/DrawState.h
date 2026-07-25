@@ -11,12 +11,6 @@
  *     Named `KfxDrawState` (not `DrawState`) because `DrawState` collides with the
  *     Win32 GDI `DrawState`/`DrawStateA` macro from <windows.h>.
  *
- * @par Migration note:
- *     During the lbDisplay-elimination migration, boundary shims (the `Lb*`
- *     wrappers / `UIRenderer_*` bridges) build a `KfxDrawState` from the still-live
- *     `lbDisplay.DrawFlags` / `DrawColour` globals and pass it down.  Once every
- *     draw site passes a `KfxDrawState` explicitly, those global fields are deleted
- *
  *     POD, C-and-C++ compatible (usable from the legacy C bflib/engine code and
  *     the C++ renderer alike).
  */
@@ -40,7 +34,7 @@ typedef unsigned int TbDrawFlagsMask;
 typedef struct KfxDrawState {
     TbDrawFlagsMask flags;
     /** Active draw colour (palette index) — one-colour sprites and text.
-     *  Same as the former lbDisplay.DrawColour (TbPixel == unsigned char). */
+     *  A palette index (TbPixel == unsigned char). */
     unsigned char colour;
 } KfxDrawState;
 

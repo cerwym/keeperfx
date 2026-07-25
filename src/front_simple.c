@@ -204,8 +204,8 @@ TbBool copy_raw8_image_to_screen_center(const unsigned char *buf, const int img_
         (int)scaled_width,  (int)scaled_height,
         (int)coord_x,  (int)coord_y);
 
-    // Lock the screen
-    if (!RendererLockScreen())
+    // Open the frame
+    if (!RendererBeginFrame())
         return false;
 
     // Copy image buffer to screen buffer (opaque game-palette Indexed8 present).
@@ -220,9 +220,6 @@ TbBool copy_raw8_image_to_screen_center(const unsigned char *buf, const int img_
 
     // Perform any screen capturing
     perform_any_screen_capturing();
-
-    // Unlock the screen
-    RendererUnlockScreen();
 
     // Swap video buffers to make the image visible
     RendererPresentFrame();
@@ -434,12 +431,14 @@ TbBool display_loading_screen(void)
 TbBool wait_for_installation_files(void)
 {
   char ffullpath[2048];
-  short was_locked = RendererIsScreenLocked();
+  short was_open = RendererIsFrameOpen();
   prepare_file_path_buf(ffullpath, sizeof(ffullpath), FGrp_StdData, "bluepal.dat");
   if ( LbFileExists(ffullpath) )
     return true;
-  if ( was_locked )
-    RendererUnlockScreen();
+  // Close the caller's open frame before running the self-contained wait loop
+  // (which drives its own present cycles), then reopen it before returning.
+  if ( was_open )
+    RendererEndFrame();
   SYNCMSG("Installation file not found, waiting");
   if (!init_bitmap_screen(&nocd_bmp,RBmp_WaitNoCD))
   {
@@ -483,8 +482,8 @@ TbBool wait_for_installation_files(void)
   }
   SYNCMSG("Finished waiting for installation after %lu seconds",counter);
   free_bitmap_screen(&nocd_bmp);
-  if ( was_locked )
-    RendererLockScreen();
+  if ( was_open )
+    RendererBeginFrame();
   return (!exit_keeper);
 }
 

@@ -34,8 +34,9 @@
 #include <algorithm>   // std::stable_sort (ExecuteImagePresentsFromIR)
 #include <utility>     // std::move
 
-#include "bflib_video.h"    // lbDisplay, RendererGetScreenWidth()/Height
+#include "bflib_video.h"    // RendererGetScreenWidth()/Height
 #include "bflib_sprite.h"   // TbSpriteSheet, get_sprite
+#include "bflib_vidraw.h"   // LbHugeSpriteDraw (land-view frame coverage build)
 #include "kfx/assets/SpriteSheetManager.h" // deferred atlas rebuild drain
 #include "platform.h"       // platform_create_gl_context / swap / destroy
 #include "engine_textures.h" // update_animating_texture_maps()
@@ -199,6 +200,28 @@ bool RendererOpenGL::Init()
     glUniform1i(glGetUniformLocation(m_shader, "u_index"),   0);
     glUniform1i(glGetUniformLocation(m_shader, "u_palette"), 1);
     m_uTintFactor = glGetUniformLocation(m_shader, "u_tint_factor");
+
+    // Coverage-blit program samplers (u_coverage on unit 2), if it compiled.
+    if (m_coverage_shader)
+    {
+        glUseProgram(m_coverage_shader);
+        glUniform1i(glGetUniformLocation(m_coverage_shader, "u_index"),    0);
+        glUniform1i(glGetUniformLocation(m_coverage_shader, "u_palette"),  1);
+        glUniform1i(glGetUniformLocation(m_coverage_shader, "u_coverage"), 2);
+        m_uCovTintFactor = glGetUniformLocation(m_coverage_shader, "u_tint_factor");
+    }
+
+    // Coverage texture (GL_R8, screen-sized) — paired with m_texIndex for the
+    // land-view frame's explicit-coverage transparent present.
+    glGenTextures(1, &m_texCoverage);
+    KFX_GL_LABEL(GL_TEXTURE, m_texCoverage, "Blit/CoverageTex");
+    glBindTexture(GL_TEXTURE_2D, m_texCoverage);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, m_screenW, m_screenH, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
+    m_texCoverage_w = m_screenW;
+    m_texCoverage_h = m_screenH;
+    glBindTexture(GL_TEXTURE_2D, 0);
 
     // ── World-geometry GPU resources ─────────────────────────────────────────
     // Fade table texture is initialised later via RendererNotifyGameTablesReady()
@@ -480,7 +503,7 @@ bool RendererOpenGL::Init()
     //            512 UI commands, 256 text glyphs.
     m_render_graph.Reserve(4096, 2048, 512,  /* world_tiles, sprites, shadows */
                            512,  256,        /* ui_cmds, text_cmds */
-                           0,    0);         /* shadow_cmds, debug_cmds */
+                           0);               /* shadow_cmds */
 
     // scRGB fake-HDR: compile sRGB→linear lift shader when backbuffer is float.
     if (platform_is_scrgb_surface())
@@ -593,8 +616,10 @@ void RendererOpenGL::Shutdown()
     if (m_vao)     { glDeleteVertexArrays(1, &m_vao);  m_vao = 0; }
     if (m_vbo)     { glDeleteBuffers(1, &m_vbo);        m_vbo = 0; }
     if (m_shader)  { glDeleteProgram(m_shader);          m_shader = 0; }
+    if (m_coverage_shader) { glDeleteProgram(m_coverage_shader); m_coverage_shader = 0; }
     if (m_tintProg){ glDeleteProgram(m_tintProg);        m_tintProg = 0; }
     if (m_texIndex)   { glDeleteTextures(1, &m_texIndex);   m_texIndex = 0; }
+    if (m_texCoverage){ glDeleteTextures(1, &m_texCoverage); m_texCoverage = 0; }
     if (m_texPalette) { glDeleteTextures(1, &m_texPalette); m_texPalette = 0; }
     if (m_texFade)    { glDeleteTextures(1, &m_texFade);    m_texFade = 0; }
     if (m_tex_null)   { glDeleteTextures(1, &m_tex_null);   m_tex_null = 0; }
@@ -657,7 +682,7 @@ void RendererOpenGL::drain_deferred_atlas_rebuild()
 
 bool RendererOpenGL::BeginFrame()
 {
-    // Idempotent: multiple RendererLockScreen calls per frame must not clear the UI queue again.
+    // Idempotent: multiple RendererBeginFrame calls per frame must not clear the UI queue again.
     if (m_frame_begun) return true;
 
     if (SpriteSheetManager::Get().RebuildPending())
@@ -970,8 +995,7 @@ void RendererOpenGL::EndFrame_GL()
                            m_world_renderer,
                            RendererGetUIRenderer(),
                            m_textRenderer,
-                           nullptr,  // IShadowRenderer — not yet implemented
-                           nullptr); // IDebugRenderer  — not yet implemented
+                           nullptr); // IShadowRenderer — not yet implemented
 
     // ── Lens FBO redirect
     // redirect world rendering to the lens scene FBO so GPU post-process
@@ -1429,8 +1453,8 @@ void RendererOpenGL::EndFrame_GL()
 
 uint8_t* RendererOpenGL::LockFramebuffer(int* out_pitch)
 {
-    // GPU mode: no CPU framebuffer. RendererLockScreen() handles the GPU branch
-    // directly and never calls this function; returning null is a safe fallback.
+    // GPU mode: no CPU framebuffer. RendererBeginFrame() skips the framebuffer
+    // publish on the GPU path and never calls this; returning null is a safe fallback.
     if (out_pitch) *out_pitch = 0;
     return nullptr;
 }
@@ -1604,6 +1628,27 @@ void RendererOpenGL::DrawTransparentPresent(const IRImagePresentCmd& c)
     }
     glBindTexture(GL_TEXTURE_2D, 0);
 
+    // Use explicit coverage when the command carries it (and the coverage program
+    // compiled) so opaque index-0 texels survive; otherwise the index-0-key path.
+    const bool use_coverage = !c.coverage.empty()
+        && (int)c.coverage.size() == tbw * tbh
+        && m_coverage_shader != 0;
+    if (use_coverage)
+    {
+        glBindTexture(GL_TEXTURE_2D, m_texCoverage);
+        if (tbw != m_texCoverage_w || tbh != m_texCoverage_h)
+        {
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, tbw, tbh, 0, GL_RED, GL_UNSIGNED_BYTE, c.coverage.data());
+            m_texCoverage_w = tbw;
+            m_texCoverage_h = tbh;
+        }
+        else
+        {
+            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, tbw, tbh, GL_RED, GL_UNSIGNED_BYTE, c.coverage.data());
+        }
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+
     glViewport(0, 0, m_rt_frame_state.screen_w, m_rt_frame_state.screen_h);
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
@@ -1611,16 +1656,63 @@ void RendererOpenGL::DrawTransparentPresent(const IRImagePresentCmd& c)
     glBindTexture(GL_TEXTURE_2D, m_texIndex);
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, m_texPalette);
+    if (use_coverage)
+    {
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, m_texCoverage);
+    }
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glUseProgram(m_shader);
-    glUniform1f(m_uTintFactor, m_rt_frame_state.possession_tint);
+    glUseProgram(use_coverage ? m_coverage_shader : m_shader);
+    glUniform1f(use_coverage ? m_uCovTintFactor : m_uTintFactor, m_rt_frame_state.possession_tint);
     glBindVertexArray(m_vao);
     glDrawArrays(GL_TRIANGLES, 0, 6);
     glBindVertexArray(0);
     glDisable(GL_BLEND);
     glDepthMask(GL_TRUE);
+    if (use_coverage)
+    {
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
     glActiveTexture(GL_TEXTURE0);
+}
+
+bool RendererOpenGL::DrawLandviewFrame(const struct TbHugeSprite* spr, long sp_len,
+                                       int xshift, int yshift, int units_per_px)
+{
+    if (!spr || !m_frame_begun)
+        return false;
+    const int w = m_screenW;
+    const int h = m_screenH;
+    if (w <= 0 || h <= 0)
+        return false;
+
+    // Build the frame pixels plus an exact coverage mask.  The huge-sprite RLE
+    // skips transparent runs (leaving the pre-fill) and writes opaque runs
+    // (including index 0).  Drawing into two buffers pre-filled with different
+    // values makes "written" unambiguous: a texel that matches in both buffers
+    // was written; one that differs was skipped — no sentinel can collide with a
+    // real opaque value.
+    std::vector<uint8_t> a((size_t)w * h, 0x00);
+    std::vector<uint8_t> b((size_t)w * h, 0xFF);
+    LbHugeSpriteDraw(spr, sp_len, a.data(), w, h, (short)xshift, (short)yshift, units_per_px);
+    LbHugeSpriteDraw(spr, sp_len, b.data(), w, h, (short)xshift, (short)yshift, units_per_px);
+
+    std::vector<uint8_t> coverage((size_t)w * h);
+    for (size_t i = 0; i < coverage.size(); ++i)
+        coverage[i] = (a[i] == b[i]) ? 0xFF : 0x00;
+
+    IRImagePresentCmd& c = m_render_graph.GetImagePresentBuffers().AppendEmpty();
+    c.format  = PresentFormat::Indexed8;
+    c.palette = PresentPalette::Game;
+    c.kind    = PresentKind::Transparent;
+    c.dst_x = 0; c.dst_y = 0; c.dst_w = w; c.dst_h = h;
+    c.src_w = w; c.src_h = h; c.src_pitch = w;
+    c.pixels   = std::move(a);
+    c.coverage = std::move(coverage);
+    c.layer_z  = 1.0f;
+    return true;
 }
 
 void RendererOpenGL::DrawZoomPresent(const IRImagePresentCmd& c)
@@ -1976,7 +2068,7 @@ void RendererOpenGL::SubmitPiPRender(struct Camera* cam, int x, int y, int w, in
     }
 
     m_world_renderer->BeginPiPCapture();
-    m_world_renderer->BeginWorldPass(nullptr, 0, w, h, 0, 0);
+    m_world_renderer->BeginWorldPass(w, h, 0, 0);
     draw_view(cam, 0);
     cmd.world_capture = m_world_renderer->FinalizePiPCapture();
 
@@ -2225,6 +2317,34 @@ bool RendererOpenGL::compile_shaders()
         glDeleteProgram(m_shader);
         m_shader = 0;
         return false;
+    }
+
+    // Coverage variant of the palette-blit program (explicit coverage instead of
+    // the index-0 key).  Non-fatal: if it fails, DrawTransparentPresent falls back
+    // to the index-0 path (land-view frame black stone would be transparent, but
+    // the game still runs).
+    {
+        unsigned int cvert = compile_shader(GL_VERTEX_SHADER,   PALETTE_BLIT_VERTEX_SHADER);
+        unsigned int cfrag = compile_shader(GL_FRAGMENT_SHADER, PALETTE_BLIT_COVERAGE_FRAGMENT_SHADER);
+        if (cvert && cfrag)
+        {
+            m_coverage_shader = glCreateProgram();
+            glAttachShader(m_coverage_shader, cvert);
+            glAttachShader(m_coverage_shader, cfrag);
+            glLinkProgram(m_coverage_shader);
+            int cok = 0;
+            glGetProgramiv(m_coverage_shader, GL_LINK_STATUS, &cok);
+            if (!cok)
+            {
+                char log[512];
+                glGetProgramInfoLog(m_coverage_shader, sizeof(log), nullptr, log);
+                ERRORLOG("RendererOpenGL coverage shader link error: %s", log);
+                glDeleteProgram(m_coverage_shader);
+                m_coverage_shader = 0;
+            }
+        }
+        if (cvert) glDeleteShader(cvert);
+        if (cfrag) glDeleteShader(cfrag);
     }
 
     // Compile the screen-tint overlay program (flat-colour fullscreen quad).

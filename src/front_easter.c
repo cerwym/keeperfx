@@ -257,7 +257,7 @@ void draw_eastegg(void)
       vy[i] = -vy[i];
       py[i] = height-k-1;
     }
-    if (RendererIsScreenLocked())
+    if (RendererIsFrameOpen())
     {
       LbTextDrawResized(scale_fixed_DK_value(px[i]/pixel_size), scale_fixed_DK_value(py[i]/pixel_size), ee_units_per_px, text, 0);
     }
@@ -296,7 +296,7 @@ void draw_eastegg(void)
       vy[i] = -vy[i];
       py[i] = height-k-1;
     }
-    if (RendererIsScreenLocked())
+    if (RendererIsFrameOpen())
     {
         LbTextDrawResized(scale_fixed_DK_value(px[i]/pixel_size), scale_fixed_DK_value(py[i]/pixel_size), ee_units_per_px, text, 0);
     }

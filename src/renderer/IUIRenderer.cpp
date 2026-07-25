@@ -21,7 +21,7 @@
 #include "renderer/ir/TextCommands.h"    // IRTextDrawCmd for the merged replay
 #include "bflib_vidraw.h"        // sprite and primitive CPU fallbacks
 #include "bflib_sprite.h"        // TbSprite
-#include "bflib_video.h"         // lbDisplay, units_per_pixel
+#include "bflib_video.h"         // units_per_pixel
 #include "vidmode.h"
 #include "vidfade.h"             // pixmap (TbColorTables) for fade_tables
 #include <algorithm>             // std::sort for the seq-merge replay

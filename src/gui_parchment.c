@@ -441,41 +441,16 @@ void draw_overhead_map(const struct TbRect *map_area, long block_size, PlayerNum
                 tile_buf[idx + 1] = g_val;
             }
         }
-        if (RendererSubmitOverheadMap(tile_buf, tiles_x, tiles_y,
+        const TbBool submitted = RendererSubmitOverheadMap(tile_buf, tiles_x, tiles_y,
             map_area->left, map_area->top,
-            map_area->right - map_area->left, map_area->bottom - map_area->top))
-        {
-            KfxFree(tile_buf);
-            return;
-        }
+            map_area->right - map_area->left, map_area->bottom - map_area->top);
         KfxFree(tile_buf);
+        if (!submitted)
+            WARNLOG("Renderer declined the overhead map submission; map not drawn");
     }
-
-    // CPU fallback: original per-pixel block write to WScreen.
-    // Passes *dstbuf (the parchment pixel already in WScreen) as background so
-    // the ghost table shading correctly darkens the parchment colour underneath.
-    long line = 0;
-    long stl_y = 1;
-    unsigned char* dstline = &RendererGetWScreen()[map_area->left + RendererScreenWidth() * map_area->top];
-    for (long cntr_h = game.map_tiles_y * block_size; cntr_h > 0; cntr_h--)
+    else
     {
-        if ((line > 0) && ((line % block_size) == 0))
-        {
-          stl_y += STL_PER_SLB;
-        }
-        unsigned char* dstbuf = dstline;
-        long stl_x = 1;
-        for (long cntr_w = game.map_tiles_x; cntr_w > 0; cntr_w--)
-        {
-            for (long k = block_size; k > 0; k--)
-            {
-                *dstbuf = get_overhead_mapblock_color(stl_x, stl_y, plyr_idx, *dstbuf);
-                dstbuf++;
-          }
-          stl_x += STL_PER_SLB;
-        }
-        dstline += RendererScreenWidth();
-        line++;
+        WARNLOG("Overhead map tile buffer allocation failed; map not drawn");
     }
 }
 
@@ -924,41 +899,11 @@ void draw_zoom_box_terrain(long scrtop_x, long scrtop_y, int stl_x, int stl_y, P
         RendererSubmitZoomBoxTiles(tile_buf, draw_tiles_x, draw_tiles_y,
             scrtop_x, scrtop_y, subtile_size, subtile_size);
         KfxFree(tile_buf);
-        return;
     }
-
-    // Software path: direct pixel write via the SW rasteriser.
-    // Only reachable on tile_buf allocation failure (OOM). In GL mode there is no
-    // CPU staging buffer (RendererGetWScreen() is always NULL — same class of bug
-    // as draw_slab64k_background); setup_vecs() would silently leave vec_screen
-    // unset, and draw_texture() below writes through it directly. Bail out instead.
-    if (RendererGetWScreen() == NULL)
+    else
     {
-        WARNLOG("Zoom box tile buffer allocation failed and no CPU screen buffer is available; skipping terrain fallback draw");
-        return;
+        WARNLOG("Zoom box tile buffer allocation failed; terrain not drawn");
     }
-    setup_vecs(RendererGetWScreen(), NULL, (unsigned int)RendererScreenWidth(), (unsigned int)RendererScreenWidth(), (unsigned int)RendererScreenHeight());
-    int scr_y = scrtop_y;
-    for (int map_dy = 0; map_dy < draw_tiles_y; map_dy++)
-    {
-        int scr_x = scrtop_x;
-        for (int map_dx = 0; map_dx < draw_tiles_x; map_dx++)
-        {
-            struct Map* mapblk = get_map_block_at(stl_x + map_dx, stl_y + map_dy);
-            if (map_block_revealed(mapblk, plyr_idx))
-            {
-                int k = element_top_face_texture(mapblk);
-                k = engine_remap_texture_blocks(stl_x + map_dx, stl_y + map_dy, k);
-                draw_texture(scr_x, scr_y, subtile_size, subtile_size, k, 0, -1);
-            } else
-          {
-            LbDrawBox(scr_x, scr_y, subtile_size, subtile_size, 1, 0);
-          }
-          scr_x += subtile_size;
-      }
-      scr_y += subtile_size;
-    }
-    LbDrawBox(scrtop_x, scrtop_y, draw_tiles_x*subtile_size, draw_tiles_y*subtile_size, 0, Lb_SPRITE_OUTLINE);
 }
 
 void draw_zoom_box_things(long scrtop_x, long scrtop_y, int stl_x, int stl_y, PlayerNumber plyr_idx, long draw_tiles_x, long draw_tiles_y, int subtile_size)

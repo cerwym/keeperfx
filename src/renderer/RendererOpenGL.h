@@ -69,16 +69,7 @@ public:
         BackendCapabilities c = {};
         c.hasGPURenderPath        = 1;
         c.wantsFullscreenViewport = 1;
-        c.hasGPUOverheadMap       = 1;
-        c.hasGPUMapFade           = 1;
-        c.hasGPUOverlay           = 1;
-        c.hasGPULandviewZoom      = 1;
-        c.hasGPUVideoFrame        = 1;
-        c.hasGPUSprites           = 1;
-        c.hasSwipeOverlay         = 1;
-        c.supportsRuntimeSwitch   = 1;
-        c.supportsGPUPasses       = 1;
-        c.supportsScreenshot      = 1;
+        c.compositesMinimapBackground = 1;
         return c;
     }
 
@@ -94,6 +85,8 @@ public:
                             float scale) override;
 
     bool SubmitTransparentBlit(const uint8_t* buf, int w, int h) override;
+    bool DrawLandviewFrame(const struct TbHugeSprite* spr, long sp_len,
+                           int xshift, int yshift, int units_per_px) override;
 
     void DrawSwipeOverlay(struct TbSpriteSheet* sprites, int frame,
                           bool draw_lr, int engine_window_x) override;
@@ -203,6 +196,13 @@ private:
     unsigned int m_texIndex     = 0; // GL_R8 screenW×screenH: transparent overlay texture
     int          m_texIndex_w   = 0; // current allocated width  (0 = not yet allocated)
     int          m_texIndex_h   = 0; // current allocated height
+    // Coverage-blit program + texture: transparency from an explicit coverage map
+    // instead of the index-0 key (land-view window frame; index 0 may be opaque).
+    unsigned int m_coverage_shader = 0;
+    int          m_uCovTintFactor  = -1;
+    unsigned int m_texCoverage     = 0; // GL_R8 coverage: 255=opaque, 0=transparent
+    int          m_texCoverage_w   = 0;
+    int          m_texCoverage_h   = 0;
     unsigned int m_texPalette   = 0; // RGBA8 256×1 GL_TEXTURE_2D palette
     uint8_t      m_last_palette[768] = {}; // snapshot for dirty-flag upload
     int          m_uTintFactor  = -1; // uniform location for u_tint_factor

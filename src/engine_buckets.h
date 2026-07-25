@@ -6,8 +6,7 @@
  * @par Purpose:
  *     Exposes the QKinds enum, BasicQ base struct, and all BucketKind*
  *     sub-structs so that both the C rasteriser (engine_render.c) and the
- *     C++ GPU renderer (GLWorldViewRenderer.cpp, VitaGPUBackend.cpp) can
- *     operate on the same bucket types without duplication.
+ *     GPU renderer can operate on the same bucket types without duplication.
  * @par Comment:
  *     This header must remain valid as both C (engine_render.c) and C++.
  *     Keep all declarations C89-compatible (no // comments inside structs,

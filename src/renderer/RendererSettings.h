@@ -229,7 +229,7 @@ typedef struct RendererSettings {
 
     /* --- Palette remap / tint mode --- */
 
-    /** Remap mode.  RENDERER_TINT_CPU (2) = CPU fallback via IBackend base
+    /** Remap mode.  RENDERER_TINT_CPU (2) = CPU rasteriser fallback
      *  (current default); RENDERER_TINT_GPU (0) = GPU shader (Phase 3+).
      *  Default: RENDERER_TINT_CPU. */
     int   tint_mode;

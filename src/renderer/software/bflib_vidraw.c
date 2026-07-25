@@ -36,7 +36,6 @@
 #include "bflib_sprite.h"
 #include "bflib_mouse.h"
 #include "bflib_render.h"
-#include "renderer/RenderPass_C.h"
 #include "renderer/RendererManager.h"
 #include "post_inc.h"
 
@@ -95,7 +94,7 @@ long g_sprite_scale_src_h = 0;
  */
 void LbDrawHVLine(long xpos1, long ypos1, long xpos2, long ypos2, TbPixel colour)
 {
-  assert(!RendererHasGPURenderPath() && "LbDrawHVLine: CPU pixel write in GL mode");
+  assert(!RendererGetCapabilities().hasGPURenderPath && "LbDrawHVLine: CPU pixel write in GL mode");
   long width_max = RendererGraphicsWindowWidth() - 1;
   long height_max = RendererGraphicsWindowHeight() - 1;
   if ( xpos1 > xpos2 )
@@ -240,7 +239,7 @@ void LbDrawHVLine(long xpos1, long ypos1, long xpos2, long ypos2, TbPixel colour
 void LbDrawBoxClip(long x, long y, unsigned long width, unsigned long height, TbPixel colour, TbDrawFlagsMask draw_flags)
 {
   lb_draw_flags = draw_flags;
-  assert(!RendererHasGPURenderPath() && "LbDrawBoxClip: CPU pixel write in GL mode");
+  assert(!RendererGetCapabilities().hasGPURenderPath && "LbDrawBoxClip: CPU pixel write in GL mode");
   long ypos = y;
   //Checking and clipping coordinates
   if ( y >= RendererGraphicsWindowHeight() )
@@ -1383,6 +1382,7 @@ void LbSpriteSetScalingWidthClippedArray(int32_t * xsteps_arr, long x, long swid
     long factor = (dwidth<<16)/swidth;
     long tmp = (factor >> 1) + (x << 16);
     pxpos = tmp >> 16;
+    { long dstart = (x < 0) ? 0 : x; if (pxpos > dstart) pxpos = dstart; }
     long w = swidth;
     do {
         tmp += factor;
@@ -1392,21 +1392,12 @@ void LbSpriteSetScalingWidthClippedArray(int32_t * xsteps_arr, long x, long swid
         pxend = tmp>>16;
         // Remember unclipped difference
         long wdiff = pxend - pxstart;
-        // Now clip to graphics line bounds
-        if (pxstart < 0) {
-            pxstart = 0;
-            pxend = pxstart;
-        } else
-        if (pxstart >= gwidth) {
-            pxstart = gwidth-1;
-            pxend = pxstart;
-        } else
-        if (pxend < 0) {
-            pxend = 0;
-        } else
-        if (pxend > gwidth) {
-            pxend = gwidth;
-        }
+        // Clip both endpoints independently to [0, gwidth]
+        if (pxstart < 0) pxstart = 0;
+        else if (pxstart > gwidth) pxstart = gwidth;
+        if (pxend < 0) pxend = 0;
+        else if (pxend > gwidth) pxend = gwidth;
+        if (pxend < pxstart) pxend = pxstart;
         // Set clipped difference to be drawn
         pwidth[0] = pxstart;
         pwidth[1] = pxend - pxstart;
@@ -1472,6 +1463,7 @@ void LbSpriteSetScalingHeightClippedArray(int32_t * ysteps_arr, long y, long she
     long factor = (dheight<<16)/sheight;
     long tmp = (factor >> 1) + (y << 16);
     lnpos = tmp >> 16;
+    { long dstart = (y < 0) ? 0 : y; if (lnpos > dstart) lnpos = dstart; }
     if (lnpos < 0)
         lnpos = 0;
     if (lnpos >= gheight)
@@ -1485,21 +1477,12 @@ void LbSpriteSetScalingHeightClippedArray(int32_t * ysteps_arr, long y, long she
         lnend = tmp>>16;
         // Remember unclipped difference
         long hdiff = lnend - lnstart;
-        // Now clip to graphics line bounds
-        if (lnstart < 0) {
-            lnstart = 0;
-            lnend = lnstart;
-        } else
-        if (lnstart >= gheight) {
-            lnstart = gheight-1;
-            lnend = lnstart;
-        } else
-        if (lnend < 0) {
-            lnend = 0;
-        } else
-        if (lnend > gheight) {
-            lnend = gheight;
-        }
+        // Clip both endpoints independently to [0, gheight]
+        if (lnstart < 0) lnstart = 0;
+        else if (lnstart > gheight) lnstart = gheight;
+        if (lnend < 0) lnend = 0;
+        else if (lnend > gheight) lnend = gheight;
+        if (lnend < lnstart) lnend = lnstart;
         // Set clipped difference to be drawn
         pheight[0] = lnstart;
         pheight[1] = lnend - lnstart;
@@ -1859,13 +1842,13 @@ int LbTiledSpriteHeight(struct TiledSprite *bigspr)
 
 void LbDrawPixel(long x, long y, TbPixel colour)
 {
-    assert(!RendererHasGPURenderPath() && "LbDrawPixel: CPU pixel write in GL mode");
+    assert(!RendererGetCapabilities().hasGPURenderPath && "LbDrawPixel: CPU pixel write in GL mode");
     RendererGetGraphicsWindowPtr()[x + RendererScreenWidth() * y] = colour;
 }
 
 void LbDrawPixelClip(long x, long y, TbPixel colour)
 {
-    assert(!RendererHasGPURenderPath() && "LbDrawPixelClip: CPU pixel write in GL mode");
+    assert(!RendererGetCapabilities().hasGPURenderPath && "LbDrawPixelClip: CPU pixel write in GL mode");
     if ( (x < 0) || (x >= RendererGraphicsWindowWidth()) )
         return;
     if ( (y < 0) || (y >= RendererGraphicsWindowHeight()) )
@@ -1891,7 +1874,7 @@ void LbDrawPixelClip(long x, long y, TbPixel colour)
 
 void LbDrawCircleFilled(long x, long y, long radius, TbPixel colour)
 {
-    assert(!RendererHasGPURenderPath() && "LbDrawCircleFilled: CPU pixel write in GL mode");
+    assert(!RendererGetCapabilities().hasGPURenderPath && "LbDrawCircleFilled: CPU pixel write in GL mode");
     long r;
     long i;
     long n;
@@ -1990,7 +1973,7 @@ static inline void LbDrawPixelClipSolid(long x, long y, TbPixel colour)
 
 void LbDrawCircleOutline(long x, long y, long radius, TbPixel colour)
 {
-    assert(!RendererHasGPURenderPath() && "LbDrawCircleOutline: CPU pixel write in GL mode");
+    assert(!RendererGetCapabilities().hasGPURenderPath && "LbDrawCircleOutline: CPU pixel write in GL mode");
     int na;
     int nb;
     int n;

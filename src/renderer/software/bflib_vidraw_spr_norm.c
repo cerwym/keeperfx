@@ -1244,7 +1244,7 @@ TbResult LbSpriteDrawUsingScalingDownDataSolidLR(uchar *outbuf, int scanline, in
 TbResult LbSpriteDrawUsingScalingData(long posx, long posy, const struct TbSourceBuffer * src_buf, TbDrawFlagsMask draw_flags)
 {
     lb_draw_flags = draw_flags;
-    assert(!RendererHasGPURenderPath() && "LbSpriteDrawUsingScalingData: CPU pixel write in GL mode");
+    assert(!RendererGetCapabilities().hasGPURenderPath && "LbSpriteDrawUsingScalingData: CPU pixel write in GL mode");
     SYNCDBG(17,"Drawing at (%ld,%ld)",posx,posy);
     unsigned char* render_ghost = pixmap.ghost; // ghost (50%) transparency LUT, owned by vidmode
     int32_t *xstep;
@@ -1416,7 +1416,7 @@ TbResult LbSpriteDrawUsingScalingData(long posx, long posy, const struct TbSourc
 TbResult DrawAlphaSpriteUsingScalingData(long posx, long posy, const struct TbSourceBuffer * src_buf, TbDrawFlagsMask draw_flags)
 {
     lb_draw_flags = draw_flags;
-    assert(!RendererHasGPURenderPath() && "DrawAlphaSpriteUsingScalingData: CPU pixel write in GL mode");
+    assert(!RendererGetCapabilities().hasGPURenderPath && "DrawAlphaSpriteUsingScalingData: CPU pixel write in GL mode");
     SYNCDBG(17,"Drawing at (%ld,%ld)",posx,posy);
     unsigned char* render_alpha = (unsigned char*)&alpha_sprite_table; // alpha LUT, owned by vidmode
 

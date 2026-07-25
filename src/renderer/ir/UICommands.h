@@ -201,7 +201,7 @@ struct IRUICursorPointerCmd
     int32_t           x             = 0;
     int32_t           y             = 0;
     int32_t           units_per_px  = 16;
-    unsigned int      draw_flags    = 0;        /**< lbDisplay.DrawFlags captured at submit time. */
+    unsigned int      draw_flags    = 0;        /**< Draw flags captured at submit time. */
 };
 
 /* IRUICursorKeeperHandCmd removed: keeper-hand sprites are now pre-computed on

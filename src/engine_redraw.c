@@ -260,7 +260,7 @@ void store_engine_window(TbGraphicsWindow *ewnd,int divider)
     ewnd->ptr = NULL;
 }
 
-// RENDER-SW-IMPL: software implementation of IMapFadePass — per-pixel wipe into lbDisplay.WScreen.
+// RENDER-SW-IMPL: software implementation of IMapFadePass — per-pixel wipe into the software draw surface (outbuf).
 // Hardcoded to 320×200; hardware path would use a UV-warp fragment shader at native resolution.
 // Called directly by SoftwareMapFadePass::StepFadeIn/StepFadeOut via map_fade_in/map_fade_out.
 void map_fade(unsigned char *outbuf, unsigned char *srcbuf1, unsigned char *srcbuf2, unsigned char *fade_tbl, unsigned char *ghost_tbl, long a6, long const xmax, long const ymax, long a9)
@@ -497,7 +497,7 @@ void draw_overlay_compass(long base_x, long base_y)
     int center_y = base_y * units_per_px / 16 + MapDiagonalLength / 2;
     int shift_x = (-(MapDiagonalLength * 7 / 16) * LbSinL(cam->rotation_angle_x)) >> LbFPMath_TrigmBits;
     int shift_y = (-(MapDiagonalLength * 7 / 16) * LbCosL(cam->rotation_angle_x)) >> LbFPMath_TrigmBits;
-    if (RendererIsScreenLocked()) {
+    if (RendererIsFrameOpen()) {
         LbTextDrawResized(center_x + shift_x - w, center_y + shift_y - h, tx_units_per_px, get_string(GUIStr_MapN), compass_flags);
     }
     shift_x = ( (MapDiagonalLength*7/16) * LbSinL(cam->rotation_angle_x)) >> LbFPMath_TrigmBits;
@@ -1080,12 +1080,11 @@ TbBool keeper_screen_redraw(void)
     } else {
         RendererClearScreen(0);
     }
-    if (RendererLockScreen())
+    if (RendererBeginFrame())
     {
         setup_engine_window(player->engine_window_x, player->engine_window_y,
             player->engine_window_width, player->engine_window_height);
         redraw_display();
-        RendererUnlockScreen();
         return true;
     }
     return false;

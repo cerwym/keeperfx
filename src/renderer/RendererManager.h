@@ -64,11 +64,6 @@ RendererType RendererGetActiveType(void);
  *  GPU renderers return true; software renderers return false. */
 TbBool RendererWantsFullscreenViewport(void);
 
-/** Returns true when the active renderer has a GPU-accelerated draw path.
- *  Use this instead of RendererGetActiveType() == RENDERER_OPENGL to avoid
- *  hard-coding backend checks.  True for GL and Vita; false for software. */
-TbBool RendererHasGPURenderPath(void);
-
 /** Returns a snapshot of the active backend's capability flags.
  *  Use specific fields (e.g. .supportsMovieCapture) instead of adding new
  *  boolean wrapper functions.  Returns an all-zero struct when no backend is
@@ -103,19 +98,21 @@ void RendererClearScreen(unsigned char colour_index);
 /* High-level screen lifecycle                                                */
 /******************************************************************************/
 
-/** Begin a frame and lock the framebuffer for CPU access.
- *  @return Non-zero on success (frame is locked and drawable). */
-int RendererLockScreen(void);
-
-/** Unlock the framebuffer. */
-void RendererUnlockScreen(void);
-
 /** Present the completed frame: runs platform tick, mouse cursor
  *  compositing, and the backend EndFrame/buffer swap. */
 void RendererPresentFrame(void);
 
-/** Query whether the screen is currently locked (WScreen is valid). */
-int RendererIsScreenLocked(void);
+/** Query whether a frame is currently open (BeginFrame ran, EndFrame has not).
+ *  True during all drawing; the software CPU framebuffer is published while open. */
+int RendererIsFrameOpen(void);
+
+/** Callback receiving the current frame's CPU pixels.  The pointer is valid
+ *  ONLY for the duration of the call — do not retain it. */
+typedef TbBool (*RendererFramePixelsFn)(const unsigned char* pixels,
+                                        int width, int height, int pitch,
+                                        void* user);
+
+TbBool RendererReadFramePixels(RendererFramePixelsFn fn, void* user);
 
 /** Returns 1 (and resets) if the world was drawn this frame.
  *  Used by the software renderer to snapshot the clean world surface. */
@@ -288,7 +285,7 @@ struct Camera; // forward declaration (defined in game_legacy.h)
  *  Call this once per view before adding geometry to the bucket list.
  *  vp_x/vp_y are the viewport's top-left corner in screen pixels (0,0 when
  *  no sidebar is present). */
-void WorldViewRenderer_BeginWorldPass(unsigned char* framebuf, int pitch, int w, int h,
+void WorldViewRenderer_BeginWorldPass(int w, int h,
                                       int vp_x, int vp_y);
 
 /** Draw the isometric/1st-person bucket list to the framebuffer.
@@ -516,7 +513,7 @@ TbBool RendererSubmitLandviewZoom(const unsigned char* src_buf, int src_w, int s
                                   float scale);
 
 /** Composite an external palette-indexed buffer over the GPU frame with index-0
- *  transparency, without writing to lbDisplay.WScreen.
+ *  transparency, without writing to the CPU staging buffer.
  *  Use when game code has drawn into a local bounce buffer (e.g. in GL mode where
  *  WScreen must not be written).  The GL backend copies buf into its staging texture
  *  immediately so the caller may free buf after this call returns.
@@ -525,6 +522,12 @@ TbBool RendererSubmitLandviewZoom(const unsigned char* src_buf, int src_w, int s
  *  @return true  (GL: queued; transparent blit runs at EndFrame).
  *          false (software renderer: caller should draw to WScreen + SubmitStagingOverlay). */
 TbBool RendererSubmitTransparentBlit(const unsigned char* buf, int w, int h);
+
+/** Draw the land-view ornate window frame (huge RLE sprite) onto the frame.
+ *  Software draws it directly with correct per-run transparency; returns false on
+ *  GPU backends, where the caller renders into a scratch buffer + transparent-blit. */
+TbBool RendererDrawLandviewFrame(const struct TbHugeSprite* spr, long sp_len,
+                                 int xshift, int yshift, int units_per_px);
 
 /** Draw the creature swipe overlay in possession mode.
  *  Delegates to the active renderer's DrawSwipeOverlay() which handles
@@ -738,7 +741,7 @@ typedef struct RendererUIButtonDesc {
     struct { const struct TbSprite* spr; int32_t x, y; } segments[RENDERER_BUTTON_MAX_SEGMENTS];
     int32_t segment_count;
     int32_t units_per_px;
-    unsigned int label_draw_flags;           /**< lbDisplay.DrawFlags applied to the label draw. */
+    unsigned int label_draw_flags;           /**< Draw flags applied to the label draw. */
     const struct TbSpriteSheet* font;         /**< Label font; NULL (or text NULL) ⇒ no label. */
     const char* text;                         /**< Label text; NULL ⇒ no label. */
     int32_t text_x, text_y, text_w, text_h;   /**< Label text window (TextRenderer_SetWindow rect). */
@@ -781,7 +784,7 @@ TbBool UIRenderer_SubmitSlabBackground(int x, int y, int w, int h);
 /** Acquire the renderer's minimap pixel buffer for this frame.
  *  Returns a renderer-owned size×size buffer (GPU mode) that the caller fills
  *  with palette indices (0 = transparent), or NULL (software mode) in which case
- *  the caller writes directly to lbDisplay.WScreen at the minimap position.
+ *  the caller writes directly to the CPU staging buffer at the minimap position.
  *  Call UIRenderer_SubmitMinimap() once drawing into the buffer is complete. */
 unsigned char* UIRenderer_AcquireMinimapBuffer(int size);
 

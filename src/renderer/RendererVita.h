@@ -43,8 +43,6 @@ public:
         BackendCapabilities c = {};
         c.hasGPURenderPath        = 1;
         c.wantsFullscreenViewport = 1;
-        c.hasGPUSprites           = 1;
-        c.supportsGPUPasses       = 1;
         return c;
     }
 

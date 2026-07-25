@@ -8,7 +8,7 @@
  *     4096×2048 R8 GL texture using a shelf packer.  Keyed by TbSprite*
  *     so SubmitSprite can look up UV coordinates in O(1).
  *
- *     Lifecycle mirrors IBackend: AddSheet() on load, RemoveSheet() on free.
+ *     Lifecycle follows sprite-sheet load/free: AddSheet() on load, RemoveSheet() on free.
  *     Space from removed sheets is not reclaimed (acceptable given DK's low
  *     sprite churn); the atlas is only rebuilt on full renderer reinit.
  */
