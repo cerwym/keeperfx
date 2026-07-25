@@ -98,20 +98,9 @@ void RendererClearScreen(unsigned char colour_index);
 /* High-level screen lifecycle                                                */
 /******************************************************************************/
 
-/** Begin a frame and lock the framebuffer for CPU access.
- *  @return Non-zero on success (frame is locked and drawable). */
-int RendererLockScreen(void);
-
-/** Unlock the framebuffer. */
-void RendererUnlockScreen(void);
-
 /** Present the completed frame: runs platform tick, mouse cursor
  *  compositing, and the backend EndFrame/buffer swap. */
 void RendererPresentFrame(void);
-
-/** Query whether the screen is currently locked (WScreen is valid).
- *  Deprecated alias for RendererIsFrameOpen() during the lock-collapse migration. */
-int RendererIsScreenLocked(void);
 
 /** Query whether a frame is currently open (BeginFrame ran, EndFrame has not).
  *  True during all drawing; the software CPU framebuffer is published while open. */

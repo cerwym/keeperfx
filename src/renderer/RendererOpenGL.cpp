@@ -682,7 +682,7 @@ void RendererOpenGL::drain_deferred_atlas_rebuild()
 
 bool RendererOpenGL::BeginFrame()
 {
-    // Idempotent: multiple RendererLockScreen calls per frame must not clear the UI queue again.
+    // Idempotent: multiple RendererBeginFrame calls per frame must not clear the UI queue again.
     if (m_frame_begun) return true;
 
     if (SpriteSheetManager::Get().RebuildPending())
@@ -1453,8 +1453,8 @@ void RendererOpenGL::EndFrame_GL()
 
 uint8_t* RendererOpenGL::LockFramebuffer(int* out_pitch)
 {
-    // GPU mode: no CPU framebuffer. RendererLockScreen() handles the GPU branch
-    // directly and never calls this function; returning null is a safe fallback.
+    // GPU mode: no CPU framebuffer. RendererBeginFrame() skips the framebuffer
+    // publish on the GPU path and never calls this; returning null is a safe fallback.
     if (out_pitch) *out_pitch = 0;
     return nullptr;
 }

@@ -543,27 +543,13 @@ void RendererClearScreen(unsigned char colour_index)
 
 static bool s_world_drawn_this_frame = false;
 
-// Compatibility shims for the lock-collapse migration.  The CPU framebuffer is now
-// published for the whole frame by RendererBeginFrame() and released by
-// RendererEndFrame(); there is no per-draw-bracket lock anymore.  Engine call
-// sites migrate to RendererBeginFrame() / RendererIsFrameOpen() directly.
-int RendererLockScreen(void)
-{
-    return RendererBeginFrame();
-}
-
-void RendererUnlockScreen(void)
-{
-    // No-op: the whole-frame framebuffer publication is released at EndFrame.
-}
-
 void RendererPresentFrame(void)
 {
     PlatformManager_FrameTick();
     // Ensure BeginFrame() has run — many call sites (fade loops, screen-mode
     // transitions, draw_clear_screen) do ClearScreen+PresentFrame without a
-    // preceding LockScreen/BeginFrame.  BeginFrame() is idempotent, so this
-    // is a no-op on the normal path where LockScreen was already called.
+    // preceding BeginFrame().  BeginFrame() is idempotent, so this is a no-op on
+    // the normal path where the frame was already opened.
     RendererBeginFrame();
     TbResult ret = LbMouseOnBeginSwap();
     if (ret != Lb_SUCCESS) {
@@ -577,11 +563,6 @@ void RendererPresentFrame(void)
     }
     RendererEndFrame();
     LbMouseOnEndSwap();
-}
-
-int RendererIsScreenLocked(void)
-{
-    return s_frame_open ? 1 : 0;
 }
 
 int RendererIsFrameOpen(void)

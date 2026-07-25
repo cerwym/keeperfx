@@ -497,7 +497,7 @@ void draw_overlay_compass(long base_x, long base_y)
     int center_y = base_y * units_per_px / 16 + MapDiagonalLength / 2;
     int shift_x = (-(MapDiagonalLength * 7 / 16) * LbSinL(cam->rotation_angle_x)) >> LbFPMath_TrigmBits;
     int shift_y = (-(MapDiagonalLength * 7 / 16) * LbCosL(cam->rotation_angle_x)) >> LbFPMath_TrigmBits;
-    if (RendererIsScreenLocked()) {
+    if (RendererIsFrameOpen()) {
         LbTextDrawResized(center_x + shift_x - w, center_y + shift_y - h, tx_units_per_px, get_string(GUIStr_MapN), compass_flags);
     }
     shift_x = ( (MapDiagonalLength*7/16) * LbSinL(cam->rotation_angle_x)) >> LbFPMath_TrigmBits;
@@ -1080,12 +1080,11 @@ TbBool keeper_screen_redraw(void)
     } else {
         RendererClearScreen(0);
     }
-    if (RendererLockScreen())
+    if (RendererBeginFrame())
     {
         setup_engine_window(player->engine_window_x, player->engine_window_y,
             player->engine_window_width, player->engine_window_height);
         redraw_display();
-        RendererUnlockScreen();
         return true;
     }
     return false;

@@ -166,10 +166,11 @@ bool RendererSoftware::BeginFrame()
     m_screenW = RendererPhysicalWidth();
     m_screenH = RendererPhysicalHeight();
 
-    // RendererBeginFrame() is not guarded and runs twice per present (once in
-    // RendererLockScreen, again in RendererPresentFrame).  Open the IR graph
-    // only once per frame — a second BeginFrame() would wipe the UI already
-    // appended this frame.  EndFrame() clears m_frame_open.
+    // RendererBeginFrame() is not guarded and runs more than once per present
+    // (the engine opens the frame, then RendererPresentFrame calls it again
+    // defensively).  Open the IR graph only once per frame — a second
+    // BeginFrame() would wipe the UI already appended this frame.  EndFrame()
+    // clears m_frame_open.
     if (m_frame_open)
         return true;
     m_frame_open = true;
@@ -209,9 +210,10 @@ void RendererSoftware::EndFrame()
     m_render_graph.Flip(fs);
 
     // The deferred UI+text replay and the cursor draw into the WScreen buffer,
-    // but RendererUnlockScreen() nulled it before present.  The draw-surface
-    // pixels are always valid (no real SDL lock needed), so point WScreen back
-    // at them with a full-screen graphics window for the replay, then clear it.
+    // but RendererEndFrame() released the whole-frame framebuffer lock before
+    // calling us.  The draw-surface pixels are always valid (no real SDL lock
+    // needed), so point WScreen back at them with a full-screen graphics window
+    // for the replay, then clear it before the blit.
     if (lbDrawSurface)
     {
         RendererSetWScreen(static_cast<TbPixel*>(lbDrawSurface->pixels));

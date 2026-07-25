@@ -435,7 +435,7 @@ struct movie_t {
 		// Route palette update through the renderer — software backend applies it to the
 		// draw surface; GPU backends ignore it (palette comes through SubmitVideoFrame).
 		RendererNotifyFmvPalette(bgra);
-		if (!RendererLockScreen()) {
+		if (!RendererBeginFrame()) {
 			return;
 		}
 		// Try GPU video frame path first.
@@ -469,7 +469,6 @@ struct movie_t {
 			vdesc.embedded_palette = m_frame->data[1];
 			RendererPresentImage(&vdesc);
 		}
-		RendererUnlockScreen();
 		RendererPresentFrame();
 	}
 

@@ -3053,12 +3053,11 @@ void gameplay_loop_draw()
     }
     keeper_wait_for_screen_focus();
     // Direct information/error messages
-    if (RendererLockScreen()) {
+    if (RendererBeginFrame()) {
         if ( do_draw ) {
             perform_any_screen_capturing();
         }
         draw_onscreen_direct_messages();
-        RendererUnlockScreen();
     }
     // Move the graphics window to center of screen buffer and swap screen
     if ( do_draw ) {
