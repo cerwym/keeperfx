@@ -692,6 +692,8 @@ void RendererSetPhysicalDimensions(int width, int height)
 {
     s_physicalScreenWidth  = width;
     s_physicalScreenHeight = height;
+    s_wscreen = NULL;
+    s_graphicsWindowPtr = NULL;
 }
 
 /******************************************************************************/

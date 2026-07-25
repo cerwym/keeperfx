@@ -209,12 +209,7 @@ void RendererSoftware::EndFrame()
     FrameState fs = {};
     m_render_graph.Flip(fs);
 
-    // The deferred UI+text replay and the cursor draw into the WScreen buffer,
-    // but RendererEndFrame() released the whole-frame framebuffer lock before
-    // calling us.  The draw-surface pixels are always valid (no real SDL lock
-    // needed), so point WScreen back at them with a full-screen graphics window
-    // for the replay, then clear it before the blit.
-    if (lbDrawSurface)
+    if (lbDrawSurface && LockFramebuffer(nullptr) != nullptr)
     {
         RendererSetWScreen(static_cast<TbPixel*>(lbDrawSurface->pixels));
         RendererSetScreenDimensions(lbDrawSurface->pitch, lbDrawSurface->h);
@@ -251,6 +246,7 @@ void RendererSoftware::EndFrame()
         CursorLayer_Draw();
 
         RendererSetWScreen(NULL);
+        UnlockFramebuffer(); // release before the blit — SDL rejects a locked surface
     }
 
     SDL_Window* win = static_cast<SDL_Window*>(platform_get_sdl_window());
