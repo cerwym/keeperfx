@@ -109,8 +109,13 @@ void RendererUnlockScreen(void);
  *  compositing, and the backend EndFrame/buffer swap. */
 void RendererPresentFrame(void);
 
-/** Query whether the screen is currently locked (WScreen is valid). */
+/** Query whether the screen is currently locked (WScreen is valid).
+ *  Deprecated alias for RendererIsFrameOpen() during the lock-collapse migration. */
 int RendererIsScreenLocked(void);
+
+/** Query whether a frame is currently open (BeginFrame ran, EndFrame has not).
+ *  True during all drawing; the software CPU framebuffer is published while open. */
+int RendererIsFrameOpen(void);
 
 /** Callback receiving the current frame's CPU pixels.  The pointer is valid
  *  ONLY for the duration of the call — do not retain it. */

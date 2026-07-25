@@ -88,6 +88,10 @@ static long                 s_graphicsWindowY      = 0;
 static long                 s_graphicsWindowWidth  = 0;
 static long                 s_graphicsWindowHeight = 0;
 
+// Frame-lifecycle state (replaces the old per-draw-bracket screen lock).
+static bool                 s_frame_open           = false; // BeginFrame ran, EndFrame not yet
+static bool                 s_fb_locked            = false; // CPU framebuffer published this frame (software)
+
 /******************************************************************************/
 
 void RendererNotifyTexturesReloaded()
@@ -494,13 +498,37 @@ int RendererBeginFrame(void)
 {
     if (!s_activeRenderer)
         return 0;
-    return s_activeRenderer->BeginFrame() ? 1 : 0;
+    if (!s_activeRenderer->BeginFrame())
+        return 0;
+    if (!s_fb_locked && !RendererGetCapabilities().hasGPURenderPath)
+    {
+        int pitch = 0;
+        unsigned char* pixels = RendererLockFramebuffer(&pitch);
+        if (!pixels)
+            return 0; // CPU framebuffer unavailable — frame not drawable
+        s_wscreen = pixels;
+        s_graphicsScreenWidth = pitch;
+        s_graphicsWindowPtr = &s_wscreen[s_graphicsWindowX +
+            s_graphicsScreenWidth * s_graphicsWindowY];
+        s_fb_locked = true;
+    }
+    s_frame_open = true;
+    return 1;
 }
 
 void RendererEndFrame(void)
 {
+    // Release the whole-frame CPU framebuffer lock BEFORE the backend's EndFrame.
+    if (s_fb_locked)
+    {
+        RendererUnlockFramebuffer();
+        s_fb_locked = false;
+    }
     if (s_activeRenderer)
         s_activeRenderer->EndFrame();
+    s_wscreen = NULL;
+    s_graphicsWindowPtr = NULL;
+    s_frame_open = false;
 }
 
 void RendererClearScreen(unsigned char colour_index)
@@ -513,43 +541,20 @@ void RendererClearScreen(unsigned char colour_index)
 /* High-level screen lifecycle (replaces LbScreen* trampolines)               */
 /******************************************************************************/
 
-// Tracks whether the screen is currently locked (RendererLockScreen called, not yet unlocked).
-// Decoupled from any CPU framebuffer pointer so that GPU mode (no CPU framebuffer) works correctly.
-static bool s_screen_locked = false;
 static bool s_world_drawn_this_frame = false;
 
+// Compatibility shims for the lock-collapse migration.  The CPU framebuffer is now
+// published for the whole frame by RendererBeginFrame() and released by
+// RendererEndFrame(); there is no per-draw-bracket lock anymore.  Engine call
+// sites migrate to RendererBeginFrame() / RendererIsFrameOpen() directly.
 int RendererLockScreen(void)
 {
-    if (!RendererBeginFrame())
-        return 0;
-    if (RendererGetCapabilities().hasGPURenderPath) {
-        // GPU mode: no CPU framebuffer. WScreen stays null for the entire frame.
-        s_wscreen = NULL;
-        s_graphicsWindowPtr = NULL;
-        s_screen_locked = true;
-        return 1;
-    }
-    int pitch = 0;
-    unsigned char *pixels = RendererLockFramebuffer(&pitch);
-    if (!pixels) {
-        s_graphicsWindowPtr = NULL;
-        s_wscreen = NULL;
-        return 0;
-    }
-    s_wscreen = pixels;
-    s_graphicsScreenWidth = pitch;
-    s_graphicsWindowPtr = &s_wscreen[s_graphicsWindowX +
-        s_graphicsScreenWidth * s_graphicsWindowY];
-    s_screen_locked = true;
-    return 1;
+    return RendererBeginFrame();
 }
 
 void RendererUnlockScreen(void)
 {
-    s_screen_locked = false;
-    s_wscreen = NULL;
-    s_graphicsWindowPtr = NULL;
-    RendererUnlockFramebuffer();
+    // No-op: the whole-frame framebuffer publication is released at EndFrame.
 }
 
 void RendererPresentFrame(void)
@@ -576,30 +581,20 @@ void RendererPresentFrame(void)
 
 int RendererIsScreenLocked(void)
 {
-    return s_screen_locked ? 1 : 0;
+    return s_frame_open ? 1 : 0;
+}
+
+int RendererIsFrameOpen(void)
+{
+    return s_frame_open ? 1 : 0;
 }
 
 TbBool RendererReadFramePixels(RendererFramePixelsFn fn, void* user)
 {
-    if (!fn)
+    if (!fn || !s_wscreen)
         return false;
-    // Capture normally runs inside the engine's existing draw bracket; only take
-    // a lock of our own when one is not already held, and release exactly what
-    // we took.
-    const bool held = s_screen_locked;
-    if (!held && !RendererLockScreen())
-        return false;
-
-    TbBool ret = false;
-    if (s_wscreen != NULL)
-    {
-        ret = fn(s_wscreen, (int)RendererScreenWidth(), (int)RendererScreenHeight(),
-                 (int)s_graphicsScreenWidth, user);
-    }
-
-    if (!held)
-        RendererUnlockScreen();
-    return ret;
+    return fn(s_wscreen, (int)RendererScreenWidth(), (int)RendererScreenHeight(),
+              (int)s_graphicsScreenWidth, user);
 }
 
 int RendererConsumeWorldDrawn(void)
