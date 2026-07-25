@@ -20,9 +20,6 @@ list(FILTER KEEPERFX_SOURCES_C   EXCLUDE REGEX ".*/debugscreen/.*\\.c$")
 list(FILTER KEEPERFX_SOURCES_C   EXCLUDE REGEX ".*/platform/vita_malloc_wrap\\.c$")
 list(FILTER KEEPERFX_SOURCES_C   EXCLUDE REGEX ".*/platform/vita_sce_diag\\.c$")
 list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/renderer/vita/.*\\.cpp$")
-# VitaGPUBackend.cpp is NOT excluded: RenderPassSystem holds it by concrete type,
-# so its symbols are needed on every platform.  The TU self-stubs off-Vita
-# (every PLATFORM_VITA block has an #else), so it costs only dead code.
 list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/renderer/RendererVita\\.cpp$")
 list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/renderer/Renderer3DS\\.cpp$")
 list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/platform/PlatformVita\\.cpp$")

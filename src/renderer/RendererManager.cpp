@@ -65,7 +65,6 @@ extern "C" {
 }
 #include "thing_creature.h"    // swipe_sprites
 #include "front_torture.h"     // fronttorture_sprites, doors[]
-#include "renderer/RenderPass_C.h"
 #include <unordered_map>
 #include <vector>
 #include "post_inc.h"
@@ -371,35 +370,12 @@ int RendererInit(RendererType type)
     }
     SpriteSheetManager::Get().ScheduleRebuild();
 
-    // Wire the LbSpriteDraw intercept for GPU sprite submission.
-    // Vita: route through VitaGPUBackend (the GPU sprite batch path).
-    // OpenGL: route through UIRenderer (IR path) — no sprite backend needed.
-#if defined(PLATFORM_VITA)
-    if (type == RENDERER_VITA)
-        RenderPass_Initialize(1); // BACKEND_GPU_VITA
-#elif defined(RENDERER_OPENGL_ENABLED)
-    if (type == RENDERER_OPENGL)
-        g_render_pass_active = 1; // UIRenderer handles sprites directly
-#endif
-    if (g_render_pass_active)
-    {
-#if defined(RENDERER_OPENGL_ENABLED)
-        SYNCLOG("Sprite intercept active: UIRenderer (IR)");
-#else
-        SYNCLOG("Sprite intercept active: %s", RenderPass_GetBackendName());
-#endif
-    }
 
     return true;
 }
 
 void RendererShutdown()
 {
-#if !defined(RENDERER_OPENGL_ENABLED)
-    // Vita/software only: UIRenderer handles the OpenGL sprite path.
-    RenderPass_Shutdown();
-#endif
-    g_render_pass_active = 0;
 
     // The backend owns its sub-renderers and destroys them inside Shutdown()
     // (after joining its render thread and while its GL context is still current),
