@@ -410,6 +410,11 @@ protected:
      *  pixels only exist after the panel sprites have replayed). */
     void SampleMinimapBackground(int diaglen, int panel_x, int panel_y);
 
+    /** Tile the slab texture into the current WScreen at (x,y,w,h).  Owned by the
+     *  CPU backend (SoftwareUIRenderer); the base merged replay calls it via
+     *  virtual dispatch for a deferred IRUISlabBackgroundCmd.  No-op by default. */
+    virtual void TileSlabBackground(int /*x*/, int /*y*/, int /*w*/, int /*h*/) {}
+
     /** Sprite handle → raw TbSprite* map, used by CPU default implementations. */
     std::unordered_map<SpriteHandle, const struct TbSprite*> m_handle_to_sprite;
 
