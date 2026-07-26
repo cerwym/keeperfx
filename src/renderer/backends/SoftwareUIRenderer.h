@@ -36,11 +36,15 @@ public:
      *  submission order (masked to the minimap circle by MapShape*). */
     void SubmitMinimap(int screen_x, int screen_y, int size) override;
 
-    /** Tile the GUI slab texture across the given rect.  Drawn immediately —
-     *  it is a background, so it belongs under the deferred UI that replays on
-     *  top of it in EndFrame.  (Folding this into the IR proper is Stage 5
-     *  work, alongside the world compositing.) */
+    /** Record the slab-background tile in the UI command buffer so it replays in
+     *  submission order with the rest of the UI, after the world (falls back to an
+     *  immediate tile when there is no write window). */
     bool SubmitSlabBackground(int x, int y, int w, int h) override;
+
+protected:
+    /** Tile the GUI slab texture into the current WScreen — the realization used
+     *  both by the immediate fallback and by the base merged replay. */
+    void TileSlabBackground(int x, int y, int w, int h) override;
 
 private:
     std::vector<uint8_t> m_minimap_buf;

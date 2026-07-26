@@ -135,11 +135,6 @@ bool RendererSoftware::Init()
 
 void RendererSoftware::Shutdown()
 {
-    free(m_world_raster);
-    m_world_raster = nullptr;
-    m_world_raster_size = 0;
-    m_world_raster_valid = false;
-
     if (s_scaleSurface) {
         SDL_DestroySurface(s_scaleSurface);
         s_scaleSurface = nullptr;
@@ -191,6 +186,10 @@ bool RendererSoftware::BeginFrame()
         ui->SetUICommandBuffers(&m_render_graph.GetUIBuffers());
     if (ITextRenderer* text = RendererGetTextRenderer())
         text->SetTextCommandBuffers(&m_render_graph.GetTextBuffers());
+    // The cursor layer records keeper-hand sprites into the same UI buffer
+    // (cursor_hands) with the shared seq, so they replay in submission order.
+    if (m_cursorLayer)
+        m_cursorLayer->SetCursorWriteBuffers(&m_render_graph.GetUIBuffers());
     return true;
 }
 
@@ -206,6 +205,7 @@ void RendererSoftware::EndFrame()
     ITextRenderer* text = RendererGetTextRenderer();
     if (ui)   ui->SetUICommandBuffers(nullptr);
     if (text) text->SetTextCommandBuffers(nullptr);
+    if (m_cursorLayer) m_cursorLayer->SetCursorWriteBuffers(nullptr);
     FrameState fs = {};
     m_render_graph.Flip(fs);
 
@@ -215,29 +215,9 @@ void RendererSoftware::EndFrame()
         RendererSetScreenDimensions(lbDrawSurface->pitch, lbDrawSurface->h);
         RendererSetViewport(0, 0, lbDrawSurface->w, lbDrawSurface->h);
 
-        // World-raster cache: make transparent UI compositing idempotent.
-        // On frames that drew world content (LockScreen was called), snapshot
-        // lbDrawSurface into m_world_raster.  On present-only frames, restore
-        // the clean world snapshot so overlays don't accumulate.
-        const size_t surface_bytes = (size_t)lbDrawSurface->pitch * (size_t)lbDrawSurface->h;
-        if (RendererConsumeWorldDrawn())
-        {
-            if (m_world_raster_size != surface_bytes)
-            {
-                free(m_world_raster);
-                m_world_raster = static_cast<uint8_t*>(malloc(surface_bytes));
-                m_world_raster_size = m_world_raster ? surface_bytes : 0;
-            }
-            if (m_world_raster)
-            {
-                memcpy(m_world_raster, lbDrawSurface->pixels, surface_bytes);
-                m_world_raster_valid = true;
-            }
-        }
-        else if (m_world_raster_valid)
-        {
-            memcpy(lbDrawSurface->pixels, m_world_raster, surface_bytes);
-        }
+        if (!RendererExecutePendingWorld() && RendererIsFadeCachePreserved())
+            RendererReexecuteWorld();
+        RendererSetViewport(0, 0, lbDrawSurface->w, lbDrawSurface->h);
 
         if (ui)
             ui->ReplayMergedFromIR(m_render_graph.GetUIBuffersRT(),
@@ -289,9 +269,6 @@ void RendererSoftware::ClearScreen(uint8_t colour_index)
 {
     if (lbDrawSurface)
         SDL_FillSurfaceRect(lbDrawSurface, NULL, colour_index);
-    // The cached world snapshot is no longer valid after a full-screen clear
-    // (e.g. transitioning to the overhead map, FMV, or menu screens).
-    m_world_raster_valid = false;
 }
 
 uint8_t* RendererSoftware::LockFramebuffer(int* out_pitch)

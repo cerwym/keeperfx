@@ -68,6 +68,21 @@ public:
     virtual void DrawFrontView(struct Camera* cam) = 0;
 
     // =========================================================================
+    // Deferred resolution (software)
+
+    /** Realise a pending recorded world pass into the current WScreen.
+     *  @return 1 if a world was drawn, 0 if none was pending. */
+    virtual int ResolveDeferredWorld() { return 0; }
+
+    /** Re-lay the last recorded world (retained bucket list) for present-only
+     *  palette-fade frames that re-present without a redraw. */
+    virtual void ReexecuteDeferredWorld() {}
+
+    /** Flag the currently-recorded world pass as a possession lens capture, so
+     *  ResolveDeferredWorld() routes it through the lens buffer + distort. */
+    virtual void MarkDeferredWorldAsLensCapture() {}
+
+    // =========================================================================
     // Info
 
     /** Human-readable backend name (e.g. "SOFTWARE", "VITA_GPU"). */

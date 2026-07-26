@@ -34,6 +34,8 @@ void SoftwareMapFadePass::PrepareBuffers(uint8_t* fade_src, uint8_t* fade_dest, 
     else
         redraw_frontview();
 
+    RendererExecutePendingWorld();
+
     int fadebuf_pos = 0;
     for (int i = 0; i < height; i++)
     {

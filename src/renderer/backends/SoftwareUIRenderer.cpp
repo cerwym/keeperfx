@@ -55,11 +55,11 @@ void SoftwareUIRenderer::SubmitMinimap(int screen_x, int screen_y, int size)
     cmds->minimap_blit.set  = true;
 }
 
-bool SoftwareUIRenderer::SubmitSlabBackground(int x, int y, int w, int h)
+void SoftwareUIRenderer::TileSlabBackground(int x, int y, int w, int h)
 {
     TbPixel* screen = RendererGetWScreen();
     if (!screen || !gui_slab)
-        return false;
+        return;
 
     long i;
     long scr_x = x / pixel_size;
@@ -85,7 +85,7 @@ bool SoftwareUIRenderer::SubmitSlabBackground(int x, int y, int w, int h)
     if (scr_y + scr_h > i)
         scr_h = i - scr_y;
     if ((scr_w <= 0) || (scr_h <= 0))
-        return true;
+        return;
 
     TbPixel* out = &screen[scr_x + RendererScreenWidth() * scr_y];
     for (i = 0; scr_h > i; i++)
@@ -108,6 +108,24 @@ bool SoftwareUIRenderer::SubmitSlabBackground(int x, int y, int w, int h)
         }
         out += RendererScreenWidth();
     }
+}
+
+bool SoftwareUIRenderer::SubmitSlabBackground(int x, int y, int w, int h)
+{
+    if (!gui_slab)
+        return false;
+
+    if (m_ui_write_cmds)
+    {
+        IRUISlabBackgroundCmd cmd;
+        cmd.layer = IRUILayer::GameUI;
+        cmd.x = x; cmd.y = y; cmd.w = w; cmd.h = h;
+        cmd.seq = m_ui_write_cmds->NextSeq();
+        m_ui_write_cmds->slab_backgrounds.Append(cmd);
+        return true;
+    }
+    // No write window (e.g. a capture path draws synchronously): tile now.
+    TileSlabBackground(x, y, w, h);
     return true;
 }
 

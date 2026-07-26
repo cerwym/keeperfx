@@ -169,8 +169,13 @@ void RendererBeginLensCapture(void)
 
 void RendererEndLensCapture(void)
 {
+    // If the lens armed a capture this frame, flag the world pass the engine just
+    // recorded as a lens capture so the world resolver routes it through the lens
+    // buffer.  GL applies its own lens in EndFrame_GL (IsWorldCaptureActive false).
     ILensRenderer* lens = RendererGetLensRenderer();
-    if (lens) lens->EndWorldCapture();
+    if (lens && lens->IsWorldCaptureActive())
+        if (IWorldViewRenderer* w = RendererGetWorldViewRenderer())
+            w->MarkDeferredWorldAsLensCapture();
 }
  
 TbBool RendererSubmitOverheadMap(const unsigned char* tile_colors, int tiles_x, int tiles_y,
@@ -541,8 +546,6 @@ void RendererClearScreen(unsigned char colour_index)
 /* High-level screen lifecycle (replaces LbScreen* trampolines)               */
 /******************************************************************************/
 
-static bool s_world_drawn_this_frame = false;
-
 void RendererPresentFrame(void)
 {
     PlatformManager_FrameTick();
@@ -578,12 +581,6 @@ TbBool RendererReadFramePixels(RendererFramePixelsFn fn, void* user)
               (int)s_graphicsScreenWidth, user);
 }
 
-int RendererConsumeWorldDrawn(void)
-{
-    int v = s_world_drawn_this_frame ? 1 : 0;
-    s_world_drawn_this_frame = false;
-    return v;
-}
 
 /******************************************************************************/
 /* Screen setup / teardown (replaces LbScreenSetup / LbScreenReset)           */
@@ -759,7 +756,6 @@ TbResult RendererWaitVbi(void)                   { return LbScreenWaitVbi(); }
 
 void WorldViewRenderer_BeginWorldPass(int w, int h, int vp_x, int vp_y)
 {
-    s_world_drawn_this_frame = true;
     if (RendererGetWorldViewRenderer())
         RendererGetWorldViewRenderer()->BeginWorldPass(w, h, vp_x, vp_y);
 }
@@ -774,6 +770,18 @@ void WorldViewRenderer_DrawFrontView(struct Camera* cam)
 {
     if (RendererGetWorldViewRenderer())
         RendererGetWorldViewRenderer()->DrawFrontView(cam);
+}
+
+int RendererExecutePendingWorld(void)
+{
+    IWorldViewRenderer* w = RendererGetWorldViewRenderer();
+    return w ? w->ResolveDeferredWorld() : 0;
+}
+
+void RendererReexecuteWorld(void)
+{
+    if (IWorldViewRenderer* w = RendererGetWorldViewRenderer())
+        w->ReexecuteDeferredWorld();
 }
 
 int WorldViewRenderer_SubmitKeeperSprite(int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,

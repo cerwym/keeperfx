@@ -114,10 +114,6 @@ typedef TbBool (*RendererFramePixelsFn)(const unsigned char* pixels,
 
 TbBool RendererReadFramePixels(RendererFramePixelsFn fn, void* user);
 
-/** Returns 1 (and resets) if the world was drawn this frame.
- *  Used by the software renderer to snapshot the clean world surface. */
-int RendererConsumeWorldDrawn(void);
-
 /******************************************************************************/
 /* Screen setup / teardown                                                    */
 /******************************************************************************/
@@ -295,6 +291,14 @@ void WorldViewRenderer_DrawIsometricView(void);
 /** Draw the front-view bucket list to the framebuffer.
  *  Call this after the front-view geometry has been added to the bucket list. */
 void WorldViewRenderer_DrawFrontView(struct Camera* cam);
+
+/** Resolve a pending deferred world into the current WScreen.
+ *  Returns 1 if a world was executed, 0 if none was pending. */
+int  RendererExecutePendingWorld(void);
+/** Re-lay the last world from the retained bucket list into the current WScreen.
+ *  Used on present-only palette-fade frames so the world stays composited without
+ *  the old m_world_raster snapshot cache. */
+void RendererReexecuteWorld(void);
 
 /** Submit a keeper-sprite (creature/object) for GPU rendering during the bucket walk.
  *  Returns 1 if the GPU handled it (CPU blit should be skipped), 0 to fall back. */

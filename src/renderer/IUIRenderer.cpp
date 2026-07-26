@@ -398,7 +398,7 @@ void IUIRenderer::ReplayMergedFromIR(const UICommandBuffers& ui,
     // background draws under the deferred foreground; see docs.)
     struct Ref { uint32_t seq; uint8_t kind; uint32_t idx; };
     enum { K_Sprite = 0, K_Remap, K_Colored, K_Box, K_Text, K_Viewport,
-           K_MinimapSetup, K_MinimapBlit };
+           K_MinimapSetup, K_MinimapBlit, K_SlabBg, K_KeeperHand };
     std::vector<Ref> order;
     order.reserve(ui.sprites.Size() + ui.sprites_remap.Size() +
                   ui.sprites_colored.Size() + ui.solid_boxes.Size() +
@@ -411,6 +411,10 @@ void IUIRenderer::ReplayMergedFromIR(const UICommandBuffers& ui,
         order.push_back({ ui.sprites_colored.Data()[i].seq, K_Colored, i });
     for (uint32_t i = 0; i < (uint32_t)ui.solid_boxes.Size(); ++i)
         order.push_back({ ui.solid_boxes.Data()[i].seq, K_Box, i });
+    for (uint32_t i = 0; i < (uint32_t)ui.slab_backgrounds.Size(); ++i)
+        order.push_back({ ui.slab_backgrounds.Data()[i].seq, K_SlabBg, i });
+    for (uint32_t i = 0; i < (uint32_t)ui.cursor_hands.Size(); ++i)
+        order.push_back({ ui.cursor_hands.Data()[i].seq, K_KeeperHand, i });
     for (uint32_t i = 0; i < (uint32_t)ui.viewports.Size(); ++i)
         order.push_back({ ui.viewports.Data()[i].seq, K_Viewport, i });
     for (uint32_t i = 0; i < (uint32_t)ui.minimap_bg_setups.Size(); ++i)
@@ -461,6 +465,17 @@ void IUIRenderer::ReplayMergedFromIR(const UICommandBuffers& ui,
                 SubmitSolidBox(c.x, c.y, c.w, c.h, c.colour_idx,
                                draw_state_make(c.draw_flags, 0));
             }
+            break;
+        }
+        case K_SlabBg: {
+            const IRUISlabBackgroundCmd& c = ui.slab_backgrounds.Data()[r.idx];
+            TileSlabBackground(c.x, c.y, c.w, c.h);
+            break;
+        }
+        case K_KeeperHand: {
+            const IRUICursorKeeperHandCmd& c = ui.cursor_hands.Data()[r.idx];
+            process_keeper_sprite((short)c.x, (short)c.y, c.kspr_base, c.angle,
+                                  c.sprgroup, c.scale, c.draw_flags, c.alpha);
             break;
         }
         case K_Text:

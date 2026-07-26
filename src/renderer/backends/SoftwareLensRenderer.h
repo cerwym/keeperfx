@@ -4,15 +4,8 @@
 /** @file SoftwareLensRenderer.h
  *     CPU software implementation of ILensRenderer.
  * @par Purpose:
- *     The software backend has no GPU lens passes — it owns the immediate-mode
- *     world-capture bracket instead. BeginWorldCapture() redirects WScreen to an
- *     offscreen lens buffer around engine()+swipe (so only the world is captured,
- *     UI excluded); EndWorldCapture() restores WScreen and distorts the captured
- *     buffer back onto the screen via draw_lens_effect() -> the CPU distortion
- *     loops. This logic previously lived on RendererSoftware; it now lives here so
- *     each backend fully owns its lens realization and the lens system is reached
- *     uniformly through RendererGetLensRenderer(). Software has no GPU passes —
- *     the immediate-mode capture bracket is the whole realization here.
+ *     The software backend has no GPU lens passes — it owns a CPU world-capture
+ *     instead. 
  */
 /******************************************************************************/
 #pragma once
@@ -29,19 +22,23 @@ public:
 
     const char* GetName() const override { return "SOFTWARE"; }
 
-    /** Redirect WScreen to the offscreen lens buffer so engine()+swipe render
-     *  the world (UI excluded) into it. No-op if no lens effect is ready. */
-    void BeginWorldCapture() override;
+    /** Draw phase: set up the full-screen engine window (so engine() computes the
+     *  lens geometry) and snapshot the distort params.  Does NOT redirect WScreen
+     *  — the world is deferred to EndFrame.  Returns true if a capture is active. */
+    bool BeginWorldCapture() override;
 
-    /** Restore WScreen and distort the captured world buffer back onto the
-     *  screen via draw_lens_effect(). No-op if BeginWorldCapture() did not
-     *  activate a capture this frame. */
-    void EndWorldCapture() override;
+    bool IsWorldCaptureActive() const override { return m_capture_active; }
 
-    // No GPU passes on software — the capture bracket above is the whole path.
+    /** EndFrame: redirect WScreen to the offscreen lens buffer for the deferred
+     *  world + swipe. */
+    void ResolveWorldCaptureBegin() override;
+
+    /** EndFrame: distort the captured buffer onto the screen and restore WScreen. */
+    void ResolveWorldCaptureEnd() override;
 
 private:
-    // Immediate-mode capture bracket state (game thread == render thread here).
+    // Capture state.  Prepared in the draw phase (BeginWorldCapture), consumed at
+    // EndFrame (ResolveWorldCapture*).  Same game thread throughout.
     bool             m_capture_active = false;
     unsigned char*   m_saved_wscreen  = nullptr;
     int              m_saved_graphics_w = 0;
@@ -50,6 +47,13 @@ private:
     unsigned char*   m_lens_buffer    = nullptr;
     unsigned int     m_lens_buffer_w  = 0;
     unsigned int     m_lens_buffer_h  = 0;
+    // Distort params snapshotted at prepare time (engine window may change before
+    // EndFrame as later UI draws run).
+    long             m_view_x = 0;
+    long             m_view_y = 0;
+    long             m_view_width = 0;
+    long             m_view_height = 0;
+    int              m_lens_type = 0;
 };
 
 /******************************************************************************/

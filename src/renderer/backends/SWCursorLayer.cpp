@@ -23,6 +23,7 @@
 #include "engine_render.h"     // process_keeper_sprite_ex
 #include "globals.h"
 #include "renderer/RendererManager.h"
+#include "renderer/ir/UICommands.h"   // UICommandBuffers, IRUICursorKeeperHandCmd
 
 #include "post_inc.h"
 
@@ -107,6 +108,18 @@ void SWCursorLayer::SubmitKeeperHandSprite(short x, short y,
                                            int32_t scale,
                                            TbDrawFlagsMask draw_flags)
 {
+    if (m_write_cmds)
+    {
+        IRUICursorKeeperHandCmd cmd;
+        cmd.x = x; cmd.y = y;
+        cmd.kspr_base = kspr_base; cmd.angle = angle; cmd.sprgroup = sprgroup;
+        cmd.scale = scale; cmd.draw_flags = draw_flags;
+        cmd.alpha = (draw_flags & Lb_SPRITE_ALPHA_ADDITIVE) != 0;
+        cmd.seq = m_write_cmds->NextSeq();
+        m_write_cmds->cursor_hands.Append(cmd);
+        return;
+    }
+    // No write window: draw immediately (legacy fallback).
     process_keeper_sprite_ex(x, y, kspr_base, angle, sprgroup, scale, draw_flags,
                              (draw_flags & Lb_SPRITE_ALPHA_ADDITIVE) != 0);
 }

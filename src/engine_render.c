@@ -6829,6 +6829,20 @@ void display_drawlist(void) // Draws isometric and 1st person view. Not frontvie
       WARNLOG("Incurred %lu rendering problems; last was with poly kind %ld",render_problems,render_prob_kind);
 }
 
+void software_execute_world_from_ir(int win_x, int win_y, int win_w, int win_h,
+                                    int is_frontview, struct Camera *cam)
+{
+    RendererSetViewport(win_x, win_y, win_w, win_h);
+    setup_vecs(RendererGetGraphicsWindowPtr(), NULL,
+               (unsigned int)RendererScreenWidth(),
+               (unsigned int)win_w, (unsigned int)win_h);
+    render_fade_tables = pixmap.fade_tables;
+    if (is_frontview)
+        display_fast_drawlist(cam);
+    else
+        display_drawlist();
+}
+
 /******************************************************************************/
 /* Fill-time (GL) submission of nonspatial overlay elements — the same
  * UIRenderer submissions draw_nonspatial_sprites_gpu() below makes at walk
@@ -7396,16 +7410,15 @@ static TbBool project_point_helper(struct PlayerInfo *player, int zoom, MapCoord
 {
     int vertical_shift;
     int64_t new_zoom;
-    uint8_t offset;
     short window_width = player->engine_window_width;
     short window_height = player->engine_window_height;
 
     *x_out = (zoom * horizontal_delta >> 16) + (*(uint16_t *)&window_width / 2);
     vertical_shift = zoom * vertical_delta >> 8;
     *z_out = window_height - ((vertical_shift + ((uint16_t)(window_height & PPH_EVEN_ALIGN_MASK) << 7)) >> 8) + 64;
-    new_zoom = (zoom * ((int16_t) pos_z)) << 7;
-    offset = *((uint8_t *)&new_zoom + 4);
-    *y_out = (vertical_shift + ((uint16_t)(window_height & PPH_EVEN_ALIGN_MASK) << 7) - ((offset + (signed int)new_zoom) >> 16)) >> 8;
+    new_zoom = ((int64_t)zoom * (int16_t)pos_z) << 7;
+    *y_out = (int32_t)((vertical_shift + ((uint16_t)(window_height & PPH_EVEN_ALIGN_MASK) << 7)
+                        - (int32_t)(new_zoom >> 16)) >> 8);
 
     return (*x_out >= 0 && *x_out < window_width && *y_out >= 0 && *y_out < window_height);
 }
