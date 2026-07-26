@@ -114,7 +114,6 @@ void SWCursorLayer::SubmitKeeperHandSprite(short x, short y,
         cmd.x = x; cmd.y = y;
         cmd.kspr_base = kspr_base; cmd.angle = angle; cmd.sprgroup = sprgroup;
         cmd.scale = scale; cmd.draw_flags = draw_flags;
-        cmd.alpha = (draw_flags & Lb_SPRITE_ALPHA_ADDITIVE) != 0;
         cmd.seq = m_write_cmds->NextSeq();
         m_write_cmds->cursor_hands.Append(cmd);
         return;

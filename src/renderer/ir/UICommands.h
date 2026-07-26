@@ -20,6 +20,7 @@
 #include <vector>
 #include "renderer/SpriteHandle.h"
 #include "renderer/GpuTypes.h"
+#include "renderer/DrawState.h"
 #include "renderer/ir/IRCommandBuffer.h"
 
 // Forward declarations to avoid pulling in platform headers.
@@ -60,7 +61,7 @@ struct IRUISolidBoxCmd
     int32_t   h          = 0;
     uint8_t   colour_idx = 0;   /**< Palette index. */
     float     alpha      = 1.0f; /**< 1.0 = opaque. */
-    unsigned int draw_flags = 0; /**< Bullfrog draw flags at submit (software replay honours Lb_SPRITE_OUTLINE); GL ignores. */
+    TbDrawFlagsMask draw_flags = 0;
     float     ndc_z      = 0.5f; /**< NDC depth for WorldOverlay/WorldOverlayFlat layers; ignored for other layers. */
     uint32_t  seq        = 0;   /**< Global submission order across all IR command types. */
 };
@@ -95,7 +96,7 @@ struct IRUISpriteCmd
     int32_t      units_per_px  = 16;  /**< 16 = 100% scale. */
     SpriteHandle sprite        = kInvalidSpriteHandle;
     uint32_t     flags         = 0;   /**< kIRSpriteFlipHoriz | kIRSpriteScaled */
-    unsigned int draw_flags    = 0;   /**< Authoritative Bullfrog draw flags (Lb_SPRITE_TRANSPAR*, etc.); backends derive alpha/transparency from this. */
+    TbDrawFlagsMask draw_flags    = 0;
     float        ndc_z         = 0.5f; /**< NDC depth for WorldOverlay/WorldOverlayFlat layers; ignored for other layers. */
     uint32_t     seq           = 0;   /**< Global submission order across all IR command types. */
 };
@@ -109,7 +110,7 @@ struct IRUISpriteRemapCmd
     int32_t      units_per_px = 16;
     SpriteHandle sprite       = kInvalidSpriteHandle;
     int32_t      remap_row    = 0;   /**< Row into fade_tables[]. */
-    unsigned int draw_flags   = 0;   /**< Authoritative Bullfrog draw flags; backends derive alpha/transparency from this. */
+    TbDrawFlagsMask draw_flags   = 0;
     float        ndc_z        = 0.5f; /**< NDC depth for WorldOverlay/WorldOverlayFlat layers; ignored for other layers. */
     uint32_t     seq          = 0;   /**< Global submission order across all IR command types. */
 };
@@ -123,7 +124,7 @@ struct IRUISpriteColoredCmd
     int32_t      units_per_px = 16;
     SpriteHandle sprite       = kInvalidSpriteHandle;
     uint8_t      colour_idx   = 0;   /**< Palette index for flat output. */
-    unsigned int draw_flags   = 0;   /**< Authoritative Bullfrog draw flags; backends derive alpha/transparency from this. */
+    TbDrawFlagsMask draw_flags   = 0;
     float        ndc_z        = 0.5f; /**< NDC depth for WorldOverlay/WorldOverlayFlat layers; ignored for other layers. */
     uint32_t     seq          = 0;   /**< Global submission order across all IR command types. */
 };
@@ -201,7 +202,7 @@ struct IRUICursorPointerCmd
     int32_t           x             = 0;
     int32_t           y             = 0;
     int32_t           units_per_px  = 16;
-    unsigned int      draw_flags    = 0;        /**< Draw flags captured at submit time. */
+    TbDrawFlagsMask   draw_flags    = 0;
 };
 
 /** Draw the in-game keeper-hand / picked-up-thing sprite (software path).
@@ -210,15 +211,14 @@ struct IRUICursorPointerCmd
  */
 struct IRUICursorKeeperHandCmd
 {
-    int32_t        x          = 0;
-    int32_t        y          = 0;
-    unsigned short kspr_base  = 0;
-    short          angle      = 0;
-    unsigned char  sprgroup   = 0;
-    long           scale      = 0;
-    unsigned int   draw_flags = 0;
-    unsigned char  alpha      = 0;
-    uint32_t       seq        = 0; /**< Global submission order across all IR command types. */
+    int32_t   x          = 0;
+    int32_t   y          = 0;
+    uint16_t        kspr_base  = 0;
+    int16_t         angle      = 0;
+    uint8_t         sprgroup   = 0;
+    int32_t         scale      = 0;
+    TbDrawFlagsMask draw_flags = 0;
+    uint32_t        seq        = 0;  /**< Global submission order across all IR command types. */
 };
 
 /******************************************************************************/

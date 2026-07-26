@@ -402,7 +402,9 @@ void IUIRenderer::ReplayMergedFromIR(const UICommandBuffers& ui,
     std::vector<Ref> order;
     order.reserve(ui.sprites.Size() + ui.sprites_remap.Size() +
                   ui.sprites_colored.Size() + ui.solid_boxes.Size() +
-                  ui.viewports.Size() + text.draws.Size());
+                  ui.slab_backgrounds.Size() + ui.cursor_hands.Size() +
+                  ui.viewports.Size() + ui.minimap_bg_setups.Size() +
+                  (ui.minimap_blit.set ? 1u : 0u) + text.draws.Size());
     for (uint32_t i = 0; i < (uint32_t)ui.sprites.Size(); ++i)
         order.push_back({ ui.sprites.Data()[i].seq, K_Sprite, i });
     for (uint32_t i = 0; i < (uint32_t)ui.sprites_remap.Size(); ++i)
@@ -474,8 +476,9 @@ void IUIRenderer::ReplayMergedFromIR(const UICommandBuffers& ui,
         }
         case K_KeeperHand: {
             const IRUICursorKeeperHandCmd& c = ui.cursor_hands.Data()[r.idx];
+            const unsigned char additive = (c.draw_flags & Lb_SPRITE_ALPHA_ADDITIVE) != 0;
             process_keeper_sprite((short)c.x, (short)c.y, c.kspr_base, c.angle,
-                                  c.sprgroup, c.scale, c.draw_flags, c.alpha);
+                                  c.sprgroup, c.scale, c.draw_flags, additive);
             break;
         }
         case K_Text:

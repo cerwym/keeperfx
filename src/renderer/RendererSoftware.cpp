@@ -236,6 +236,10 @@ void RendererSoftware::EndFrame()
         ERRORLOG("RendererSoftware::EndFrame: SDL_GetWindowSurface returned NULL: %s", SDL_GetError());
         return;
     }
+    // The lock block above is skipped when lbDrawSurface is null; the blit below
+    // dereferences it, so guard here too (no draw surface -> nothing to present).
+    if (!lbDrawSurface)
+        return;
     SDL_Rect dst = { 0, 0, s_screenSurface->w, s_screenSurface->h };
 
     if (s_scaleSurface != nullptr) {
