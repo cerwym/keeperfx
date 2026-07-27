@@ -43,10 +43,6 @@ void PlatformManager::Set(IPlatform* platform)
 #endif
 }
 
-// ----- Default IWindowSystem (base class impl) -----
-// Returned by IPlatform::GetWindowSystem() when the platform has not
-// registered a more specific window system.  HasOSCursor() returns false
-// so all grab/warp/focus logic in the engine is skipped on stub platforms.
 static IWindowSystem s_defaultWindowSystem;
 
 IWindowSystem* IPlatform::GetWindowSystem()
