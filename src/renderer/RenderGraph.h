@@ -40,9 +40,7 @@
 
 /******************************************************************************/
 
-class IWorldViewRenderer;
-class IUIRenderer;
-class ITextRenderer;
+class IFrameGraphExecutor;
 
 /******************************************************************************/
 
@@ -130,26 +128,10 @@ public:
     // Render-thread execution
 
     /**
-     * Dispatch the read-side buffers to backend sub-renderers.
+     * Drive one frame's ordered execution through a backend realizer.
      *
-     * Execute() is called from the render thread after Flip() has been
-     * signalled.  It iterates layers in fixed order:
-     *   Shadow → World → UI → Text
-     *
-     * Sub-renderers that are nullptr are skipped silently.  Capabilities are
-     * checked so that unsupported command types degrade gracefully.
-     *
-     * @param caps     Backend capability flags (determines which dispatchers run).
-     * @param world    IWorldViewRenderer implementation (may be nullptr).
-     * @param ui       IUIRenderer implementation (may be nullptr).
-     * @param text     ITextRenderer implementation (may be nullptr).
-     * @param shadow   IShadowRenderer implementation (may be nullptr).
      */
-    void Execute(const BackendCapabilities& caps,
-                 IWorldViewRenderer* world,
-                 IUIRenderer*        ui,
-                 ITextRenderer*      text,
-                 IShadowRenderer*    shadow);
+    void Execute(IFrameGraphExecutor& exec);
 
 private:
     // -------------------------------------------------------------------------

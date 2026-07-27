@@ -9,6 +9,7 @@
 
 #include "IRenderer.h"
 #include "renderer/FrameState.h"
+#include "renderer/IFrameGraphExecutor.h"
 #include "renderer/RenderGraph.h"
 #include "renderer/RenderThreadManager.h"
 #include "renderer/opengl/GLWorldViewRenderer.h"
@@ -31,20 +32,12 @@ class ICursorLayer;
 /**
  * OpenGL renderer backend.
  *
- * The CPU-rendered 8-bit paletted framebuffer is blitted to screen via a
- * fullscreen palette-decode shader (index texture → RGBA via 256×1 palette).
- *
- * Also owns the shared GPU resources (fade table texture, tile atlas,
- * palette texture) and manages all sub-renderers internally.
  */
-class RendererOpenGL : public IRenderer {
+class RendererOpenGL : public IRenderer, public IFrameGraphExecutor {
     friend class GLLensRenderer;
 
 private:
-    // Typed GL sub-renderer pointers — created and owned by this backend in
-    // Init(), destroyed in Shutdown().  Non-null on a successful Init(); a GL
-    // sub-renderer Init() failure fails the whole backend (no software fallback —
-    // the manager retries with RendererSoftware, see main.cpp).
+    // Typed GL sub-renderer pointers — created and owned by this backend
     GLTextRenderer*      m_textRenderer    = nullptr;
     GLMapFadePass*       m_gl_mapfade      = nullptr;
     GLLensRenderer*      m_gl_lens         = nullptr;
@@ -135,11 +128,6 @@ public:
      *  Call after load_texture_map_file() loads new level textures. */
     void InvalidateTileAtlas(); 
     
-    /** Schedule the fade-table GPU texture for creation on the render thread.
-     *  Must be called instead of init_fade_table_texture() once the render
-     *  thread is running (i.e. after the first EndFrame()).  The actual
-     *  glGenTextures / glTexImage2D runs in EndFrame_GL() where the context
-     *  is current, after which SetFadeTexture() is pushed to all sub-renderers. */
     void ScheduleFadeTableInit() { m_fade_table_pending = true; }
 
     // Sub-renderer setters — called by RendererManager factories after creation.
@@ -150,9 +138,6 @@ public:
     void SetGLMapFadePass(GLMapFadePass* mfp)  { m_gl_mapfade = mfp; }
     void SetGLUIRenderer(GLUIRenderer* ui)     { m_gl_ui_renderer = ui; }
 
-    // Sub-renderer factory methods — create and wire each GL sub-renderer using
-    // this backend's own GPU resources.  Called by RendererManager factories so
-    // that no GL resource handles need to be exposed as public accessors.
     IWorldViewRenderer* CreateGLWorldViewRenderer();
     IMapFadePass*       CreateGLMapFadePass();
     ITextRenderer*      CreateGLTextRenderer();
@@ -160,9 +145,6 @@ public:
     IUIRenderer*        CreateGLUIRenderer();
     ICursorLayer*       CreateGLCursorLayer();
 
-    /** Compile GLSL programs for all GL sub-renderers.
-     *  Called once by RendererManager::RendererInit() after all sub-renderers
-     *  are wired up.  Returns false (and logs) if any compilation fails. */
     bool CompileSubRendererShaders();
 
 private:
@@ -180,7 +162,7 @@ private:
 
 private:
 
-    // Screen dimensions — set in Init() once, used throughout EndFrame() for viewport sizing.
+    // Screen dimensions
     int      m_screenW        = 0;
     int      m_screenH        = 0;
     bool     m_frame_begun     = false; // true after first BeginFrame; reset by EndFrame
@@ -188,7 +170,7 @@ private:
     // Palette index requested by ClearScreen(); resolved to RGBA at glClear() time in EndFrame().
     uint8_t  m_clearColourIndex = 0;
 
-    // GL objects — fullscreen palette-blit quad
+    // fullscreen palette-blit quad
     unsigned int m_vao          = 0;
     unsigned int m_vbo          = 0;
     unsigned int m_shader       = 0;
@@ -324,10 +306,6 @@ private:
     std::vector<PiPCmd> m_pip_queue;  ///< Commands accumulated this frame.
     std::vector<PiPFBO> m_pip_fbos;   ///< Per-slot FBO resources (grown on demand).
 
-    // Phase 3C render-thread copies of per-frame command queues and scalar state.
-    // EndFrame() moves/copies these before signalling the render thread so the
-    // game thread (building the next frame concurrently) can safely modify the
-    // originals without racing EndFrame_GL().
     std::vector<PiPCmd>         m_rt_pip_queue;
     std::vector<OverheadMapCmd> m_rt_overhead_map_cmds;
     uint8_t                     m_rt_clearColourIndex = 0;
@@ -383,9 +361,6 @@ private:
     int          m_scrgb_lift_h      = 0;
 
     // ── Swipe overlay (possession attack effect) ───────────────────────────
-    // Recorded by DrawSwipeOverlay() as atlas-sprite quads, flushed directly
-    // by EndFrame() after GPURenderNow() while the lens FBO is still bound.
-    // Entirely self-contained: own shader, VAO/VBO, no UIRenderer involvement.
     struct SwipeVertex { float x, y, u, v, r, g, b, a; };
     std::vector<SwipeVertex>  m_swipe_verts;      // game-thread write (accumulated per frame)
     std::vector<SwipeVertex>  m_rt_swipe_verts;   // render-thread read (moved from m_swipe_verts by EndFrame)
@@ -397,25 +372,11 @@ private:
     /** (Re-)create (or resize) FBO slot at index @p idx to at least w×h. */
     void ensure_pip_fbo(std::size_t idx, int w, int h);
 
-    // ── Render thread (Phase 3A) ───────────────────────────────────────────
-    // The dedicated GL-submission thread owns the OpenGL context for the
-    // entire session.  EndFrame() (game thread) calls WaitForCompletion()
-    // at entry and Signal() at exit.  See RenderThreadManager.h for protocol.
+    // ── Render thread ───────────────────────────────────────────
     RenderThreadManager     m_render_thread;
 
-    // Set in BeginFrame() when the animated-tile sentinel changes; consumed in
-    // EndFrame_GL() on the render thread (where the GL context is current).
-    // Written by game thread, read+cleared by render thread — atomic to prevent UB.
-    std::atomic<bool>       m_anim_tiles_dirty {false};
-    // Set in BeginFrame() when block_mem becomes available and the tile atlas has
-    // not yet been GPU-initialised.  Consumed in EndFrame_GL() on the render
-    // thread that owns the GL context (glGenTextures/glTexImage3D require it).
-    // Written by game thread, read+cleared by render thread — atomic to prevent UB.
+    std::atomic<bool>       m_anim_tiles_dirty {false};.
     std::atomic<bool>       m_tile_atlas_init_pending {false};
-    // Set by ScheduleFadeTableInit() (called from RendererNotifyGameTablesReady).
-    // Consumed in EndFrame_GL() — the render thread creates the GL texture then
-    // pushes the ID to every sub-renderer that needs it.
-    // Written by game thread, read+cleared by render thread — atomic to prevent UB.
     std::atomic<bool>       m_fade_table_pending      {false};
     bool                    m_imgui_init_pending      = false;
 
@@ -424,6 +385,38 @@ private:
      *  the game thread may be building the next frame concurrently once
      *  EndFrame() signals the render thread. */
     void EndFrame_GL();
+
+    // ── IFrameGraphExecutor — render-thread frame phases ───────────────────
+    // One method per ordered step of the GL frame sequence.  RenderGraph::Execute()
+    // owns the call ORDER and invokes these in turn;
+
+    void FGClearFrame() override;
+    void FGPopulateUI() override;
+    void FGBeginWorldCapture() override;
+    void FGExecuteWorld() override;
+    void FGFlushSwipeOverlay() override;
+    void FGResolveWorldCapture() override;
+    void FGApplyLensPaletteUIExclusion() override;
+    void FGExecuteMapFade() override;
+    void FGDrawWorldSpriteLayer() override;
+    void FGDrawWorldOverlayFlatLayer() override;
+    void FGExecuteImagePresents() override;
+    void FGDrawOverheadMap() override;
+    void FGExecutePiPCaptures() override;
+    void FGDrawGameUI() override;
+    void FGCaptureWorldFrameIfPending() override;
+    void FGDrawZoomBoxes() override;
+    void FGDrawFrontOverlay() override;
+    void FGExecuteText() override;
+    void FGDrawScreenTint() override;
+    void FGExecuteCursor() override;
+    void FGDrawDevToolsOverlay() override;
+    void FGCaptureScreenshot() override;
+    void FGApplyScrgbLift() override;
+
+    // Transient lens scene-capture bracket state: set by FGBeginWorldCapture(),
+    // read by FGResolveWorldCapture() (both render thread, same frame).
+    bool m_rt_lens_active = false;
 
     /** Execute all queued image-present commands (render thread), sorted by
      *  layer_z, dispatching on {format,kind} to the existing GL shaders. */

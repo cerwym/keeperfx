@@ -974,6 +974,142 @@ void RendererOpenGL::EndFrame_GL()
         if (m_gl_mapfade)       m_gl_mapfade->SetScreenSize(sw, sh);
     }
 
+    m_render_graph.Execute(*this);
+
+    platform_swap_gl_buffers(platform_get_sdl_window());
+
+    KFX_GPU_COLLECT();
+    KFX_FRAMEMARK();
+}
+
+void RendererOpenGL::FGPopulateUI()
+{
+    // Populate render-thread quad/line buffers from the UI IR snapshot.  No GL
+    // draws here; the later phases issue them.
+    if (IUIRenderer* ui = RendererGetUIRenderer())
+        ui->PopulateFromIR(m_render_graph.GetUIBuffersRT(), m_render_graph.GetFrameStateRT());
+}
+
+void RendererOpenGL::FGBeginWorldCapture()
+{
+    // Redirect world rendering to the lens scene FBO so GPU post-process passes
+    // can operate on the result before it reaches the screen. The lens
+    // compositing (FBOs, passes, passthrough blit) is owned by GLLensRenderer.
+    m_rt_lens_active = false;
+    const PostProcessCommandBuffers& pp = m_render_graph.GetPostProcessBuffersRT();
+    if (m_rt_frame_state.lens_mode == 2 && pp.lens.has_value() && m_gl_lens)
+    {
+        m_rt_lens_active = m_gl_lens->BeginSceneCapture(
+            *pp.lens, m_rt_frame_state.screen_w, m_rt_frame_state.screen_h);
+    }
+}
+
+void RendererOpenGL::FGExecuteWorld()
+{
+    if (m_world_renderer)
+        m_world_renderer->ExecuteWorldFromIR(m_render_graph.GetWorldBuffersRT());
+}
+
+void RendererOpenGL::FGFlushSwipeOverlay()
+{
+    // Draw swipe-overlay quads while the lens FBO is still bound, so they sit on
+    // top of world geometry and get lens-distorted.
+    FlushSwipeQuads();
+    SYNCDBG(0, "EndFrame_GL step 4: swipe quads + world render done");
+}
+
+void RendererOpenGL::FGResolveWorldCapture()
+{
+    // If the lens FBO was active, apply GPU post-process passes and blit the
+    // result back to the default framebuffer.
+    if (m_rt_lens_active && m_gl_lens)
+    {
+        const PostProcessCommandBuffers& pp = m_render_graph.GetPostProcessBuffersRT();
+        if (pp.lens.has_value())
+            m_gl_lens->ResolveAndApply(*pp.lens, m_rt_frame_state.screen_w, m_rt_frame_state.screen_h);
+    }
+}
+
+void RendererOpenGL::FGApplyLensPaletteUIExclusion()
+{
+    if (m_gl_lens)
+    {
+        const PostProcessCommandBuffers& pp = m_render_graph.GetPostProcessBuffersRT();
+        if (pp.lens.has_value())
+            m_gl_lens->ApplyPaletteUIExclusion(*pp.lens);
+    }
+}
+
+void RendererOpenGL::FGExecuteMapFade()
+{
+    // Map-fade GPU compose pass — active during PVM_ParchFadeIn / ParchFadeOut.
+    const auto& post_process = m_render_graph.GetPostProcessBuffersRT();
+    if (post_process.map_fade)
+    {
+        IMapFadePass* mfp = RendererGetMapFadePass();
+        if (mfp) mfp->ExecuteFromIR(*post_process.map_fade);
+    }
+}
+
+void RendererOpenGL::FGDrawWorldSpriteLayer()
+{
+    UIRenderer_DrawWorldSpriteLayerRT();
+}
+
+void RendererOpenGL::FGDrawWorldOverlayFlatLayer()
+{
+    UIRenderer_DrawWorldOverlayFlatLayerRT();
+}
+
+void RendererOpenGL::FGExecuteImagePresents()
+{
+    if (!m_rt_presents_captured)
+        ExecuteImagePresentsFromIR(m_render_graph.GetImagePresentBuffersRT());
+}
+
+void RendererOpenGL::FGDrawGameUI()
+{
+    if (IUIRenderer* ui = RendererGetUIRenderer())
+        ui->DrawGameUI();
+}
+
+void RendererOpenGL::FGCaptureWorldFrameIfPending()
+{
+    // If the map-fade transition flagged a world-view capture as pending
+    // (GLMapFadePass::ExecuteFromIR(), earlier this frame), take it now — after
+    // GameUI so the sidebar is part of the captured snapshot and crossfades with
+    // the rest of the view instead of popping in/out once the transition
+    // completes. No-op on the (common) frames with no capture pending.
+    if (auto* mfp = RendererGetMapFadePass()) mfp->CaptureWorldFrameIfPending();
+}
+
+void RendererOpenGL::FGDrawFrontOverlay()
+{
+    // Top-overlay (tooltip, corner frames), drawn dead-last among sprite layers.
+    if (IUIRenderer* ui = RendererGetUIRenderer())
+        ui->DrawFrontOverlay();
+}
+
+void RendererOpenGL::FGExecuteText()
+{
+    // Text on top of all sprites (sidebar labels, event messages, tooltips).
+    if (m_textRenderer)
+        m_textRenderer->ExecuteTextFromIR(m_render_graph.GetTextBuffersRT());
+}
+
+void RendererOpenGL::FGExecuteCursor()
+{
+    if (auto* cursor = RendererGetCursorLayer())
+        cursor->ExecuteCursorFromIR(m_render_graph.GetUIBuffersRT());
+}
+
+void RendererOpenGL::FGDrawDevToolsOverlay()
+{
+    kfx::DevTools::instance().drawOverlay();
+}
+
+void RendererOpenGL::FGClearFrame()
+{
     glDisable(GL_SCISSOR_TEST);
     {
         // Resolve palette index → RGBA for the GL clear colour (6-bit palette: shift left 2 for 8-bit).
@@ -984,99 +1120,13 @@ void RendererOpenGL::EndFrame_GL()
     }
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     SYNCDBG(0, "EndFrame_GL step 3: glClear done");
+}
 
-    // ── RenderGraph dispatch ──────────────────────────────────────────────────
-    // Execute() performs the first real dispatch step:
-    //   • UI: calls ui->PopulateFromIR() to fill m_rt_quads[]/m_rt_lines[] from
-    //     the IR snapshot.  No GL draws here; the Draw*() calls below issue them.
-    //   • World + Text: dispatched explicitly below (ordering constraints require
-    //     world inside the lens-FBO bracket; text after DrawFrontOverlay).
-    m_render_graph.Execute(GetCapabilities(),
-                           m_world_renderer,
-                           RendererGetUIRenderer(),
-                           m_textRenderer,
-                           nullptr); // IShadowRenderer — not yet implemented
-
-    // ── Lens FBO redirect
-    // redirect world rendering to the lens scene FBO so GPU post-process
-    // passes can operate on the result before it reaches the screen. The lens
-    // compositing (FBOs, passes, passthrough blit) is owned by GLLensRenderer.
-    bool lens_active = false;
-    {
-        const PostProcessCommandBuffers& pp = m_render_graph.GetPostProcessBuffersRT();
-        if (m_rt_frame_state.lens_mode == 2 && pp.lens.has_value() && m_gl_lens)
-        {
-            lens_active = m_gl_lens->BeginSceneCapture(
-                *pp.lens, m_rt_frame_state.screen_w, m_rt_frame_state.screen_h);
-        }
-    }
-
-    if (m_world_renderer)
-    {
-        m_world_renderer->ExecuteWorldFromIR(m_render_graph.GetWorldBuffersRT());
-    }
-
-    // Draw swipe-overlay quads while the lens FBO is still bound,
-    // so they sit on top of world geometry and get lens-distorted.
-    FlushSwipeQuads();
-    SYNCDBG(0, "EndFrame_GL step 4: swipe quads + world render done");
-
-    // If lens FBO was active, apply GPU post-process passes and blit result
-    // back to the default framebuffer.
-    if (lens_active && m_gl_lens)
-    {
-        const PostProcessCommandBuffers& pp = m_render_graph.GetPostProcessBuffersRT();
-        if (pp.lens.has_value())
-            m_gl_lens->ResolveAndApply(*pp.lens, m_rt_frame_state.screen_w, m_rt_frame_state.screen_h);
-    }
-
-    // Palette-lens UI exclusion (OpenGL only) — owned by GLLensRenderer. When a
-    // lens palette is active with WorldOnly scope, it re-uploads the shared
-    // palette texture with the base (non-lens) palette so the subsequent
-    // UI/text/overhead draws decode without the lens tint (world tinted, UI clean).
-    // FullFrame scope or no lens palette leaves the applied palette in place.
-    if (m_gl_lens)
-    {
-        const PostProcessCommandBuffers& pp = m_render_graph.GetPostProcessBuffersRT();
-        if (pp.lens.has_value())
-            m_gl_lens->ApplyPaletteUIExclusion(*pp.lens);
-    }
-
-    // Map-fade GPU compose pass — active during PVM_ParchFadeIn / ParchFadeOut.
-    // Must run HERE — after ExecuteWorldFromIR() but BEFORE the rawblit/overhead
-    // map draws (so those queues are still available for the parchment FBO
-    // capture inside CaptureParchmentFrame()). The world-view capture (which
-    // needs GameUI drawn too) is deferred separately — see
-    // CaptureWorldFrameIfPending(), called after DrawGameUI() further down.
-    // IRMapFadeCmd is written by GLMapFadePass::FlushToRenderGraph() on the
-    // game thread and consumed from the render-side post-process buffers here.
-    {
-        const auto& post_process = m_render_graph.GetPostProcessBuffersRT();
-        if (post_process.map_fade)
-        {
-            IMapFadePass* mfp = RendererGetMapFadePass();
-            if (mfp) mfp->ExecuteFromIR(*post_process.map_fade);
-        }
-    }
-
-    UIRenderer_DrawWorldSpriteLayerRT();
-    UIRenderer_DrawWorldOverlayFlatLayerRT();
-
-    // Unified image-present IR (opaque backgrounds/parchment; transparent+zoom
-    // fold in step 2). Composites here — after world/overlay, before the overhead
-    // map — matching where rawblit drew. Fade preservation comes from the skipped
-    // Flip (read-side persists), so no separate rawblit cache is needed.
-    // Skipped when FlushSceneToFBO() already captured them into the map-fade FBO
-    // (parchment fade) — the fade composite draws instead of the raw present.
-    if (!m_rt_presents_captured)
-        ExecuteImagePresentsFromIR(m_render_graph.GetImagePresentBuffersRT());
-
-    // Overhead map tile colour GPU blit — drawn after the parchment background
-    // rawblit and before the staging overlay so tile colours sit below CPU sprites
-    // (room icons, creatures, call-to-arms circles).  Uses the same rawblit shader
-    // (palette_blit_vert + rawimage_blit_frag — opaque) and VAO/VBO layout, scaled
-    // to the map_area dest rect supplied by draw_overhead_map().
-    // Multiple commands allowed per frame (e.g. full map + zoom box).
+void RendererOpenGL::FGDrawOverheadMap()
+{
+    // Uses the same rawblit shader (palette_blit_vert + rawimage_blit_frag —
+    // opaque) and VAO/VBO layout, scaled to the map_area dest rect supplied by
+    // draw_overhead_map().  Multiple commands allowed per frame (full map + zoom box).
     for (const OverheadMapCmd& cmd : m_rt_overhead_map_cmds)
     {
         glViewport(0, 0, m_rt_frame_state.screen_w, m_rt_frame_state.screen_h);
@@ -1160,8 +1210,10 @@ void RendererOpenGL::EndFrame_GL()
         glActiveTexture(GL_TEXTURE0);
     }
     m_rt_overhead_map_cmds.clear();
+}
 
-    // ── PiP isometric render (ZBM_ISOMETRIC zoom-box mode) ────────────────
+void RendererOpenGL::FGExecutePiPCaptures()
+{
     // Each entry in m_rt_pip_queue is rendered into its own FBO slot (grown on
     // demand) then submitted to GLUIRenderer for compositing.  Queue cleared.
     if (m_world_renderer && !m_rt_pip_queue.empty())
@@ -1198,27 +1250,10 @@ void RendererOpenGL::EndFrame_GL()
 
         m_rt_pip_queue.clear();
     }
-    // (FMV, landview-zoom, and transparent-blit are folded into the unified
-    // image-present IR — executed by ExecuteImagePresentsFromIR above.)
+}
 
-    {
-        IUIRenderer* ui = RendererGetUIRenderer();
-        if (ui) ui->DrawGameUI();
-    }
-
-    // If the map-fade transition flagged a world-view capture as pending
-    // (GLMapFadePass::ExecuteFromIR(), earlier this frame), take it now —
-    // after GameUI so the sidebar is part of the captured snapshot and
-    // crossfades with the rest of the view instead of popping in/out once
-    // the transition completes. No-op on the (common) frames with no
-    // capture pending.
-    if (auto* mfp = RendererGetMapFadePass()) mfp->CaptureWorldFrameIfPending();
-
-    // ── Zoom-box tile quads (ZBM_OVERHEAD with actual tile textures) ───────
-    // Drawn AFTER GameUI so the tile render lands on top of all
-    // parchment-map UI sprites (overhead creatures, room icons, call-to-arms).
-    // The top-overlay (tooltip, corner frames) will follow in
-    // DrawFrontOverlay() below, so they are unaffected.
+void RendererOpenGL::FGDrawZoomBoxes()
+{
     // Step 1: fill each zoom box region with solid black so unrevealed tiles
     //         and skipped rock tiles appear black rather than showing whatever
     //         is underneath (overhead map, parchment).
@@ -1335,21 +1370,10 @@ void RendererOpenGL::EndFrame_GL()
         }
     }
     m_rt_zoom_tile_cmds.clear();
+}
 
-    // Top-overlay (tooltip, corner frames), drawn dead-last among sprite layers.
-    // Software UIRenderer: DrawGameUI() (above) already drew everything, so
-    // DrawFrontOverlay() is a no-op on the base interface.
-    {
-        IUIRenderer* ui = RendererGetUIRenderer();
-        if (ui) ui->DrawFrontOverlay();
-    }
-
-    // Text on top of all sprites (sidebar labels, event messages, tooltips).
-    // Software ITextRenderer: ExecuteTextFromIR() default calls Draw() so the
-    // fallback path is handled automatically without a cast or else branch.
-    if (m_textRenderer)
-        m_textRenderer->ExecuteTextFromIR(m_render_graph.GetTextBuffersRT());
-
+void RendererOpenGL::FGDrawScreenTint()
+{
     if (m_rt_frame_state.screen_tint[3] > 0.0f && m_tintProg)
     {
         glEnable(GL_BLEND);
@@ -1362,15 +1386,10 @@ void RendererOpenGL::EndFrame_GL()
         glBindVertexArray(0);
         glDisable(GL_BLEND);
     }
+}
 
-    SYNCDBG(0, "EndFrame_GL step 5: before cursor draw");
-    if (auto* cursor = RendererGetCursorLayer())
-        cursor->ExecuteCursorFromIR(m_render_graph.GetUIBuffersRT());
-
-    kfx::DevTools::instance().drawOverlay();
-
-    // Screenshot capture: after all draw calls, before buffer swap so that the
-    // default framebuffer holds the fully-composited frame.
+void RendererOpenGL::FGCaptureScreenshot()
+{
     if (!m_rt_screenshot_path.empty())
     {
         const int w = m_rt_frame_state.screen_w;
@@ -1388,7 +1407,10 @@ void RendererOpenGL::EndFrame_GL()
                                      m_rt_screenshot_fmt, m_rt_screenshot_path.c_str());
         m_rt_screenshot_path.clear();
     }
+}
 
+void RendererOpenGL::FGApplyScrgbLift()
+{
     if (m_scrgb_active && m_scrgb_lift_shader)
     {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -1444,11 +1466,6 @@ void RendererOpenGL::EndFrame_GL()
             glEnable(GL_DEPTH_TEST);
         }
     }
-
-    platform_swap_gl_buffers(platform_get_sdl_window());
-
-    KFX_GPU_COLLECT();
-    KFX_FRAMEMARK();
 }
 
 uint8_t* RendererOpenGL::LockFramebuffer(int* out_pitch)

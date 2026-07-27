@@ -109,6 +109,15 @@ public:
     /** Releases the framebuffer lock obtained via LockFramebuffer(). */
     virtual void UnlockFramebuffer() = 0;
 
+    // -------------------------------------------------------------------------
+    // Software CPU draw-target ("WScreen") ownership
+    //
+
+    /** Current software CPU draw-target base pointer (null on GPU backends). */
+    virtual uint8_t* GetSoftwareFramebuffer() const { return nullptr; }
+    /** Set the current software CPU draw-target base pointer (no-op on GPU). */
+    virtual void SetSoftwareFramebuffer(uint8_t* /*buf*/) {}
+
     /** Queue a full-screen image present (see RendererPresentImageDesc).
      *  GPU backends append an IRImagePresentCmd to the RenderGraph write buffer
      *  and return true; the base returns false so the C entry point runs the
