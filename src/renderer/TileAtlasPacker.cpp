@@ -80,6 +80,7 @@ void TileAtlasPacker::DecodeTile(const uint8_t* src_indexed, int tile_id)
     uint8_t* dst_row0 = m_rgba_scratch
         + (size_t)(row * k_tile_dim * k_atlas_w + col * k_tile_dim) * 4;
 
+    const uint8_t* pal = LbPaletteGetReadonly();
     for (int y = 0; y < k_tile_dim; y++)
     {
         uint8_t* dst = dst_row0 + (size_t)(y * k_atlas_w) * 4;
@@ -88,10 +89,9 @@ void TileAtlasPacker::DecodeTile(const uint8_t* src_indexed, int tile_id)
             // block_ptrs data is stored in mega-rows of block_count_per_row tiles;
             // each pixel row spans block_count_per_row * k_tile_dim bytes.
             const uint8_t idx = src_indexed[(size_t)y * (block_count_per_row * k_tile_dim) + x];
-            // lbPalette stores 6-bit R,G,B components — shift left by 2 to 8-bit
-            dst[x * 4 + 0] = (uint8_t)(lbPalette[idx * 3 + 0] << 2);
-            dst[x * 4 + 1] = (uint8_t)(lbPalette[idx * 3 + 1] << 2);
-            dst[x * 4 + 2] = (uint8_t)(lbPalette[idx * 3 + 2] << 2);
+            dst[x * 4 + 0] = (uint8_t)(pal[idx * 3 + 0] << 2);
+            dst[x * 4 + 1] = (uint8_t)(pal[idx * 3 + 1] << 2);
+            dst[x * 4 + 2] = (uint8_t)(pal[idx * 3 + 2] << 2);
             dst[x * 4 + 3] = 0xFF;
         }
     }
@@ -119,18 +119,12 @@ void TileAtlasPacker::BuildAnimatedStrip(int variation)
     const int y_offset  = first_row * k_tile_dim;
     const int h_pixels  = row_count * k_tile_dim;
 
-    // Decode the strip rows into scratch (strip-local coords).
-    // IMPORTANT: include static tiles that share rows with the animated range.
-    // Animated tiles start at k_anim_first=544 (row 8, col 32) and end at
-    // k_anim_last=999 (row 15, col 39).  Static-A tiles 512..543 share row 8
-    // (cols 0..31) and static-B tiles 1000..1023 share row 15 (cols 40..63).
-    // Without re-filling those static tiles here, the memset above would
-    // permanently zero their atlas positions on every animation tick.
     memset(m_rgba_scratch, 0, (size_t)k_atlas_w * h_pixels * 4);
 
     const int strip_start = first_row * k_atlas_cols;            // 512
     const int strip_end   = (last_row + 1) * k_atlas_cols;       // 1024
 
+    const uint8_t* pal = LbPaletteGetReadonly();
     for (int tile_id = strip_start; tile_id < strip_end && tile_id < k_total_tiles; tile_id++)
     {
         const uint8_t* src = block_ptrs[variation * k_total_tiles + tile_id];
@@ -147,9 +141,9 @@ void TileAtlasPacker::BuildAnimatedStrip(int variation)
             for (int x = 0; x < k_tile_dim; x++)
             {
                 const uint8_t idx = src[(size_t)y * (block_count_per_row * k_tile_dim) + x];
-                dst[x * 4 + 0] = (uint8_t)(lbPalette[idx * 3 + 0] << 2);
-                dst[x * 4 + 1] = (uint8_t)(lbPalette[idx * 3 + 1] << 2);
-                dst[x * 4 + 2] = (uint8_t)(lbPalette[idx * 3 + 2] << 2);
+                dst[x * 4 + 0] = (uint8_t)(pal[idx * 3 + 0] << 2);
+                dst[x * 4 + 1] = (uint8_t)(pal[idx * 3 + 1] << 2);
+                dst[x * 4 + 2] = (uint8_t)(pal[idx * 3 + 2] << 2);
                 dst[x * 4 + 3] = 0xFF;
             }
         }

@@ -424,13 +424,14 @@ struct movie_t {
 	void output_video_frame() {
 		// FFMpeg used to provide m_frame->palette_has_changed but it has been deprecated
 		// Assume the palette has changed every frame as there is no way for us to know anymore
-		// Update lbPalette[] (6-bit) so Vita and other backends that read it directly see FMV colours.
 		const uint8_t* bgra = m_frame->data[1];
+		unsigned char pal6[PALETTE_SIZE];
 		for (size_t i = 0; i < PALETTE_COLORS; ++i) {
-			lbPalette[i*3+0] = bgra[i*4+2] >> 2; // R
-			lbPalette[i*3+1] = bgra[i*4+1] >> 2; // G
-			lbPalette[i*3+2] = bgra[i*4+0] >> 2; // B
+			pal6[i*3+0] = bgra[i*4+2] >> 2; // R
+			pal6[i*3+1] = bgra[i*4+1] >> 2; // G
+			pal6[i*3+2] = bgra[i*4+0] >> 2; // B
 		}
+		LbPaletteSetRaw6bit(pal6);
         RendererWaitVbi(); // this is a no-op today
 		// Route palette update through the renderer — software backend applies it to the
 		// draw surface; GPU backends ignore it (palette comes through SubmitVideoFrame).

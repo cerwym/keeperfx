@@ -13,7 +13,7 @@
 
 #include <string.h>
 
-#include "bflib_video.h"   // lbPalette
+#include "bflib_video.h"   // LbPaletteGetReadonly
 #include "bflib_basics.h"  // ERRORLOG
 #include "post_inc.h"
 
@@ -29,12 +29,13 @@ bool RendererHelper_SaveIndexedImage(const uint8_t* pixels, int w, int h, int pi
         return false;
     }
 
-    // Build SDL palette from lbPalette (6-bit DK values, shifted to 8-bit).
+    // Build SDL palette from the active palette (6-bit DK values, shifted to 8-bit).
+    const unsigned char* pal = LbPaletteGetReadonly();
     SDL_Color colors[256];
     for (int i = 0; i < 256; i++) {
-        colors[i].r = (lbPalette[i * 3 + 0] & 0x3F) << 2;
-        colors[i].g = (lbPalette[i * 3 + 1] & 0x3F) << 2;
-        colors[i].b = (lbPalette[i * 3 + 2] & 0x3F) << 2;
+        colors[i].r = (pal[i * 3 + 0] & 0x3F) << 2;
+        colors[i].g = (pal[i * 3 + 1] & 0x3F) << 2;
+        colors[i].b = (pal[i * 3 + 2] & 0x3F) << 2;
         colors[i].a = 255;
     }
     // SDL3: palette access via SDL_GetSurfacePalette (surf->format is now an enum, not a struct)

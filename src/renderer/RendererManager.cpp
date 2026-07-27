@@ -446,15 +446,13 @@ GLSpriteAtlas* RendererGetSpriteAtlas()
     return nullptr;
 }
 
+extern "C" const unsigned char* LbPaletteGetReadonly(void);
+
 const unsigned char* RendererGetActivePalette()
 {
-    // The currently-active 6-bit VGA palette (what indexed drawing samples and
-    // what LbPaletteGetReadonly feeds to the GL palette texture). This is NOT the
-    // fixed in-game engine_palette: the frontend swaps in frontend_palette, fades
-    // install transient palettes, etc. The truecolour atlas and the debug viewer
-    // must match whatever is on screen, so track lbPalette.
-    extern unsigned char lbPalette[]; // from bflib_video.c — 6-bit VGA (768 bytes)
-    return lbPalette;
+    // The currently-active 6-bit VGA palette (what indexed drawing samples). This
+    // is NOT the fixed in-game engine_palette:
+    return LbPaletteGetReadonly();
 }
 
 RendererType RendererGetActiveType()

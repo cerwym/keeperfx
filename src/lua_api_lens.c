@@ -643,8 +643,7 @@ static int lua_Blend_color_batch(lua_State *L)
     int buf_height = (int)buf_info->height;
     int buf_pitch = (int)buf_info->pitch;
     
-    // Get active palette from display system (already declared in bflib_video.h)
-    unsigned char* palette = lbPalette;
+    unsigned char* palette = (unsigned char*)LbPaletteGetReadonly();
     
     // Get number of operations
 #if LUA_VERSION_NUM >= 502
@@ -873,8 +872,8 @@ static int lua_Build_darkening_lut(lua_State *L)
     if (strength < 0.0) strength = 0.0;
     if (strength > 1.0) strength = 1.0;
     
-    // Get active palette
-    unsigned char* palette = lbPalette;
+    // Get active palette (read-only) via the single palette accessor.
+    unsigned char* palette = (unsigned char*)LbPaletteGetReadonly();
     if (palette == NULL) {
         ERRORLOG("LUA: BuildDarkeningLUT - palette not available");
         lua_pushnil(L);

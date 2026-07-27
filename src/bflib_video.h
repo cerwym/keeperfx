@@ -173,7 +173,6 @@ void LbScreenFreeDrawSurface(void);
 /******************************************************************************/
 extern volatile TbBool lbScreenInitialised;
 extern volatile TbBool lbUseSdk;
-extern unsigned char lbPalette[PALETTE_SIZE];
 
 #define VGA6_MAX                                63.0f // VGA 6-bit palette component range (0–63)
 #define UPP_BASE                                16   // units_per_pixel_best value at base resolution (640x400)
@@ -233,6 +232,10 @@ TbResult LbScreenWaitVbi(void);
 TbResult LbPaletteSet(unsigned char *palette);
 TbResult LbPaletteGet(unsigned char *palette);
 const unsigned char *LbPaletteGetReadonly(void);
+/** Overwrite the active 6-bit palette buffer directly (no SDL-surface update).
+ *  Narrow write path for the FMV decoder, which drives its own present palette
+ *  and only needs backends that read the active palette to see the new colours. */
+void LbPaletteSetRaw6bit(const unsigned char *pal6);
 TbResult LbPaletteDataFillBlack(unsigned char *palette);
 TbResult LbPaletteDataFillWhite(unsigned char *palette);
 

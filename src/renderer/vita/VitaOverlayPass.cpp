@@ -110,13 +110,14 @@ void VitaOverlayPass::Apply(unsigned int src_tex, unsigned int dst_fbo,
     if (!m_program || !m_configured)
         return;
 
-    // Rebuild the palette texture from the current 6-bit RGB lbPalette.
-    // lbPalette layout: [r0,g0,b0, r1,g1,b1, ...] each value 0‥63 (×4 → 0‥255).
+    // Rebuild the palette texture from the current active 6-bit RGB palette.
+    // Layout: [r0,g0,b0, r1,g1,b1, ...] each value 0‥63 (×4 → 0‥255).
+    const unsigned char* pal = LbPaletteGetReadonly();
     unsigned char rgba_pal[256 * 4];
     for (int i = 0; i < 256; ++i) {
-        rgba_pal[i * 4 + 0] = (unsigned char)(lbPalette[i * 3 + 0] << 2);
-        rgba_pal[i * 4 + 1] = (unsigned char)(lbPalette[i * 3 + 1] << 2);
-        rgba_pal[i * 4 + 2] = (unsigned char)(lbPalette[i * 3 + 2] << 2);
+        rgba_pal[i * 4 + 0] = (unsigned char)(pal[i * 3 + 0] << 2);
+        rgba_pal[i * 4 + 1] = (unsigned char)(pal[i * 3 + 1] << 2);
+        rgba_pal[i * 4 + 2] = (unsigned char)(pal[i * 3 + 2] << 2);
         rgba_pal[i * 4 + 3] = 255;
     }
     glBindTexture(GL_TEXTURE_2D, m_palette_tex);

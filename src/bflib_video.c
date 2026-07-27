@@ -60,7 +60,7 @@ TbBool lbDoubleBufferingRequested;
 /** Name of the video driver to be used. Must be set before LbScreenInitialize().
  * Under Win32 and with SDL, choises are windib or directx. */
 /** Colour palette buffer. */
-unsigned char lbPalette[PALETTE_SIZE];
+static unsigned char lbPalette[PALETTE_SIZE];
 /** Driver-specific colour palette buffer. */
 SDL_Color lbPaletteColors[PALETTE_COLORS];
 
@@ -678,6 +678,12 @@ TbResult LbPaletteGet(unsigned char *palette)
 const unsigned char *LbPaletteGetReadonly(void)
 {
     return lbPalette;
+}
+
+void LbPaletteSetRaw6bit(const unsigned char *pal6)
+{
+    if (pal6 != NULL)
+        memcpy(lbPalette, pal6, PALETTE_SIZE);
 }
 
 TbResult LbSetTitle(const char *title)

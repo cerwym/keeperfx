@@ -160,11 +160,12 @@ void RendererVita::EndFrame()
                         GL_LUMINANCE, GL_UNSIGNED_BYTE, lbDrawSurface->pixels);
         SDL_UnlockSurface(lbDrawSurface);
 
+        const unsigned char* pal = LbPaletteGetReadonly();
         uint8_t rgba[256 * 4];
         for (int i = 0; i < 256; i++) {
-            rgba[i*4+0] = (uint8_t)(lbPalette[i*3+0] << 2);
-            rgba[i*4+1] = (uint8_t)(lbPalette[i*3+1] << 2);
-            rgba[i*4+2] = (uint8_t)(lbPalette[i*3+2] << 2);
+            rgba[i*4+0] = (uint8_t)(pal[i*3+0] << 2);
+            rgba[i*4+1] = (uint8_t)(pal[i*3+1] << 2);
+            rgba[i*4+2] = (uint8_t)(pal[i*3+2] << 2);
             rgba[i*4+3] = 0xFF;
         }
         glActiveTexture(GL_TEXTURE1);
