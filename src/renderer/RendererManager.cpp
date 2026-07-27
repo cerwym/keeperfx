@@ -726,7 +726,7 @@ void RendererApplyPossessionPalette(long step, const unsigned char *main_palette
         if (pix > 63) pix = 63;
         dst[2] = (unsigned char)pix;
     }
-    RendererWaitVbi();
+
     RendererPaletteSet(palette);
 }
 
@@ -739,14 +739,12 @@ extern "C" TbResult LbScreenSetDoubleBuffering(TbBool state);
 extern "C" TbResult LbSetTitle(const char *title);
 extern "C" TbResult LbSetIcon(unsigned short nicon);
 extern "C" TbScreenMode LbScreenActiveMode(void);
-extern "C" TbResult LbScreenWaitVbi(void);
 
 TbResult RendererScreenInitialize(void)         { return LbScreenInitialize(); }
 TbResult RendererSetDoubleBuffering(TbBool state){ return LbScreenSetDoubleBuffering(state); }
 TbResult RendererSetTitle(const char *title)     { return LbSetTitle(title); }
 TbResult RendererSetIcon(unsigned short nicon)   { return LbSetIcon(nicon); }
 TbScreenMode RendererActiveMode(void)            { return LbScreenActiveMode(); }
-TbResult RendererWaitVbi(void)                   { return LbScreenWaitVbi(); }
 
 /******************************************************************************/
 /* C-callable world-view renderer wrappers */

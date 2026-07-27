@@ -167,7 +167,7 @@ TbResult LbPaletteFadeStep(unsigned char *from_palette,unsigned char *to_palette
         source_color_component = from_palette[i+2];
         palette[i+2] = fade_count * (target_color_component - source_color_component) / fade_steps + source_color_component;
     }
-    LbScreenWaitVbi();
+
     return LbPaletteSet(palette);
 }
 
@@ -226,15 +226,6 @@ long LbPaletteFade(unsigned char *pal, long fade_steps, enum TbPaletteFadeFlag f
 #endif
     }
     return fade_count;
-}
-
-/** Wait for vertical blanking interval.
- *
- * @return Lb_SUCCESS if wait successful.
- */
-TbResult LbScreenWaitVbi(void)
-{
-  return Lb_SUCCESS;
 }
 
 /** Get the display ID the game is currently rendering to, or the primary display if no window exists. */

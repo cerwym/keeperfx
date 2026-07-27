@@ -1672,7 +1672,6 @@ void PaletteSetPlayerPalette(struct PlayerInfo *player, unsigned char *pal)
         player->palette_fade_step_possession = 0;
         if (is_my_player(player))
         {
-            RendererWaitVbi();
             RendererPaletteSet(pal);
         }
     }
