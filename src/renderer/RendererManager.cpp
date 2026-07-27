@@ -79,8 +79,6 @@ static TbScreenCoord        s_physicalScreenWidth  = 0;
 static TbScreenCoord        s_physicalScreenHeight = 0;
 static TbScreenCoord        s_graphicsScreenWidth  = 0;
 static TbScreenCoord        s_graphicsScreenHeight = 0;
-static unsigned char*       s_wscreen              = NULL;
-static unsigned char*       s_graphicsWindowPtr    = NULL;
 
 // Renderer-private graphics/clip window rect.
 static long                 s_graphicsWindowX      = 0;
@@ -511,10 +509,9 @@ int RendererBeginFrame(void)
         unsigned char* pixels = RendererLockFramebuffer(&pitch);
         if (!pixels)
             return 0; // CPU framebuffer unavailable — frame not drawable
-        s_wscreen = pixels;
+        s_activeRenderer->SetSoftwareFramebuffer(pixels);
         s_graphicsScreenWidth = pitch;
-        s_graphicsWindowPtr = &s_wscreen[s_graphicsWindowX +
-            s_graphicsScreenWidth * s_graphicsWindowY];
+        // graphics-window-offset pointer is derived on demand from the target.
         s_fb_locked = true;
     }
     s_frame_open = true;
@@ -530,9 +527,10 @@ void RendererEndFrame(void)
         s_fb_locked = false;
     }
     if (s_activeRenderer)
+    {
         s_activeRenderer->EndFrame();
-    s_wscreen = NULL;
-    s_graphicsWindowPtr = NULL;
+        s_activeRenderer->SetSoftwareFramebuffer(nullptr);
+    }
     s_frame_open = false;
 }
 
@@ -575,9 +573,10 @@ int RendererIsFrameOpen(void)
 
 TbBool RendererReadFramePixels(RendererFramePixelsFn fn, void* user)
 {
-    if (!fn || !s_wscreen)
+    unsigned char* wscreen = RendererGetWScreen();
+    if (!fn || !wscreen)
         return false;
-    return fn(s_wscreen, (int)RendererScreenWidth(), (int)RendererScreenHeight(),
+    return fn(wscreen, (int)RendererScreenWidth(), (int)RendererScreenHeight(),
               (int)s_graphicsScreenWidth, user);
 }
 
@@ -626,10 +625,7 @@ void RendererSetViewport(int32_t x, int32_t y, int32_t width, int32_t height)
     s_graphicsWindowY = y;
     s_graphicsWindowWidth = right_edge - x;
     s_graphicsWindowHeight = bottom_edge - y;
-    if (s_wscreen != NULL)
-        s_graphicsWindowPtr = s_wscreen + s_graphicsScreenWidth * y + x;
-    else
-        s_graphicsWindowPtr = NULL;
+    // graphics-window-offset pointer is derived on demand (RendererGetGraphicsWindowPtr).
 }
 
 void RendererStoreViewport(TbGraphicsWindow *grwnd)
@@ -647,11 +643,7 @@ void RendererLoadViewport(TbGraphicsWindow *grwnd)
     s_graphicsWindowY = grwnd->y;
     s_graphicsWindowWidth = grwnd->width;
     s_graphicsWindowHeight = grwnd->height;
-    if (s_wscreen != NULL)
-        s_graphicsWindowPtr = s_wscreen
-            + s_graphicsScreenWidth * s_graphicsWindowY + s_graphicsWindowX;
-    else
-        s_graphicsWindowPtr = NULL;
+    // graphics-window-offset pointer is derived on demand (RendererGetGraphicsWindowPtr).
 }
 
 /******************************************************************************/
@@ -668,14 +660,27 @@ long RendererGraphicsWindowWidth(void)  { return s_graphicsWindowWidth;  }
 long RendererGraphicsWindowHeight(void) { return s_graphicsWindowHeight; }
 unsigned short RendererGetScreenWidth(void)  { return MyScreenWidth; }
 unsigned short RendererGetScreenHeight(void) { return MyScreenHeight; }
-unsigned char* RendererGetWScreen(void)    { return s_wscreen; }
-unsigned char* RendererGetGraphicsWindowPtr(void) { return s_graphicsWindowPtr; }
+// The CPU draw target lives in the active renderer (de-globalised); these
+// C-callable accessors delegate to it so the ambient software rasteriser keeps
+// working.  The graphics-window-offset pointer is derived on demand from the
+// target base + the current graphics-window geometry.
+unsigned char* RendererGetWScreen(void)
+{
+    return s_activeRenderer ? s_activeRenderer->GetSoftwareFramebuffer() : NULL;
+}
+
+unsigned char* RendererGetGraphicsWindowPtr(void)
+{
+    unsigned char* base = RendererGetWScreen();
+    if (!base)
+        return NULL;
+    return base + s_graphicsScreenWidth * s_graphicsWindowY + s_graphicsWindowX;
+}
 
 void RendererSetWScreen(unsigned char* buf)
 {
-    s_wscreen = buf;
-    if (!buf)
-        s_graphicsWindowPtr = NULL;
+    if (s_activeRenderer)
+        s_activeRenderer->SetSoftwareFramebuffer(buf);
 }
 
 void RendererSetScreenDimensions(int width, int height)
@@ -689,8 +694,7 @@ void RendererSetPhysicalDimensions(int width, int height)
 {
     s_physicalScreenWidth  = width;
     s_physicalScreenHeight = height;
-    s_wscreen = NULL;
-    s_graphicsWindowPtr = NULL;
+    RendererSetWScreen(NULL);  // clear the active renderer's stale target
 }
 
 /******************************************************************************/
@@ -978,7 +982,7 @@ TbBool RendererPresentImage(const struct RendererPresentImageDesc* desc)
         return false;
     }
     return copy_raw8_image_buffer(
-        s_wscreen,
+        RendererGetWScreen(),
         RendererScreenWidth(), RendererScreenHeight(),
         desc->dst_w, desc->dst_h, desc->dst_x, desc->dst_y,
         desc->src, desc->src_w, desc->src_h);

@@ -34,6 +34,9 @@ private:
     int m_screenW = 0;
     int m_screenH = 0;
 
+    // The framebuffer
+    uint8_t* m_wscreen = nullptr;
+
     // ── Software IR executor ──────────────────────────────────────────────────
     // The software backend defers UI + text submissions into this graph during
     // the frame, then replays them (merged by a shared per-frame seq) into
@@ -50,6 +53,9 @@ public:
     void     ClearScreen(uint8_t colour_index) override;
     uint8_t* LockFramebuffer(int* out_pitch) override;
     void     UnlockFramebuffer() override;
+
+    uint8_t* GetSoftwareFramebuffer() const override { return m_wscreen; }
+    void     SetSoftwareFramebuffer(uint8_t* buf) override { m_wscreen = buf; }
 
     bool     PresentImage(const struct RendererPresentImageDesc* desc) override;
 

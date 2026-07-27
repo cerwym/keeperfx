@@ -7,9 +7,7 @@
 /******************************************************************************/
 #include "renderer/RenderGraph.h"
 
-#include "renderer/IWorldViewRenderer.h"
-#include "renderer/IUIRenderer.h"
-#include "renderer/ITextRenderer.h"
+#include "renderer/IFrameGraphExecutor.h"
 
 /******************************************************************************/
 // RenderGraph::FrameBuffers
@@ -20,20 +18,17 @@ void RenderGraph::FrameBuffers::Reset()
     world.Reset();
     ui.Reset();
     text.Reset();
-    shadow.Reset();
     post_process.Reset();
     image_present.Reset();
 }
 
 void RenderGraph::FrameBuffers::Reserve(
     size_t world_tiles, size_t world_sprites, size_t world_shadows,
-    size_t ui_cmds,     size_t text_cmds,
-    size_t shadow_cmds)
+    size_t ui_cmds,     size_t text_cmds)
 {
     world.Reserve(world_tiles, world_sprites, world_shadows);
     ui.Reserve(ui_cmds);
     text.Reserve(text_cmds);
-    shadow.Reserve(shadow_cmds);
     // Full-screen presents are few per frame (usually 1); a small fixed reserve
     // avoids the first-frame realloc without over-allocating owned pixel buffers.
     image_present.Reserve(8);
@@ -44,7 +39,6 @@ void RenderGraph::FrameBuffers::Swap(FrameBuffers& other)
     world.Swap(other.world);
     ui.Swap(other.ui);
     text.Swap(other.text);
-    shadow.Swap(other.shadow);
     post_process.Swap(other.post_process);
     image_present.Swap(other.image_present);
 }
@@ -61,15 +55,14 @@ RenderGraph::RenderGraph()
 
 void RenderGraph::Reserve(
     size_t world_tiles, size_t world_sprites, size_t world_shadows,
-    size_t ui_cmds,     size_t text_cmds,
-    size_t shadow_cmds)
+    size_t ui_cmds,     size_t text_cmds)
 {
     // Reserve both write and read sides so neither triggers a realloc
     // during a frame.
     m_write.Reserve(world_tiles, world_sprites, world_shadows,
-                    ui_cmds, text_cmds, shadow_cmds);
+                    ui_cmds, text_cmds);
     m_read.Reserve(world_tiles,  world_sprites, world_shadows,
-                   ui_cmds, text_cmds, shadow_cmds);
+                   ui_cmds, text_cmds);
 }
 
 void RenderGraph::BeginFrame()
@@ -98,32 +91,63 @@ void RenderGraph::UpdateFrameState(const FrameState& fs)
     m_read_fs = fs;
 }
 
-void RenderGraph::Execute(
-    const BackendCapabilities& caps,
-    IWorldViewRenderer*  world,
-    IUIRenderer*         ui,
-    ITextRenderer*       text,
-    IShadowRenderer*     shadow)
+void RenderGraph::Execute(IFrameGraphExecutor& exec)
 {
-    // -------------------------------------------------------------------------
-    // Layer 1: Shadow pass (before world so shadows composite underneath)
-    // Shadow commands are currently embedded in the world geometry stream
-    // (IRWorldShadowCmd in WorldCommandBuffers).  The dedicated IShadowRenderer
-    // path is reserved for future shadow-map / shadow-volume implementations.
-    (void)shadow;  // not yet implemented
+    // This function OWNS the per-frame execution order.  Each call
+    // is one ordered phase realised by the backend.
+    // Ordering constraints:
+    //   • World must run INSIDE the lens FBO bracket
+    //     (FGBeginWorldCapture … FGResolveWorldCapture) so post-process passes
+    //     operate on the captured scene before it reaches the screen.
+    //   • Map-fade must run AFTER world but BEFORE image-presents / overhead so
+    //     those queues are still available for the parchment FBO capture.
+    //   • The deferred world-view capture runs AFTER GameUI so the sidebar is
+    //     part of the crossfaded snapshot.
+    //   • Screenshot / scRGB-lift run last, after all draws, before the swap
+    //     (which stays in the backend's EndFrame).
 
-    // -------------------------------------------------------------------------
-    // Layer 2: World pass (geometry → shadows → sprites → world-UI)
-    (void)world;
+    // Frame setup.
+    exec.FGClearFrame();
+    exec.FGPopulateUI();
 
-    // -------------------------------------------------------------------------
-    // Layer 3: UI pass — populate render-thread quad/line buffers from IR.
-    if (ui)
-        ui->PopulateFromIR(m_read.ui, m_read_fs);
+    // World inside the lens scene-capture bracket.
+    exec.FGBeginWorldCapture();
+    exec.FGExecuteWorld();
+    exec.FGFlushSwipeOverlay();
+    exec.FGResolveWorldCapture();
+    exec.FGApplyLensPaletteUIExclusion();
 
-    // -------------------------------------------------------------------------
-    // Layer 4: Text pass
-    (void)text;
+    // Map-fade compose (after world, before presents / overhead).
+    exec.FGExecuteMapFade();
+
+    // World-space sprite / flat overlay layers.
+    exec.FGDrawWorldSpriteLayer();
+    exec.FGDrawWorldOverlayFlatLayer();
+
+    // Full-screen image presents (backgrounds / parchment / FMV).
+    exec.FGExecuteImagePresents();
+
+    // Overhead map / PiP captures.
+    exec.FGDrawOverheadMap();
+    exec.FGExecutePiPCaptures();
+
+    // Game UI, then the deferred world-view capture.
+    exec.FGDrawGameUI();
+    exec.FGCaptureWorldFrameIfPending();
+
+    // Zoom-box tiles (on top of GameUI), front overlay, text.
+    exec.FGDrawZoomBoxes();
+    exec.FGDrawFrontOverlay();
+    exec.FGExecuteText();
+
+    // Full-screen tint, cursor, dev overlay.
+    exec.FGDrawScreenTint();
+    exec.FGExecuteCursor();
+    exec.FGDrawDevToolsOverlay();
+
+    // Present-time captures (before the backend's buffer swap).
+    exec.FGCaptureScreenshot();
+    exec.FGApplyScrgbLift();
 }
 
 /******************************************************************************/
