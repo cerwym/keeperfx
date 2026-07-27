@@ -147,12 +147,6 @@ public:
      *  the render-graph-owned WorldCommandBuffers passed here. */
     void ExecuteWorldFromIR(const WorldCommandBuffers& cmds);
 
-    /** IWorldViewRenderer override: calls ExecuteWorldFromIR().
-     *  Note: EndFrame_GL() calls ExecuteWorldFromIR() directly (not through the
-     *  interface) because it must be wrapped inside the lens-FBO bracket.  This
-     *  override exists for interface completeness and future backends. */
-    void ExecuteFromIR(const WorldCommandBuffers& cmds) override { ExecuteWorldFromIR(cmds); }
-
     /** Supply the active 256-colour VGA palette (768 bytes: R,G,B × 256).
      *  Called by RendererSetPaletteForRenderers() on the game thread.
      *  Pointer copy only — safe without GL context.

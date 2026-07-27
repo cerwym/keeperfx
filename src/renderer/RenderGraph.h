@@ -30,11 +30,9 @@
 #include <optional>
 #include "renderer/FrameState.h"
 #include "renderer/BackendCapabilities.h"
-#include "renderer/IShadowRenderer.h"
 #include "renderer/ir/WorldCommands.h"
 #include "renderer/ir/UICommands.h"
 #include "renderer/ir/TextCommands.h"
-#include "renderer/ir/ShadowCommands.h"
 #include "renderer/ir/PostProcessCommands.h"
 #include "renderer/ir/ImagePresentCommands.h"
 
@@ -62,8 +60,7 @@ public:
 
     /** Reserve backing memory for expected peak commands per frame. */
     void Reserve(size_t world_tiles, size_t world_sprites, size_t world_shadows,
-                 size_t ui_cmds,     size_t text_cmds,
-                 size_t shadow_cmds);
+                 size_t ui_cmds,     size_t text_cmds);
 
     // =========================================================================
     // Game-thread write accessors
@@ -71,7 +68,6 @@ public:
     WorldCommandBuffers&       GetWorldBuffers()       { return m_write.world;        }
     UICommandBuffers&          GetUIBuffers()          { return m_write.ui;           }
     TextCommandBuffers&        GetTextBuffers()        { return m_write.text;         }
-    ShadowCommandBuffers&      GetShadowBuffers()      { return m_write.shadow;       }
     PostProcessCommandBuffers& GetPostProcessBuffers() { return m_write.post_process; }
     ImagePresentBuffers&       GetImagePresentBuffers(){ return m_write.image_present; }
 
@@ -119,7 +115,6 @@ public:
     const WorldCommandBuffers&       GetWorldBuffersRT()       const { return m_read.world;        }
     const UICommandBuffers&          GetUIBuffersRT()          const { return m_read.ui;           }
     const TextCommandBuffers&        GetTextBuffersRT()        const { return m_read.text;         }
-    const ShadowCommandBuffers&      GetShadowBuffersRT()      const { return m_read.shadow;       }
     const PostProcessCommandBuffers& GetPostProcessBuffersRT() const { return m_read.post_process; }
     const ImagePresentBuffers&       GetImagePresentBuffersRT()const { return m_read.image_present; }
     const FrameState&                GetFrameStateRT()         const { return m_read_fs;           }
@@ -142,14 +137,12 @@ private:
         WorldCommandBuffers       world;
         UICommandBuffers          ui;
         TextCommandBuffers        text;
-        ShadowCommandBuffers      shadow;
         PostProcessCommandBuffers post_process;
         ImagePresentBuffers       image_present;
 
         void Reset();
         void Reserve(size_t world_tiles, size_t world_sprites, size_t world_shadows,
-                     size_t ui_cmds,     size_t text_cmds,
-                     size_t shadow_cmds);
+                     size_t ui_cmds,     size_t text_cmds);
         void Swap(FrameBuffers& other);
     };
 

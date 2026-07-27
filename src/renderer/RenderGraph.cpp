@@ -18,20 +18,17 @@ void RenderGraph::FrameBuffers::Reset()
     world.Reset();
     ui.Reset();
     text.Reset();
-    shadow.Reset();
     post_process.Reset();
     image_present.Reset();
 }
 
 void RenderGraph::FrameBuffers::Reserve(
     size_t world_tiles, size_t world_sprites, size_t world_shadows,
-    size_t ui_cmds,     size_t text_cmds,
-    size_t shadow_cmds)
+    size_t ui_cmds,     size_t text_cmds)
 {
     world.Reserve(world_tiles, world_sprites, world_shadows);
     ui.Reserve(ui_cmds);
     text.Reserve(text_cmds);
-    shadow.Reserve(shadow_cmds);
     // Full-screen presents are few per frame (usually 1); a small fixed reserve
     // avoids the first-frame realloc without over-allocating owned pixel buffers.
     image_present.Reserve(8);
@@ -42,7 +39,6 @@ void RenderGraph::FrameBuffers::Swap(FrameBuffers& other)
     world.Swap(other.world);
     ui.Swap(other.ui);
     text.Swap(other.text);
-    shadow.Swap(other.shadow);
     post_process.Swap(other.post_process);
     image_present.Swap(other.image_present);
 }
@@ -59,15 +55,14 @@ RenderGraph::RenderGraph()
 
 void RenderGraph::Reserve(
     size_t world_tiles, size_t world_sprites, size_t world_shadows,
-    size_t ui_cmds,     size_t text_cmds,
-    size_t shadow_cmds)
+    size_t ui_cmds,     size_t text_cmds)
 {
     // Reserve both write and read sides so neither triggers a realloc
     // during a frame.
     m_write.Reserve(world_tiles, world_sprites, world_shadows,
-                    ui_cmds, text_cmds, shadow_cmds);
+                    ui_cmds, text_cmds);
     m_read.Reserve(world_tiles,  world_sprites, world_shadows,
-                   ui_cmds, text_cmds, shadow_cmds);
+                   ui_cmds, text_cmds);
 }
 
 void RenderGraph::BeginFrame()

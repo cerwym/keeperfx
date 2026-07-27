@@ -375,7 +375,7 @@ private:
     // ── Render thread ───────────────────────────────────────────
     RenderThreadManager     m_render_thread;
 
-    std::atomic<bool>       m_anim_tiles_dirty {false};.
+    std::atomic<bool>       m_anim_tiles_dirty {false};
     std::atomic<bool>       m_tile_atlas_init_pending {false};
     std::atomic<bool>       m_fade_table_pending      {false};
     bool                    m_imgui_init_pending      = false;
