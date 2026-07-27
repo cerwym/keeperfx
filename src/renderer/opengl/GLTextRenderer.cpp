@@ -356,11 +356,6 @@ void GLTextRenderer::SetTextCommandBuffers(TextCommandBuffers* cmds)
 
 void GLTextRenderer::ExecuteTextFromIR(const TextCommandBuffers& cmds)
 {
-    // Translate IRTextDrawCmd entries into DeferredDraw entries.
-    // Draw() is always called regardless — it flushes both IR-translated items
-    // and any fallback content that arrived via m_pending before the write
-    // window opened.  The old early-return (Size()==0 → return) was removed
-    // because an empty IR buffer does not mean m_pending is empty.
     if (cmds.draws.Size() > 0)
     {
         const uint32_t current_gen = RendererGetTextFontGeneration();
@@ -565,9 +560,6 @@ void GLTextRenderer::Draw()
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, m_palette_tex);
 
-    // CRITICAL: Reset active atlas tracker because other renderers (minimap, sprites)
-    // bind their textures to GL_TEXTURE0 between our Draw() calls, corrupting state.
-    // We must rebind the font atlas texture for the first draw of each frame.
     m_active_atlas = nullptr;
     m_active_dbc_atlas = nullptr;
     // Reset batch accumulation state
@@ -588,12 +580,7 @@ void GLTextRenderer::Draw()
               });
 
     const uint32_t current_gen = RendererGetTextFontGeneration();
-    // Fonts were reloaded since the caches were built (start/exit level, GUI data
-    // reload).  The caches are keyed by raw font pointer, so every entry is now
-    // stale: evict them here (render thread, GL context current) before repopulating
-    // for the live generation.  Without this the caches leak a GLFontAtlas + GL
-    // texture per font per reload cycle, and a reused font address could alias a
-    // stale atlas.
+
     if (current_gen != m_cache_generation)
     {
         evict_font_atlas_caches();
@@ -699,7 +686,7 @@ void GLTextRenderer::Draw()
                 }
             }
 
-            if (!atlas->IsInitialized()) continue;
+            if (atlas == nullptr || !atlas->IsInitialized()) continue;
 
             if (atlas != m_active_atlas)
             {
@@ -1002,16 +989,15 @@ void GLTextRenderer::ScreenToNDC(float screen_x, float screen_y, float* ndc_x, f
 void GLTextRenderer::ApplyTextColorUniform()
 {
     if (m_loc_text_color < 0) return;
-    // Flush any pending vertices accumulated with the previous alpha before updating
-    // the uniform — GL uniforms are program-global, so pending batch vertices would
-    // otherwise be drawn with the new alpha when they are eventually flushed.
     FlushBatch();
     float alpha = 1.0f;
-    // Priority matches software renderer (bflib_vidraw.c): TRANSPAR4 is checked first.
-    if (m_text_draw_flags & Lb_SPRITE_TRANSPAR4)
+    if (m_text_draw_flags & Lb_SPRITE_TRANSPAR4) {
         alpha = g_renderer_settings.transpar4_alpha;
-    else if (m_text_draw_flags & Lb_SPRITE_TRANSPAR8)
+    }
+    else if (m_text_draw_flags & Lb_SPRITE_TRANSPAR8) {
         alpha = g_renderer_settings.transpar8_alpha;
+    }
+
     glUniform4f(m_loc_text_color, 1.0f, 1.0f, 1.0f, alpha);
 }
 
