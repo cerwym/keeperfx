@@ -8,15 +8,12 @@
 // imagehlp.h omitted: dbghelp.h supersedes it and defines the same types.
 // Including both causes C2011 type redefinition errors on MSVC.
 #include <dbghelp.h>
-#include <psapi.h>
 #include <direct.h>
 #include <io.h>
-#include <signal.h>
-#include <stdio.h>
-#include <string.h>
+#include <csignal>
+#include <cstdio>
+#include <cstring>
 #include <sstream>
-#include <malloc.h>
-#include <errno.h>
 #include "bflib_crash.h"
 #include "bflib_video.h"
 #include "renderer/RendererManager.h"
@@ -54,6 +51,7 @@ const char* PlatformWindows::GetOSVersion() const
     static char buffer[256];
     OSVERSIONINFO v;
     v.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
+    // TODO : change to IsWindows
     if (GetVersionEx(&v)) {
         snprintf(buffer, sizeof(buffer), "%s %ld.%ld.%ld",
             (v.dwPlatformId == VER_PLATFORM_WIN32_NT) ? "Windows NT" : "Windows",
@@ -591,8 +589,6 @@ long PlatformWindows::FileWrite(TbFileHandle handle, const void* buf, unsigned l
     if (!handle) {
         return -1;
     }
-
-    DebugPrint(std::string(static_cast<const char*>(buf), len));
 
     return (long)fwrite(buf, 1, len, static_cast<TbFileInfo*>(handle)->fp);
 }
