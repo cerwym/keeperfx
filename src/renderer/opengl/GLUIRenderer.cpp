@@ -677,6 +677,7 @@ void GLUIRenderer::FlipBuffers()
         m_rt_quads[i] = std::move(m_quads[i]);
         m_rt_lines[i] = std::move(m_lines[i]);
     }
+    m_rt_swipe_quads = std::move(m_swipe_quads);
 
     // Swap minimap CPU buffers so the render thread reads the just-completed
     // frame's pixel data while the game thread fills the next frame's buffer
@@ -1142,6 +1143,41 @@ void GLUIRenderer::SubmitCursorPanelSprite(int32_t x, int32_t y, int units_per_p
     m_cursor_quads.push_back(q);
 }
 
+void GLUIRenderer::SubmitSwipeQuad(float px, float py, float pw, float ph,
+                                   float u0, float v0, float u1, float v1, float alpha)
+{
+    ASSERT_GAME_THREAD();
+    UIQuad q;
+    q.x0 = px;        q.y0 = py;
+    q.x1 = px + pw;   q.y1 = py + ph;
+    q.u0 = u0;        q.v0 = v0;
+    q.u1 = u1;        q.v1 = v1;
+    q.r = 1.0f;  q.g = 1.0f;  q.b = 1.0f;
+    q.a = alpha;
+    q.z = 0.5f;
+    q.mode = 0.0f;   // PASS_SPRITE
+    q.texture_id = 0;
+    q.remap_row = -1;
+    q.seq = 0;
+    m_swipe_quads.push_back(q);
+}
+
+void GLUIRenderer::DrawSwipeQuadsRT()
+{
+    ASSERT_RENDER_THREAD();
+    if (m_rt_swipe_quads.empty()) return;
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+
+    flush_quads_from(m_rt_swipe_quads);   // shared sprite pipeline; clears the buffer
+
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+}
+
 void GLUIRenderer::Draw()
 {
     KFX_ZONE("UIRenderer::Draw");
@@ -1179,6 +1215,7 @@ void GLUIRenderer::Clear()
 {
     ASSERT_GAME_THREAD();
     for (int i = 0; i < kLayerCount; ++i) { m_quads[i].clear(); m_lines[i].clear(); }
+    m_swipe_quads.clear();
     // NOTE: m_fbo_quads and m_vertices are render-thread-only temporaries.
     // m_fbo_quads is populated by SubmitFBOQuad() on the render thread and
     // cleared by DrawGameUI().  m_vertices is a scratch buffer owned by
