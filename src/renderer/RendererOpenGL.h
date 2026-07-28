@@ -360,15 +360,6 @@ private:
     int          m_scrgb_lift_w      = 0;
     int          m_scrgb_lift_h      = 0;
 
-    // ── Swipe overlay (possession attack effect) ───────────────────────────
-    struct SwipeVertex { float x, y, u, v, r, g, b, a; };
-    std::vector<SwipeVertex>  m_swipe_verts;      // game-thread write (accumulated per frame)
-    std::vector<SwipeVertex>  m_rt_swipe_verts;   // render-thread read (moved from m_swipe_verts by EndFrame)
-    unsigned int              m_swipe_shader = 0;
-    unsigned int              m_swipe_vao    = 0;
-    unsigned int              m_swipe_vbo    = 0;
-    void FlushSwipeQuads();
-
     /** (Re-)create (or resize) FBO slot at index @p idx to at least w×h. */
     void ensure_pip_fbo(std::size_t idx, int w, int h);
 

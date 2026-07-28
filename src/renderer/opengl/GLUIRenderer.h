@@ -164,6 +164,11 @@ public:
     void SubmitCursorPanelSprite(int32_t x, int32_t y, int units_per_px, SpriteHandle spr,
                                  unsigned int draw_flags);
 
+    void SubmitSwipeQuad(float px, float py, float pw, float ph,
+                         float u0, float v0, float u1, float v1, float alpha);
+
+    void DrawSwipeQuadsRT();
+
     /** Initialize OpenGL resources.
      *  @return true if successful */
     bool Init();
@@ -299,6 +304,9 @@ private:
     // via SubmitCursorPanelSprite(); DrawCursorSprites() flushes it.  Never touched
     // by the game thread, eliminating the m_quads[1] race in Phase 3C.
     std::vector<UIQuad>  m_cursor_quads;
+
+    std::vector<UIQuad>  m_swipe_quads;
+    std::vector<UIQuad>  m_rt_swipe_quads;
 
     // Screen properties
     int m_screen_width;

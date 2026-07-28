@@ -646,11 +646,6 @@ void RendererOpenGL::Shutdown()
     m_scrgb_lift_w = 0;
     m_scrgb_lift_h = 0;
 
-    // Swipe overlay shader + VAO/VBO
-    if (m_swipe_shader) { glDeleteProgram(m_swipe_shader); m_swipe_shader = 0; }
-    if (m_swipe_vao)    { glDeleteVertexArrays(1, &m_swipe_vao); m_swipe_vao = 0; }
-    if (m_swipe_vbo)    { glDeleteBuffers(1, &m_swipe_vbo); m_swipe_vbo = 0; }
-
     kfx::DevTools::instance().shutdownOverlay();
 
     platform_destroy_gl_context();
@@ -808,9 +803,6 @@ void RendererOpenGL::EndFrame()
     std::copy(std::begin(m_zoom_clip_rect), std::end(m_zoom_clip_rect),
               std::begin(m_rt_zoom_clip_rect));
     m_rt_zoom_clip_radius = m_zoom_clip_radius;
-
-    // Double-buffer swipe overlay verts: same pattern as PiP/rawblit queues.
-    m_rt_swipe_verts = std::move(m_swipe_verts);
 
     // Screenshot: move pending path/fmt into render-thread copies; clear pending
     // so that subsequent EndFrame() calls without a screenshot don't re-trigger.
@@ -1013,7 +1005,7 @@ void RendererOpenGL::FGFlushSwipeOverlay()
 {
     // Draw swipe-overlay quads while the lens FBO is still bound, so they sit on
     // top of world geometry and get lens-distorted.
-    FlushSwipeQuads();
+    if (m_gl_ui_renderer) m_gl_ui_renderer->DrawSwipeQuadsRT();
     SYNCDBG(0, "EndFrame_GL step 4: swipe quads + world render done");
 }
 
@@ -1832,7 +1824,7 @@ bool RendererOpenGL::SubmitTransparentBlit(const uint8_t* buf, int w, int h)
 void RendererOpenGL::DrawSwipeOverlay(struct TbSpriteSheet* sprites, int frame,
                                      bool draw_lr, int engine_window_x)
 {
-    if (!m_sprite_atlas)
+    if (!m_sprite_atlas || !m_gl_ui_renderer)
         return;
 
     static const int SPRITES_X = 3;
@@ -1858,17 +1850,10 @@ void RendererOpenGL::DrawSwipeOverlay(struct TbSpriteSheet* sprites, int frame,
     int scrpos_y = (scr_h * 16 / units_per_px - (startspr->SHeight + endspr->SHeight)) / 2;
     const float alpha = 0.333f; // Lb_SPRITE_TRANSPAR4
 
-    // Record sprite quads as raw vertex data for FlushSwipeQuads().
     auto push_quad = [&](float px, float py, float pw, float ph,
                          float u0, float v0, float u1, float v1)
     {
-        // Two triangles: TL, TR, BR, TL, BR, BL
-        m_swipe_verts.push_back({px,      py,      u0, v0, 1,1,1, alpha});
-        m_swipe_verts.push_back({px + pw, py,      u1, v0, 1,1,1, alpha});
-        m_swipe_verts.push_back({px + pw, py + ph, u1, v1, 1,1,1, alpha});
-        m_swipe_verts.push_back({px,      py,      u0, v0, 1,1,1, alpha});
-        m_swipe_verts.push_back({px + pw, py + ph, u1, v1, 1,1,1, alpha});
-        m_swipe_verts.push_back({px,      py + ph, u0, v1, 1,1,1, alpha});
+        m_gl_ui_renderer->SubmitSwipeQuad(px, py, pw, ph, u0, v0, u1, v1, alpha);
     };
 
     if (draw_lr)
@@ -1920,77 +1905,6 @@ void RendererOpenGL::DrawSwipeOverlay(struct TbSpriteSheet* sprites, int frame,
             scrpos_y += delta_y;
         }
     }
-}
-
-void RendererOpenGL::FlushSwipeQuads()
-{
-    if (m_rt_swipe_verts.empty() || !m_sprite_atlas)
-        return;
-
-    // Lazy-init shader + VAO/VBO on first use
-    if (!m_swipe_shader)
-    {
-        unsigned int vs = compile_shader(GL_VERTEX_SHADER,   UI_VERTEX_SHADER);
-        unsigned int fs = compile_shader(GL_FRAGMENT_SHADER, UI_SPRITE_FRAGMENT_SHADER);
-        if (!vs || !fs) { if (vs) glDeleteShader(vs); if (fs) glDeleteShader(fs); m_rt_swipe_verts.clear(); return; }
-        m_swipe_shader = glCreateProgram();
-        glAttachShader(m_swipe_shader, vs);
-        glAttachShader(m_swipe_shader, fs);
-        glLinkProgram(m_swipe_shader);
-        glDeleteShader(vs);
-        glDeleteShader(fs);
-        int ok = 0;
-        glGetProgramiv(m_swipe_shader, GL_LINK_STATUS, &ok);
-        if (!ok) { glDeleteProgram(m_swipe_shader); m_swipe_shader = 0; m_rt_swipe_verts.clear(); return; }
-        glUseProgram(m_swipe_shader);
-        glUniform1i(glGetUniformLocation(m_swipe_shader, "u_sprite_atlas"), 0);
-        glUniform1i(glGetUniformLocation(m_swipe_shader, "u_palette"),      1);
-
-        glGenVertexArrays(1, &m_swipe_vao);
-        glGenBuffers(1, &m_swipe_vbo);
-        glBindVertexArray(m_swipe_vao);
-        glBindBuffer(GL_ARRAY_BUFFER, m_swipe_vbo);
-        // SwipeVertex: x, y, u, v, r, g, b, a (8 floats = 32 bytes)
-        glEnableVertexAttribArray(0); // a_pos (vec2)
-        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(SwipeVertex), (void*)0);
-        glEnableVertexAttribArray(1); // a_uv (vec2)
-        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(SwipeVertex), (void*)(2 * sizeof(float)));
-        glEnableVertexAttribArray(2); // a_color (vec4)
-        glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(SwipeVertex), (void*)(4 * sizeof(float)));
-        // Attributes 3 (a_z) and 4 (a_mode) unused — set constant
-        glVertexAttrib1f(3, 0.5f);
-        glVertexAttrib1f(4, 0.0f);
-        glBindVertexArray(0);
-    }
-
-    glUseProgram(m_swipe_shader);
-    glUniform2f(glGetUniformLocation(m_swipe_shader, "u_screen_size"),
-                (float)m_rt_frame_state.screen_w, (float)m_rt_frame_state.screen_h);
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_sprite_atlas->GetTexture());
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, m_texPalette);
-
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-
-    glBindVertexArray(m_swipe_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_swipe_vbo);
-    glBufferData(GL_ARRAY_BUFFER,
-                 (GLsizeiptr)(m_rt_swipe_verts.size() * sizeof(SwipeVertex)),
-                 m_rt_swipe_verts.data(), GL_STREAM_DRAW);
-    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_rt_swipe_verts.size());
-
-    glBindVertexArray(0);
-    glDepthMask(GL_TRUE);
-    glDisable(GL_BLEND);
-    glActiveTexture(GL_TEXTURE0);
-    glUseProgram(0);
-
-    m_rt_swipe_verts.clear();
 }
 
 bool RendererOpenGL::SubmitOverheadMap(const uint8_t* tile_colors, int tiles_x, int tiles_y,
