@@ -127,12 +127,13 @@ void SWCursorLayer::Draw()
 {
     // Draw the pointer sprite into WScreen right before the SDL blit.
     // WScreen is fully rebuilt each frame so no backup/restore is needed.
-    if (m_pointer_spr && RendererGetWScreen())
+    const TbGraphicsWindow target = RendererGetDrawTarget();
+    if (m_pointer_spr && target.ptr)
     {
         draw_pointer_sprite(m_pointer_x, m_pointer_y,
                             m_pointer_spr,
-                            RendererGetWScreen(),
-                            (unsigned long)RendererScreenWidth());
+                            target.ptr,
+                            (unsigned long)target.scanline);
     }
 }
 

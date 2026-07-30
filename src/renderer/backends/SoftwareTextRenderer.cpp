@@ -107,10 +107,11 @@ void SoftwareTextRenderer::SetClipWindow(int32_t x, int32_t y, int32_t w, int32_
     if (x1 < 0) x1 = 0;
     if (y0 < 0) y0 = 0;
     if (y1 < 0) y1 = 0;
-    if (x0 > RendererScreenWidth())  x0 = RendererScreenWidth();
-    if (x1 > RendererScreenWidth())  x1 = RendererScreenWidth();
-    if (y0 > RendererScreenHeight()) y0 = RendererScreenHeight();
-    if (y1 > RendererScreenHeight()) y1 = RendererScreenHeight();
+    const TbGraphicsWindow target = RendererGetDrawTarget();
+    if (x0 > target.scanline)      x0 = target.scanline;
+    if (x1 > target.scanline)      x1 = target.scanline;
+    if (y0 > target.screen_height) y0 = target.screen_height;
+    if (y1 > target.screen_height) y1 = target.screen_height;
 
     m_clip_window = { x0, y0, x1 - x0, y1 - y0 };
 }
@@ -626,11 +627,12 @@ void SoftwareTextRenderer::PutDownSimpleSpritesResized(const char* sbuf, const c
 void SoftwareTextRenderer::PutDownDbcSprites(const char* sbuf, const char* ebuf,
                                              int32_t x, int32_t y, int32_t len)
 {
+    const TbGraphicsWindow target = RendererGetDrawTarget();
     struct AsianFontWindow awind;
-    awind.buf_ptr = RendererGetGraphicsWindowPtr();
-    awind.width = RendererGraphicsWindowWidth();
-    awind.height = RendererGraphicsWindowHeight();
-    awind.scanline = RendererScreenWidth();
+    awind.buf_ptr = TbGraphicsWindowOrigin(&target);
+    awind.width = target.width;
+    awind.height = target.height;
+    awind.scanline = target.scanline;
     TbBool needs_draw = false;
     unsigned long chr = 0;
 
@@ -713,11 +715,12 @@ void SoftwareTextRenderer::PutDownDbcSpritesResized(const char* sbuf, const char
                                                     int32_t x, int32_t y,
                                                     int32_t space_len, int32_t units_per_px)
 {
+    const TbGraphicsWindow target = RendererGetDrawTarget();
     struct AsianFontWindow awind;
-    awind.buf_ptr = RendererGetGraphicsWindowPtr();
-    awind.width = RendererGraphicsWindowWidth();
-    awind.height = RendererGraphicsWindowHeight();
-    awind.scanline = RendererScreenWidth();
+    awind.buf_ptr = TbGraphicsWindowOrigin(&target);
+    awind.width = target.width;
+    awind.height = target.height;
+    awind.scanline = target.scanline;
     TbBool needs_draw = false;
     unsigned long chr = 0;
 

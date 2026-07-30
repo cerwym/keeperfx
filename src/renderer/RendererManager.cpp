@@ -677,6 +677,19 @@ unsigned char* RendererGetGraphicsWindowPtr(void)
     return base + s_graphicsScreenWidth * s_graphicsWindowY + s_graphicsWindowX;
 }
 
+TbGraphicsWindow RendererGetDrawTarget(void)
+{
+    TbGraphicsWindow t;
+    t.x             = s_graphicsWindowX;
+    t.y             = s_graphicsWindowY;
+    t.width         = s_graphicsWindowWidth;
+    t.height        = s_graphicsWindowHeight;
+    t.ptr           = RendererGetWScreen();
+    t.scanline      = s_graphicsScreenWidth;
+    t.screen_height = s_graphicsScreenHeight;
+    return t;
+}
+
 void RendererSetWScreen(unsigned char* buf)
 {
     if (s_activeRenderer)

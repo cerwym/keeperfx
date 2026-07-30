@@ -59,9 +59,10 @@ void SoftwareLensRenderer::ResolveWorldCaptureBegin()
     if (!m_capture_active)
         return;
 
-    m_saved_wscreen    = RendererGetWScreen();
-    m_saved_graphics_w = RendererScreenWidth();
-    m_saved_graphics_h = RendererScreenHeight();
+    const TbGraphicsWindow saved = RendererGetDrawTarget();
+    m_saved_wscreen    = saved.ptr;
+    m_saved_graphics_w = saved.scanline;
+    m_saved_graphics_h = saved.screen_height;
     RendererStoreViewport(&m_saved_viewport);
 
     memset(m_lens_buffer, 0, (size_t)m_lens_buffer_w * (size_t)m_lens_buffer_h * sizeof(TbPixel));
@@ -79,8 +80,9 @@ void SoftwareLensRenderer::ResolveWorldCaptureEnd()
     RendererSetScreenDimensions(m_saved_graphics_w, m_saved_graphics_h);
     RendererLoadViewport(&m_saved_viewport);
 
-    const long dst_offset = m_view_y * RendererScreenWidth() + m_view_x;
-    draw_lens_effect(RendererGetWScreen() + dst_offset, RendererScreenWidth(),
+    const TbGraphicsWindow target = RendererGetDrawTarget();
+    const long dst_offset = m_view_y * target.scanline + m_view_x;
+    draw_lens_effect(target.ptr + dst_offset, target.scanline,
         m_lens_buffer, m_lens_buffer_w, m_view_width, m_view_height, m_view_x, m_lens_type);
 
     m_capture_active = false;

@@ -57,7 +57,8 @@ void SoftwareUIRenderer::SubmitMinimap(int screen_x, int screen_y, int size)
 
 void SoftwareUIRenderer::TileSlabBackground(int x, int y, int w, int h)
 {
-    TbPixel* screen = RendererGetWScreen();
+    const TbGraphicsWindow target = RendererGetDrawTarget();
+    TbPixel* screen = target.ptr;
     if (!screen || !gui_slab)
         return;
 
@@ -87,7 +88,7 @@ void SoftwareUIRenderer::TileSlabBackground(int x, int y, int w, int h)
     if ((scr_w <= 0) || (scr_h <= 0))
         return;
 
-    TbPixel* out = &screen[scr_x + RendererScreenWidth() * scr_y];
+    TbPixel* out = &screen[scr_x + target.scanline * scr_y];
     for (i = 0; scr_h > i; i++)
     {
         TbPixel* inp = &gui_slab[GUI_SLAB_DIMENSION * (i % GUI_SLAB_DIMENSION)];
@@ -106,7 +107,7 @@ void SoftwareUIRenderer::TileSlabBackground(int x, int y, int w, int h)
         {
             for (int j = 0; j < scr_w; j++) out[j] = inp[j] ? inp[j] : 1;
         }
-        out += RendererScreenWidth();
+        out += target.scanline;
     }
 }
 

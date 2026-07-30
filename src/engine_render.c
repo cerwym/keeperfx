@@ -6833,8 +6833,9 @@ void software_execute_world_from_ir(int win_x, int win_y, int win_w, int win_h,
                                     int is_frontview, struct Camera *cam)
 {
     RendererSetViewport(win_x, win_y, win_w, win_h);
-    setup_vecs(RendererGetGraphicsWindowPtr(), NULL,
-               (unsigned int)RendererScreenWidth(),
+    const TbGraphicsWindow target = RendererGetDrawTarget();
+    setup_vecs(TbGraphicsWindowOrigin(&target), NULL,
+               (unsigned int)target.scanline,
                (unsigned int)win_w, (unsigned int)win_h);
     render_fade_tables = pixmap.fade_tables;
     if (is_frontview)

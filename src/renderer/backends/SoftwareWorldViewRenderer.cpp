@@ -23,8 +23,9 @@ void SoftwareWorldViewRenderer::BeginWorldPass(int w, int h, int vp_x, int vp_y)
     m_win_h = h;
     // The renderer owns the CPU framebuffer; point the rasteriser at the current
     // graphics-window origin.  The engine no longer hands a pixel pointer in.
-    setup_vecs(RendererGetGraphicsWindowPtr(), NULL,
-               (unsigned int)RendererScreenWidth(), (unsigned int)w, (unsigned int)h);
+    const TbGraphicsWindow target = RendererGetDrawTarget();
+    setup_vecs(TbGraphicsWindowOrigin(&target), NULL,
+               (unsigned int)target.scanline, (unsigned int)w, (unsigned int)h);
 }
 
 void SoftwareWorldViewRenderer::DrawIsometricView()
