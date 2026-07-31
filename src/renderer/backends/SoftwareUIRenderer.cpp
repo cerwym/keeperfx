@@ -55,9 +55,9 @@ void SoftwareUIRenderer::SubmitMinimap(int screen_x, int screen_y, int size)
     cmds->minimap_blit.set  = true;
 }
 
-void SoftwareUIRenderer::TileSlabBackground(int x, int y, int w, int h)
+void SoftwareUIRenderer::TileSlabBackground(int x, int y, int w, int h,
+                                            const TbGraphicsWindow& target)
 {
-    const TbGraphicsWindow target = RendererGetDrawTarget();
     TbPixel* screen = target.ptr;
     if (!screen || !gui_slab)
         return;
@@ -125,8 +125,9 @@ bool SoftwareUIRenderer::SubmitSlabBackground(int x, int y, int w, int h)
         m_ui_write_cmds->slab_backgrounds.Append(cmd);
         return true;
     }
-    // No write window (e.g. a capture path draws synchronously): tile now.
-    TileSlabBackground(x, y, w, h);
+    // No write window (e.g. a capture path draws synchronously): tile now,
+    // sampling the live framebuffer at this synchronous boundary.
+    TileSlabBackground(x, y, w, h, RendererGetDrawTarget());
     return true;
 }
 

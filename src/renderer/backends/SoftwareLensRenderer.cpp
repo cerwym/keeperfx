@@ -54,35 +54,46 @@ bool SoftwareLensRenderer::BeginWorldCapture()
     return true;
 }
 
-void SoftwareLensRenderer::ResolveWorldCaptureBegin()
+TbGraphicsWindow SoftwareLensRenderer::ResolveWorldCaptureBegin(const TbGraphicsWindow& screen_target)
 {
     if (!m_capture_active)
-        return;
+        return screen_target;
 
-    const TbGraphicsWindow saved = RendererGetDrawTarget();
-    m_saved_wscreen    = saved.ptr;
-    m_saved_graphics_w = saved.scanline;
-    m_saved_graphics_h = saved.screen_height;
-    RendererStoreViewport(&m_saved_viewport);
-
+    // Hand back the off-screen lens buffer as an explicit draw target for the
+    // deferred world (the world executor rasterises into it via setup_vecs).
     memset(m_lens_buffer, 0, (size_t)m_lens_buffer_w * (size_t)m_lens_buffer_h * sizeof(TbPixel));
+
+    TbGraphicsWindow lens_target;
+    lens_target.x             = 0;
+    lens_target.y             = 0;
+    lens_target.width         = (long)m_lens_buffer_w;
+    lens_target.height        = (long)m_lens_buffer_h;
+    lens_target.ptr           = m_lens_buffer;
+    lens_target.scanline      = (long)m_lens_buffer_w;
+    lens_target.screen_height = (long)m_lens_buffer_h;
+
+    // Legacy bflib_vidraw.* world sub-draws (e.g. the possession flame effect)
+    // still read the *ambient* CPU target rather than the setup_vecs target, so
+    // point the ambient target at the lens buffer too — otherwise they draw to
+    // the screen and are overwritten by the distort below.  Phase C2 replaces
+    // this ambient set with an explicit scope guard around those primitives.
     RendererSetWScreen(m_lens_buffer);
     RendererSetScreenDimensions((int)m_lens_buffer_w, (int)m_lens_buffer_h);
-    RendererSetViewport(0, 0, (int)m_lens_buffer_w, (int)m_lens_buffer_h);
+
+    return lens_target;
 }
 
-void SoftwareLensRenderer::ResolveWorldCaptureEnd()
+void SoftwareLensRenderer::ResolveWorldCaptureEnd(const TbGraphicsWindow& screen_target)
 {
     if (!m_capture_active)
         return;
 
-    RendererSetWScreen(m_saved_wscreen);
-    RendererSetScreenDimensions(m_saved_graphics_w, m_saved_graphics_h);
-    RendererLoadViewport(&m_saved_viewport);
+    // Restore the ambient CPU target to the on-screen surface before distorting.
+    RendererSetWScreen(screen_target.ptr);
+    RendererSetScreenDimensions((int)screen_target.scanline, (int)screen_target.screen_height);
 
-    const TbGraphicsWindow target = RendererGetDrawTarget();
-    const long dst_offset = m_view_y * target.scanline + m_view_x;
-    draw_lens_effect(target.ptr + dst_offset, target.scanline,
+    const long dst_offset = m_view_y * screen_target.scanline + m_view_x;
+    draw_lens_effect(screen_target.ptr + dst_offset, screen_target.scanline,
         m_lens_buffer, m_lens_buffer_w, m_view_width, m_view_height, m_view_x, m_lens_type);
 
     m_capture_active = false;

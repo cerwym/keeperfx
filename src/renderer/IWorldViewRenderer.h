@@ -30,6 +30,7 @@
 #pragma once
 
 #include <cstdint>
+#include "bflib_video.h"   // TbGraphicsWindow
 
 // Forward declarations to avoid pulling renderer IR into every includer.
 struct Camera;
@@ -52,8 +53,11 @@ public:
      *  @param w         Viewport width in pixels.
      *  @param h         Viewport height in pixels.
      *  @param vp_x      Viewport left edge in screen pixels (0 if no sidebar).
-     *  @param vp_y      Viewport top edge in screen pixels (0 if no sidebar). */
-    virtual void BeginWorldPass(int w, int h, int vp_x, int vp_y) = 0;
+     *  @param vp_y      Viewport top edge in screen pixels (0 if no sidebar).
+     *  @param target    The CPU draw target (software rasteriser origin); GPU
+     *                   backends ignore it. */
+    virtual void BeginWorldPass(int w, int h, int vp_x, int vp_y,
+                                const TbGraphicsWindow& target) = 0;
 
     // =========================================================================
     // Draw
@@ -70,13 +74,14 @@ public:
     // =========================================================================
     // Deferred resolution (software)
 
-    /** Realise a pending recorded world pass into the current WScreen.
+    /** Realise a pending recorded world pass into @p target (the on-screen draw
+     *  target; the possession lens redirects it to an off-screen buffer).
      *  @return 1 if a world was drawn, 0 if none was pending. */
-    virtual int ResolveDeferredWorld() { return 0; }
+    virtual int ResolveDeferredWorld(const TbGraphicsWindow& /*target*/) { return 0; }
 
-    /** Re-lay the last recorded world (retained bucket list) for present-only
-     *  palette-fade frames that re-present without a redraw. */
-    virtual void ReexecuteDeferredWorld() {}
+    /** Re-lay the last recorded world (retained bucket list) into @p target for
+     *  present-only palette-fade frames that re-present without a redraw. */
+    virtual void ReexecuteDeferredWorld(const TbGraphicsWindow& /*target*/) {}
 
     /** Flag the currently-recorded world pass as a possession lens capture, so
      *  ResolveDeferredWorld() routes it through the lens buffer + distort. */

@@ -46,20 +46,22 @@ public:
 
     // ── IMapFadePass ─────────────────────────────────────────────────────────
 
-    void PrepareBuffers(uint8_t* fade_src, uint8_t* fade_dest, int scanline, int height) override
+    void PrepareBuffers(uint8_t* fade_src, uint8_t* fade_dest, int scanline, int height,
+                        const TbGraphicsWindow& target) override
     {
-        (void)fade_src; (void)fade_dest; (void)scanline; (void)height;
+        (void)fade_src; (void)fade_dest; (void)scanline; (void)height; (void)target;
     }
 
     /** Render one fade-in frame (parchment → 3D world).
      *  Captures both views on step == 0.  Records the current step and sets
      *  m_capture_pending so FlushToRenderGraph() can emit the IR command.
-     *  Falls back to map_fade_in() if Init() failed. */
-    int32_t StepFadeIn(int32_t step) override;
+     *  Falls back to map_fade_in() if Init() failed.  The CPU @p target is unused
+     *  on the GPU path. */
+    int32_t StepFadeIn(int32_t step, const TbGraphicsWindow& target) override;
 
     /** Render one fade-out frame (3D world → parchment).
      *  Captures both views on step == 32.  Same logic as StepFadeIn above. */
-    int32_t StepFadeOut(int32_t step) override;
+    int32_t StepFadeOut(int32_t step, const TbGraphicsWindow& target) override;
 
     const char* GetName() const override { return "OPENGL"; }
     const char* RendererName() const override { return "GLMapFadePass"; }

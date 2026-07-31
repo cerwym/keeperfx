@@ -222,7 +222,7 @@ void RendererSoftware::EndFrame()
         if (ui)
             ui->ReplayMergedFromIR(m_render_graph.GetUIBuffersRT(),
                                    m_render_graph.GetTextBuffersRT(),
-                                   text);
+                                   text, RendererGetDrawTarget());
         CursorLayer_Draw();
 
         RendererSetWScreen(NULL);
@@ -292,7 +292,8 @@ void RendererSoftware::UnlockFramebuffer()
         SDL_UnlockSurface(lbDrawSurface);
 }
 
-bool RendererSoftware::PresentImage(const struct RendererPresentImageDesc* desc)
+bool RendererSoftware::PresentImage(const struct RendererPresentImageDesc* desc,
+                                    const TbGraphicsWindow& target)
 {
     // Only handle FMV frames with an embedded palette; other cases fall through
     // to the C bridge's existing software path (copy_raw8_image_buffer).
@@ -305,7 +306,6 @@ bool RendererSoftware::PresentImage(const struct RendererPresentImageDesc* desc)
         return false;
     }
 
-    const TbGraphicsWindow target = RendererGetDrawTarget();
     uint8_t* dst_buf = target.ptr;
     if (!dst_buf) return false;
 
@@ -354,9 +354,9 @@ bool RendererSoftware::PresentImage(const struct RendererPresentImageDesc* desc)
     return true;
 }
 
-bool RendererSoftware::SubmitTransparentBlit(const uint8_t* buf, int w, int h)
+bool RendererSoftware::SubmitTransparentBlit(const uint8_t* buf, int w, int h,
+                                             const TbGraphicsWindow& target)
 {
-    const TbGraphicsWindow target = RendererGetDrawTarget();
     if (!buf || !target.ptr) return false;
     if (w != target.scanline || h != RendererPhysicalHeight()) return false;
 
@@ -373,9 +373,8 @@ bool RendererSoftware::SubmitTransparentBlit(const uint8_t* buf, int w, int h)
 bool RendererSoftware::SubmitLandviewZoom(const uint8_t* src_buf, int src_w, int /*src_h*/,
                                           float center_map_x, float center_map_y,
                                           float screen_cx, float screen_cy,
-                                          float scale)
+                                          float scale, const TbGraphicsWindow& target)
 {
-    const TbGraphicsWindow target = RendererGetDrawTarget();
     uint8_t* wscreen = target.ptr;
     if (!src_buf || !wscreen)
         return false;
@@ -471,9 +470,9 @@ bool RendererSoftware::SubmitLandviewZoom(const uint8_t* src_buf, int src_w, int
 }
 
 bool RendererSoftware::DrawLandviewFrame(const struct TbHugeSprite* spr, long sp_len,
-                                         int xshift, int yshift, int units_per_px)
+                                         int xshift, int yshift, int units_per_px,
+                                         const TbGraphicsWindow& target)
 {
-    const TbGraphicsWindow target = RendererGetDrawTarget();
     if (!spr || !target.ptr)
         return false;
     // Draw straight onto our framebuffer so the huge-sprite RLE keeps its own
@@ -487,11 +486,11 @@ bool RendererSoftware::DrawLandviewFrame(const struct TbHugeSprite* spr, long sp
 }
 
 bool RendererSoftware::SubmitOverheadMap(const uint8_t* tile_colors, int tiles_x, int tiles_y,
-                                         int dst_x, int dst_y, int dst_w, int dst_h)
+                                         int dst_x, int dst_y, int dst_w, int dst_h,
+                                         const TbGraphicsWindow& target)
 {
     if (!tile_colors || tiles_x <= 0 || tiles_y <= 0) return false;
 
-    const TbGraphicsWindow target = RendererGetDrawTarget();
     uint8_t* dst_screen = target.ptr;
     if (!dst_screen) return false;
 
@@ -548,12 +547,12 @@ bool RendererSoftware::SubmitOverheadMap(const uint8_t* tile_colors, int tiles_x
 }
 
 void RendererSoftware::SubmitZoomBoxTiles(const uint16_t* tile_block_ids, int tiles_x, int tiles_y,
-                                          int dst_x, int dst_y, int tile_w, int tile_h)
+                                          int dst_x, int dst_y, int tile_w, int tile_h,
+                                          const TbGraphicsWindow& target)
 {
     if (!tile_block_ids || tiles_x <= 0 || tiles_y <= 0) return;
 
     TbDrawFlagsMask tile_flags = 0;
-    const TbGraphicsWindow target = RendererGetDrawTarget();
     setup_vecs(target.ptr, NULL, (unsigned int)target.scanline,
                (unsigned int)target.scanline, (unsigned int)target.screen_height);
 

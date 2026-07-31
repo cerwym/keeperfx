@@ -26,7 +26,8 @@ void generate_map_fade_ghost_table(const char *fname, unsigned char *palette, un
  
 /******************************************************************************/
 
-void SoftwareMapFadePass::PrepareBuffers(uint8_t* fade_src, uint8_t* fade_dest, int scanline, int height)
+void SoftwareMapFadePass::PrepareBuffers(uint8_t* fade_src, uint8_t* fade_dest, int scanline, int height,
+                                         const TbGraphicsWindow& target)
 {
     struct PlayerInfo* player = get_my_player();
     if (player->view_mode_restore == PVM_IsoWibbleView || player->view_mode_restore == PVM_IsoStraightView)
@@ -36,7 +37,8 @@ void SoftwareMapFadePass::PrepareBuffers(uint8_t* fade_src, uint8_t* fade_dest, 
 
     RendererExecutePendingWorld();
 
-    TbGraphicsWindow target = RendererGetDrawTarget();
+    // The surface (target.ptr) is the whole-frame locked framebuffer — its base is
+    // stable across the redraws below; only its contents change between captures.
     int fadebuf_pos = 0;
     for (int i = 0; i < height; i++)
     {
@@ -49,8 +51,6 @@ void SoftwareMapFadePass::PrepareBuffers(uint8_t* fade_src, uint8_t* fade_dest, 
     load_parchment_file();
     redraw_minimal_overhead_view();
 
-    // The target base may have moved during the redraw above; re-fetch it.
-    target = RendererGetDrawTarget();
     fadebuf_pos = 0;
     for (int i = 0; i < height; i++)
     {
@@ -61,9 +61,8 @@ void SoftwareMapFadePass::PrepareBuffers(uint8_t* fade_src, uint8_t* fade_dest, 
     }
 }
  
-void SoftwareMapFadePass::EnsureBuffers()
+void SoftwareMapFadePass::EnsureBuffers(const TbGraphicsWindow& target)
 {
-    const TbGraphicsWindow target = RendererGetDrawTarget();
     const size_t ghost_bytes = (size_t)PALETTE_COLORS * PALETTE_COLORS;
     const size_t capture_extent = 320 * (size_t)target.screen_height + target.scanline;
     m_fade_buffer.resize(ghost_bytes + 320 * 200 + capture_extent);
@@ -72,29 +71,27 @@ void SoftwareMapFadePass::EnsureBuffers()
     m_map_fade_dest = m_map_fade_src + 320 * 200;
 }
 
-int32_t SoftwareMapFadePass::StepFadeIn(int32_t step)
+int32_t SoftwareMapFadePass::StepFadeIn(int32_t step, const TbGraphicsWindow& target)
 {
     if (step == 0)
     {
-        EnsureBuffers();
-        PrepareBuffers(m_map_fade_src, m_map_fade_dest, 320, RendererGetDrawTarget().screen_height);
+        EnsureBuffers(target);
+        PrepareBuffers(m_map_fade_src, m_map_fade_dest, 320, target.screen_height, target);
         generate_map_fade_ghost_table("data/mapfadeg.dat", engine_palette, m_map_fade_ghost_table);
     }
-    const TbGraphicsWindow target = RendererGetDrawTarget();
     map_fade(target.ptr, m_map_fade_dest, m_map_fade_src, pixmap.fade_tables,
         m_map_fade_ghost_table, step, 320, 200, target.scanline);
     return (8 - get_my_player()->instance_remain_turns) * 4;
 }
  
-int32_t SoftwareMapFadePass::StepFadeOut(int32_t step)
+int32_t SoftwareMapFadePass::StepFadeOut(int32_t step, const TbGraphicsWindow& target)
 {
     if (step == 32)
     {
-        EnsureBuffers();
-        PrepareBuffers(m_map_fade_src, m_map_fade_dest, 320, RendererGetDrawTarget().screen_height);
+        EnsureBuffers(target);
+        PrepareBuffers(m_map_fade_src, m_map_fade_dest, 320, target.screen_height, target);
         generate_map_fade_ghost_table("data/mapfadeg.dat", engine_palette, m_map_fade_ghost_table);
     }
-    const TbGraphicsWindow target = RendererGetDrawTarget();
     map_fade(target.ptr, m_map_fade_dest, m_map_fade_src, pixmap.fade_tables,
         m_map_fade_ghost_table, step, 320, 200, target.scanline);
     return get_my_player()->instance_remain_turns * 4;

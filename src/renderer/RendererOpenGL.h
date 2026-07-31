@@ -70,22 +70,26 @@ public:
      *  RenderGraph write buffer (executed at EndFrame_GL by layer_z).
      *  Folds the former BlitRaw8GPU / SubmitVideoFrame / SubmitTransparentBlit /
      *  SubmitLandviewZoom GPU paths. */
-    bool PresentImage(const struct RendererPresentImageDesc* desc) override;
+    bool PresentImage(const struct RendererPresentImageDesc* desc,
+                      const TbGraphicsWindow& target) override;
 
     bool SubmitLandviewZoom(const uint8_t* src_buf, int src_w, int src_h,
                             float center_map_x, float center_map_y,
                             float screen_cx,    float screen_cy,
-                            float scale) override;
+                            float scale, const TbGraphicsWindow& target) override;
 
-    bool SubmitTransparentBlit(const uint8_t* buf, int w, int h) override;
+    bool SubmitTransparentBlit(const uint8_t* buf, int w, int h,
+                               const TbGraphicsWindow& target) override;
     bool DrawLandviewFrame(const struct TbHugeSprite* spr, long sp_len,
-                           int xshift, int yshift, int units_per_px) override;
+                           int xshift, int yshift, int units_per_px,
+                           const TbGraphicsWindow& target) override;
 
     void DrawSwipeOverlay(struct TbSpriteSheet* sprites, int frame,
                           bool draw_lr, int engine_window_x) override;
 
     bool SubmitOverheadMap(const uint8_t* tile_colors, int tiles_x, int tiles_y,
-                           int dst_x, int dst_y, int dst_w, int dst_h) override;
+                           int dst_x, int dst_y, int dst_w, int dst_h,
+                           const TbGraphicsWindow& target) override;
 
     /** Queue a grid of texture-mapped tile quads for the zoom-box terrain view.
      *  @param tile_block_ids  Array of tile_block indices (from element_top_face_texture),
@@ -93,7 +97,8 @@ public:
      *  @param dst_x/dst_y     Screen top-left of the zoom-box tile grid (pixels).
      *  @param tile_w/tile_h   On-screen size of each tile (pixels). */
     void SubmitZoomBoxTiles(const uint16_t* tile_block_ids, int tiles_x, int tiles_y,
-                            int dst_x, int dst_y, int tile_w, int tile_h) override;
+                            int dst_x, int dst_y, int tile_w, int tile_h,
+                            const TbGraphicsWindow& target) override;
 
     /** Schedule a picture-in-picture isometric render for draw_zoom_box (ZBM_ISOMETRIC).
      *  The game thread captures the PiP world/UI draw data immediately; the render

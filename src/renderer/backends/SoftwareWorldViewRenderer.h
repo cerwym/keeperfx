@@ -17,20 +17,21 @@ public:
     ~SoftwareWorldViewRenderer() = default;
 
     void BeginWorldPass(int w, int h,
-                        int vp_x, int vp_y) override;
+                        int vp_x, int vp_y,
+                        const TbGraphicsWindow& target) override;
     void DrawIsometricView() override;
     void DrawFrontView(struct Camera* cam) override;
 
-    int  ResolveDeferredWorld() override;
-    void ReexecuteDeferredWorld() override;
+    int  ResolveDeferredWorld(const TbGraphicsWindow& target) override;
+    void ReexecuteDeferredWorld(const TbGraphicsWindow& target) override;
     void MarkDeferredWorldAsLensCapture() override { m_lens = true; }
 
     const char* GetName() const override { return "SOFTWARE"; }
 
 private:
-    // Rasterise the recorded descriptor into the current WScreen, routing through
-    // the lens buffer + distort when m_lens is set.
-    void ExecuteRecordedWorld();
+    // Rasterise the recorded descriptor into @p screen_target, routing through the
+    // lens buffer + distort when m_lens is set.
+    void ExecuteRecordedWorld(const TbGraphicsWindow& screen_target);
 
     // Engine-window rect of the current pass,
     int  m_win_x = 0;

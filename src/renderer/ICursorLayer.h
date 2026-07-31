@@ -41,6 +41,7 @@
 
 #include <cstdint>
 #include "renderer/DrawState.h"  // TbDrawFlagsMask
+#include "bflib_video.h"         // TbGraphicsWindow
 
 struct TbSprite;
 struct UICommandBuffers; // forward declaration — full type needed only by implementations
@@ -66,10 +67,11 @@ public:
                                         int32_t scale,
                                         TbDrawFlagsMask draw_flags) = 0;
 
-    /** Draw all queued cursor sprites to the framebuffer.
+    /** Draw all queued cursor sprites to @p target (the software framebuffer).
      *  Called from RendererOpenGL::EndFrame() and RendererSoftware::EndFrame()
-     *  as the absolute last draw step before the buffer swap. */
-    virtual void Draw() = 0;
+     *  as the absolute last draw step before the buffer swap.  GPU backends
+     *  ignore @p target (they draw via the atlas sprite shader). */
+    virtual void Draw(const TbGraphicsWindow& target) = 0;
 
     /** Clear queued state.  Called at the start of each frame (BeginFrame). */
     virtual void Clear() = 0;
@@ -88,7 +90,7 @@ public:
     /** Execute cursor draws from the read-side IR buffers (render thread).
      *  Called from EndFrame_GL() after all other passes, replacing Draw().
      *  Default: forwards to Draw() for backward compatibility. */
-    virtual void ExecuteCursorFromIR(const UICommandBuffers& cmds) { Draw(); }
+    virtual void ExecuteCursorFromIR(const UICommandBuffers& cmds, const TbGraphicsWindow& target) { (void)cmds; Draw(target); }
 
     virtual const char* GetName() const = 0;
 };

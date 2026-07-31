@@ -1091,7 +1091,7 @@ void RendererOpenGL::FGExecuteText()
 void RendererOpenGL::FGExecuteCursor()
 {
     if (auto* cursor = RendererGetCursorLayer())
-        cursor->ExecuteCursorFromIR(m_render_graph.GetUIBuffersRT());
+        cursor->ExecuteCursorFromIR(m_render_graph.GetUIBuffersRT(), TbGraphicsWindow{}); // GPU path ignores the CPU target
 }
 
 void RendererOpenGL::FGDrawDevToolsOverlay()
@@ -1472,7 +1472,8 @@ void RendererOpenGL::UnlockFramebuffer()
     // No-op in GL mode — discard buffer writes are silently ignored.
 }
 
-bool RendererOpenGL::PresentImage(const struct RendererPresentImageDesc* desc)
+bool RendererOpenGL::PresentImage(const struct RendererPresentImageDesc* desc,
+                                  const TbGraphicsWindow& /*target*/)
 {
     if (!desc || !desc->src) return false;
     // Outside the frame write-window (no LockScreen/BeginFrame yet) the caller
@@ -1687,7 +1688,8 @@ void RendererOpenGL::DrawTransparentPresent(const IRImagePresentCmd& c)
 }
 
 bool RendererOpenGL::DrawLandviewFrame(const struct TbHugeSprite* spr, long sp_len,
-                                       int xshift, int yshift, int units_per_px)
+                                       int xshift, int yshift, int units_per_px,
+                                       const TbGraphicsWindow& /*target*/)
 {
     if (!spr || !m_frame_begun)
         return false;
@@ -1779,7 +1781,7 @@ bool RendererOpenGL::SubmitLandviewZoom(
     const uint8_t* src_buf, int src_w, int src_h,
     float center_map_x, float center_map_y,
     float screen_cx,    float screen_cy,
-    float scale)
+    float scale,        const TbGraphicsWindow& /*target*/)
 {
     if (!src_buf || src_w <= 0 || src_h <= 0)
     {
@@ -1803,7 +1805,8 @@ bool RendererOpenGL::SubmitLandviewZoom(
     return true;
 }
 
-bool RendererOpenGL::SubmitTransparentBlit(const uint8_t* buf, int w, int h)
+bool RendererOpenGL::SubmitTransparentBlit(const uint8_t* buf, int w, int h,
+                                           const TbGraphicsWindow& /*target*/)
 {
     if (w != m_screenW || h != m_screenH)
         return false;
@@ -1908,7 +1911,8 @@ void RendererOpenGL::DrawSwipeOverlay(struct TbSpriteSheet* sprites, int frame,
 }
 
 bool RendererOpenGL::SubmitOverheadMap(const uint8_t* tile_colors, int tiles_x, int tiles_y,
-                                        int dst_x, int dst_y, int dst_w, int dst_h)
+                                        int dst_x, int dst_y, int dst_w, int dst_h,
+                                        const TbGraphicsWindow& /*target*/)
 {
     OverheadMapCmd cmd;
     cmd.pixels.assign(tile_colors, tile_colors + (size_t)tiles_x * (size_t)tiles_y * 2);
@@ -1923,7 +1927,8 @@ bool RendererOpenGL::SubmitOverheadMap(const uint8_t* tile_colors, int tiles_x, 
 }
 
 void RendererOpenGL::SubmitZoomBoxTiles(const uint16_t* tile_block_ids, int tiles_x, int tiles_y,
-                                        int dst_x, int dst_y, int tile_w, int tile_h)
+                                        int dst_x, int dst_y, int tile_w, int tile_h,
+                                        const TbGraphicsWindow& /*target*/)
 {
     if (!tile_block_ids || tiles_x <= 0 || tiles_y <= 0) return;
 
@@ -1998,7 +2003,7 @@ void RendererOpenGL::SubmitPiPRender(struct Camera* cam, int x, int y, int w, in
     }
 
     m_world_renderer->BeginPiPCapture();
-    m_world_renderer->BeginWorldPass(w, h, 0, 0);
+    m_world_renderer->BeginWorldPass(w, h, 0, 0, TbGraphicsWindow{}); // GPU path ignores the CPU target
     draw_view(cam, 0);
     cmd.world_capture = m_world_renderer->FinalizePiPCapture();
 

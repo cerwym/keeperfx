@@ -25,14 +25,15 @@ public:
     SoftwareMapFadePass()  = default;
     ~SoftwareMapFadePass() = default;
 
-    void PrepareBuffers(uint8_t* fade_src, uint8_t* fade_dest, int scanline, int height) override;
-    int32_t StepFadeIn(int32_t step) override;
-    int32_t StepFadeOut(int32_t step) override;
- 
+    void PrepareBuffers(uint8_t* fade_src, uint8_t* fade_dest, int scanline, int height,
+                        const TbGraphicsWindow& target) override;
+    int32_t StepFadeIn(int32_t step, const TbGraphicsWindow& target) override;
+    int32_t StepFadeOut(int32_t step, const TbGraphicsWindow& target) override;
+
     const char* GetName() const override { return "SOFTWARE"; }
 
 protected:
-    void EnsureBuffers();
+    void EnsureBuffers(const TbGraphicsWindow& target);
 
     std::vector<unsigned char> m_fade_buffer;
     unsigned char* m_map_fade_ghost_table = nullptr;

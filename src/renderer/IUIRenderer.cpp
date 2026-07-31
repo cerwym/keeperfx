@@ -139,12 +139,13 @@ void IUIRenderer::SetupMinimapBackground(int diaglen, int panel_x, int panel_y)
         m_ui_write_cmds->minimap_bg_setups.Append(cmd);
         return;
     }
-    SampleMinimapBackground(diaglen, panel_x, panel_y);
+    // Immediate (no write window): sample the live framebuffer at its boundary.
+    SampleMinimapBackground(diaglen, panel_x, panel_y, RendererGetDrawTarget());
 }
 
-void IUIRenderer::SampleMinimapBackground(int diaglen, int panel_x, int panel_y)
+void IUIRenderer::SampleMinimapBackground(int diaglen, int panel_x, int panel_y,
+                                          const TbGraphicsWindow& target)
 {
-    const TbGraphicsWindow target = RendererGetDrawTarget();
     if (!MapBackground || !MapShapeStart || !MapShapeEnd || !target.ptr)
     {
         NumBackColours = 0;
@@ -392,7 +393,8 @@ void IUIRenderer::SetUICommandBuffers(UICommandBuffers* cmds)
 
 void IUIRenderer::ReplayMergedFromIR(const UICommandBuffers& ui,
                                      const TextCommandBuffers& text,
-                                     ITextRenderer* text_renderer)
+                                     ITextRenderer* text_renderer,
+                                     const TbGraphicsWindow& target)
 {
     // Merge UI sprite commands and text draws by their shared submission seq,
     // then replay each through the immediate CPU path in true submission order.
@@ -473,7 +475,7 @@ void IUIRenderer::ReplayMergedFromIR(const UICommandBuffers& ui,
         }
         case K_SlabBg: {
             const IRUISlabBackgroundCmd& c = ui.slab_backgrounds.Data()[r.idx];
-            TileSlabBackground(c.x, c.y, c.w, c.h);
+            TileSlabBackground(c.x, c.y, c.w, c.h, target);
             break;
         }
         case K_KeeperHand: {
@@ -496,7 +498,7 @@ void IUIRenderer::ReplayMergedFromIR(const UICommandBuffers& ui,
         }
         case K_MinimapSetup: {
             const IRUIMinimapBgSetupCmd& c = ui.minimap_bg_setups.Data()[r.idx];
-            SampleMinimapBackground(c.diaglen, c.panel_x, c.panel_y);
+            SampleMinimapBackground(c.diaglen, c.panel_x, c.panel_y, target);
             // The panel colour tables derive from the sampled colours and were
             // built from stale data at submit time — rebuild them now.
             setup_panel_colors();
@@ -504,7 +506,6 @@ void IUIRenderer::ReplayMergedFromIR(const UICommandBuffers& ui,
         }
         case K_MinimapBlit: {
             const UIMinimapBlit& c = ui.minimap_blit;
-            const TbGraphicsWindow target = RendererGetDrawTarget();
             TbPixel* dst = target.ptr;
             if (!dst || !MapShapeStart || !MapShapeEnd ||
                 (size_t)c.size * (size_t)c.size > ui.minimap_pixels.size())

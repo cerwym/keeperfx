@@ -18,6 +18,7 @@
 
 #include <cstdint>
 #include "BackendCapabilities.h"
+#include "bflib_video.h"   // TbGraphicsWindow
 
 /******************************************************************************/
 
@@ -122,9 +123,10 @@ public:
      *  GPU backends append an IRImagePresentCmd to the RenderGraph write buffer
      *  and return true; the base returns false so the C entry point runs the
      *  software Indexed8 CPU fallback. */
-    virtual bool PresentImage(const struct RendererPresentImageDesc* desc)
+    virtual bool PresentImage(const struct RendererPresentImageDesc* desc,
+                              const TbGraphicsWindow& target)
     {
-        (void)desc;
+        (void)desc; (void)target;
         return false;
     }
 
@@ -153,9 +155,10 @@ public:
      *  @param w/h  Buffer dimensions (must equal the physical screen dimensions).
      *  @return true  (GL: queued; transparent blit runs at EndFrame).
      *          false (software renderer or size mismatch). */
-    virtual bool SubmitTransparentBlit(const uint8_t* buf, int w, int h)
+    virtual bool SubmitTransparentBlit(const uint8_t* buf, int w, int h,
+                                       const TbGraphicsWindow& target)
     {
-        (void)buf; (void)w; (void)h;
+        (void)buf; (void)w; (void)h; (void)target;
         return false;
     }
 
@@ -171,9 +174,10 @@ public:
      *          false if unhandled — the caller renders into a scratch buffer and
      *                calls SubmitTransparentBlit() (GPU path; index-0 keyed). */
     virtual bool DrawLandviewFrame(const struct TbHugeSprite* spr, long sp_len,
-                                   int xshift, int yshift, int units_per_px)
+                                   int xshift, int yshift, int units_per_px,
+                                   const TbGraphicsWindow& target)
     {
-        (void)spr; (void)sp_len; (void)xshift; (void)yshift; (void)units_per_px;
+        (void)spr; (void)sp_len; (void)xshift; (void)yshift; (void)units_per_px; (void)target;
         return false;
     }
 
@@ -210,10 +214,11 @@ public:
      *          false if unhandled (software renderer). */
     virtual bool SubmitOverheadMap(
         const uint8_t* tile_colors, int tiles_x, int tiles_y,
-        int dst_x, int dst_y, int dst_w, int dst_h)
+        int dst_x, int dst_y, int dst_w, int dst_h,
+        const TbGraphicsWindow& target)
     {
         (void)tile_colors; (void)tiles_x; (void)tiles_y;
-        (void)dst_x; (void)dst_y; (void)dst_w; (void)dst_h;
+        (void)dst_x; (void)dst_y; (void)dst_w; (void)dst_h; (void)target;
         return false;
     }
 
@@ -240,12 +245,12 @@ public:
         const uint8_t* src_buf, int src_w, int src_h,
         float center_map_x, float center_map_y,
         float screen_cx,    float screen_cy,
-        float scale)
+        float scale,        const TbGraphicsWindow& target)
     {
         (void)src_buf; (void)src_w; (void)src_h;
         (void)center_map_x; (void)center_map_y;
         (void)screen_cx;    (void)screen_cy;
-        (void)scale;
+        (void)scale;        (void)target;
         return false;
     }
 
@@ -317,7 +322,8 @@ public:
     virtual void SubmitZoomBoxTiles(const uint16_t* /*tile_block_ids*/,
                                     int /*tiles_x*/, int /*tiles_y*/,
                                     int /*dst_x*/, int /*dst_y*/,
-                                    int /*tile_w*/, int /*tile_h*/) {}
+                                    int /*tile_w*/, int /*tile_h*/,
+                                    const TbGraphicsWindow& /*target*/) {}
 
     /** Schedule a Picture-in-Picture isometric render into an FBO (GPU path).
      *  Software backends ignore this call. */

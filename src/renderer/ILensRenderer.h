@@ -23,6 +23,8 @@
 /******************************************************************************/
 #pragma once
 
+#include "bflib_video.h"   // TbGraphicsWindow
+
 /******************************************************************************/
 
 class ILensRenderer {
@@ -41,14 +43,18 @@ public:
      *  the lens without the manager tracking capture state. */
     virtual bool IsWorldCaptureActive() const { return false; }
 
-    /** EndFrame resolve step 1 (software): redirect WScreen to the offscreen lens
-     *  buffer so the deferred world + swipe rasterise into it.  No-op if no
-     *  capture is active or on GPU backends. */
-    virtual void ResolveWorldCaptureBegin() {}
+    /** EndFrame resolve step 1 (software): return the off-screen draw target the
+     *  deferred world should rasterise into (the lens buffer), given the on-screen
+     *  target it would otherwise use.  The default (GPU backends / no capture)
+     *  returns @p screen_target unchanged, so the world draws straight to screen. */
+    virtual TbGraphicsWindow ResolveWorldCaptureBegin(const TbGraphicsWindow& screen_target)
+    {
+        return screen_target;
+    }
 
-    /** EndFrame resolve: distort the captured buffer back onto the screen (draw_lens_effect) and restore WScreen.
-     *   No-op if no capture is active or on GPU backends. */
-    virtual void ResolveWorldCaptureEnd() {}
+    /** EndFrame resolve: distort the captured lens buffer onto @p screen_target
+     *  (draw_lens_effect).  No-op if no capture is active or on GPU backends. */
+    virtual void ResolveWorldCaptureEnd(const TbGraphicsWindow& /*screen_target*/) {}
 };
 
 /******************************************************************************/
