@@ -11,6 +11,7 @@
 #include "engine_render.h"                 // setup_vecs target, software_execute_world_from_ir
 #include "renderer/RendererManager.h"      // RendererGetGraphicsWindowPtr / RendererGetLensRenderer
 #include "renderer/ILensRenderer.h"        // ResolveWorldCapture* for the possession lens
+#include "renderer/software/SwDrawTarget.h" // SwTargetScope — legacy-primitive redirect
 #include "post_inc.h"
 
 /******************************************************************************/
@@ -55,8 +56,14 @@ void SoftwareWorldViewRenderer::ExecuteRecordedWorld(const TbGraphicsWindow& scr
     TbGraphicsWindow world_target = lens ? lens->ResolveWorldCaptureBegin(screen_target)
                                          : screen_target;
 
-    software_execute_world_from_ir(&world_target, m_win_x, m_win_y, m_win_w, m_win_h,
-                                   m_frontview ? 1 : 0, m_cam);
+    {
+        // Point the legacy bflib_vidraw.* world sub-draws (e.g. the possession
+        // flame effect) at the same surface as the setup_vecs rasteriser.  For the
+        // non-lens case world_target == screen_target, so this is a no-op override.
+        SwTargetScope sw_scope(world_target.ptr, world_target.scanline, world_target.screen_height);
+        software_execute_world_from_ir(&world_target, m_win_x, m_win_y, m_win_w, m_win_h,
+                                       m_frontview ? 1 : 0, m_cam);
+    }
 
     if (lens) lens->ResolveWorldCaptureEnd(screen_target);   // distort -> screen
 }
