@@ -57,20 +57,25 @@ public:
     uint8_t* GetSoftwareFramebuffer() const override { return m_wscreen; }
     void     SetSoftwareFramebuffer(uint8_t* buf) override { m_wscreen = buf; }
 
-    bool     PresentImage(const struct RendererPresentImageDesc* desc) override;
+    bool     PresentImage(const struct RendererPresentImageDesc* desc,
+                          const TbGraphicsWindow& target) override;
 
     void     NotifyFmvPalette(const uint8_t* bgra_1024) override;
-    bool     SubmitTransparentBlit(const uint8_t* buf, int w, int h) override;
+    bool     SubmitTransparentBlit(const uint8_t* buf, int w, int h,
+                                   const TbGraphicsWindow& target) override;
     bool     SubmitLandviewZoom(const uint8_t* src_buf, int src_w, int src_h,
                                 float center_map_x, float center_map_y,
                                 float screen_cx, float screen_cy,
-                                float scale) override;
+                                float scale, const TbGraphicsWindow& target) override;
     bool     DrawLandviewFrame(const struct TbHugeSprite* spr, long sp_len,
-                               int xshift, int yshift, int units_per_px) override;
+                               int xshift, int yshift, int units_per_px,
+                               const TbGraphicsWindow& target) override;
     bool     SubmitOverheadMap(const uint8_t* tile_colors, int tiles_x, int tiles_y,
-                               int dst_x, int dst_y, int dst_w, int dst_h) override;
+                               int dst_x, int dst_y, int dst_w, int dst_h,
+                               const TbGraphicsWindow& target) override;
     void     SubmitZoomBoxTiles(const uint16_t* tile_block_ids, int tiles_x, int tiles_y,
-                                int dst_x, int dst_y, int tile_w, int tile_h) override;
+                                int dst_x, int dst_y, int tile_w, int tile_h,
+                                const TbGraphicsWindow& target) override;
 
     // Swipe overlay — software renderer draws sprites directly to WScreen.
     void     DrawSwipeOverlay(struct TbSpriteSheet* sprites, int frame,

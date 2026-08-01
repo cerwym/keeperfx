@@ -140,7 +140,7 @@ TbBool RendererSubmitTransparentBlit(const unsigned char* buf, int w, int h)
 {
     IRenderer* rend = RendererGetActive();
     if (!rend) return false;
-    return rend->SubmitTransparentBlit(buf, w, h) ? true : false;
+    return rend->SubmitTransparentBlit(buf, w, h, RendererGetDrawTarget()) ? true : false;
 }
 
 TbBool RendererDrawLandviewFrame(const struct TbHugeSprite* spr, long sp_len,
@@ -148,7 +148,8 @@ TbBool RendererDrawLandviewFrame(const struct TbHugeSprite* spr, long sp_len,
 {
     IRenderer* rend = RendererGetActive();
     if (!rend) return false;
-    return rend->DrawLandviewFrame(spr, sp_len, xshift, yshift, units_per_px) ? true : false;
+    return rend->DrawLandviewFrame(spr, sp_len, xshift, yshift, units_per_px,
+                                   RendererGetDrawTarget()) ? true : false;
 }
 
 void RendererDrawSwipeOverlay(struct TbSpriteSheet* sprites, int frame,
@@ -182,7 +183,7 @@ TbBool RendererSubmitOverheadMap(const unsigned char* tile_colors, int tiles_x, 
     IRenderer* rend = RendererGetActive();
     if (!rend) return false;
     return rend->SubmitOverheadMap(tile_colors, tiles_x, tiles_y,
-                                   dst_x, dst_y, dst_w, dst_h) ? true : false;
+                                   dst_x, dst_y, dst_w, dst_h, RendererGetDrawTarget()) ? true : false;
 }
 
 void RendererSubmitZoomBoxTiles(const unsigned short* tile_block_ids, int tiles_x, int tiles_y,
@@ -191,7 +192,7 @@ void RendererSubmitZoomBoxTiles(const unsigned short* tile_block_ids, int tiles_
     IRenderer* rend = RendererGetActive();
     if (rend)
         rend->SubmitZoomBoxTiles((const uint16_t*)tile_block_ids, tiles_x, tiles_y,
-                                  dst_x, dst_y, tile_w, tile_h);
+                                  dst_x, dst_y, tile_w, tile_h, RendererGetDrawTarget());
 }
 
 /******************************************************************************/
@@ -677,6 +678,19 @@ unsigned char* RendererGetGraphicsWindowPtr(void)
     return base + s_graphicsScreenWidth * s_graphicsWindowY + s_graphicsWindowX;
 }
 
+TbGraphicsWindow RendererGetDrawTarget(void)
+{
+    TbGraphicsWindow t;
+    t.x             = s_graphicsWindowX;
+    t.y             = s_graphicsWindowY;
+    t.width         = s_graphicsWindowWidth;
+    t.height        = s_graphicsWindowHeight;
+    t.ptr           = RendererGetWScreen();
+    t.scanline      = s_graphicsScreenWidth;
+    t.screen_height = s_graphicsScreenHeight;
+    return t;
+}
+
 void RendererSetWScreen(unsigned char* buf)
 {
     if (s_activeRenderer)
@@ -761,7 +775,7 @@ TbResult RendererWaitVbi(void)                   { return LbScreenWaitVbi(); }
 void WorldViewRenderer_BeginWorldPass(int w, int h, int vp_x, int vp_y)
 {
     if (RendererGetWorldViewRenderer())
-        RendererGetWorldViewRenderer()->BeginWorldPass(w, h, vp_x, vp_y);
+        RendererGetWorldViewRenderer()->BeginWorldPass(w, h, vp_x, vp_y, RendererGetDrawTarget());
 }
 
 void WorldViewRenderer_DrawIsometricView(void)
@@ -779,13 +793,18 @@ void WorldViewRenderer_DrawFrontView(struct Camera* cam)
 int RendererExecutePendingWorld(void)
 {
     IWorldViewRenderer* w = RendererGetWorldViewRenderer();
-    return w ? w->ResolveDeferredWorld() : 0;
+    if (!w) return 0;
+    const TbGraphicsWindow target = RendererGetDrawTarget();
+    return w->ResolveDeferredWorld(target);
 }
 
 void RendererReexecuteWorld(void)
 {
     if (IWorldViewRenderer* w = RendererGetWorldViewRenderer())
-        w->ReexecuteDeferredWorld();
+    {
+        const TbGraphicsWindow target = RendererGetDrawTarget();
+        w->ReexecuteDeferredWorld(target);
+    }
 }
 
 int WorldViewRenderer_SubmitKeeperSprite(int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
@@ -895,7 +914,7 @@ int WorldViewRenderer_GetCurrentSpriteWantsOutline(void)
 void CursorLayer_Draw(void)
 {
     if (RendererGetCursorLayer())
-        RendererGetCursorLayer()->Draw();
+        RendererGetCursorLayer()->Draw(RendererGetDrawTarget());
 }
 
 void CursorLayer_Clear(void)
@@ -928,20 +947,20 @@ void CursorLayer_SubmitKeeperHandSprite(short x, short y, unsigned short kspr_ba
 void MapFadePass_PrepareBuffers(unsigned char* fade_src, unsigned char* fade_dest, int scanline, int height)
 {
     if (RendererGetMapFadePass())
-        RendererGetMapFadePass()->PrepareBuffers(fade_src, fade_dest, scanline, height);
+        RendererGetMapFadePass()->PrepareBuffers(fade_src, fade_dest, scanline, height, RendererGetDrawTarget());
 }
 
 int32_t MapFadePass_StepFadeIn(int32_t step)
 {
     if (RendererGetMapFadePass())
-        return RendererGetMapFadePass()->StepFadeIn(step);
+        return RendererGetMapFadePass()->StepFadeIn(step, RendererGetDrawTarget());
     return step; // no-op: don't advance if not initialised
 }
 
 int32_t MapFadePass_StepFadeOut(int32_t step)
 {
     if (RendererGetMapFadePass())
-        return RendererGetMapFadePass()->StepFadeOut(step);
+        return RendererGetMapFadePass()->StepFadeOut(step, RendererGetDrawTarget());
     return step;
 }
 
@@ -968,8 +987,9 @@ TbBool RendererPresentImage(const struct RendererPresentImageDesc* desc)
 
     // Backend virtual — GPU queues an IR present, software handles FMV
     // embedded-palette blits via its PresentImage override.
+    const TbGraphicsWindow target = RendererGetDrawTarget();
     IRenderer* rend = RendererGetActive();
-    if (rend && rend->PresentImage(desc))
+    if (rend && rend->PresentImage(desc, target))
         return true;
 
     // Fallback for the classic opaque game-palette blit (menu backgrounds,
@@ -982,8 +1002,8 @@ TbBool RendererPresentImage(const struct RendererPresentImageDesc* desc)
         return false;
     }
     return copy_raw8_image_buffer(
-        RendererGetWScreen(),
-        RendererScreenWidth(), RendererScreenHeight(),
+        target.ptr,
+        target.scanline, target.screen_height,
         desc->dst_w, desc->dst_h, desc->dst_x, desc->dst_y,
         desc->src, desc->src_w, desc->src_h);
 }
@@ -1003,7 +1023,7 @@ TbBool RendererSubmitLandviewZoom(const unsigned char* src_buf, int src_w, int s
     if (!rend) return false;
     return rend->SubmitLandviewZoom(src_buf, src_w, src_h,
                                     center_map_x, center_map_y,
-                                    screen_cx, screen_cy, scale) ? true : false;
+                                    screen_cx, screen_cy, scale, RendererGetDrawTarget()) ? true : false;
 }
 
 void RendererApplySettings(const RendererSettings* s)

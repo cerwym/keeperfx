@@ -127,9 +127,30 @@ struct GraphicsWindow {
     long y;
     long width;
     long height;
+    /** Base of the CPU draw surface (former "WScreen" pointer), NULL if none.
+     *  When this struct is used purely as a saved clip-window rect (Store/Load
+     *  viewport) this slot is left NULL and the surface fields below are unused;
+     *  when it is used as a populated software draw target (RendererGetDrawTarget)
+     *  it holds the surface base and the window-origin pointer is derived as
+     *  ptr + scanline * y + x. */
     TbPixel *ptr;
+    /** Surface pitch in bytes per row (scanline stride). Only meaningful when
+     *  this struct describes a draw target. */
+    long scanline;
+    /** Full surface height in rows. Only meaningful when this struct describes a
+     *  draw target. */
+    long screen_height;
 };
 typedef struct GraphicsWindow TbGraphicsWindow;
+
+/** Window-origin pixel pointer of a populated draw target: the surface base
+ *  advanced to the clip-window origin (equivalent to the old
+ *  RendererGetGraphicsWindowPtr()).  Returns NULL when the target has no
+ *  surface. */
+static inline TbPixel *TbGraphicsWindowOrigin(const TbGraphicsWindow *t)
+{
+    return t->ptr ? (t->ptr + t->scanline * t->y + t->x) : (TbPixel *)0;
+}
 
 struct ScreenModeInfo {
     /** Hardware driver screen width. */

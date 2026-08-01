@@ -139,12 +139,14 @@ void IUIRenderer::SetupMinimapBackground(int diaglen, int panel_x, int panel_y)
         m_ui_write_cmds->minimap_bg_setups.Append(cmd);
         return;
     }
-    SampleMinimapBackground(diaglen, panel_x, panel_y);
+    // Immediate (no write window): sample the live framebuffer at its boundary.
+    SampleMinimapBackground(diaglen, panel_x, panel_y, RendererGetDrawTarget());
 }
 
-void IUIRenderer::SampleMinimapBackground(int diaglen, int panel_x, int panel_y)
+void IUIRenderer::SampleMinimapBackground(int diaglen, int panel_x, int panel_y,
+                                          const TbGraphicsWindow& target)
 {
-    if (!MapBackground || !MapShapeStart || !MapShapeEnd || !RendererGetWScreen())
+    if (!MapBackground || !MapShapeStart || !MapShapeEnd || !target.ptr)
     {
         NumBackColours = 0;
         return;
@@ -152,7 +154,7 @@ void IUIRenderer::SampleMinimapBackground(int diaglen, int panel_x, int panel_y)
 
     int num_colours = 0;
     long bkgnd_pos = 0;
-    TbPixel* out = &RendererGetWScreen()[panel_x + RendererScreenWidth() * panel_y];
+    TbPixel* out = &target.ptr[panel_x + target.scanline * panel_y];
     for (int h = 0; h < diaglen; h++)
     {
         for (int w = MapShapeStart[h]; w < MapShapeEnd[h]; w++)
@@ -175,7 +177,7 @@ void IUIRenderer::SampleMinimapBackground(int diaglen, int panel_x, int panel_y)
             MapBackground[bkgnd_pos + w] = (unsigned char)colour;
         }
         bkgnd_pos += diaglen;
-        out += RendererScreenWidth();
+        out += target.scanline;
     }
     NumBackColours = num_colours;
 }
@@ -353,11 +355,12 @@ void IUIRenderer::SubmitMinimap(int screen_x, int screen_y, int size)
     // spans now and re-blit them at this submission's seq during replay.
     if (!m_ui_write_cmds || size <= 0)
         return;
-    const TbPixel* src = RendererGetWScreen();
+    const TbGraphicsWindow target = RendererGetDrawTarget();
+    const TbPixel* src = target.ptr;
     if (!src || !MapShapeStart || !MapShapeEnd)
         return;
-    const int stride   = RendererScreenWidth();
-    const int screen_h = RendererScreenHeight();
+    const int stride   = target.scanline;
+    const int screen_h = target.screen_height;
     UICommandBuffers* cmds = m_ui_write_cmds;
     cmds->minimap_pixels.assign((size_t)size * (size_t)size, 0);
     for (int h = 0; h < size; ++h)
@@ -390,7 +393,8 @@ void IUIRenderer::SetUICommandBuffers(UICommandBuffers* cmds)
 
 void IUIRenderer::ReplayMergedFromIR(const UICommandBuffers& ui,
                                      const TextCommandBuffers& text,
-                                     ITextRenderer* text_renderer)
+                                     ITextRenderer* text_renderer,
+                                     const TbGraphicsWindow& target)
 {
     // Merge UI sprite commands and text draws by their shared submission seq,
     // then replay each through the immediate CPU path in true submission order.
@@ -471,7 +475,7 @@ void IUIRenderer::ReplayMergedFromIR(const UICommandBuffers& ui,
         }
         case K_SlabBg: {
             const IRUISlabBackgroundCmd& c = ui.slab_backgrounds.Data()[r.idx];
-            TileSlabBackground(c.x, c.y, c.w, c.h);
+            TileSlabBackground(c.x, c.y, c.w, c.h, target);
             break;
         }
         case K_KeeperHand: {
@@ -494,7 +498,7 @@ void IUIRenderer::ReplayMergedFromIR(const UICommandBuffers& ui,
         }
         case K_MinimapSetup: {
             const IRUIMinimapBgSetupCmd& c = ui.minimap_bg_setups.Data()[r.idx];
-            SampleMinimapBackground(c.diaglen, c.panel_x, c.panel_y);
+            SampleMinimapBackground(c.diaglen, c.panel_x, c.panel_y, target);
             // The panel colour tables derive from the sampled colours and were
             // built from stale data at submit time — rebuild them now.
             setup_panel_colors();
@@ -502,12 +506,12 @@ void IUIRenderer::ReplayMergedFromIR(const UICommandBuffers& ui,
         }
         case K_MinimapBlit: {
             const UIMinimapBlit& c = ui.minimap_blit;
-            TbPixel* dst = RendererGetWScreen();
+            TbPixel* dst = target.ptr;
             if (!dst || !MapShapeStart || !MapShapeEnd ||
                 (size_t)c.size * (size_t)c.size > ui.minimap_pixels.size())
                 break;
-            const int stride   = RendererScreenWidth();
-            const int screen_h = RendererScreenHeight();
+            const int stride   = target.scanline;
+            const int screen_h = target.screen_height;
             for (int h = 0; h < c.size; ++h)
             {
                 const int y = c.y + h;

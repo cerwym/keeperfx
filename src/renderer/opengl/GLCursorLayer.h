@@ -52,7 +52,7 @@ public:
     /** No-op: cursor data now lives in UICommandBuffers and is flushed via
      *  ExecuteCursorFromIR().  Draw() is retained for the ICursorLayer default
      *  implementation only; it does nothing in GL mode. */
-    virtual void Draw() override {}
+    virtual void Draw(const TbGraphicsWindow& /*target*/) override {}
     virtual void Clear() override {}
     virtual const char* GetName() const override { return "GL_CURSOR"; }
 
@@ -68,7 +68,7 @@ public:
     /** Execute cursor draws from the render-thread read-side UICommandBuffers.
      *  Reads cmds.cursor_pointers (atlas quad path) and cmds.cursor_hands
      *  (keeper-sprite path).  Called from EndFrame_GL() after all other passes. */
-    void ExecuteCursorFromIR(const UICommandBuffers& cmds) override;
+    void ExecuteCursorFromIR(const UICommandBuffers& cmds, const TbGraphicsWindow& target) override;
 
 private:
     GLWorldViewRenderer* m_wvr        = nullptr;

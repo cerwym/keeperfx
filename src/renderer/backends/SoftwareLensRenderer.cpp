@@ -54,33 +54,37 @@ bool SoftwareLensRenderer::BeginWorldCapture()
     return true;
 }
 
-void SoftwareLensRenderer::ResolveWorldCaptureBegin()
+TbGraphicsWindow SoftwareLensRenderer::ResolveWorldCaptureBegin(const TbGraphicsWindow& screen_target)
 {
     if (!m_capture_active)
-        return;
+        return screen_target;
 
-    m_saved_wscreen    = RendererGetWScreen();
-    m_saved_graphics_w = RendererScreenWidth();
-    m_saved_graphics_h = RendererScreenHeight();
-    RendererStoreViewport(&m_saved_viewport);
-
+    // Hand back the off-screen lens buffer as an explicit draw target for the
+    // deferred world (the world executor rasterises into it via setup_vecs).
     memset(m_lens_buffer, 0, (size_t)m_lens_buffer_w * (size_t)m_lens_buffer_h * sizeof(TbPixel));
-    RendererSetWScreen(m_lens_buffer);
-    RendererSetScreenDimensions((int)m_lens_buffer_w, (int)m_lens_buffer_h);
-    RendererSetViewport(0, 0, (int)m_lens_buffer_w, (int)m_lens_buffer_h);
+
+    TbGraphicsWindow lens_target;
+    lens_target.x             = 0;
+    lens_target.y             = 0;
+    lens_target.width         = (long)m_lens_buffer_w;
+    lens_target.height        = (long)m_lens_buffer_h;
+    lens_target.ptr           = m_lens_buffer;
+    lens_target.scanline      = (long)m_lens_buffer_w;
+    lens_target.screen_height = (long)m_lens_buffer_h;
+
+    // The caller wraps the world execution in a SwTargetScope(lens_target) so the
+    // legacy bflib_vidraw.* sub-draws (e.g. the possession flame) rasterise into
+    // this buffer too — no ambient renderer-state mutation here.
+    return lens_target;
 }
 
-void SoftwareLensRenderer::ResolveWorldCaptureEnd()
+void SoftwareLensRenderer::ResolveWorldCaptureEnd(const TbGraphicsWindow& screen_target)
 {
     if (!m_capture_active)
         return;
 
-    RendererSetWScreen(m_saved_wscreen);
-    RendererSetScreenDimensions(m_saved_graphics_w, m_saved_graphics_h);
-    RendererLoadViewport(&m_saved_viewport);
-
-    const long dst_offset = m_view_y * RendererScreenWidth() + m_view_x;
-    draw_lens_effect(RendererGetWScreen() + dst_offset, RendererScreenWidth(),
+    const long dst_offset = m_view_y * screen_target.scanline + m_view_x;
+    draw_lens_effect(screen_target.ptr + dst_offset, screen_target.scanline,
         m_lens_buffer, m_lens_buffer_w, m_view_width, m_view_height, m_view_x, m_lens_type);
 
     m_capture_active = false;

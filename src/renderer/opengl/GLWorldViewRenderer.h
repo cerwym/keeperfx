@@ -84,7 +84,8 @@ public:
     void SetFadeTexture(GLuint tex) { m_fade_tex = tex; }
 
     // IWorldViewRenderer
-    void BeginWorldPass(int w, int h, int vp_x, int vp_y) override;
+    void BeginWorldPass(int w, int h, int vp_x, int vp_y,
+                        const TbGraphicsWindow& target) override;
     void DrawIsometricView() override;
     void DrawFrontView(struct Camera* cam) override;
     const char* GetName() const override { return "GLWorldViewRenderer"; }

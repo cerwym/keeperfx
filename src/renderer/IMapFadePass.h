@@ -29,6 +29,7 @@
 #pragma once
 
 #include <stdint.h>
+#include "bflib_video.h"   // TbGraphicsWindow
 
 // Forward declarations — avoid pulling in RenderGraph and post-process IR
 // headers into software/vita backends that don't use them.
@@ -42,20 +43,22 @@ public:
     virtual ~IMapFadePass() = default;
 
     /** Capture the source and destination frames for the fade transition.
-     *  Software fills the provided CPU buffers; GPU backends usually ignore this. */
-    virtual void PrepareBuffers(uint8_t* fade_src, uint8_t* fade_dest, int scanline, int height) = 0;
+     *  Software fills the provided CPU buffers from @p target; GPU backends
+     *  usually ignore this. */
+    virtual void PrepareBuffers(uint8_t* fade_src, uint8_t* fade_dest, int scanline, int height,
+                                const TbGraphicsWindow& target) = 0;
 
-    /** Render one fade-in frame (parchment → 3D view).
+    /** Render one fade-in frame (parchment → 3D view) into @p target.
      *  On step == 0, captures the source and destination frames.
      *  @param step  Current step value in [0, 32].
      *  @return      Next step value (step + 4, capped at 32). */
-    virtual int32_t StepFadeIn(int32_t step) = 0;
+    virtual int32_t StepFadeIn(int32_t step, const TbGraphicsWindow& target) = 0;
 
-    /** Render one fade-out frame (3D view → parchment).
+    /** Render one fade-out frame (3D view → parchment) into @p target.
      *  On step == 32, captures the source and destination frames.
      *  @param step  Current step value in [0, 32].
      *  @return      Next step value (step - 4, capped at 0). */
-    virtual int32_t StepFadeOut(int32_t step) = 0;
+    virtual int32_t StepFadeOut(int32_t step, const TbGraphicsWindow& target) = 0;
 
     virtual const char* GetName() const = 0;
 

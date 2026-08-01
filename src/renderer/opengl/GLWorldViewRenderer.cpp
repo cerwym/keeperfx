@@ -2009,7 +2009,8 @@ int GLWorldViewRenderer::BeginWorldSpriteCapture(int32_t bucket_idx)
 
 /******************************************************************************/
 
-void GLWorldViewRenderer::BeginWorldPass(int w, int h, int vp_x, int vp_y)
+void GLWorldViewRenderer::BeginWorldPass(int w, int h, int vp_x, int vp_y,
+                                         const TbGraphicsWindow& /*target*/)
 {
     KFX_ZONE("WVR::BeginWorldPass");
     ASSERT_GAME_THREAD();

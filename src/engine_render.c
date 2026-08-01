@@ -6829,12 +6829,18 @@ void display_drawlist(void) // Draws isometric and 1st person view. Not frontvie
       WARNLOG("Incurred %lu rendering problems; last was with poly kind %ld",render_problems,render_prob_kind);
 }
 
-void software_execute_world_from_ir(int win_x, int win_y, int win_w, int win_h,
+void software_execute_world_from_ir(const TbGraphicsWindow *target,
+                                    int win_x, int win_y, int win_w, int win_h,
                                     int is_frontview, struct Camera *cam)
 {
     RendererSetViewport(win_x, win_y, win_w, win_h);
-    setup_vecs(RendererGetGraphicsWindowPtr(), NULL,
-               (unsigned int)RendererScreenWidth(),
+    // Rasterise into the caller-supplied surface at the engine-window origin.
+    // The target's own window fields are ignored here — the win_x/win_y args are
+    // the origin (the possession lens passes an off-screen buffer as the surface).
+    unsigned char *origin = target->ptr
+        ? (target->ptr + target->scanline * win_y + win_x) : NULL;
+    setup_vecs(origin, NULL,
+               (unsigned int)target->scanline,
                (unsigned int)win_w, (unsigned int)win_h);
     render_fade_tables = pixmap.fade_tables;
     if (is_frontview)

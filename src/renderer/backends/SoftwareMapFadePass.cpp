@@ -26,7 +26,8 @@ void generate_map_fade_ghost_table(const char *fname, unsigned char *palette, un
  
 /******************************************************************************/
 
-void SoftwareMapFadePass::PrepareBuffers(uint8_t* fade_src, uint8_t* fade_dest, int scanline, int height)
+void SoftwareMapFadePass::PrepareBuffers(uint8_t* fade_src, uint8_t* fade_dest, int scanline, int height,
+                                         const TbGraphicsWindow& target)
 {
     struct PlayerInfo* player = get_my_player();
     if (player->view_mode_restore == PVM_IsoWibbleView || player->view_mode_restore == PVM_IsoStraightView)
@@ -36,13 +37,15 @@ void SoftwareMapFadePass::PrepareBuffers(uint8_t* fade_src, uint8_t* fade_dest, 
 
     RendererExecutePendingWorld();
 
+    // The surface (target.ptr) is the whole-frame locked framebuffer — its base is
+    // stable across the redraws below; only its contents change between captures.
     int fadebuf_pos = 0;
     for (int i = 0; i < height; i++)
     {
-        unsigned char* src = RendererGetWScreen() + RendererScreenWidth() * i;
+        unsigned char* src = target.ptr + target.scanline * i;
         unsigned char* dst = &fade_src[fadebuf_pos];
         fadebuf_pos += scanline;
-        memcpy(dst, src, RendererScreenWidth());
+        memcpy(dst, src, target.scanline);
     }
 
     load_parchment_file();
@@ -51,45 +54,45 @@ void SoftwareMapFadePass::PrepareBuffers(uint8_t* fade_src, uint8_t* fade_dest, 
     fadebuf_pos = 0;
     for (int i = 0; i < height; i++)
     {
-        unsigned char* src = RendererGetWScreen() + RendererScreenWidth() * i;
+        unsigned char* src = target.ptr + target.scanline * i;
         unsigned char* dst = &fade_dest[fadebuf_pos];
         fadebuf_pos += scanline;
-        memcpy(dst, src, RendererScreenWidth());
+        memcpy(dst, src, target.scanline);
     }
 }
  
-void SoftwareMapFadePass::EnsureBuffers()
+void SoftwareMapFadePass::EnsureBuffers(const TbGraphicsWindow& target)
 {
     const size_t ghost_bytes = (size_t)PALETTE_COLORS * PALETTE_COLORS;
-    const size_t capture_extent = 320 * (size_t)RendererScreenHeight() + RendererScreenWidth();
+    const size_t capture_extent = 320 * (size_t)target.screen_height + target.scanline;
     m_fade_buffer.resize(ghost_bytes + 320 * 200 + capture_extent);
     m_map_fade_ghost_table = m_fade_buffer.data();
     m_map_fade_src = m_map_fade_ghost_table + ghost_bytes;
     m_map_fade_dest = m_map_fade_src + 320 * 200;
 }
 
-int32_t SoftwareMapFadePass::StepFadeIn(int32_t step)
+int32_t SoftwareMapFadePass::StepFadeIn(int32_t step, const TbGraphicsWindow& target)
 {
     if (step == 0)
     {
-        EnsureBuffers();
-        PrepareBuffers(m_map_fade_src, m_map_fade_dest, 320, RendererScreenHeight());
+        EnsureBuffers(target);
+        PrepareBuffers(m_map_fade_src, m_map_fade_dest, 320, target.screen_height, target);
         generate_map_fade_ghost_table("data/mapfadeg.dat", engine_palette, m_map_fade_ghost_table);
     }
-    map_fade(RendererGetWScreen(), m_map_fade_dest, m_map_fade_src, pixmap.fade_tables,
-        m_map_fade_ghost_table, step, 320, 200, RendererScreenWidth());
+    map_fade(target.ptr, m_map_fade_dest, m_map_fade_src, pixmap.fade_tables,
+        m_map_fade_ghost_table, step, 320, 200, target.scanline);
     return (8 - get_my_player()->instance_remain_turns) * 4;
 }
  
-int32_t SoftwareMapFadePass::StepFadeOut(int32_t step)
+int32_t SoftwareMapFadePass::StepFadeOut(int32_t step, const TbGraphicsWindow& target)
 {
     if (step == 32)
     {
-        EnsureBuffers();
-        PrepareBuffers(m_map_fade_src, m_map_fade_dest, 320, RendererScreenHeight());
+        EnsureBuffers(target);
+        PrepareBuffers(m_map_fade_src, m_map_fade_dest, 320, target.screen_height, target);
         generate_map_fade_ghost_table("data/mapfadeg.dat", engine_palette, m_map_fade_ghost_table);
     }
-    map_fade(RendererGetWScreen(), m_map_fade_dest, m_map_fade_src, pixmap.fade_tables,
-        m_map_fade_ghost_table, step, 320, 200, RendererScreenWidth());
+    map_fade(target.ptr, m_map_fade_dest, m_map_fade_src, pixmap.fade_tables,
+        m_map_fade_ghost_table, step, 320, 200, target.scanline);
     return get_my_player()->instance_remain_turns * 4;
 }

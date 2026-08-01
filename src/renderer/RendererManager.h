@@ -170,6 +170,17 @@ unsigned short RendererGetScreenWidth(void);
 /** Active screen height in physical pixels. */
 unsigned short RendererGetScreenHeight(void);
 
+/** Populate a draw-target value describing the current CPU draw surface:
+ *  the surface base (@c ptr), its pitch (@c scanline) and height
+ *  (@c screen_height), and the active clip/graphics window rect (@c x/y/width/
+ *  height).  The window-origin pointer is derived as @c ptr + scanline*y + x.
+ *
+ *  This bundles the scattered RendererGetWScreen()/RendererScreenWidth()/
+ *  RendererGraphicsWindow*() reads into one value.  Sourced internally from the
+ *  active renderer's current target, so it is behaviour-identical to the
+ *  individual accessors. */
+TbGraphicsWindow RendererGetDrawTarget(void);
+
 /** Pointer to the locked CPU framebuffer, or NULL if not locked. */
 unsigned char* RendererGetWScreen(void);
 

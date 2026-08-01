@@ -37,6 +37,7 @@
 #include "bflib_mouse.h"
 #include "bflib_render.h"
 #include "renderer/RendererManager.h"
+#include "renderer/software/SwDrawTarget.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
@@ -95,8 +96,8 @@ long g_sprite_scale_src_h = 0;
 void LbDrawHVLine(long xpos1, long ypos1, long xpos2, long ypos2, TbPixel colour)
 {
   assert(!RendererGetCapabilities().hasGPURenderPath && "LbDrawHVLine: CPU pixel write in GL mode");
-  long width_max = RendererGraphicsWindowWidth() - 1;
-  long height_max = RendererGraphicsWindowHeight() - 1;
+  long width_max = SwTargetWindowWidth() - 1;
+  long height_max = SwTargetWindowHeight() - 1;
   if ( xpos1 > xpos2 )
   { //Switching & clipping x coordinates
     if (xpos1 < 0) return;
@@ -106,7 +107,7 @@ void LbDrawHVLine(long xpos1, long ypos1, long xpos2, long ypos2, TbPixel colour
     if ( xpos2 < 0 )
       nxpos1 = 0;
     if ( xpos1 > width_max )
-      nxpos2 = RendererGraphicsWindowWidth() - 1;
+      nxpos2 = SwTargetWindowWidth() - 1;
     xpos1 = nxpos1;
     xpos2 = nxpos2;
   } else
@@ -116,7 +117,7 @@ void LbDrawHVLine(long xpos1, long ypos1, long xpos2, long ypos2, TbPixel colour
     if ( xpos1 < 0 )
       xpos1 = 0;
     if ( xpos2 > width_max )
-      xpos2 = RendererGraphicsWindowWidth() - 1;
+      xpos2 = SwTargetWindowWidth() - 1;
   }
   if ( ypos1 > ypos2 )
   { //Switching & clipping y coordinates
@@ -127,7 +128,7 @@ void LbDrawHVLine(long xpos1, long ypos1, long xpos2, long ypos2, TbPixel colour
     if ( ypos2 < 0 )
       nxpos1 = 0;
     if ( ypos1 > height_max )
-      nxpos2 = RendererGraphicsWindowHeight() - 1;
+      nxpos2 = SwTargetWindowHeight() - 1;
     ypos1 = nxpos1;
     ypos2 = nxpos2;
   } else
@@ -137,11 +138,11 @@ void LbDrawHVLine(long xpos1, long ypos1, long xpos2, long ypos2, TbPixel colour
     if (ypos1 < 0)
       ypos1 = 0;
     if ( ypos2 > height_max )
-      ypos2 = RendererGraphicsWindowHeight() - 1;
+      ypos2 = SwTargetWindowHeight() - 1;
   }
   //And now to drawing
-  unsigned char *screen_ptr = RendererGetGraphicsWindowPtr() + xpos1 +
-          RendererScreenWidth() * ypos1;
+  unsigned char *screen_ptr = SwTargetGraphicsWindowPtr() + xpos1 +
+          SwTargetScanline() * ypos1;
   if ( xpos2 == xpos1 )
   {//Vertical line
     long idx = ypos2 - ypos1 + 1;
@@ -152,7 +153,7 @@ void LbDrawHVLine(long xpos1, long ypos1, long xpos2, long ypos2, TbPixel colour
         glass_idx&=0xff00;
         glass_idx |= *screen_ptr;
         *screen_ptr = pixmap.ghost[glass_idx];
-        screen_ptr += RendererScreenWidth();
+        screen_ptr += SwTargetScanline();
         idx--;
       } while ( idx>0 );
     } else
@@ -165,7 +166,7 @@ void LbDrawHVLine(long xpos1, long ypos1, long xpos2, long ypos2, TbPixel colour
           glass_idx&=0x00ff;
           glass_idx |= ((*screen_ptr)<<8);
           *screen_ptr = pixmap.ghost[glass_idx];
-          screen_ptr += RendererScreenWidth();
+          screen_ptr += SwTargetScanline();
           idx--;
         }
         while ( idx>0 );
@@ -175,7 +176,7 @@ void LbDrawHVLine(long xpos1, long ypos1, long xpos2, long ypos2, TbPixel colour
         do
         {
           *screen_ptr = col_idx;
-          screen_ptr += RendererScreenWidth();
+          screen_ptr += SwTargetScanline();
           idx--;
         }
         while ( idx>0 );
@@ -242,36 +243,36 @@ void LbDrawBoxClip(long x, long y, unsigned long width, unsigned long height, Tb
   assert(!RendererGetCapabilities().hasGPURenderPath && "LbDrawBoxClip: CPU pixel write in GL mode");
   long ypos = y;
   //Checking and clipping coordinates
-  if ( y >= RendererGraphicsWindowHeight() )
+  if ( y >= SwTargetWindowHeight() )
       return;
   if ( y < 0 )
   {
       height += y;
       ypos = 0;
   }
-  if ( (long)(height + ypos) > RendererGraphicsWindowHeight() )
-      height -= height + ypos - RendererGraphicsWindowHeight();
+  if ( (long)(height + ypos) > SwTargetWindowHeight() )
+      height -= height + ypos - SwTargetWindowHeight();
   if ( (long)height <= 0 )
       return;
 
-  ypos = RendererScreenWidth() * (RendererGraphicsWindowY() + ypos);
+  ypos = SwTargetScanline() * (SwTargetWindowY() + ypos);
   long xpos = x;
-  if ( x >= RendererGraphicsWindowWidth() )
+  if ( x >= SwTargetWindowWidth() )
       return;
   if ( x < 0 )
   {
       width += x;
       xpos = 0;
   }
-  if ( (long)(width + xpos) > RendererGraphicsWindowWidth() )
-      width -= width + xpos - RendererGraphicsWindowWidth();
+  if ( (long)(width + xpos) > SwTargetWindowWidth() )
+      width -= width + xpos - SwTargetWindowWidth();
   if ( (long)width <= 0 )
       return;
   //And now let's start drawing
-  unsigned char *screen_ptr = &RendererGetWScreen()[RendererGraphicsWindowX()] + xpos + ypos;
+  unsigned char *screen_ptr = &SwTargetWScreen()[SwTargetWindowX()] + xpos + ypos;
   unsigned long idxh = height;
   //Space between lines in video buffer
-  unsigned long screen_delta = RendererScreenWidth() - width;
+  unsigned long screen_delta = SwTargetScanline() - width;
   if ( lb_draw_flags & Lb_SPRITE_TRANSPAR4 )
   {
       unsigned short glass_idx = (unsigned char)colour << 8;
@@ -372,13 +373,13 @@ static inline TbResult LbSpriteDrawPrepare(struct TbSpriteDrawData *spd, long x,
         SYNCDBG(19,"Zero size sprite (%d,%d)",spr->SWidth,spr->SHeight);
         return Lb_OK;
     }
-    if ((RendererGraphicsWindowWidth() == 0) || (RendererGraphicsWindowHeight() == 0))
+    if ((SwTargetWindowWidth() == 0) || (SwTargetWindowHeight() == 0))
     {
         SYNCDBG(19,"Invalid graphics window dimensions");
         return Lb_FAIL;
     }
-    x += RendererGraphicsWindowX();
-    y += RendererGraphicsWindowY();
+    x += SwTargetWindowX();
+    y += SwTargetWindowY();
     short left;
     short right;
     short top;
@@ -387,7 +388,7 @@ static inline TbResult LbSpriteDrawPrepare(struct TbSpriteDrawData *spd, long x,
     short sprHt = spr->SHeight;
     //Coordinates range checking - x coords
     int delta;
-    delta = RendererGraphicsWindowX() - x;
+    delta = SwTargetWindowX() - x;
     if (delta <= 0)
     {
         left = 0;
@@ -397,7 +398,7 @@ static inline TbResult LbSpriteDrawPrepare(struct TbSpriteDrawData *spd, long x,
             return Lb_OK;
         left = delta;
     }
-    delta = x + sprWd - (RendererGraphicsWindowWidth()+RendererGraphicsWindowX());
+    delta = x + sprWd - (SwTargetWindowWidth()+SwTargetWindowX());
     if ( delta <= 0 )
     {
         right = sprWd;
@@ -408,7 +409,7 @@ static inline TbResult LbSpriteDrawPrepare(struct TbSpriteDrawData *spd, long x,
         right = sprWd - delta;
     }
     //Coordinates range checking - y coords
-    delta = RendererGraphicsWindowY() - y;
+    delta = SwTargetWindowY() - y;
     if (delta <= 0)
     {
       top = 0;
@@ -418,8 +419,8 @@ static inline TbResult LbSpriteDrawPrepare(struct TbSpriteDrawData *spd, long x,
         return Lb_OK;
       top = delta;
     }
-    delta = y + sprHt - (RendererGraphicsWindowHeight() + RendererGraphicsWindowY());
-    if (y + sprHt - (RendererGraphicsWindowHeight() + RendererGraphicsWindowY()) <= 0)
+    delta = y + sprHt - (SwTargetWindowHeight() + SwTargetWindowY());
+    if (y + sprHt - (SwTargetWindowHeight() + SwTargetWindowY()) <= 0)
     {
       btm = sprHt;
     } else
@@ -430,15 +431,15 @@ static inline TbResult LbSpriteDrawPrepare(struct TbSpriteDrawData *spd, long x,
     }
     if ((lb_draw_flags & Lb_SPRITE_FLIP_VERTIC) != 0)
     {
-        spd->r = &RendererGetWScreen()[x + (y+btm-1)*RendererScreenWidth() + left];
-        spd->nextRowDelta = -RendererScreenWidth();
+        spd->r = &SwTargetWScreen()[x + (y+btm-1)*SwTargetScanline() + left];
+        spd->nextRowDelta = -SwTargetScanline();
         short tmp_btm = btm;
         btm = sprHt - top;
         top = sprHt - tmp_btm;
     } else
     {
-        spd->r = &RendererGetWScreen()[x + (y+top)*RendererScreenWidth() + left];
-        spd->nextRowDelta = RendererScreenWidth();
+        spd->r = &SwTargetWScreen()[x + (y+top)*SwTargetScanline() + left];
+        spd->nextRowDelta = SwTargetScanline();
     }
     spd->Ht = btm - top;
     spd->Wd = right - left;
@@ -1548,8 +1549,8 @@ void LbSpriteSetScalingData(long x, long y, long swidth, long sheight, long dwid
     g_sprite_scale_dst_h = dheight;
     g_sprite_scale_src_w = swidth;
     g_sprite_scale_src_h = sheight;
-    long gwidth = RendererGraphicsWindowWidth();
-    long gheight = RendererGraphicsWindowHeight();
+    long gwidth = SwTargetWindowWidth();
+    long gheight = SwTargetWindowHeight();
     scale_up = true;
     if ((dwidth <= swidth) && (dheight <= sheight))
         scale_up = false;
@@ -1843,19 +1844,19 @@ int LbTiledSpriteHeight(struct TiledSprite *bigspr)
 void LbDrawPixel(long x, long y, TbPixel colour)
 {
     assert(!RendererGetCapabilities().hasGPURenderPath && "LbDrawPixel: CPU pixel write in GL mode");
-    RendererGetGraphicsWindowPtr()[x + RendererScreenWidth() * y] = colour;
+    SwTargetGraphicsWindowPtr()[x + SwTargetScanline() * y] = colour;
 }
 
 void LbDrawPixelClip(long x, long y, TbPixel colour)
 {
     assert(!RendererGetCapabilities().hasGPURenderPath && "LbDrawPixelClip: CPU pixel write in GL mode");
-    if ( (x < 0) || (x >= RendererGraphicsWindowWidth()) )
+    if ( (x < 0) || (x >= SwTargetWindowWidth()) )
         return;
-    if ( (y < 0) || (y >= RendererGraphicsWindowHeight()) )
+    if ( (y < 0) || (y >= SwTargetWindowHeight()) )
         return;
     TbPixel *buf;
     int val;
-    buf = RendererGetGraphicsWindowPtr() + RendererScreenWidth() * y + x;
+    buf = SwTargetGraphicsWindowPtr() + SwTargetScanline() * y + x;
     val = 0;
     if ((lb_draw_flags & Lb_SPRITE_TRANSPAR4) != 0)
     {
@@ -1936,38 +1937,38 @@ void LbDrawCircleFilled(long x, long y, long radius, TbPixel colour)
 
 static inline void LbDrawPixelClipOpaq1(long x, long y, TbPixel colour)
 {
-    if ( (x < 0) || (x >= RendererGraphicsWindowWidth()) )
+    if ( (x < 0) || (x >= SwTargetWindowWidth()) )
         return;
-    if ( (y < 0) || (y >= RendererGraphicsWindowHeight()) )
+    if ( (y < 0) || (y >= SwTargetWindowHeight()) )
         return;
     TbPixel *buf;
     int val;
-    buf = RendererGetGraphicsWindowPtr() + RendererScreenWidth() * y + x;
+    buf = SwTargetGraphicsWindowPtr() + SwTargetScanline() * y + x;
     val = (colour << 8) + (*buf);
     *buf = pixmap.ghost[val];
 }
 
 static inline void LbDrawPixelClipOpaq2(long x, long y, TbPixel colour)
 {
-    if ( (x < 0) || (x >= RendererGraphicsWindowWidth()) )
+    if ( (x < 0) || (x >= SwTargetWindowWidth()) )
         return;
-    if ( (y < 0) || (y >= RendererGraphicsWindowHeight()) )
+    if ( (y < 0) || (y >= SwTargetWindowHeight()) )
         return;
     TbPixel *buf;
     int val;
-    buf = RendererGetGraphicsWindowPtr() + RendererScreenWidth() * y + x;
+    buf = SwTargetGraphicsWindowPtr() + SwTargetScanline() * y + x;
     val = ((*buf) << 8) + colour;
     *buf = pixmap.ghost[val];
 }
 
 static inline void LbDrawPixelClipSolid(long x, long y, TbPixel colour)
 {
-    if ( (x < 0) || (x >= RendererGraphicsWindowWidth()) )
+    if ( (x < 0) || (x >= SwTargetWindowWidth()) )
         return;
-    if ( (y < 0) || (y >= RendererGraphicsWindowHeight()) )
+    if ( (y < 0) || (y >= SwTargetWindowHeight()) )
         return;
     TbPixel *buf;
-    buf = RendererGetGraphicsWindowPtr() + RendererScreenWidth() * y + x;
+    buf = SwTargetGraphicsWindowPtr() + SwTargetScanline() * y + x;
     *buf = colour;
 }
 
@@ -2115,13 +2116,13 @@ void setup_steps(long posx, long posy, const struct TbSourceBuffer * src_buf, in
     long sposy;
     sposx = posx;
     sposy = posy;
-    (*scanline) = RendererScreenWidth();
+    (*scanline) = SwTargetScanline();
     if ((lb_draw_flags & Lb_SPRITE_FLIP_HORIZ) != 0) {
         sposx = src_buf->width + posx - 1;
     }
     if ((lb_draw_flags & Lb_SPRITE_FLIP_VERTIC) != 0) {
         sposy = src_buf->height + posy - 1;
-        (*scanline) = -RendererScreenWidth();
+        (*scanline) = -SwTargetScanline();
     }
     (*xstep) = &xsteps_array[2 * sposx];
     (*ystep) = &ysteps_array[2 * sposy];
@@ -2137,8 +2138,8 @@ void setup_outbuf(const int32_t *xstep, const int32_t *ystep, uchar **outbuf, in
     gspos_x = xstep[0];
     if ((lb_draw_flags & Lb_SPRITE_FLIP_HORIZ) != 0)
         gspos_x += xstep[1] - 1;
-    (*outbuf) = &RendererGetGraphicsWindowPtr()[gspos_x + RendererScreenWidth() * gspos_y];
-    (*outheight) = RendererScreenHeight();
+    (*outbuf) = &SwTargetGraphicsWindowPtr()[gspos_x + SwTargetScanline() * gspos_y];
+    (*outheight) = SwTargetScreenHeight();
 }
 
 /******************************************************************************/

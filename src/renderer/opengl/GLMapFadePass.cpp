@@ -287,8 +287,9 @@ void GLMapFadePass::CaptureWorldFrameIfPending()
 
 /******************************************************************************/
 
-int32_t GLMapFadePass::StepFadeIn(int32_t step)
+int32_t GLMapFadePass::StepFadeIn(int32_t step, const TbGraphicsWindow& target)
 {
+    (void)target;   // GPU path captures via FBO — no CPU draw target
     if (!m_initialized)
     {
         WARNLOG("GLMapFadePass: GPU init failed, skipping fade");
@@ -339,8 +340,9 @@ int32_t GLMapFadePass::StepFadeIn(int32_t step)
     return (int32_t)derived;
 }
 
-int32_t GLMapFadePass::StepFadeOut(int32_t step)
+int32_t GLMapFadePass::StepFadeOut(int32_t step, const TbGraphicsWindow& target)
 {
+    (void)target;   // GPU path captures via FBO — no CPU draw target
     if (!m_initialized)
     {
         WARNLOG("GLMapFadePass: GPU init failed, skipping fade");

@@ -69,7 +69,7 @@ void GLCursorLayer::SubmitKeeperHandSprite(short x, short y,
     m_wvr->EndCursorCapture();
 }
 
-void GLCursorLayer::ExecuteCursorFromIR(const UICommandBuffers& cmds)
+void GLCursorLayer::ExecuteCursorFromIR(const UICommandBuffers& cmds, const TbGraphicsWindow& /*target*/)
 {
     // ── Pointer sprites (atlas quad path) ────────────────────────────────────
     if (!cmds.cursor_pointers.Empty() && m_glui && m_atlas)

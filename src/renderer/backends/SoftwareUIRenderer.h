@@ -44,7 +44,8 @@ public:
 protected:
     /** Tile the GUI slab texture into the current WScreen — the realization used
      *  both by the immediate fallback and by the base merged replay. */
-    void TileSlabBackground(int x, int y, int w, int h) override;
+    void TileSlabBackground(int x, int y, int w, int h,
+                            const TbGraphicsWindow& target) override;
 
 private:
     std::vector<uint8_t> m_minimap_buf;

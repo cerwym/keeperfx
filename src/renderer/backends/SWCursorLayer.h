@@ -27,7 +27,7 @@ public:
                                         int32_t scale,
                                         TbDrawFlagsMask draw_flags) override;
 
-    virtual void Draw() override;
+    virtual void Draw(const TbGraphicsWindow& target) override;
     virtual void Clear() override;
     virtual void SetCursorWriteBuffers(struct UICommandBuffers* cmds) override { m_write_cmds = cmds; }
     virtual const char* GetName() const override { return "SW_CURSOR"; }

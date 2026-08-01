@@ -29,21 +29,17 @@ public:
 
     bool IsWorldCaptureActive() const override { return m_capture_active; }
 
-    /** EndFrame: redirect WScreen to the offscreen lens buffer for the deferred
-     *  world + swipe. */
-    void ResolveWorldCaptureBegin() override;
+    /** EndFrame: return the off-screen lens buffer as the draw target the deferred
+     *  world should rasterise into (given the on-screen target). */
+    TbGraphicsWindow ResolveWorldCaptureBegin(const TbGraphicsWindow& screen_target) override;
 
-    /** EndFrame: distort the captured buffer onto the screen and restore WScreen. */
-    void ResolveWorldCaptureEnd() override;
+    /** EndFrame: distort the captured buffer onto the on-screen target. */
+    void ResolveWorldCaptureEnd(const TbGraphicsWindow& screen_target) override;
 
 private:
     // Capture state.  Prepared in the draw phase (BeginWorldCapture), consumed at
     // EndFrame (ResolveWorldCapture*).  Same game thread throughout.
     bool             m_capture_active = false;
-    unsigned char*   m_saved_wscreen  = nullptr;
-    int              m_saved_graphics_w = 0;
-    int              m_saved_graphics_h = 0;
-    TbGraphicsWindow m_saved_viewport = {};
     unsigned char*   m_lens_buffer    = nullptr;
     unsigned int     m_lens_buffer_w  = 0;
     unsigned int     m_lens_buffer_h  = 0;

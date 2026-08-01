@@ -22,6 +22,7 @@
 #include "renderer/GpuTypes.h"
 #include "renderer/DrawState.h"
 #include "bflib_basics.h"
+#include "bflib_video.h"   // TbGraphicsWindow
 #include <unordered_map>
 #include <cstdint>
 
@@ -381,7 +382,8 @@ public:
      *  own PopulateFromIR/Draw). */
     virtual void ReplayMergedFromIR(const UICommandBuffers& ui,
                                     const TextCommandBuffers& text,
-                                    ITextRenderer* text_renderer);
+                                    ITextRenderer* text_renderer,
+                                    const TbGraphicsWindow& target);
 
     // ── IR (Intermediate Representation) dispatch ──────────────────────────────
 
@@ -408,12 +410,14 @@ protected:
     /** Immediate WScreen sampling body of SetupMinimapBackground; also invoked
      *  by the software IR executor when the setup was deferred (the sampled
      *  pixels only exist after the panel sprites have replayed). */
-    void SampleMinimapBackground(int diaglen, int panel_x, int panel_y);
+    void SampleMinimapBackground(int diaglen, int panel_x, int panel_y,
+                                 const TbGraphicsWindow& target);
 
-    /** Tile the slab texture into the current WScreen at (x,y,w,h).  Owned by the
+    /** Tile the slab texture into @p target at (x,y,w,h).  Owned by the
      *  CPU backend (SoftwareUIRenderer); the base merged replay calls it via
      *  virtual dispatch for a deferred IRUISlabBackgroundCmd.  No-op by default. */
-    virtual void TileSlabBackground(int /*x*/, int /*y*/, int /*w*/, int /*h*/) {}
+    virtual void TileSlabBackground(int /*x*/, int /*y*/, int /*w*/, int /*h*/,
+                                    const TbGraphicsWindow& /*target*/) {}
 
     /** Sprite handle → raw TbSprite* map, used by CPU default implementations. */
     std::unordered_map<SpriteHandle, const struct TbSprite*> m_handle_to_sprite;

@@ -251,7 +251,8 @@ void display_drawlist(void);
 void display_fast_drawlist(struct Camera *cam);
 
 /** Software executor: rasterise the retained world IR into the current screen, setups up tables. */
-void software_execute_world_from_ir(int win_x, int win_y, int win_w, int win_h,
+void software_execute_world_from_ir(const TbGraphicsWindow *target,
+                                    int win_x, int win_y, int win_w, int win_h,
                                     int is_frontview, struct Camera *cam);
 
 /** Submits non-spatial UI elements (status flowers, floating gold text,
