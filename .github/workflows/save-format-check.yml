@@ -6,16 +6,11 @@ name: Save format check
 # and only writes to the job summary and an artifact.
 
 on:
+  # No path filter: every PR update must re-run, so an earlier "breaks saves"
+  # result is cleared when the change is reverted. The job exits early when no
+  # relevant file changed.
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
-    paths:
-      - 'src/**.h'
-      - 'src/**.hpp'
-      - 'config/fxdata/lua/core/serialisation.lua'
-      - 'config/fxdata/lua/external/binser.lua'
-      - 'build/cmake/modules/Dependencies.cmake'
-      - 'tools/save-layout/**'
-      - '.github/workflows/save-format-check.yml'
 
 permissions:
   contents: read
@@ -29,7 +24,22 @@ jobs:
       with:
         fetch-depth: 0
 
+    - name: Find base and scope
+      id: scope
+      env:
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      run: |
+        set -eu
+        base=$(git merge-base "$BASE_SHA" HEAD)
+        echo "base=$base" >> "$GITHUB_OUTPUT"
+        if git diff --quiet "$base" HEAD -- 'src/**.h' 'src/**.hpp' 'src/*.h'             config/fxdata/lua/core/serialisation.lua config/fxdata/lua/external/binser.lua             build/cmake/modules/Dependencies.cmake tools/save-layout .github/workflows/save-format-check.yml; then
+          echo "relevant=false" >> "$GITHUB_OUTPUT"
+        else
+          echo "relevant=true" >> "$GITHUB_OUTPUT"
+        fi
+
     - name: Install tools
+      if: steps.scope.outputs.relevant == 'true'
       run: |
         set -eux
         sudo apt-get update
@@ -38,14 +48,20 @@ jobs:
     - name: Compare with base
       id: compare
       env:
-        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        BASE: ${{ steps.scope.outputs.base }}
+        RELEVANT: ${{ steps.scope.outputs.relevant }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
       run: |
         set -eu
-        base=$(git merge-base "$BASE_SHA" HEAD)
-        verdict=$(bash tools/save-layout/check_pr.sh "$base" save-format)
+        if [ "$RELEVANT" = "true" ]; then
+          verdict=$(bash tools/save-layout/check_pr.sh "$BASE" save-format)
+        else
+          mkdir -p save-format
+          verdict=$(python3 tools/save-layout/compare.py tools/save-layout/roots.txt /dev/null /dev/null             save-format/result.json save-format/summary.md)
+        fi
         echo "verdict=$verdict" >> "$GITHUB_OUTPUT"
         # For save-format-report.yml, which comments on the PR.
-        echo "${{ github.event.pull_request.number }}" > save-format/pr_number
+        echo "$PR_NUMBER" > save-format/pr_number
         cat save-format/summary.md >> "$GITHUB_STEP_SUMMARY"
 
     - name: Upload result
