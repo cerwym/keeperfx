@@ -290,7 +290,6 @@ struct Game {
     /** Number of available thing indices stored in unsynced_free_things array. When count is 0, no free things available. */
     ThingIndex unsynced_free_things_count;
     GameTurn play_gameturn;
-    int32_t save_check_demo_field;
     GameTurn pckt_gameturn;
     /** Synchronized random seed. used for game actions, as it's always identical for clients of network game. */
     uint32_t action_random_seed;
