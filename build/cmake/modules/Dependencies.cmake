@@ -20,6 +20,30 @@ find_package(OpenGL REQUIRED)
 add_library(glad STATIC "${CMAKE_SOURCE_DIR}/deps/glad/src/glad.c")
 target_include_directories(glad PUBLIC "${CMAKE_SOURCE_DIR}/deps/glad/include")
 
+# ━━━ ImGui Debug/Settings Overlay (optional, desktop + vcpkg only) ━━━
+# By the time this runs, KEEPERFX_IMGUI is only still ON when VCPKG_TOOLCHAIN
+# is set (Platforms.cmake already forced it OFF otherwise), so a missing
+# package here means vcpkg is in play but didn't produce it -- a real
+# problem, never silently downgraded to a no-overlay build (that would poison
+# the CMake cache: it stays OFF forever, even after the package is fixed,
+# because this logic only forces the cache value when the lookup fails, and
+# nothing ever flips it back on automatically).
+if(KEEPERFX_IMGUI)
+    find_package(imgui CONFIG QUIET)
+    if(imgui_FOUND)
+        kfx_status("DEPS" "ImGui found — debug/settings overlay enabled")
+        add_compile_definitions(KEEPERFX_IMGUI_ENABLED=1)
+    else()
+        message(FATAL_ERROR
+            "KEEPERFX_IMGUI is ON but the 'imgui' package was not found for "
+            "triplet '${VCPKG_TARGET_TRIPLET}'.\n"
+            "  - vcpkg manifest mode should install it automatically; try a "
+            "clean reconfigure of this build directory.\n"
+            "  - Or install it explicitly: vcpkg install imgui[core,opengl3-binding]:${VCPKG_TARGET_TRIPLET}\n"
+            "  - To build intentionally WITHOUT the overlay, configure with -DKEEPERFX_IMGUI=OFF.")
+    endif()
+endif()
+
 # kfx_fetch(<dir> <url> [SKIP_EXAMPLES]): download + extract into <builddir>/deps/<dir>/ once.
 # SKIP_EXAMPLES leaves out libexec/, where the SDL dev packages put their example programs. The
 # build doesn't use them, and Windows Defender reports some of them as malware (a false positive).
