@@ -25,6 +25,7 @@ public:
     void SwapBuffers() override;
     bool SetSwapInterval(int interval) override;
     ProcLoader GetProcLoader() const override;
+    void* GetNativeContextHandle() const override { return static_cast<void*>(m_context); }
 
 private:
     GLContextSDL(SDL_Window* window, SDL_GLContextState* context);

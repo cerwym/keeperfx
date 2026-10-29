@@ -101,11 +101,15 @@ foreach(_t IN LISTS KFX_TARGETS)
     if(KEEPERFX_TRACY AND TARGET TracyClient)
         target_link_libraries(${_t} PRIVATE TracyClient)
     endif()
-    # ImGui overlay (optional — desktop + vcpkg only). Linked here as soon as
-    # the target resolves (Task 1); the vendors/backends *source* files are
-    # added back once they exist (Task 3's GLImGuiBackend/imgui_impl_sdl3).
+    # ImGui overlay (optional — desktop + vcpkg only). vendors/ and backends/
+    # are excluded from the generic glob above because they need the imgui
+    # target to exist first; added back here, explicitly, once it does.
     if(KEEPERFX_IMGUI AND TARGET imgui::imgui)
         target_link_libraries(${_t} PRIVATE imgui::imgui)
+        target_sources(${_t} PRIVATE
+            "${CMAKE_SOURCE_DIR}/src/kfx/imgui/vendors/imgui_impl_sdl3.cpp"
+            "${CMAKE_SOURCE_DIR}/src/kfx/imgui/backends/GLImGuiBackend.cpp"
+        )
     endif()
 endforeach()
 
