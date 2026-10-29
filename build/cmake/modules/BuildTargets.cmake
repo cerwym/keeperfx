@@ -15,6 +15,19 @@ elseif(UNIX AND NOT APPLE)
     list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX "/WindowCompositorWin\\.cpp$")
 endif()
 
+# ImGui overlay exclusion.
+# DevTools.cpp is the always-present facade (no-ops without ImGui) and must
+# stay compiled even when the tooling is off, so the rest of the engine can
+# call it unconditionally. DebugOverlay.cpp is the ImGui-dependent shell, and
+# backends/vendors need the imgui target to exist first -- both are filtered
+# here and added back explicitly, alongside the link, in the per-target loop
+# below (where KFX_TARGETS and the imgui::imgui target both exist yet).
+if(NOT KEEPERFX_IMGUI)
+    list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/kfx/imgui/DebugOverlay\\.cpp$")
+endif()
+list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/kfx/imgui/vendors/.*\\.cpp$")
+list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/kfx/imgui/backends/.*\\.cpp$")
+
 # Window icon
 if(NOT WIN32)
     set(KFX_ICON_PNG "${CMAKE_SOURCE_DIR}/res/keeperfx_icon256-24bpp.png")
@@ -87,6 +100,12 @@ foreach(_t IN LISTS KFX_TARGETS)
     # Tracy profiler (FetchContent target — compiled from source, matches CRT).
     if(KEEPERFX_TRACY AND TARGET TracyClient)
         target_link_libraries(${_t} PRIVATE TracyClient)
+    endif()
+    # ImGui overlay (optional — desktop + vcpkg only). Linked here as soon as
+    # the target resolves (Task 1); the vendors/backends *source* files are
+    # added back once they exist (Task 3's GLImGuiBackend/imgui_impl_sdl3).
+    if(KEEPERFX_IMGUI AND TARGET imgui::imgui)
+        target_link_libraries(${_t} PRIVATE imgui::imgui)
     endif()
 endforeach()
 

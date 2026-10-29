@@ -1,0 +1,189 @@
+/******************************************************************************/
+// Free implementation of Bullfrog's Dungeon Keeper strategy game.
+/******************************************************************************/
+/** @file DebugOverlay.cpp
+ *     ImGui debug overlay shell implementation.
+ *
+ *     Owns the ImGui context, the thread-safe SDL event queue, and whichever
+ *     renderer-specific IImGuiRenderBackend was handed to Initialize() --
+ *     this file has no idea which graphics API that backend actually uses.
+ */
+/******************************************************************************/
+#include "pre_inc.h"
+#include "kfx/imgui/DebugOverlay.hpp"
+
+#ifdef KEEPERFX_IMGUI_ENABLED
+
+#include "kfx/imgui/IImGuiRenderBackend.h"
+#include "globals.h"
+
+#include <SDL3/SDL.h>
+#include <imgui.h>
+
+#include <atomic>
+#include <memory>
+#include <mutex>
+#include <vector>
+/******************************************************************************/
+
+// SDL is the shared windowing layer for every renderer backend this project
+// has (OpenGL today, same SDL3 window for any future GL-alternative backend)
+// -- only the *graphics-API* side (IImGuiRenderBackend) is abstracted here,
+// not SDL itself.
+static std::mutex s_event_mutex;
+static std::vector<SDL_Event> s_event_queue;
+static std::vector<SDL_Event> s_event_queue_rt;
+
+static std::atomic<bool> s_visible{false};
+static std::atomic<bool> s_want_mouse{false};
+static std::atomic<bool> s_want_keyboard{false};
+static bool s_initialized = false;
+static std::unique_ptr<kfx::IImGuiRenderBackend> s_backend;
+
+static bool overlay_backend_ready()
+{
+    if (!s_initialized || !s_backend) {
+        return false;
+    }
+    return ImGui::GetCurrentContext() != nullptr;
+}
+
+int DebugOverlay_Initialize(std::unique_ptr<kfx::IImGuiRenderBackend> backend)
+{
+    if (s_initialized)
+        return 1;
+    if (!backend)
+    {
+        WARNLOG("DebugOverlay init skipped: no render backend supplied");
+        return 0;
+    }
+
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO();
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    io.IniFilename = nullptr;
+
+    ImGui::StyleColorsDark();
+
+    if (!backend->Init())
+    {
+        WARNLOG("DebugOverlay init failed: render backend Init() returned false");
+        ImGui::DestroyContext();
+        return 0;
+    }
+
+    s_backend = std::move(backend);
+    s_initialized = true;
+    SYNCLOG("DebugOverlay initialized");
+    return 1;
+}
+
+void DebugOverlay_Shutdown(void)
+{
+    if (!s_initialized)
+        return;
+
+    s_backend->Shutdown();
+    s_backend.reset();
+    ImGui::DestroyContext();
+
+    {
+        std::lock_guard<std::mutex> lock(s_event_mutex);
+        s_event_queue.clear();
+        s_event_queue_rt.clear();
+    }
+
+    s_want_mouse.store(false);
+    s_want_keyboard.store(false);
+    s_visible.store(false);
+    s_initialized = false;
+}
+
+void DebugOverlay_NewFrame(void)
+{
+    if (!overlay_backend_ready())
+        return;
+
+    {
+        std::lock_guard<std::mutex> lock(s_event_mutex);
+        s_event_queue_rt.swap(s_event_queue);
+        s_event_queue.clear();
+    }
+
+    for (const SDL_Event& ev : s_event_queue_rt)
+        s_backend->ProcessEvent(&ev);
+    s_event_queue_rt.clear();
+
+    s_backend->NewFrame();
+    ImGui::NewFrame();
+}
+
+void DebugOverlay_Render(void)
+{
+    if (!overlay_backend_ready())
+        return;
+
+    if (!s_visible.load())
+    {
+        s_want_mouse.store(false);
+        s_want_keyboard.store(false);
+        ImGui::EndFrame();
+        return;
+    }
+
+    if (ImGui::BeginMainMenuBar())
+    {
+        if (ImGui::BeginMenu("KeeperFX Debug"))
+        {
+            if (ImGui::MenuItem("Close Overlay", "F3"))
+                s_visible.store(false);
+            ImGui::EndMenu();
+        }
+        ImGui::EndMainMenuBar();
+    }
+
+    ImGui::Begin("Debug Overlay");
+    ImGui::TextUnformatted("No panels yet -- facade/overlay scaffold only.");
+    ImGui::End();
+
+    ImGui::Render();
+    s_backend->RenderDrawData();
+
+    ImGuiIO& io = ImGui::GetIO();
+    s_want_mouse.store(io.WantCaptureMouse);
+    s_want_keyboard.store(io.WantCaptureKeyboard);
+}
+
+void DebugOverlay_QueueEvent(const void* sdl_event)
+{
+    if (!s_initialized || sdl_event == nullptr)
+        return;
+
+    std::lock_guard<std::mutex> lock(s_event_mutex);
+    s_event_queue.push_back(*static_cast<const SDL_Event*>(sdl_event));
+}
+
+void DebugOverlay_Toggle(void)
+{
+    bool expected = s_visible.load();
+    while (!s_visible.compare_exchange_weak(expected, !expected)) {}
+}
+
+int DebugOverlay_IsVisible(void)
+{
+    return s_visible.load() ? 1 : 0;
+}
+
+int DebugOverlay_WantCaptureMouse(void)
+{
+    return s_want_mouse.load() ? 1 : 0;
+}
+
+int DebugOverlay_WantCaptureKeyboard(void)
+{
+    return s_want_keyboard.load() ? 1 : 0;
+}
+
+#endif
+
+#include "post_inc.h"
