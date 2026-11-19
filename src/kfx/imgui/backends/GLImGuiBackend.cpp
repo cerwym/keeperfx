@@ -14,6 +14,8 @@
 #include <imgui.h>
 #include <imgui_impl_opengl3.h>
 
+#include <string>
+
 #include "post_inc.h"
 /******************************************************************************/
 
@@ -29,8 +31,20 @@ bool GLImGuiBackend::Init()
     if (m_window == nullptr || m_gl_context == nullptr)
         return false;
 
+    // ImGui_ImplSDL3_InitForOpenGL sets SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH=1
+    // process-wide, which changes game behaviour (a click that focuses an
+    // unfocused window also reaches the game) even when the overlay is never
+    // opened. Restore whatever was set before, rather than editing the
+    // vendored file -- this keeps that file an unmodified copy.
+    const char* prev_clickthrough_hint = SDL_GetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH);
+    const bool had_clickthrough_hint = prev_clickthrough_hint != nullptr;
+    const std::string saved_clickthrough_hint = had_clickthrough_hint ? prev_clickthrough_hint : std::string();
+
     if (!ImGui_ImplSDL3_InitForOpenGL(static_cast<SDL_Window*>(m_window), m_gl_context))
         return false;
+
+    SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, had_clickthrough_hint ? saved_clickthrough_hint.c_str() : "0");
+
     if (!ImGui_ImplOpenGL3_Init("#version 330 core"))
     {
         ImGui_ImplSDL3_Shutdown();

@@ -528,6 +528,18 @@ void RendererOpenGL::render_thread_work()
         KFX_ZONE_COLOR("RendererOpenGL::PresentScreenTarget", KFX_COLOR_RENDER_GPU);
         m_impl->PresentScreenTarget(fd);
     }
+
+    {
+        // ImGui debug overlay: drawn directly on the window's own
+        // framebuffer, at the window's real drawable size, after the screen
+        // target has already been blitted/scaled into it -- see
+        // FGDrawDevToolsOverlay()'s comment for why it isn't drawn there.
+        // PresentScreenTarget() leaves the screen-target FBO bound, not 0.
+        KFX_ZONE_COLOR("RendererOpenGL::DrawDevToolsOverlay", KFX_COLOR_RENDER_GPU);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glViewport(0, 0, fd.drawable_w, fd.drawable_h);
+        kfx::DevTools::instance().drawOverlay();
+    }
 }
 
 void RendererOpenGL::render_thread_present()
@@ -711,7 +723,14 @@ void RendererOpenGL::FGExecuteCursor()
 
 void RendererOpenGL::FGDrawDevToolsOverlay()
 {
-    kfx::DevTools::instance().drawOverlay();
+    // Deliberately empty: this hook runs while the offscreen screen-target
+    // FBO is still bound (RenderGraph::Execute()'s fixed ordering), and that
+    // target gets blitted, scaled and letterboxed into the window by
+    // PresentScreenTarget() afterwards. Drawing ImGui here would get scaled/
+    // clipped along with it, and its mouse hit-testing (window coordinates)
+    // would disagree with where it visibly ends up. The real draw happens
+    // in render_thread_work(), after PresentScreenTarget(), directly on the
+    // window's own framebuffer -- see the comment there.
 }
 
 void RendererOpenGL::render_thread_cleanup()

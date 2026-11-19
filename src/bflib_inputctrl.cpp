@@ -291,6 +291,29 @@ static TbKeyCode mousebutton_to_keycode(const Uint8 *button)
     return (KC_MOUSE1 + 1 - *button);
 }
 
+// Catches every way the overlay's visibility can change -- F3, its own
+// "Close Overlay" menu item, or a forced close (shutdownOverlay() on an
+// ALT+R renderer switch) -- not just the F3 keypress itself.
+static void sync_overlay_mouse_grab(void)
+{
+    if (!kfx::DevTools::available())
+        return;
+
+    static TbBool s_overlay_was_visible = false;
+    const bool now_visible = kfx::DevTools::instance().isOverlayVisible();
+    if (!s_overlay_was_visible && now_visible)
+    {
+        s_overlay_pre_grab = lbMouseGrabbed;
+        LbSetMouseGrab(false);
+        GetSDLWindowSystem()->SetCursorVisible(true);
+    }
+    else if (s_overlay_was_visible && !now_visible)
+    {
+        LbSetMouseGrab(s_overlay_pre_grab);
+    }
+    s_overlay_was_visible = now_visible;
+}
+
 static void process_event(const SDL_Event *ev)
 {
     struct TbPoint mouseDelta;
@@ -306,20 +329,11 @@ static void process_event(const SDL_Event *ev)
         x = keyboard_keys_mapping(&ev->key);
         if (x == KC_F3 && kfx::DevTools::available())
         {
-            auto& devtools = kfx::DevTools::instance();
-            const bool before = devtools.isOverlayVisible();
-            devtools.toggleOverlay();
-            const bool after = devtools.isOverlayVisible();
-            if (!before && after)
-            {
-                s_overlay_pre_grab = lbMouseGrabbed;
-                LbSetMouseGrab(false);
-                GetSDLWindowSystem()->SetCursorVisible(true);
-            }
-            else if (before && !after)
-            {
-                LbSetMouseGrab(s_overlay_pre_grab);
-            }
+            // Grab save/restore happens once per poll in sync_overlay_mouse_grab(),
+            // not here -- that also covers the overlay's own "Close Overlay"
+            // menu item and a forced close (e.g. shutdownOverlay() on an
+            // ALT+R renderer switch), neither of which goes through this key.
+            kfx::DevTools::instance().toggleOverlay();
         }
         if (x != KC_UNASSIGNED && !kfx::DevTools::instance().isOverlayVisible())
         {
@@ -569,6 +583,7 @@ TbBool LbPollInputs(void)
         kfx::DevTools::instance().queueEvent(&ev);
         process_event(&ev);
     }
+    sync_overlay_mouse_grab();
 
     return (lbUserQuit < 1);
 }
