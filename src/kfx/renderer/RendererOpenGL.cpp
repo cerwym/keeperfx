@@ -6,6 +6,8 @@
 #include "kfx/platform/IPlatform.h"
 #include "kfx/platform/IWindowSystem.h"
 #include "kfx/platform/IGLContext.h"
+#include "kfx/imgui/DevTools.h"
+#include "kfx/imgui/backends/GLImGuiBackend.h"
 #include "kfx/renderer/opengl/GLFunctions.h"
 #include "kfx/renderer/opengl/GLSpriteAtlas.h"
 #include "kfx/renderer/opengl/GLUIRenderer.h"
@@ -38,6 +40,7 @@
 #include <SDL3/SDL.h>
 #include <SDL3_image/SDL_image.h> // IMG_SavePNG (screenshots), Todo : move to platform layer
 #include <cstring>
+#include <memory>
 #include <string>
 #include <vector>
 #include "post_inc.h"
@@ -453,6 +456,26 @@ void RendererOpenGL::render_thread_init()
     m_impl->write_idx = 0;
 
     glClearColor(0.06f, 0.06f, 0.10f, 1.0f);
+
+    // ImGui debug overlay (optional; never allowed to fail renderer init --
+    // this is debug tooling, not a required subsystem).
+    // GLImGuiBackend's implementation only exists (and only links) when
+    // KEEPERFX_IMGUI_ENABLED is defined -- unlike kfx::DevTools's own
+    // methods, which are always safe to call, naming a concrete backend
+    // type here unavoidably needs this one #ifdef, since this is the one
+    // place that decides which concrete backend to construct.
+#ifdef KEEPERFX_IMGUI_ENABLED
+    {
+        auto backend = std::make_unique<kfx::GLImGuiBackend>(
+            GetPlatform()->GetWindowSystem()->GetNativeWindowHandle(),
+            m_gl_context->GetNativeContextHandle());
+        if (!kfx::DevTools::instance().initOverlay(std::move(backend)))
+        {
+            WARNLOG("RendererOpenGL::Init: ImGui debug overlay init failed; continuing without it");
+        }
+    }
+#endif
+
     m_impl->init_ok = true;
 }
 
@@ -686,10 +709,16 @@ void RendererOpenGL::FGExecuteCursor()
     m_impl->cursor.DrawSnapshot(fd.cursor_snapshot);
 }
 
+void RendererOpenGL::FGDrawDevToolsOverlay()
+{
+    kfx::DevTools::instance().drawOverlay();
+}
+
 void RendererOpenGL::render_thread_cleanup()
 {
     if (m_impl->functions_loaded)
     {
+        kfx::DevTools::instance().shutdownOverlay();
         m_impl->resource_mapper.ShutdownAll();
         m_impl->ui.Shutdown();
         m_impl->atlas.Free();
