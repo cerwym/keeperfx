@@ -188,6 +188,10 @@
     <ClCompile Include="src\highscores.c" />
     <ClCompile Include="src\kjm_input.c" />
     <ClCompile Include="src\lens_api.c" />
+    <ClCompile Include="src\kfx\imgui\backends\GLImGuiBackend.cpp" />
+    <ClCompile Include="src\kfx\imgui\DebugOverlay.cpp" />
+    <ClCompile Include="src\kfx\imgui\DevTools.cpp" />
+    <ClCompile Include="src\kfx\imgui\vendors\imgui_impl_sdl3.cpp" />
     <ClCompile Include="src\kfx\lense\DisplacementEffect.cpp" />
     <ClCompile Include="src\kfx\lense\FlyeyeEffect.cpp" />
     <ClCompile Include="src\kfx\lense\LensEffect.cpp" />
@@ -547,6 +551,11 @@
     <ClInclude Include="src\keeperfx.hpp" />
     <ClInclude Include="src\kjm_input.h" />
     <ClInclude Include="src\lens_api.h" />
+    <ClInclude Include="src\kfx\imgui\backends\GLImGuiBackend.h" />
+    <ClInclude Include="src\kfx\imgui\DebugOverlay.hpp" />
+    <ClInclude Include="src\kfx\imgui\DevTools.h" />
+    <ClInclude Include="src\kfx\imgui\IImGuiRenderBackend.h" />
+    <ClInclude Include="src\kfx\imgui\vendors\imgui_impl_sdl3.h" />
     <ClInclude Include="src\kfx\lense\DisplacementEffect.h" />
     <ClInclude Include="src\kfx\lense\FlyeyeEffect.h" />
     <ClInclude Include="src\kfx\lense\LensEffect.h" />

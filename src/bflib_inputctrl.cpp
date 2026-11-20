@@ -28,6 +28,7 @@
 #include "bflib_joyst.h"
 #include "bflib_video.h"
 #include "kfx/platform/WindowSystemSDL.h"
+#include "kfx/imgui/DevTools.h"
 #include "bflib_planar.h"
 #include "bflib_sndlib.h"
 #include "bflib_mshandler.hpp"
@@ -54,6 +55,7 @@ unsigned char last_used_input_device = 0;
 static TbBool isMouseActive = true;
 static TbBool isMouseActivated = false;
 static TbBool firstTimeMouseInit = true;
+static TbBool s_overlay_pre_grab = false; // mouse grab state before the overlay opened
 
 static char lbTextInputBuffer[256];
 static int lbTextInputLength = 0;
@@ -289,6 +291,29 @@ static TbKeyCode mousebutton_to_keycode(const Uint8 *button)
     return (KC_MOUSE1 + 1 - *button);
 }
 
+// Catches every way the overlay's visibility can change -- F3, its own
+// "Close Overlay" menu item, or a forced close (shutdownOverlay() on an
+// ALT+R renderer switch) -- not just the F3 keypress itself.
+static void sync_overlay_mouse_grab(void)
+{
+    if (!kfx::DevTools::available())
+        return;
+
+    static TbBool s_overlay_was_visible = false;
+    const bool now_visible = kfx::DevTools::instance().isOverlayVisible();
+    if (!s_overlay_was_visible && now_visible)
+    {
+        s_overlay_pre_grab = lbMouseGrabbed;
+        LbSetMouseGrab(false);
+        GetSDLWindowSystem()->SetCursorVisible(true);
+    }
+    else if (s_overlay_was_visible && !now_visible)
+    {
+        LbSetMouseGrab(s_overlay_pre_grab);
+    }
+    s_overlay_was_visible = now_visible;
+}
+
 static void process_event(const SDL_Event *ev)
 {
     struct TbPoint mouseDelta;
@@ -302,7 +327,15 @@ static void process_event(const SDL_Event *ev)
     {
     case SDL_EVENT_KEY_DOWN:
         x = keyboard_keys_mapping(&ev->key);
-        if (x != KC_UNASSIGNED)
+        if (x == KC_F3 && kfx::DevTools::available())
+        {
+            // Grab save/restore happens once per poll in sync_overlay_mouse_grab(),
+            // not here -- that also covers the overlay's own "Close Overlay"
+            // menu item and a forced close (e.g. shutdownOverlay() on an
+            // ALT+R renderer switch), neither of which goes through this key.
+            kfx::DevTools::instance().toggleOverlay();
+        }
+        if (x != KC_UNASSIGNED && !kfx::DevTools::instance().isOverlayVisible())
         {
             keyboardControl(KActn_KEYDOWN,x,keyboard_mods_mapping(&ev->key), ev->key.key);
         }
@@ -320,6 +353,10 @@ static void process_event(const SDL_Event *ev)
 
     case SDL_EVENT_MOUSE_MOTION:
         if (!isMouseActive)
+        {
+          return;
+        }
+        if (kfx::DevTools::instance().isOverlayVisible())
         {
           return;
         }
@@ -392,6 +429,10 @@ static void process_event(const SDL_Event *ev)
     case SDL_EVENT_MOUSE_BUTTON_DOWN:
     case SDL_EVENT_MOUSE_BUTTON_UP:
         last_used_input_device = ID_Keyboard_Mouse;
+        if (kfx::DevTools::instance().isOverlayVisible())
+        {
+            return;
+        }
 
         if(ev->button.button == SDL_BUTTON_LEFT || ev->button.button == SDL_BUTTON_RIGHT || ev->button.button == SDL_BUTTON_MIDDLE)
         {
@@ -421,6 +462,10 @@ static void process_event(const SDL_Event *ev)
 
     case SDL_EVENT_MOUSE_WHEEL:
         last_used_input_device = ID_Keyboard_Mouse;
+        if (kfx::DevTools::instance().isOverlayVisible())
+        {
+            return;
+        }
         mouseDelta.x = 0;
         mouseDelta.y = 0;
         mouseControl(ev->wheel.y > 0 ? MActn_WHEELMOVEUP : MActn_WHEELMOVEDOWN, &mouseDelta);
@@ -535,8 +580,10 @@ TbBool LbPollInputs(void)
     SDL_Event ev;
     //process events until event queue is empty
     while (SDL_PollEvent(&ev)) {
+        kfx::DevTools::instance().queueEvent(&ev);
         process_event(&ev);
     }
+    sync_overlay_mouse_grab();
 
     return (lbUserQuit < 1);
 }

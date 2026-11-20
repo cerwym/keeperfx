@@ -68,6 +68,7 @@ public:
     void FGResolveMapFade() override;
     void FGExecuteImagePresentOverlay() override;
     void FGExecuteCursor() override;
+    void FGDrawDevToolsOverlay() override;
 
     bool ScheduleScreenshot(const char* path, int fmt) override;
     void FGCaptureScreenshot() override;

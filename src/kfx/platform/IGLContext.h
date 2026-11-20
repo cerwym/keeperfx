@@ -19,6 +19,13 @@ public:
     virtual bool SetSwapInterval(int interval) = 0;
     /** Looks up GL entry points by name, for the GL function loader. */
     virtual ProcLoader GetProcLoader() const = 0;
+
+    /** The real native context handle (SDL_GLContext, cast to void*), for
+     *  code that must bind directly to it (e.g. the ImGui debug overlay's
+     *  SDL3 platform binding). Returns nullptr for any backend that doesn't
+     *  support it -- harmless everywhere except the one call site that
+     *  actually needs it. */
+    virtual void* GetNativeContextHandle() const { return nullptr; }
 };
 
 #endif // IGLCONTEXT_H

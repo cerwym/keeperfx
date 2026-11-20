@@ -6,6 +6,8 @@
 #include "kfx/platform/IPlatform.h"
 #include "kfx/platform/IWindowSystem.h"
 #include "kfx/platform/IGLContext.h"
+#include "kfx/imgui/DevTools.h"
+#include "kfx/imgui/backends/GLImGuiBackend.h"
 #include "kfx/renderer/opengl/GLFunctions.h"
 #include "kfx/renderer/opengl/GLSpriteAtlas.h"
 #include "kfx/renderer/opengl/GLUIRenderer.h"
@@ -38,6 +40,7 @@
 #include <SDL3/SDL.h>
 #include <SDL3_image/SDL_image.h> // IMG_SavePNG (screenshots), Todo : move to platform layer
 #include <cstring>
+#include <memory>
 #include <string>
 #include <vector>
 #include "post_inc.h"
@@ -453,6 +456,26 @@ void RendererOpenGL::render_thread_init()
     m_impl->write_idx = 0;
 
     glClearColor(0.06f, 0.06f, 0.10f, 1.0f);
+
+    // ImGui debug overlay (optional; never allowed to fail renderer init --
+    // this is debug tooling, not a required subsystem).
+    // GLImGuiBackend's implementation only exists (and only links) when
+    // KEEPERFX_IMGUI_ENABLED is defined -- unlike kfx::DevTools's own
+    // methods, which are always safe to call, naming a concrete backend
+    // type here unavoidably needs this one #ifdef, since this is the one
+    // place that decides which concrete backend to construct.
+#ifdef KEEPERFX_IMGUI_ENABLED
+    {
+        auto backend = std::make_unique<kfx::GLImGuiBackend>(
+            GetPlatform()->GetWindowSystem()->GetNativeWindowHandle(),
+            m_gl_context->GetNativeContextHandle());
+        if (!kfx::DevTools::instance().initOverlay(std::move(backend)))
+        {
+            WARNLOG("RendererOpenGL::Init: ImGui debug overlay init failed; continuing without it");
+        }
+    }
+#endif
+
     m_impl->init_ok = true;
 }
 
@@ -504,6 +527,18 @@ void RendererOpenGL::render_thread_work()
     {
         KFX_ZONE_COLOR("RendererOpenGL::PresentScreenTarget", KFX_COLOR_RENDER_GPU);
         m_impl->PresentScreenTarget(fd);
+    }
+
+    {
+        // ImGui debug overlay: drawn directly on the window's own
+        // framebuffer, at the window's real drawable size, after the screen
+        // target has already been blitted/scaled into it -- see
+        // FGDrawDevToolsOverlay()'s comment for why it isn't drawn there.
+        // PresentScreenTarget() leaves the screen-target FBO bound, not 0.
+        KFX_ZONE_COLOR("RendererOpenGL::DrawDevToolsOverlay", KFX_COLOR_RENDER_GPU);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glViewport(0, 0, fd.drawable_w, fd.drawable_h);
+        kfx::DevTools::instance().drawOverlay();
     }
 }
 
@@ -686,10 +721,23 @@ void RendererOpenGL::FGExecuteCursor()
     m_impl->cursor.DrawSnapshot(fd.cursor_snapshot);
 }
 
+void RendererOpenGL::FGDrawDevToolsOverlay()
+{
+    // Deliberately empty: this hook runs while the offscreen screen-target
+    // FBO is still bound (RenderGraph::Execute()'s fixed ordering), and that
+    // target gets blitted, scaled and letterboxed into the window by
+    // PresentScreenTarget() afterwards. Drawing ImGui here would get scaled/
+    // clipped along with it, and its mouse hit-testing (window coordinates)
+    // would disagree with where it visibly ends up. The real draw happens
+    // in render_thread_work(), after PresentScreenTarget(), directly on the
+    // window's own framebuffer -- see the comment there.
+}
+
 void RendererOpenGL::render_thread_cleanup()
 {
     if (m_impl->functions_loaded)
     {
+        kfx::DevTools::instance().shutdownOverlay();
         m_impl->resource_mapper.ShutdownAll();
         m_impl->ui.Shutdown();
         m_impl->atlas.Free();
