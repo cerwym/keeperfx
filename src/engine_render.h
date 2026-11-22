@@ -94,6 +94,9 @@ enum stripey_line_colors {
     SLC_GREEN2,
     SLC_DARKGREEN,
     SLC_MIXEDGREEN,
+    SLC_BEIGE,
+    SLC_SIENNA,
+    SLC_DARKBROWN,
     STRIPEY_LINE_COLOR_COUNT // Must always be the last entry (add new colours above this line)
 };
 
@@ -106,6 +109,10 @@ extern struct stripey_line colored_stripey_lines[];
 extern unsigned char poly_pool[POLY_POOL_SIZE];
 extern unsigned char *poly_pool_end;
 extern long cells_away;
+/** hide ceiling while being carried (possession) */
+extern TbBool engine_hide_ceiling;
+extern TbBool engine_view_above_walls;
+extern uint32_t engine_view_distance_limit;
 extern float hud_scale;
 extern int creature_status_size;
 extern int line_box_size;
@@ -135,8 +142,6 @@ extern long const orient_to_mapV1[];
 extern long const orient_to_mapV2[];
 extern long const orient_to_mapV3[];
 extern long const orient_to_mapV4[];
-extern long box_lag_compensation_x;
-extern long box_lag_compensation_y;
 extern Offset vert_offset[3];
 extern Offset hori_offset[3];
 extern Offset high_offset[3];
@@ -165,6 +170,7 @@ void setup_rotate_stuff(long a1, long a2, long a3, long a4, long a5, long a6, lo
 
 void process_keeper_sprite(short x, short y, unsigned short a3, short kspr_angle, unsigned char a5, long a6);
 void draw_status_sprites(long a1, long a2, struct Thing *thing);
+unsigned short choose_health_sprite(const struct Thing* thing);
 
 // Room-flag pole/top and floating gold/damage text raster. No longer static:
 // GLWorldViewRenderer's own bucket walk calls these directly (same reason as
@@ -220,11 +226,12 @@ TbBool resolve_keepersprite_cursor_geometry(short x, short y, unsigned short ksp
     short kspr_angle, unsigned char sprgroup, long scale,
     struct SpriteScale *out_scale,
     int32_t *out_draw_idx, const unsigned char **out_data, int *out_src_w, int *out_src_h);
-void draw_map_volume_box(long cor1_x, long cor1_y, long cor2_x, long cor2_y, long floor_height_z, unsigned char color);
+void draw_map_volume_box(struct MapVolumeBox *box, long cor1_x, long cor1_y, long cor2_x, long cor2_y, long floor_height_z, unsigned char color);
 
-void update_engine_settings(struct PlayerInfo *player);
+void update_engine_settings(void);
 void draw_view(struct Camera *cam, unsigned char a2);
 void draw_frontview_engine(struct Camera *cam);
+MapCoord get_rendered_floor_height(MapSubtlCoord stl_x, MapSubtlCoord stl_y);
 TbBool map_to_screen(struct Coord3d *pos, int32_t *screen_x, int32_t *screen_y);
 
 // Rasterize the bucket list built by the most recent draw_view()/

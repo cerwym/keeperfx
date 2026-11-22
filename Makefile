@@ -111,7 +111,7 @@ CU_OBJS := \
 	$(OBJDIR)/cu/TestRun.o \
 	$(OBJDIR)/cu/Util.o
 LINKLIB = -mwindows \
-	-L"sdl/lib" -lSDL3 -lSDL3_mixer -lSDL3_image \
+	-L"sdl/lib" -lSDL3 -lSDL3_image \
 	-L"deps/ffmpeg/libavformat" -lavformat \
 	-L"deps/ffmpeg/libavcodec" -lavcodec \
 	-L"deps/ffmpeg/libswresample" -lswresample \
@@ -176,7 +176,7 @@ $(TESTS_OBJ) $(CU_OBJS): .EXTRA_PREREQS = $(OBJDIR)/tests/.build_config
 DEPFLAGS = -MMD -MP -MF "$(@:%.o=%.d)" -MT"$@"
 DEFFLAGS = -DSPNG_STATIC=1 -DAL_LIBTYPE_STATIC
 DEBUG ?= 0
-OPTFLAGS = -march=x86-64 -fno-omit-frame-pointer $(if $(filter 1,$(DEBUG)),-O0,-O3)
+OPTFLAGS = -march=x86-64 -msse2 -mfpmath=sse -ffp-contract=off -fno-omit-frame-pointer $(if $(filter 1,$(DEBUG)),-O0,-O3)
 DBGFLAGS = $(if $(filter 1,$(DEBUG)),-g -DDEBUG,$(if $(CV2PDB),-g,))
 std_LOGFLAGS = -DBFDEBUG_LEVEL=0
 hvlog_LOGFLAGS = -DBFDEBUG_LEVEL=10
@@ -187,7 +187,6 @@ WARNFLAGS = \
 	-Werror \
 	-Wno-sign-compare \
 	-Wno-unused-parameter \
-	-Wno-maybe-uninitialized \
 	-Wno-strict-aliasing \
 	-Wno-unknown-pragmas \
 	-Wno-format-truncation
@@ -369,7 +368,7 @@ src/moonphase.c: deps/astronomy/include/astronomy.h
 deps/centitoml/toml_api.c: deps/centijson/include/json.h
 deps/centitoml/toml_conv.c: deps/centijson/include/json.h
 src/bflib_fmvids.cpp: deps/ffmpeg/libavformat/avformat.h
-src/bflib_sndlib.cpp: deps/openal/include/AL/al.h
+src/kfx/audio/SoundBank.cpp src/kfx/audio/AudioSystem.cpp src/kfx/audio/SoundEffects.cpp src/kfx/audio/MusicStream.cpp src/kfx/audio/AudioCallback.cpp src/kfx/audio/AudioStream.cpp: deps/openal/include/AL/al.h
 src/net_exchange_gameplay.c: deps/zlib/include/zlib.h
 src/net_resync.cpp: deps/zlib/include/zlib.h
 src/replay_rewind.c: deps/zlib/include/zlib.h

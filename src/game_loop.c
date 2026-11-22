@@ -50,6 +50,7 @@
 #include "config_keeperfx.h"
 #include "api.h"
 #include "player_instances.h"
+#include "net_game.h"
 #include "lvl_filesdk1.h"
 #include "config_sounds.h"
 #include "lens_api.h"
@@ -261,7 +262,7 @@ void process_dungeon_destroy(struct Thing* heartng)
         break;
     case 3:
         // Drop all held things, by keeper
-        if ((dungeon->num_things_in_hand > 0) && ((game.conf.rules[plyr_idx].gameplay.classic_bugs_flags & ClscBug_NoHandPurgeOnDefeat) == 0))
+        if ((game.conf.rules[plyr_idx].gameplay.classic_bugs_flags & ClscBug_NoHandPurgeOnDefeat) == 0)
         {
             if (no_backup)
                 dump_all_held_things_on_map(plyr_idx, central_pos->x.stl.num, central_pos->y.stl.num);
@@ -332,22 +333,12 @@ static void force_application_close()
 {
     extern int frontend_menu_state;
 
-    if (frontend_menu_state == 0)
-    {
-        struct PlayerInfo* player = get_my_player();
-        if (player != INVALID_PLAYER)
-        {
-            set_players_packet_action(player, PckA_ForceApplicationClose, 0, 0, 0, 0);
-        }
-        else
-        {
-            exit_keeper = 1;
-        }
+    TbBool network_paused = network_is_active() && flag_is_set(game.operation_flags, GOF_Paused);
+    if ((frontend_menu_state == 0) && (get_my_player() != INVALID_PLAYER) && !network_paused) {
+        set_players_packet_action(get_my_player(), PckA_ForceApplicationClose, 0, 0, 0, 0);
+        return;
     }
-    else
-    {
-        exit_keeper = 1;
-    }
+    exit_keeper = 1;
 }
 
 static bool keeper_wait_for_screen_focus()
@@ -543,7 +534,9 @@ void gameplay_loop_draw()
 void network_yield_waiting_gameplay_packets()
 {
     lbBufferKeyPresses = true;
-    poll_inputs();
+    if (!poll_inputs()) {
+        exit_keeper = 1;
+    }
     lbBufferKeyPresses = false;
     gameplay_loop_draw();
     update_gameplay_delta_time();
@@ -660,6 +653,20 @@ static void gameplay_loop_logic()
     }
     if (local_state.process_turn_time > turns_per_second + 1)
         local_state.process_turn_time = turns_per_second + 1;
+    // In a network game the other players only wait for this game once they have used up the
+    // input lag, so after a stall it is behind them by up to that many turns: catch those up,
+    // but no more. Running more of the missed turns back to back would take it ahead of the
+    // others, where it waits for their packets each turn and takes them for network delay (and
+    // the input lag goes up). Nobody waits for a spectator, which catches up at its own pace
+    // (multiplayer_clock_adjust). The same limit applies after waiting for the network, so it is
+    // never under two turns: with no input lag every turn waits a little for the others'
+    // packets, and throwing that time away would slow the whole game down.
+    if (network_is_active() && !network_user_is_spectator(netstate.my_id))
+    {
+        float catch_up_limit = max(game.input_lag_turns + 1, 2);
+        if (local_state.process_turn_time > catch_up_limit)
+            local_state.process_turn_time = catch_up_limit;
+    }
     while (local_state.process_turn_time < 1.0)
     {
         gameplay_loop_draw();
@@ -790,7 +797,7 @@ static TbBool should_use_delta_time_on_menu()
         case FeSt_LEVEL_SELECT:
         case FeSt_CAMPAIGN_SELECT:
         case FeSt_MAPPACK_SELECT:
-        case FeSt_MP_MAPPACK_SELECT:
+        case FeSt_SKIRMISH_LOBBY:
         case FeSt_LAND_VIEW:
         case FeSt_NETLAND_VIEW:
         case FeSt_TORTURE:
@@ -951,8 +958,6 @@ static TbBool wait_at_frontend(void)
     // Note that we cannot use LbMoveGameCursorToHostCursor for this, because the buffer position may remain unchanged.
     LbMouseSetPositionInitial(lbDisplay.MMouseX, lbDisplay.MMouseY);
 
-    try_restore_frontend_error_box();
-
     memset(lbKeyPressed, 0, sizeof(lbKeyPressed));
     poll_inputs();
     clear_mouse_pressed_lrbutton();
@@ -1049,6 +1054,7 @@ static TbBool wait_at_frontend(void)
           break;
     case FeSt_START_MPLEVEL:
           memset(&intralvl, 0, sizeof(struct IntralevelData));
+          clear_custom_intralevel_data();
           set_flag(local_system_flags, GSF_NetworkActive);
           skip_high_score_screen = 1;
           game.game_kind = GKind_MultiGame;
@@ -1094,10 +1100,10 @@ static TbBool wait_at_frontend(void)
     return true;
 }
 
-static TbBool player_skips_heart_zoom(const struct PlayerInfo *player)
+static TbBool user_skips_heart_zoom(NetUserId user)
 {
     const struct UserState *host = get_user_state(SERVER_ID);
-    const struct UserState *ustate = get_player_user_state(player);
+    const struct UserState *ustate = get_user_state(user);
     if (user_state_invalid(ustate))
         ustate = host;
     return (game.game_kind == GKind_LocalGame) && (host->prefs[UPref_SkipHeartZoom] != 0) && (ustate->prefs[UPref_SkipHeartZoom] != 0);
@@ -1125,13 +1131,15 @@ void game_loop(void)
       int32_t mspos_y_bak = lbDisplay.MMouseY;
 
       if (((game.game_kind != GKind_LocalGame) || (game.save_game_slot == -1)) && (!network_is_active() || net_join_role != NetRole_Spectator)) {
-          for (int i = 0; i < PLAYERS_COUNT; i++) {
-              struct PlayerInfo *player = get_player(i);
-              if (player_exists(player) && ((player->allocflags & PlaF_CompCtrl) == 0) && !player_skips_heart_zoom(player)) {
-                  set_user_instance(get_player_primary_user(player), PI_HeartZoom, 0);
+          for (NetUserId user = 0; user < MAX_NET_USERS; user++) {
+              if (!user_present(user))
+                  continue;
+              struct PlayerInfo *player = get_user_player(user);
+              if (player_exists(player) && ((player->allocflags & PlaF_CompCtrl) == 0) && !user_skips_heart_zoom(user)) {
+                  set_user_instance(user, PI_HeartZoom, 0);
               }
           }
-          if (player_skips_heart_zoom(get_my_player()) && !replay.load_enable) {
+          if (user_skips_heart_zoom(get_my_user()) && !replay.load_enable) {
               toggle_status_menu(1); // Required when skipping PI_HeartZoom
           }
       } else
@@ -1163,7 +1171,7 @@ void game_loop(void)
       GameT.Hours = 0;
       if (!TimerNoReset)
       {
-          if (player_skips_heart_zoom(get_my_player()))
+          if (user_skips_heart_zoom(get_my_user()))
           {
               timerstarttime = starttime;
           }
@@ -1210,7 +1218,6 @@ void game_loop(void)
     if ((local_system_flags & GSF_CaptureMovie) != 0) {
         movie_record_stop();
     }
-    ShutDownSDLAudio();
     SYNCDBG(7,"Done");
 }
 

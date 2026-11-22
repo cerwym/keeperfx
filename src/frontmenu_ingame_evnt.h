@@ -31,6 +31,7 @@ extern "C" {
 
 struct GuiMenu;
 struct GuiButton;
+struct TbSprite;
 
 /******************************************************************************/
 enum EventButtonState {
@@ -61,10 +62,15 @@ short zoom_to_fight(PlayerNumber plyr_idx);
 void draw_bonus_timer(void);
 TbBool bonus_timer_enabled(void);
 void draw_timer(void);
+void draw_archon_co_users(void);
+void sprite_visible_box(const struct TbSprite *spr, int *left, int *top, int *right, int *bottom);
 void draw_frametime(void);
 void draw_gameturn_timer(void);
 void draw_watched_player_name(void);
 TbBool mouse_is_over_watched_player_name(void);
+void draw_paused_message(int tx_units_per_px);
+TbBool mouse_is_over_paused_message(void);
+TbBool mouse_is_over_clickable_hud_text(void);
 void draw_consolelog(void);
 void draw_network_stats(void);
 int font_size_units_per_px(int font_size);

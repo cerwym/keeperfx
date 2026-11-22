@@ -12,10 +12,12 @@
 #include "bflib_vidraw.h"
 #include "bflib_video.h"
 #include "config_spritecolors.h"
+#include "cursor_tag.h"
 #include "dungeon_data.h"
 #include "engine_redraw.h"
 #include "engine_render.h"
 #include "frontend.h"
+#include "frontmenu_ingame_evnt.h"
 #include "frontmenu_ingame_map.h"
 #include "game_legacy.h"
 #include "gui_frontmenu.h"
@@ -100,7 +102,7 @@ void observer_reset(void)
 
 void observer_set_packet_cursor(struct Packet *pckt)
 {
-    if (pckt->action != PckA_None || get_local_view_type(get_my_player()) != PVT_DungeonTop) {
+    if (pckt->action != PckA_None || get_local_view_type() != PVT_DungeonTop) {
         return;
     }
     int32_t mouse_screen_x = GetMouseX();
@@ -132,7 +134,7 @@ static TbBool observer_decode_cursor_offset(int32_t par, int32_t *offset)
 
 void observer_store_packets(const struct Packet *packets)
 {
-    if (!observer_is_active() || (packets != NULL && replay_playback_is_paused())) {
+    if (packets != NULL && replay_playback_is_paused()) {
         return;
     }
     memcpy(observer_previous_cursors, observer_cursors, sizeof(observer_previous_cursors));
@@ -214,7 +216,7 @@ void detach_observer_camera(void)
     if (is_observer_camera_active()) {
         return;
     }
-    const unsigned char view_type = get_local_view_type(get_my_player());
+    const unsigned char view_type = get_local_view_type();
     enter_observer_camera();
     if (view_type == PVT_MapScreen) {
         set_observer_camera_view(PVT_MapScreen);
@@ -259,7 +261,7 @@ static TbBool observer_cursor_to_screen(const struct ObserverCursor *cursor, int
     struct Coord3d cursor_map_position;
     cursor_map_position.x.val = cursor->packet.pos_x;
     cursor_map_position.y.val = cursor->packet.pos_y;
-    cursor_map_position.z.val = get_floor_height_at(&cursor_map_position);
+    cursor_map_position.z.val = get_rendered_floor_height(coord_subtile(cursor->packet.pos_x), coord_subtile(cursor->packet.pos_y));
     return map_to_screen(&cursor_map_position, screen_x, screen_y);
 }
 
@@ -270,6 +272,14 @@ static void observer_set_faded_cursor(const struct TbSprite *spr, int32_t screen
     observer_faded_cursor_position[1] = screen_y - scale_ui_value_lofi(hot_y);
 }
 
+static void draw_faded_cursor_sprite(const struct TbSprite *spr, int32_t pos_x, int32_t pos_y, unsigned short fade_flags)
+{
+    unsigned short draw_flags = RendererGetDrawFlags();
+    RendererSetDrawFlags(fade_flags);
+    LbSpriteDrawScaled(pos_x, pos_y, spr, scale_ui_value_lofi(spr->SWidth), scale_ui_value_lofi(spr->SHeight));
+    RendererSetDrawFlags(draw_flags);
+}
+
 void observer_draw_faded_cursor(void)
 {
     const struct TbSprite *spr = observer_faded_cursor_sprite;
@@ -277,10 +287,74 @@ void observer_draw_faded_cursor(void)
         return;
     }
     observer_faded_cursor_sprite = NULL;
-    unsigned short draw_flags = RendererGetDrawFlags();
-    RendererSetDrawFlags(Lb_SPRITE_TRANSPAR4);
-    LbSpriteDrawScaled(observer_faded_cursor_position[0], observer_faded_cursor_position[1], spr, scale_ui_value_lofi(spr->SWidth), scale_ui_value_lofi(spr->SHeight));
-    RendererSetDrawFlags(draw_flags);
+    draw_faded_cursor_sprite(spr, observer_faded_cursor_position[0], observer_faded_cursor_position[1], Lb_SPRITE_TRANSPAR4);
+}
+
+static TbBool packet_has_map_cursor(const struct Packet *pckt)
+{
+    return (pckt->control_flags & (PCtr_Gui | PCtr_MapCoordsValid)) == PCtr_MapCoordsValid;
+}
+
+static TbBool co_user_cursor_map_position(NetUserId user, struct Coord3d *pos)
+{
+    const struct Packet *pckt = &observer_cursors[user].packet;
+    if (!packet_has_map_cursor(pckt)) {
+        return false;
+    }
+    pos->x.val = pckt->pos_x;
+    pos->y.val = pckt->pos_y;
+    const struct Packet *previous = &observer_previous_cursors[user].packet;
+    if (packet_has_map_cursor(previous)) {
+        pos->x.val = lroundf(interpolate(previous->pos_x, pckt->pos_x));
+        pos->y.val = lroundf(interpolate(previous->pos_y, pckt->pos_y));
+    }
+    pos->z.val = get_rendered_floor_height(coord_subtile(pos->x.val), coord_subtile(pos->y.val));
+    return true;
+}
+
+/** Inverse of point_to_overhead_map(). */
+static TbBool map_to_parchment_screen(const struct Coord3d *pos, int32_t *screen_x, int32_t *screen_y)
+{
+    struct TbRect map_area;
+    const int32_t block_size = get_parchment_map_area_rect(&map_area);
+    const int32_t x = map_area.left + (pos->x.val - COORD_PER_STL / 2) * block_size / (COORD_PER_STL * STL_PER_SLB);
+    const int32_t y = map_area.top + (pos->y.val - COORD_PER_STL / 2) * block_size / (COORD_PER_STL * STL_PER_SLB);
+    if (RendererPointInZoomBoxScreenRect(x, y)) {
+        return false;
+    }
+    *screen_x = x * pixel_size;
+    *screen_y = y * pixel_size;
+    return true;
+}
+
+void draw_co_user_cursors(void)
+{
+    const unsigned char view_type = get_displayed_view_type();
+    if ((view_type != PVT_DungeonTop && view_type != PVT_MapScreen) || get_local_map_fade() != PVT_None
+     || is_observer_camera_active() || observer_own_cursor_solid) {
+        return;
+    }
+    if (view_type == PVT_DungeonTop && game.small_map_state == 2) {
+        return;
+    }
+    for (NetUserId user = 0; user < MAX_NET_USERS; user++) {
+        if (!is_co_user_of_displayed_user(user) || get_user_view_type(user) != view_type) {
+            continue;
+        }
+        struct Coord3d pos;
+        int32_t screen_x;
+        int32_t screen_y;
+        if (!co_user_cursor_map_position(user, &pos)) {
+            continue;
+        }
+        const TbBool on_screen = (view_type == PVT_MapScreen) ? map_to_parchment_screen(&pos, &screen_x, &screen_y) : map_to_screen(&pos, &screen_x, &screen_y);
+        if (!on_screen) {
+            continue;
+        }
+        const struct TbSprite *spr = get_sprite(pointer_sprites, get_player_colored_pointer_icon_idx(MousePG_Arrow, get_net_user_player_number(user)));
+        draw_faded_cursor_sprite(spr, screen_x - scale_ui_value_lofi(OBSERVER_OWN_CURSOR_HOTSPOT_X), screen_y - scale_ui_value_lofi(OBSERVER_OWN_CURSOR_HOTSPOT_Y),
+            (view_type == PVT_MapScreen) ? Lb_SPRITE_TRANSPAR8 : Lb_SPRITE_TRANSPAR4);
+    }
 }
 
 unsigned short observer_watched_cursor_draw_flags(void)
@@ -350,11 +424,11 @@ void observer_update_cursor(void)
 TbBool gameplay_cursor_is_over_gui(void)
 {
     if (!observer_is_following_user()) {
-        return game_is_busy_doing_gui();
+        return game_is_busy_doing_gui() || mouse_is_over_clickable_hud_text();
     }
     const struct Packet *pckt = observer_get_view_packet();
     return pckt == NULL || flag_is_set(pckt->control_flags, PCtr_Gui)
-        || get_local_view_type(get_my_player()) != PVT_DungeonTop
+        || get_local_view_type() != PVT_DungeonTop
         || game.small_map_state == 2 || a_menu_window_is_active();
 }
 
@@ -420,6 +494,8 @@ void observer_update_view(void)
             turn_on_menu(GMnu_CREATURE_QUERY1);
             toggle_first_person_menu(false);
             toggle_first_person_menu(local_state.show_gui);
+        } else if (view_type == PVT_DungeonTop) {
+            turn_on_main_panel_menu();
         }
         setup_engine_window(0, 0, MyScreenWidth, MyScreenHeight);
     }
@@ -431,7 +507,7 @@ void observer_set_view_mode(unsigned char mode)
     TbBool front_view;
     TbBool wibble = local_observer_user_state.prefs[UPref_Wibble] != 0;
     rotate_mode_to_dungeon_view(mode, &front_view, &wibble);
-    set_engine_view(&local_observer_player, front_view, wibble);
+    set_user_dungeon_view(OBSERVER_USER, front_view, wibble);
     if (is_observer_camera_active()) {
         local_state.observer_camera_idx = CamIV_Isometric;
         if (front_view) {
@@ -448,7 +524,7 @@ static void observer_clear_query(unsigned char state)
     }
     local_observer_user_state.instance_num = PI_Unset;
     set_user_work_state(OBSERVER_USER, state, 0);
-    clear_selected_thing(&local_observer_player);
+    clear_selected_thing(&local_observer_user_state);
 }
 
 static void observer_select_user(NetUserId user, PlayerNumber plyr_idx)
@@ -517,12 +593,11 @@ void observer_update_query(void)
             return;
         }
     }
-    struct PlayerInfo *player = get_my_player();
-    if (get_local_view_type(player) != PVT_DungeonTop || game_is_busy_doing_gui()) {
+    if (get_local_view_type() != PVT_DungeonTop || game_is_busy_doing_gui()) {
         return;
     }
     struct Coord3d pos = {0};
-    if (screen_to_map(get_local_active_camera(player), GetMouseX(), GetMouseY(), &pos)) {
+    if (screen_to_map(get_local_active_camera(),GetMouseX(), GetMouseY(), &pos)) {
         struct Thing *thing = get_creature_near(pos.x.val, pos.y.val);
         if (thing_is_creature(thing)) {
             local_state.local_thing_under_hand = thing->index;
@@ -532,7 +607,7 @@ void observer_update_query(void)
 
 TbBool observer_query_input(void)
 {
-    if (!is_observer_camera_active() || get_local_view_type(&local_observer_player) != PVT_DungeonTop) {
+    if (!is_observer_camera_active() || get_local_view_type() != PVT_DungeonTop) {
         return false;
     }
     struct Thing *thing = thing_get(local_state.local_thing_under_hand);
@@ -554,7 +629,7 @@ void observer_init(PlayerNumber camera_player_number)
 {
     observer_reset();
     build_local_user_preferences(local_observer_user_state.prefs);
-    const struct UserState *camera_state = get_player_user_state(get_player(camera_player_number));
+    const struct UserState *camera_state = get_player_primary_user_state(get_player(camera_player_number));
     if (!user_state_invalid(camera_state)) {
         local_observer_user_state.dungeon_camera = camera_state->dungeon_camera;
         local_observer_user_state.prefs[UPref_FrontView] = camera_state->prefs[UPref_FrontView];

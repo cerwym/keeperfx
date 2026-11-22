@@ -87,6 +87,7 @@ TbBool update_controlled_creature_movement(const struct Thing *thing, struct Cre
 void slow_down_controlled_creature(struct CreatureControl *cctrl);
 struct Thing* kill_creature(struct Thing *creatng, struct Thing *killertng,
     PlayerNumber killer_plyr_idx, CrDeathFlags flags);
+TbBool creature_counts_in_dungeon_stats(const struct Thing *creatng);
 void update_creature_count(struct Thing *thing);
 TngUpdateRet process_creature_state(struct Thing *thing);
 
@@ -98,16 +99,16 @@ void set_creature_level(struct Thing *thing, CrtrExpLevel exp_level);
 void init_creature_level(struct Thing *thing, CrtrExpLevel exp_level);
 long get_creature_speed(const struct Thing *thing);
 
-TbBool control_creature_as_controller(struct PlayerInfo *player, struct Thing *thing);
+TbBool control_creature_as_controller(NetUserId user, struct Thing *thing);
 TbBool thing_can_be_controlled_as_controller(struct Thing* thing);
-TbBool control_creature_as_passenger(struct PlayerInfo *player, struct Thing *thing);
-void leave_creature_as_controller(struct PlayerInfo *player, struct Thing *thing);
+TbBool control_creature_as_passenger(NetUserId user, struct Thing *thing);
+void leave_creature_as_controller(NetUserId user, struct Thing *thing);
 void prepare_to_controlled_creature_death(struct Thing* thing);
 ThingIndex process_player_use_instance(struct Thing *thing, CrInstance inst_id, const struct Packet *packet);
 ThingIndex get_human_controlled_creature_target(struct Thing *thing, CrInstance inst_id, const struct Packet *packet);
 ThingIndex find_possession_target(struct Thing *caster, CrInstance inst_id, int32_t yaw);
 TbBool possession_instance_can_start(struct Thing *thing, const struct CreatureControl *cctrl, CrInstance inst_id, GameTurn turn, const struct Packet *pckt, TbBool allow_unavailable);
-struct Thing *get_creature_near_for_controlling(PlayerNumber plyr_idx, MapCoord x, MapCoord y);
+struct Thing *get_creature_near_for_controlling(PlayerNumber plyr_idx, NetUserId user, MapCoord x, MapCoord y);
 
 TbBool load_swipe_graphic_for_creature(const struct Thing *thing);
 void free_swipe_graphic(void);
@@ -221,7 +222,7 @@ TbBool free_spell_slot(struct Thing *thing, int slot_idx);
 
 void controlled_creature_pick_thing_up(struct Thing *creatng, struct Thing *picktng, PlayerNumber plyr_idx);
 void controlled_creature_drop_thing(struct Thing *creatng, struct Thing *droptng, PlayerNumber plyr_idx);
-void direct_control_pick_up_or_drop(PlayerNumber plyr_idx, struct Thing *creatng);
+void direct_control_pick_up_or_drop(NetUserId user, struct Thing *creatng);
 void display_controlled_pick_up_thing_name(struct Thing *picktng, unsigned long timeout, PlayerNumber plyr_idx);
 struct Thing *controlled_get_thing_to_pick_up(struct Thing *creatng);
 TbBool thing_is_pickable_by_digger(struct Thing *picktng, struct Thing *creatng);
@@ -231,7 +232,7 @@ void controlled_continue_looking_excluding_diagonal(struct Thing *creatng, MapSu
 short get_creature_eye_height(const struct Thing *creatng);
 
 void query_creature(NetUserId user, ThingIndex index, TbBool reset, TbBool zoom);
-TbBool creature_can_be_queried(struct PlayerInfo *player, struct Thing *creatng);
+TbBool creature_can_be_queried(NetUserId user, struct Thing *creatng);
 /******************************************************************************/
 TbBool thing_is_creature(const struct Thing *thing);
 TbBool thing_is_dead_creature(const struct Thing *thing);
@@ -257,6 +258,7 @@ void throw_out_gold(struct Thing* thing, long amount);
 ThingModel get_random_creature_kind_with_model_flags(unsigned long model_flags);
 ThingModel get_random_appropriate_creature_kind(ThingModel original_model);
 struct Thing *grow_up_creature(struct Thing *thing, ThingModel grow_up_model, CrtrExpLevel grow_up_level);
+unsigned char path_tileset_id(struct Thing *thing);
 /******************************************************************************/
 #ifdef __cplusplus
 }

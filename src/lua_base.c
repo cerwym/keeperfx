@@ -1,5 +1,7 @@
 #include "pre_inc.h"
 
+#include <stdlib.h>
+#include <string.h>
 #include <lua.h>
 #include <lauxlib.h>
 #include <lualib.h>
@@ -9,9 +11,11 @@
 #include "bflib_basics.h"
 #include "bflib_fileio.h"
 #include "config_keeperfx.h"
+#include "lens_api.h"
 #include "game_legacy.h"
 #include "globals.h"
 #include "gui_msgs.h"
+#include "net_filecheck.h"
 #include "replay.h"
 
 #include "config_creature.h"
@@ -21,12 +25,17 @@
 #include "config_objects.h"
 #include "config_trapdoor.h"
 #include "config_crtrstates.h"
+#include "config_textures.h"
 
 #include "post_inc.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#define LUA_MODULE_LOADER_LUA 2
+#define LUA_MODULE_LOADER_C 3
+#define LUA_MODULE_LOADER_C_ROOT 4
 
 struct lua_State *Lvl_script = NULL;
 
@@ -124,6 +133,7 @@ TbBool CheckLua(lua_State *L, int result, const char* func)
 
 void close_lua_script()
 {
+    LensManager_ClearCustomLenses(LensManager_GetInstance());
     if(Lvl_script)
         lua_close(Lvl_script);
     Lvl_script = NULL;
@@ -151,6 +161,68 @@ int setLuaPath( lua_State* L)
     lua_setfield(L, -2, "path"); // set the field "path" in table at -2 with value at top of stack
     lua_pop(L, 1); // get rid of package table from top of stack
     return 0; // all done!
+}
+
+static int load_checksummed_lua_file(lua_State *L, const char *fname)
+{
+    add_loaded_file_checksum(fname);
+    return luaL_loadfile(L, fname);
+}
+
+static int load_checksummed_lua_module(lua_State *L)
+{
+    const char *module_name = luaL_checkstring(L, 1);
+    lua_getglobal(L, "package");
+    lua_getfield(L, -1, "searchpath");
+    lua_pushstring(L, module_name);
+    lua_getfield(L, -3, "path");
+    lua_call(L, 2, 2);
+    if (lua_isnil(L, -2)) {
+        return 1;
+    }
+    const char *fname = lua_tostring(L, -2);
+    if (load_checksummed_lua_file(L, fname) != LUA_OK) {
+        return luaL_error(L, "error loading module '%s' from file '%s':\n\t%s", module_name, fname, lua_tostring(L, -1));
+    }
+    return 1;
+}
+
+static int call_checksummed_file_function(lua_State *L)
+{
+    if (lua_type(L, 1) == LUA_TSTRING) {
+        add_loaded_file_checksum(lua_tostring(L, 1));
+    }
+    lua_pushvalue(L, lua_upvalueindex(1));
+    lua_insert(L, 1);
+    lua_call(L, lua_gettop(L) - 1, LUA_MULTRET);
+    return lua_gettop(L);
+}
+
+static void checksum_file_function(lua_State *L, const char *function_name)
+{
+    lua_getglobal(L, function_name);
+    lua_pushcclosure(L, call_checksummed_file_function, 1);
+    lua_setglobal(L, function_name);
+}
+
+static void install_checksummed_lua_loaders(lua_State *L)
+{
+    checksum_file_function(L, "loadfile");
+    checksum_file_function(L, "dofile");
+    lua_getglobal(L, "package");
+    lua_getfield(L, -1, "loaders");
+    lua_pushcfunction(L, load_checksummed_lua_module);
+    lua_rawseti(L, -2, LUA_MODULE_LOADER_LUA);
+    lua_pushnil(L);
+    lua_rawseti(L, -2, LUA_MODULE_LOADER_C);
+    lua_pushnil(L);
+    lua_rawseti(L, -2, LUA_MODULE_LOADER_C_ROOT);
+    lua_pop(L, 2);
+}
+
+static TbBool run_lua_file(lua_State *L, const char *fname, const char *func)
+{
+    return CheckLua(L, load_checksummed_lua_file(L, fname) || lua_pcall(L, 0, LUA_MULTRET, 0), func);
 }
 
 
@@ -252,7 +324,7 @@ static TbBool open_lua_script_for_mod(lua_State* L, LevelNumber lvnum, const str
         fname = prepare_file_fmtpath_mod(mod_dir, FGrp_FxData, "lua/init.lua");
         if (LbFileExists(fname))
         {
-            if (CheckLua(L, luaL_dofile(L, fname), "mod_fxdata_lua_file"))
+            if (run_lua_file(L, fname, "mod_fxdata_lua_file"))
             {
                 result = true;
             }
@@ -268,7 +340,7 @@ static TbBool open_lua_script_for_mod(lua_State* L, LevelNumber lvnum, const str
         fname = prepare_file_fmtpath_mod(mod_dir, FGrp_CmpgConfig, "lua/init.lua");
         if (LbFileExists(fname))
         {
-            if (CheckLua(L, luaL_dofile(L, fname), "mod_campaign_lua_file"))
+            if (run_lua_file(L, fname, "mod_campaign_lua_file"))
             {
                 result = true;
             }
@@ -285,7 +357,7 @@ static TbBool open_lua_script_for_mod(lua_State* L, LevelNumber lvnum, const str
         fname = prepare_file_fmtpath_mod(mod_dir, fgroup, "map%05lu.lua", (unsigned long)lvnum);
         if (LbFileExists(fname))
         {
-            if(CheckLua(L, luaL_dofile(L, fname), "mod_level_script_loading"))
+            if(run_lua_file(L, fname, "mod_level_script_loading"))
             {
                 result = true;
             }
@@ -363,6 +435,142 @@ static void disable_lua_file_io(lua_State *L)
 }
 
 
+/* Deterministic pairs():
+ * Table traversal order in Lua depends on string hashes, and LuaJIT seeds its
+ * string hash from system entropy, so lua_next() visits keys in a different
+ * order in every process (and PUC Lua, used by the browser build, orders them
+ * differently again). Scripts run in the simulation, so a script that acts on
+ * the keys of a table in pairs() order would act in a different order on each
+ * client of a multiplayer game. This pairs() visits the keys in a fixed order:
+ * numbers ascending, then strings by bytes, then booleans; keys that cannot be
+ * ordered (tables, functions, userdata) come last in traversal order, which
+ * can still differ between clients. next() is the stock one. */
+struct LuaSortKey {
+    int rank;
+    lua_Number num;
+    const char *str;
+    size_t len;
+    int pos;
+};
+
+static int lua_sort_key_cmp(const void *va, const void *vb)
+{
+    const struct LuaSortKey *a = (const struct LuaSortKey *)va;
+    const struct LuaSortKey *b = (const struct LuaSortKey *)vb;
+    if (a->rank != b->rank)
+        return (a->rank < b->rank) ? -1 : 1;
+    switch (a->rank)
+    {
+    case 0:
+    case 2:
+        if (a->num != b->num)
+            return (a->num < b->num) ? -1 : 1;
+        break;
+    case 1:
+    {
+        size_t n = (a->len < b->len) ? a->len : b->len;
+        int c = memcmp(a->str, b->str, n);
+        if (c != 0)
+            return (c < 0) ? -1 : 1;
+        if (a->len != b->len)
+            return (a->len < b->len) ? -1 : 1;
+        break;
+    }
+    default:
+        break;
+    }
+    return (a->pos < b->pos) ? -1 : (a->pos > b->pos);
+}
+
+/* The iterator is a Lua function, so LuaJIT can compile loops over pairs()
+ * (with a C iterator every step leaves compiled code). Its state is the table
+ * { t, keys in order, position }. It has no upvalues (rawget is looked up as a
+ * global), so an iterator a script keeps in saved state survives a save. */
+static const char lua_ordered_pairs_iter_src[] =
+    "return function(state)\n"
+    "    local t, keys, i = state[1], state[2], state[3]\n"
+    "    while true do\n"
+    "        i = i + 1\n"
+    "        local k = keys[i]\n"
+    "        if k == nil then\n"
+    "            state[3] = i - 1\n"
+    "            return nil\n"
+    "        end\n"
+    "        local v = rawget(t, k)\n"
+    "        if v ~= nil then\n" // keys removed during the traversal are skipped
+    "            state[3] = i\n"
+    "            return k, v\n"
+    "        end\n"
+    "    end\n"
+    "end\n";
+
+static int lua_ordered_pairs(lua_State *L)
+{
+    luaL_checktype(L, 1, LUA_TTABLE);
+    lua_settop(L, 1); // pairs(t, extra) must not shift the indices below
+    int count = 0;
+    lua_newtable(L); // 2: keys in traversal order; also keeps the key strings alive
+    lua_pushnil(L);
+    while (lua_next(L, 1) != 0) {
+        lua_pop(L, 1);
+        lua_pushvalue(L, -1);
+        lua_rawseti(L, 2, ++count);
+    }
+    // 3: sort records. Userdata rather than malloc: a Lua error below cannot leak it.
+    struct LuaSortKey *keys = (struct LuaSortKey *)lua_newuserdata(L, sizeof(struct LuaSortKey) * (count > 0 ? count : 1));
+    for (int i = 0; i < count; i++) {
+        lua_rawgeti(L, 2, i + 1);
+        struct LuaSortKey *k = &keys[i];
+        memset(k, 0, sizeof(*k));
+        k->pos = i + 1;
+        switch (lua_type(L, -1))
+        {
+        case LUA_TNUMBER:
+            k->rank = 0;
+            k->num = lua_tonumber(L, -1);
+            break;
+        case LUA_TSTRING:
+            k->rank = 1;
+            k->str = lua_tolstring(L, -1, &k->len); // stays valid: the keys table holds the string
+            break;
+        case LUA_TBOOLEAN:
+            k->rank = 2;
+            k->num = lua_toboolean(L, -1);
+            break;
+        default:
+            k->rank = 3;
+            break;
+        }
+        lua_pop(L, 1);
+    }
+    qsort(keys, count, sizeof(struct LuaSortKey), lua_sort_key_cmp);
+    lua_pushvalue(L, lua_upvalueindex(1)); // 4: the iterator
+    lua_createtable(L, 3, 0); // 5: its state
+    lua_pushvalue(L, 1);
+    lua_rawseti(L, 5, 1);
+    lua_createtable(L, count, 0); // the keys in sorted order
+    for (int i = 0; i < count; i++) {
+        lua_rawgeti(L, 2, keys[i].pos);
+        lua_rawseti(L, -2, i + 1);
+    }
+    lua_rawseti(L, 5, 2);
+    lua_pushinteger(L, 0);
+    lua_rawseti(L, 5, 3);
+    lua_pushnil(L);
+    return 3;
+}
+
+static void install_ordered_pairs(lua_State *L)
+{
+    if ((luaL_loadstring(L, lua_ordered_pairs_iter_src) != 0) || (lua_pcall(L, 0, 1, 0) != 0)) {
+        ERRORLOG("Cannot create the pairs() iterator: %s", lua_tostring(L, -1));
+        lua_pop(L, 1);
+        return;
+    }
+    lua_pushcclosure(L, lua_ordered_pairs, 1);
+    lua_setglobal(L, "pairs");
+}
+
 /* @comment
  *     The loading items of open_lua_script and open_lua_script_for_mod need to be consistent.
  */
@@ -399,6 +607,7 @@ TbBool open_lua_script(LevelNumber lvnum)
     }
 
     open_lua_standard_libraries(Lvl_script);
+    install_ordered_pairs(Lvl_script);
     disable_lua_functions(Lvl_script);
     disable_lua_file_io(Lvl_script);
 
@@ -407,6 +616,7 @@ TbBool open_lua_script(LevelNumber lvnum)
     reg_host_functions(Lvl_script);
 
     setLuaPath(Lvl_script);
+    install_checksummed_lua_loaders(Lvl_script);
 
     char* fname = prepare_file_fmtpath(FGrp_FxData, "lua/init.lua");
 
@@ -416,7 +626,7 @@ TbBool open_lua_script(LevelNumber lvnum)
         close_lua_script();
         return false;
     }
-    if (!CheckLua(Lvl_script, luaL_dofile(Lvl_script, fname), "global_lua_file")) {
+    if (!run_lua_file(Lvl_script, fname, "global_lua_file")) {
         ERRORLOG("failed to load global lua script");
         close_lua_script();
         return false;
@@ -425,7 +635,7 @@ TbBool open_lua_script(LevelNumber lvnum)
     fname = prepare_file_fmtpath(FGrp_CmpgConfig, "lua/init.lua");
     if (LbFileExists(fname))
     {
-        if (!CheckLua(Lvl_script, luaL_dofile(Lvl_script, fname), "campaign_lua_file"))
+        if (!run_lua_file(Lvl_script, fname, "campaign_lua_file"))
         {
             ERRORLOG("failed to load campaign lua script");
         }
@@ -435,7 +645,7 @@ TbBool open_lua_script(LevelNumber lvnum)
     fname = prepare_file_fmtpath(fgroup, "map%05lu.lua", (unsigned long)lvnum);
     // Load and parse the Lua File
     if (LbFileExists(fname)) {
-        if (!CheckLua(Lvl_script, luaL_dofile(Lvl_script, fname), "level_script_loading")) {
+        if (!run_lua_file(Lvl_script, fname, "level_script_loading")) {
             ERRORLOG("failed to load level lua script");
         }
     }
@@ -534,9 +744,10 @@ void generate_lua_types_file()
             if (desc[i].name[0] != '\0') ++count;       \
         }                                               \
         fprintf(out, "---@alias %s ", alias_name);      \
-        if (count >= 90) {                              \
+        if (strcmp(alias_name, "texture_pack") == 0)    \
+            fprintf(out, "integer|");                   \
+        else if (count >= 90)                           \
             fprintf(out, "string|");                    \
-        }                                               \
         int written = 0;                                \
         for (int i = 0; desc[i].name != NULL; ++i) {    \
             if (desc[i].name[0] == '\0') continue;      \
@@ -569,6 +780,7 @@ void generate_lua_types_file()
     GENERATE_ALIAS("effect_type", effect_desc);
     GENERATE_ALIAS("spell_type", spell_desc);
     GENERATE_ALIAS("slab_type", slab_desc);
+    GENERATE_ALIAS("texture_pack", texture_pack_desc);
     GENERATE_ALIAS("creature_state", creatrstate_desc);
     GENERATE_ALIAS("shot_type", shot_desc);
     fprintf(out, "\n");

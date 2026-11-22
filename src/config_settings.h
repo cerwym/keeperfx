@@ -44,6 +44,7 @@ struct GameSettings {
     unsigned char video_cluedo_mode;
     unsigned char sound_volume;
     unsigned char music_volume;
+    unsigned char movie_volume;
     unsigned char roomflags_on;
     unsigned short gamma_correction;
     int switching_vidmodes_index; /**< The current position in the list of video modes to switch between with Alt+R (-1 means the index is unset). */
@@ -58,6 +59,7 @@ struct GameSettings {
     int isometric_tilt;
     TbBool highlight_mode;
     uint8_t computer_assistant_kind;
+    uint64_t reconnect_token;
     };
 #pragma pack()
 /******************************************************************************/

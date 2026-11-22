@@ -30,11 +30,14 @@
 #include "gui_msgs.h"
 #include "net_exchange_common.h"
 #include "net_input_lag.h"
+#include "net_lobby.h"
 #include "net_main.h"
 #include "net_spectator.h"
 #include "player_data.h"
 #include "net_game.h"
 #include "packets.h"
+#include "replay.h"
+#include "local_hand.h"
 #include "roomspace_input.h"
 #include "lua_triggers.h"
 #include "keeperfx.hpp"
@@ -52,10 +55,11 @@ int32_t multiplayer_speed_adjustment_ns;
 // TURN_SYNC_MAX_ADJUSTMENT_NS being set too high causes stutters.
 #define REPAIR_HISTORY_RESEND_INTERVAL 200
 #define REPAIR_HISTORY_RECOVERY_INTERVAL 50
-#define FINAL_RESORT_RESYNC_RECOVERY 10000
+#define FINAL_RESORT_RESYNC_RECOVERY (PEER_TIMEOUT_MS * 2)
 #define TURN_SYNC_INTERVAL_MS 250
 #define TURN_SYNC_MAX_ADJUSTMENT_NS 1000000
 #define TURN_SYNC_ADJUST_FACTOR 64
+#define PEER_WAIT_MESSAGE_DELAY_MS 500
 
 struct PacketHistory {
     struct Packet entries[PACKET_HISTORY_SIZE];
@@ -81,6 +85,7 @@ static int64_t server_turn_position_ns = 0;
 static TbClockMSec last_repair_history_send[MAX_NET_USERS];
 static TbClockMSec last_turn_sync_send = 0;
 static NetUserId next_repair_history_user = 0;
+static TbClockMSec missing_packets_wait_start = 0;
 
 static int64_t get_current_turn_position_ns(void)
 {
@@ -169,6 +174,71 @@ TbError process_network_unpause_message(NetUserId source, size_t buffer_size)
 
 static struct QueuedGameplayChat gameplay_chat_queue[GAMEPLAY_CHAT_QUEUE_LEN];
 static int32_t gameplay_chat_queue_count;
+static struct QueuedGameplayChat gameplay_chat_history[MAX_NET_USERS][GAMEPLAY_CHAT_HISTORY_SIZE];
+
+static void show_gameplay_chat_message(NetUserId user, const char *text, TbBool local)
+{
+    char message_type = MsgType_Local;
+    if (!local && (network_is_active() || (game.game_kind == GKind_MultiGame))) {
+        message_type = MsgType_Player;
+    }
+    PlayerNumber plyr_idx = get_net_user_player_number(user);
+    message_add(message_type, plyr_idx, text);
+    if (count_player_users(plyr_idx) > 1) {
+        game.messages[0].archon_digit = min(get_user_archon_index(user) + 1, 9);
+    }
+    play_non_3d_sample(snd_chat_message[user == get_local_user()]);
+}
+
+static TbBool run_chat_command(NetUserId user, const char *text, MapCoord cursor_x, MapCoord cursor_y, TbBool issued_here)
+{
+    char command[PLAYER_MP_MESSAGE_LEN];
+    copy_chat_message(command, text);
+    const enum ConsoleCommandResult result = cmd_exec(get_net_user_player_number(user), command + 1, cursor_x, cursor_y, issued_here);
+    if (((result == CmdR_Succeeded) || (result == CmdR_SucceededLocally)) && network_is_active()) {
+        show_gameplay_chat_message(user, text, result == CmdR_SucceededLocally);
+    }
+    return result != CmdR_Unrecognised;
+}
+
+const struct QueuedGameplayChat *find_gameplay_chat(NetUserId user, GameTurn turn)
+{
+    const struct QueuedGameplayChat *chat = &gameplay_chat_history[user][turn % GAMEPLAY_CHAT_HISTORY_SIZE];
+    if ((chat->turn != turn) || (chat->message[0] == '\0')) {
+        return NULL;
+    }
+    return chat;
+}
+
+void receive_gameplay_chat_message(NetUserId user, const char *message, MapCoord cursor_x, MapCoord cursor_y, GameTurn turn)
+{
+    if ((user < 0) || (user >= MAX_NET_USERS)) {
+        return;
+    }
+    struct QueuedGameplayChat *chat = &gameplay_chat_history[user][turn % GAMEPLAY_CHAT_HISTORY_SIZE];
+    *chat = (struct QueuedGameplayChat){.user = user, .turn = turn, .cursor_x = cursor_x, .cursor_y = cursor_y};
+    copy_chat_message(chat->message, message);
+    if ((message[0] != cmd_char) || !cmd_is_synced(message + 1)) {
+        show_gameplay_chat_message(user, chat->message, false);
+    }
+}
+
+TbBool send_gameplay_chat_message(NetUserId user, const char *message, MapCoord cursor_x, MapCoord cursor_y)
+{
+    if ((message[0] == '\0') || ((message[0] == cmd_char) && !cmd_is_synced(message + 1) && run_chat_command(user, message, cursor_x, cursor_y, true))) {
+        return true;
+    }
+    GameTurn turn = get_gameturn();
+    while ((find_gameplay_chat(user, turn) != NULL) || (get_history_packet(user, turn) != NULL)) {
+        turn++;
+    }
+    if ((GameTurnDelta)(turn - get_gameturn()) >= GAMEPLAY_CHAT_HISTORY_SIZE - 2 * MAXIMUM_INPUT_LAG_TURNS) {
+        return false;
+    }
+    send_network_chat_message_at(user, message, cursor_x, cursor_y, turn);
+    receive_gameplay_chat_message(user, message, cursor_x, cursor_y, turn);
+    return true;
+}
 
 void queue_gameplay_chat_message(NetUserId user, const char *message, MapCoord cursor_x, MapCoord cursor_y)
 {
@@ -205,21 +275,13 @@ void process_queued_chat_messages(void)
 
 void process_gameplay_chat_message(NetUserId user, const char *message, MapCoord cursor_x, MapCoord cursor_y)
 {
-    if (message[0] != '\0')
-        replay_record_chat_message(user, message, cursor_x, cursor_y);
-    PlayerNumber plyr_idx = get_net_user_player_number(user);
-    struct UserState *ustate = get_user_state(user);
-    if (!user_state_invalid(ustate))
-        ustate->init_flags &= ~UsrIF_NewMPMessage;
-    if (message[0] != '\0') {
-        char text[PLAYER_MP_MESSAGE_LEN];
-        copy_chat_message(text, message);
-        lua_on_chatmsg(plyr_idx, text);
-        const TbBool shown = (text[0] != cmd_char) || !cmd_exec(plyr_idx, text + 1, cursor_x, cursor_y) || network_is_active();
-        if (shown) {
-            message_add(MsgType_Player, plyr_idx, text);
-            play_non_3d_sample(snd_chat_message[user == get_local_user()]);
-        }
+    replay_record_chat_message(user, message, cursor_x, cursor_y);
+    lua_on_chatmsg(get_net_user_player_number(user), message);
+    if ((message[0] == cmd_char) && run_chat_command(user, message, cursor_x, cursor_y, (user == get_local_user()) && !replay.load_enable)) {
+        return;
+    }
+    if (!network_is_active() || network_user_is_spectator(netstate.my_id)) {
+        show_gameplay_chat_message(user, message, false);
     }
 }
 
@@ -248,7 +310,7 @@ TbError process_network_turn_sync_message(NetUserId source, const char *buffer, 
 
 void store_packet_history(NetUserId user, const struct Packet *packet)
 {
-    if (user < 0 || user >= MAX_NET_USERS || is_packet_empty(packet)) {
+    if (user < 0 || user >= MAX_NET_USERS || is_packet_empty(packet) || (flag_is_set(packet->control_flags, PCtr_ChatMessage) && (find_gameplay_chat(user, packet->turn) == NULL))) {
         return;
     }
     struct Packet *entry = &packet_history[user].entries[packet->turn % PACKET_HISTORY_SIZE];
@@ -347,6 +409,7 @@ TbBool read_repair_packet_history(NetUserId source, const char *buffer, size_t b
 void initialize_packet_history(void)
 {
     gameplay_chat_queue_count = 0;
+    memset(gameplay_chat_history, 0, sizeof(gameplay_chat_history));
     memset(packet_history, 0, sizeof(packet_history));
     server_turn_received_at = 0;
     server_turn_position_ns = 0;
@@ -357,6 +420,7 @@ void initialize_packet_history(void)
     network_spectator_reset();
     input_lag_reset();
     reset_dig_prediction();
+    reset_local_hand();
 }
 
 static TbBool user_has_required_turn_packets(NetUserId user)
@@ -379,6 +443,19 @@ static TbBool have_all_turn_packets(NetUserId local_user)
         }
     }
     return true;
+}
+
+TbBool is_waiting_on_user_packets(NetUserId user)
+{
+    if (missing_packets_wait_start == 0 || LbTimerClock() - missing_packets_wait_start < PEER_WAIT_MESSAGE_DELAY_MS) {
+        return false;
+    }
+    return user != netstate.my_id && user_present(user) && !user_has_required_turn_packets(user);
+}
+
+TbClockMSec get_peer_timeout_remaining(void)
+{
+    return max(PEER_TIMEOUT_MS - (LbTimerClock() - missing_packets_wait_start), 0);
 }
 
 static TbBool host_lost(GameTurn turn, const char *state)
@@ -477,7 +554,6 @@ static void send_repair_history_if_due(int32_t resend_interval)
 static TbError wait_for_missing_packets(void *server_buf, size_t frame_size, NetUserId local_user)
 {
     GameTurn expected_turn = get_gameturn() - game.input_lag_turns;
-    TbClockMSec wait_start_time = LbTimerClock();
     TbBool turn_complete = false;
     TbBool wait_timed_out = false;
     MULTIPLAYER_LOG("LbNetwork_ExchangeGameplay: Missing packets for turn=%lu, collecting...", (unsigned long)expected_turn);
@@ -486,11 +562,12 @@ static TbError wait_for_missing_packets(void *server_buf, size_t frame_size, Net
         send_repair_history_if_due(REPAIR_HISTORY_RECOVERY_INTERVAL);
         netstate.sp->update(OnNewUser);
         host_spoof_dropped_user_packets();
+        net_lobby_refresh_rejoin_open();
         if (host_lost(expected_turn, "waiting for")) {
             return Lb_OK;
         }
         turn_complete = have_all_turn_packets(local_user);
-        for (NetUserId peer_id = 0; peer_id < netstate.max_users && !turn_complete; peer_id += 1) {
+        for (NetUserId peer_id = 0; peer_id < MAX_NET_CONNECTIONS && !turn_complete; peer_id += 1) {
             if (!can_send_to_peer(peer_id)) {
                 continue;
             }
@@ -503,7 +580,7 @@ static TbError wait_for_missing_packets(void *server_buf, size_t frame_size, Net
         if (turn_complete || netstate.resync_pending || netstate.pending_spectator_id != INVALID_USER_ID) {
             break;
         }
-        if (LbTimerClock() - wait_start_time >= FINAL_RESORT_RESYNC_RECOVERY) {
+        if (LbTimerClock() - missing_packets_wait_start >= FINAL_RESORT_RESYNC_RECOVERY) {
             set_flag(local_system_flags, GSF_NetGameNoSync);
             clear_flag(local_system_flags, GSF_NetSeedNoSync);
             wait_timed_out = true;
@@ -516,7 +593,8 @@ static TbError wait_for_missing_packets(void *server_buf, size_t frame_size, Net
             return Lb_OK;
         }
     }
-    TbClockMSec wait_time = LbTimerClock() - wait_start_time;
+    TbClockMSec wait_time = LbTimerClock() - missing_packets_wait_start;
+    input_lag_note_wait(wait_time);
     if (wait_timed_out) {
         WARNLOG("LbNetwork_ExchangeGameplay: Timed out waiting for turn=%lu after %dms; continuing so resync can recover",
             (unsigned long)expected_turn, (int32_t)wait_time);
@@ -563,7 +641,10 @@ TbError LbNetwork_ExchangeGameplay(void *send_buf, void *server_buf, size_t fram
         if (player_exists(my_player)) {
             NetUserId local_user = netstate.my_id;
             if (!have_all_turn_packets(local_user)) {
-                return wait_for_missing_packets(server_buf, frame_size, local_user);
+                missing_packets_wait_start = LbTimerClock();
+                TbError result = wait_for_missing_packets(server_buf, frame_size, local_user);
+                missing_packets_wait_start = 0;
+                return result;
             }
         }
     }

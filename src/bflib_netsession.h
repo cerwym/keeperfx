@@ -23,6 +23,7 @@
 #include <stdint.h>
 #include "bflib_basics.h"
 
+#define PLAYER_MP_NAME_LEN 20
 
 #ifdef __cplusplus
 extern "C" {
@@ -33,7 +34,7 @@ extern "C" {
 #define SESSION_NAME_MAX_LEN     128
 #define SESSION_LOBBY_ID_MAX_LEN  64
 #define NETSP_PLAYER_NAME_MAX_LEN  32
-#define SESSION_HUMANS_MAX 4
+#define SESSION_HUMANS_MAX 8
 #define SESSION_METADATA_MAX 2048
 
 enum NetJoinRejection {
@@ -47,8 +48,6 @@ enum NetJoinRejection {
     NetJoin_SpectatorsFull = 7,
     NetJoin_SpectatorsUnsupported = 8,
     NetJoin_SpectatorDesynced = 9,
-    NetJoin_MapMismatch = 10,
-    NetJoin_FxdataMismatch = 11,
     NetJoin_Count,
 };
 
@@ -93,6 +92,7 @@ struct TbNetworkSessionNameEntry {
     uint8_t spectators_enabled;
     uint8_t max_spectators;
     uint8_t spectator_count;
+    uint8_t rejoin_open;
 };
 
 struct TbNetworkPlayerEntry {
@@ -105,7 +105,7 @@ struct TbNetworkPlayerEntry {
 
 struct TbNetworkCallbackData {
   char svc_name[12];
-  char plyr_name[20];
+  char plyr_name[PLAYER_MP_NAME_LEN];
   char session_data[32];
 };
 

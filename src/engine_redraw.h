@@ -23,6 +23,7 @@
 #include "bflib_basics.h"
 #include "globals.h"
 #include "bflib_video.h"
+#include "net_main.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -40,10 +41,13 @@ void setup_engine_window(long x1, long y1, long x2, long y2);
 void store_engine_window(TbGraphicsWindow *ewnd,int divider);
 void load_engine_window(TbGraphicsWindow *ewnd);
 
-void set_engine_view(struct PlayerInfo *player, TbBool front_view, TbBool wibble);
-void update_engine_view(struct PlayerInfo *player, TbBool keep_local_camera);
+void set_user_dungeon_view(NetUserId user, TbBool front_view, TbBool wibble);
+void update_local_view(NetUserId user, TbBool keep_local_camera);
 
 void draw_overlay_compass(long a1, long a2);
+
+void clear_custom_buff_icons(void);
+void set_custom_buff_icon_slot(const char *name, const long *icons, const short *dy, int count);
 
 TbBool keeper_screen_redraw(void);
 

@@ -112,6 +112,8 @@ void SendUserUpdate(NetUserId dest, NetUserId updated_user)
     write_pos += strlen(netstate.users[updated_user].name) + 1;
     memcpy(write_pos, &netstate.users[updated_user].version, sizeof(netstate.users[updated_user].version));
     write_pos += sizeof(netstate.users[updated_user].version);
+    *write_pos = netstate.users[updated_user].spectator_icon;
+    write_pos += 1;
     send_message_buffer(dest, write_pos);
 }
 
@@ -173,7 +175,6 @@ enum NetJoinRejection OnNewUser(NetUserId *assigned_id, enum NetConnectionRole r
     *assigned_id = id;
     netstate.users[id].progress = USER_CONNECTED;
     netstate.users[id].ack = -1;
-    netstate.users_leave_reason[id] = NetJoin_Accepted;
     netstate.users[id].connected_at = LbTimerClock();
     net_lobby_refresh_metadata();
     NETLOG("Assigning new user to ID %u", id);

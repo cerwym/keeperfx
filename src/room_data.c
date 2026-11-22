@@ -445,6 +445,11 @@ void count_slabs_all_only(struct Room *room)
     room->total_capacity = room->slabs_count;
 }
 
+void count_slabs_mul2(struct Room* room)
+{
+    room->total_capacity = room->slabs_count*2;
+}
+
 void count_slabs_all_wth_effcncy(struct Room *room)
 {
     unsigned long count = room->slabs_count * ((long)room->efficiency);
@@ -1572,7 +1577,7 @@ TbBool find_random_valid_position_for_thing_in_room(struct Thing *thing, struct 
                 {
                     pos->x.val = subtile_coord_center(stl_x);
                     pos->y.val = subtile_coord_center(stl_y);
-                    pos->z.val = get_thing_height_at_with_radius(thing, pos, navi_radius);
+                    pos->z.val = get_thing_height_at_xy_with_radius(thing, pos, navi_radius);
                     if (!thing_in_wall_at_with_radius(thing, pos, navi_radius)) {
                         return true;
                     }
@@ -1945,7 +1950,7 @@ TbBool find_first_valid_position_for_thing_anywhere_in_room(const struct Thing *
                     {
                         pos->x.val = subtile_coord_center(stl_x);
                         pos->y.val = subtile_coord_center(stl_y);
-                        pos->z.val = get_thing_height_at_with_radius(thing, pos, block_radius);
+                        pos->z.val = get_thing_height_at_xy_with_radius(thing, pos, block_radius);
                         if ( !thing_in_wall_at_with_radius(thing, pos, block_radius) ) {
                           return true;
                         }
@@ -2762,7 +2767,7 @@ TbBool find_random_valid_position_for_thing_in_room_avoiding_object_excluding_ro
                     {
                         pos->x.val = subtile_coord_center(x);
                         pos->y.val = subtile_coord_center(y);
-                        pos->z.val = get_thing_height_at_with_radius(thing, pos, nav_sizexy);
+                        pos->z.val = get_thing_height_at_xy_with_radius(thing, pos, nav_sizexy);
                         if (!thing_in_wall_at_with_radius(thing, pos, nav_sizexy)) {
                             return true;
                         }
@@ -2816,7 +2821,7 @@ TbBool find_random_valid_position_for_thing_in_room_avoiding_object_excluding_ro
                         {
                             pos->x.val = subtile_coord_center(astl_x);
                             pos->y.val = subtile_coord_center(astl_y);
-                            pos->z.val = get_thing_height_at_with_radius(thing, pos, nav_sizexy);
+                            pos->z.val = get_thing_height_at_xy_with_radius(thing, pos, nav_sizexy);
                             if (!thing_in_wall_at_with_radius(thing, pos, nav_sizexy)) {
                                 SYNCLOG("Thorough check succeeded where random check failed.");
                                 return true;
@@ -3330,6 +3335,9 @@ struct Room *place_room(PlayerNumber owner, RoomKind rkind, MapSubtlCoord stl_x,
     return room;
 }
 
+/**
+ * Find nearest room that has storage to spare. Cannot be used for gold because gold rooms store hoard amount, not gold amount.
+ */
 struct Room *find_nearest_room_of_role_for_thing_with_spare_item_capacity(struct Thing *thing, PlayerNumber plyr_idx, RoomRole rrole, unsigned char nav_flags)
 {
     long retdist = INT32_MAX;
@@ -3354,6 +3362,57 @@ struct Room *find_nearest_room_of_role_for_thing_with_spare_item_capacity(struct
                 // Per-room code
                 long dist = grid_distance(thing->mappos.x.stl.num, thing->mappos.y.stl.num, room->central_stl_x, room->central_stl_y);
                 if ((dist < retdist) && (room->total_capacity > room->capacity_used_for_storage))
+                {
+                    struct Coord3d pos;
+                    if (find_first_valid_position_for_thing_anywhere_in_room(thing, room, &pos))
+                    {
+                        if (!thing_is_creature(thing) || creature_can_navigate_to(thing, &pos, nav_flags))
+                        {
+                            retdist = dist;
+                            retroom = room;
+                        }
+                    }
+                }
+                // Per-room code ends
+                k++;
+                if (k > ROOMS_COUNT)
+                {
+                    ERRORLOG("Infinite loop detected when sweeping rooms list");
+                    break;
+                }
+            }
+        }
+    }
+    return retroom;
+}
+
+/**
+ * Function is similar to checking for spare item capacity, but with special condition to calculate max gold.
+ */
+struct Room* find_nearest_room_of_role_for_thing_with_spare_gold_capacity(struct Thing* thing, PlayerNumber plyr_idx, RoomRole rrole, unsigned char nav_flags)
+{
+    int32_t retdist = INT32_MAX;
+    struct Room* retroom = INVALID_ROOM;
+
+    struct Dungeon* dungeon = get_dungeon(plyr_idx);
+    for (RoomKind rkind = 0; rkind < game.conf.slab_conf.room_types_count; rkind++)
+    {
+        if (room_role_matches(rkind, rrole))
+        {
+            long i = dungeon->room_list_start[rkind];
+            unsigned long k = 0;
+            while (i != 0)
+            {
+                struct Room* room = room_get(i);
+                if (room_is_invalid(room))
+                {
+                    ERRORLOG("Jump to invalid room detected");
+                    break;
+                }
+                i = room->next_of_owner;
+                // Per-room code
+                long dist = grid_distance(thing->mappos.x.stl.num, thing->mappos.y.stl.num, room->central_stl_x, room->central_stl_y);
+                if ((dist < retdist) && (max_gold_amount_in_room(room) > room->capacity_used_for_storage))
                 {
                     struct Coord3d pos;
                     if (find_first_valid_position_for_thing_anywhere_in_room(thing, room, &pos))

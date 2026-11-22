@@ -47,6 +47,8 @@ struct CreatureControl;
 #define CAMERA_TILT_DEFAULT -266
 #define CAMERA_TILT_MIN -350
 #define CAMERA_TILT_MAX -200
+#define CAMERA_DEVIATE_JUMP_DECAY 32
+#define TREMBLING_LANDING_CAMERA_DEVIATE_JUMP 96
 
 extern long zoom_distance_setting; // CFG setting
 extern long frontview_zoom_distance_setting; // CFG setting
@@ -138,7 +140,8 @@ TbBool view_move_camera_to_position(MapCoord *pos_x, MapCoord *pos_y, MapCoord x
 
 void update_camera_shake(void);
 void init_player_cameras(struct PlayerInfo *player);
-void update_first_person_position(struct Camera *cam, struct Thing *thing, const struct CreatureControl *cctrl, int eye_height);
+void init_user_cameras(int32_t user);
+void update_first_person_position(struct Camera *cam, const struct Thing *thing, const struct CreatureControl *cctrl, int eye_height);
 
 /******************************************************************************/
 #ifdef __cplusplus

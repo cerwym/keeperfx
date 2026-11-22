@@ -457,6 +457,9 @@ TbBool object_is_gold(const struct Thing *thing)
  */
 TbBool object_is_gold_hoard(const struct Thing *thing)
 {
+    if (thing->class_id != TCls_Object) {
+        return false;
+    }
     struct ObjectConfigStats* objst = get_object_model_stats(thing->model);
     return (objst->genre == OCtg_GoldHoard);
 }
@@ -641,6 +644,15 @@ TbBool delete_lair_totem(struct Thing *lairtng)
     return true;
 }
 
+static short possessed_food_peck_pitch(unsigned char timer)
+{
+    if (timer == 0)
+        return 0;
+    if (timer <= 3)
+        return DEGREES_360 - 116 * timer;
+    return (116 * timer + 1352) & ANGLE_MASK;
+}
+
 static long food_moves(struct Thing *objtng)
 {
     struct Coord3d pos;
@@ -653,12 +665,14 @@ static long food_moves(struct Thing *objtng)
         destroy_food(objtng);
         return TUFRet_Deleted;
     }
-    TbBool dirct_ctrl = is_thing_directly_controlled(objtng);
+    TbBool dirct_ctrl = user_controls_thing(ANY_USER, objtng, UCT_Direct | UCT_PossessionEntryZoom);
     if (dirct_ctrl)
     {
+        objtng->move_angle_z = 0;
         if (objtng->food.possession_startup_timer > 0)
         {
             objtng->food.possession_startup_timer--;
+            objtng->move_angle_z = possessed_food_peck_pitch(objtng->food.possession_startup_timer);
             return TUFRet_Modified;
         }
     }
@@ -776,9 +790,8 @@ static long food_moves(struct Thing *objtng)
         if (dangle > 62)
             dangle = 62;
         objtng->move_angle_xy = (objtng->move_angle_xy + dangle * sangle) & ANGLE_MASK;
-        struct PlayerInfo* my_player = get_my_player();
-        if (my_player->controlled_thing_idx == objtng->index && ((get_player_view_type(my_player) == PVT_CreatureContrl) || (get_player_view_type(my_player) == PVT_CreaturePasngr))) {
-            set_local_camera_destination(my_player);
+        if (get_local_user_state()->controlled_thing_idx == objtng->index && ((get_user_view_type(get_my_user()) == PVT_CreatureContrl) || (get_user_view_type(get_my_user()) == PVT_CreaturePasngr))) {
+            set_local_camera_destination(get_my_user());
         }
         if (get_angle_difference(objtng->move_angle_xy, objtng->food.angle) < DEGREES_50)
         {
@@ -999,7 +1012,7 @@ void process_object_sacrifice(struct Thing *thing, long sacowner)
         kill_all_players_chickens(thing->owner);
         output_player_message(sacowner, SMsg_SacrificePunish, 0);
     } else
-    if (object_is_gold_pile(thing))
+    if (object_is_gold_pile(thing) || (thing->model == ObjMdl_SpinningCoin)) //Spinning coins are what is dropped from hand. Gold piles are not truly dropped.
     {
         if (thing->valuable.gold_stored > 0)
         {
@@ -1415,7 +1428,7 @@ static TngUpdateRet object_update_call_to_arms(struct Thing *thing)
             struct Coord3d pos;
             pos.x.val = subtile_coord_center(dungeon->cta_stl_x);
             pos.y.val = subtile_coord_center(dungeon->cta_stl_y);
-            pos.z.val = get_thing_height_at(thing, &pos);
+            pos.z.val = get_thing_height_at_xy(thing, &pos);
             move_thing_in_map(thing, &pos);
             reset_interpolation_of_thing(thing);
             set_thing_draw(thing, ctagfx->birth_anim_idx, 256, objst->sprite_size_max, 0, 0, ODC_Default);
@@ -1677,7 +1690,7 @@ static TbBool find_free_position_on_slab(struct Thing* thing, struct Coord3d* po
             {
                 pos->x.val = subtile_coord_center(x);
                 pos->y.val = subtile_coord_center(y);
-                pos->z.val = get_thing_height_at_with_radius(thing, pos, nav_sizexy);
+                pos->z.val = get_thing_height_at_xy_with_radius(thing, pos, nav_sizexy);
                 if (!thing_in_wall_at_with_radius(thing, pos, nav_sizexy)) {
                     return true;
                 }

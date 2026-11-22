@@ -455,15 +455,17 @@ struct CreatureControl *allocate_free_control_structure(void);
 void delete_control_structure(struct CreatureControl *cctrl);
 void delete_all_control_structures(void);
 
-struct Thing *create_and_control_creature_as_controller(struct PlayerInfo *player, ThingModel crmodel, struct Coord3d *pos);
+struct Thing *create_and_control_creature_as_controller(NetUserId user, ThingModel crmodel, struct Coord3d *pos);
 
 TbBool disband_creatures_group(struct Thing *thing);
 struct Thing *get_group_last_member(struct Thing *thing);
 
 void play_creature_sound(struct Thing *thing, long snd_idx, long a3, long a4);
+void play_creature_sound_non_3d(struct Thing *thing, long snd_idx);
 void stop_creature_sound(struct Thing *thing, long snd_idx);
 void play_creature_sound_and_create_sound_thing(struct Thing *thing, long snd_idx, long a2);
 struct CreatureSound *get_creature_sound(struct Thing *thing, long snd_idx);
+struct CreatureSound *get_creature_model_sound(ThingModel cmodel, long snd_idx);
 TbBool creature_can_gain_experience(const struct Thing *thing);
 
 /** Convert a CreatureSound slot + variant index to the unified sample ID.

@@ -1422,7 +1422,7 @@ TbBool process_checks(struct Computer2 *comp)
             break;
         if ((ccheck->flags & ComChk_Unkn0001) == 0)
         {
-            long delta = (get_gameturn() - ccheck->last_run_turn);
+            GameTurnDelta delta = (GameTurnDelta)get_gameturn() - (GameTurnDelta)ccheck->last_run_turn;
             if ((delta > ccheck->turns_interval) && (computer_check_func_list[ccheck->func] != NULL))
             {
                 SYNCDBG(8,"Executing check %ld, \"%s\"",i,ccheck->name);
@@ -1613,7 +1613,7 @@ void setup_computer_players2(void)
       if (is_active_keeper(player))
       {
         int skirmish_AI_type = get_random_skirmish_computer_model();
-        const struct UserState *ustate = get_player_user_state(player);
+        const struct UserState *ustate = get_player_primary_user_state(player);
         if (!user_state_invalid(ustate))
         {
             skirmish_AI_type = get_computer_assist_model(ustate->prefs[UPref_StartingComputerAssistantKind]);

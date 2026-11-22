@@ -31,6 +31,7 @@
 #include "bflib_sprfnt.h"
 
 #include "front_network.h"
+#include "config_settings.h"
 #include "gui_frontbtns.h"
 #include "gui_draw.h"
 #include "frontend.h"
@@ -51,6 +52,16 @@
 #include "post_inc.h"
 
 static int32_t lobby_chat_text_width;
+static const short player_colour_sprites[MAX_NET_USERS] = {
+    GFS_bullfrog_red_med,
+    GFS_bullfrog_blue_med,
+    GFS_bullfrog_green_med,
+    GFS_bullfrog_yellow_med,
+    GFS_bullfrog_purple_med,
+    GFS_bullfrog_black_med,
+    GFS_bullfrog_orange_med,
+    GFS_bullfrog_white_med,
+};
 
 const char *net_join_error_text(enum NetJoinRejection reason)
 {
@@ -72,10 +83,6 @@ const char *net_join_error_text(enum NetJoinRejection reason)
         return get_string(GUIStr_NetSpectatorsFull);
     case NetJoin_SpectatorDesynced:
         return get_string(GUIStr_NetSpectatorDesynced);
-    case NetJoin_MapMismatch:
-        return get_string(GUIStr_NetUnsyncedMap);
-    case NetJoin_FxdataMismatch:
-        return get_string(GUIStr_NetVerifyFxdataSame);
     default:
         return NULL;
     }
@@ -119,7 +126,8 @@ void frontnet_messages_down_maintain(struct GuiButton *gbtn)
 
 void frontnet_start_game_maintain(struct GuiButton *gbtn)
 {
-    TbBool enabled = network_is_host() && net_number_of_enum_players > 1 && !net_player_colours_conflict();
+    TbBool enough_players = net_number_of_enum_players > 1 || frontnet_service_selected(FrontendNetSvc_Skirmish);
+    TbBool enabled = network_is_host() && enough_players && !net_player_colours_conflict();
     gbtn->flags ^= (gbtn->flags ^ LbBtnF_Enabled * enabled) & LbBtnF_Enabled;
 }
 
@@ -163,7 +171,7 @@ void frontnet_session_set_player_name(struct GuiButton *gbtn)
 {
     strcpy(net_player_name, tmp_net_player_name);
     strcpy(net_config_info.net_player_name, tmp_net_player_name);
-    net_write_config_file();
+    save_settings();
 }
 
 static void draw_tiled_bar(struct GuiButton *gbtn, int left_index, int first_middle_index, int middle_count, int right_index)
@@ -256,7 +264,7 @@ void frontnet_draw_net_session_players(struct GuiButton *gbtn)
         text = net_player[netplyr_idx].name;
         if (netplyr_idx >= net_number_of_enum_players)
             break;
-        spr = get_frontend_sprite(GFS_bullfrog_red_med+netplyr_idx);
+        spr = get_frontend_sprite(player_colour_sprites[netplyr_idx]);
         i = height - spr->SHeight * fs_units_per_px / 16;
         LbSpriteDrawResized(gbtn->scr_pos_x, gbtn->scr_pos_y + shift_y + abs(i)/2, fs_units_per_px, spr);
         LbTextSetWindow(gbtn->scr_pos_x, shift_y + gbtn->scr_pos_y, gbtn->width - spr->SWidth * fs_units_per_px / 16, height);
@@ -327,21 +335,15 @@ static void build_frontend_dimmed_remap(unsigned char *remap, int red_sixteenths
 
 void frontnet_draw_player_icon(NetUserId user, int pos_x, int pos_y, int units_per_px)
 {
-    static unsigned char shadow_remap[PALETTE_COLORS];
-    static TbBool shadow_remap_initialized;
-    if (!shadow_remap_initialized) {
-        build_frontend_dimmed_remap(shadow_remap, 3, 3, 3);
-        shadow_remap_initialized = true;
-    }
-    if (net_player_colour[user] < 0) {
-        LbSpriteDrawResizedRemap(pos_x, pos_y, units_per_px, get_frontend_sprite(GFS_bullfrog_blue_med), shadow_remap);
-        return;
-    }
-    if (net_player_colour[user] == NET_PLAYER_COLOUR_RANDOM) {
+    int8_t colour = net_player_colour[user];
+    if (colour == NET_PLAYER_COLOUR_RANDOM) {
         LbSpriteDrawResized(pos_x, pos_y, units_per_px, get_frontend_sprite(GFS_random_colour));
         return;
     }
-    LbSpriteDrawResized(pos_x, pos_y, units_per_px, get_frontend_sprite(GFS_bullfrog_red_med + net_player_colour[user]));
+    if (colour < 0) {
+        return;
+    }
+    LbSpriteDrawResized(pos_x, pos_y, units_per_px, get_frontend_sprite(player_colour_sprites[colour]));
 }
 
 void frontnet_messages_up(struct GuiButton *gbtn)
@@ -452,7 +454,7 @@ void frontnet_draw_messages(struct GuiButton *gbtn)
             break;
         struct NetMessage *nmsg;
         nmsg = &net_message[netmsg_id];
-        TbBool sender_active = nmsg->connection_id == net_user_info[nmsg->plyr_idx].connection_id && net_player_colour[nmsg->plyr_idx] >= 0;
+        TbBool sender_active = nmsg->connection_id == net_user_info[nmsg->plyr_idx].connection_id && network_user_active(nmsg->plyr_idx);
         int icon_y = font_height - spr->SHeight * fs_units_per_px / 16;
         if (sender_active) {
             frontnet_draw_player_icon(nmsg->plyr_idx, gbtn->scr_pos_x, y + gbtn->scr_pos_y + (icon_y >> 1), fs_units_per_px);
@@ -558,10 +560,8 @@ void frontnet_service_select(struct GuiButton *gbtn)
   if ( ((local_system_flags & GSF_AllowOnePlayer) != 0)
      && (srvidx+1 >= net_number_of_services) )
   {
-      frontend_set_player_number(default_loc_player);
-      fe_network_active = 0;
-      net_service_index_selected = FrontendNetSvc_Skirmish;
-      frontend_set_state(FeSt_MP_MAPPACK_SELECT);
+      frontnet_skirmish_setup();
+      frontend_set_state(FeSt_SKIRMISH_LOBBY);
   } else
   if (srvidx < 0)
   {

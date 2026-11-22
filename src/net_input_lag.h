@@ -11,6 +11,11 @@
 #define INPUT_LAG_DECREASE_WINDOW_TURNS 300
 // Waiting this long for a packet each turn is tolerated, in exchange for lower input lag.
 #define INPUT_LAG_TOLERATED_WAIT_MS 35
+// Added to the network delay the round trip times explain before the input lag is capped there
+// (input_lag_network_cap), for the delay they don't show: a packet waits a little at the host
+// before it is relayed and up to a frame at the receiver before the game reads it, and the
+// players' turns are only roughly aligned. The value was found by measuring, not derived.
+#define INPUT_LAG_NETWORK_CAP_SLACK_MS 60
 // Extra headroom required before a decrease, so the input lag can't oscillate between two values.
 #define INPUT_LAG_DECREASE_MARGIN_MS 10
 
@@ -35,6 +40,7 @@ void input_lag_reset(void);
 void input_lag_reset_request(int32_t input_lag_turns);
 void input_lag_get_stats(struct InputLagStats *stats);
 void input_lag_note_packet_arrival(GameTurn turn);
+void input_lag_note_wait(TbClockMSec wait_time);
 void input_lag_observe_host_packet(const struct Packet *packet);
 TbBool input_lag_needs_lookahead(void);
 GameTurn input_lag_first_pending_turn(void);

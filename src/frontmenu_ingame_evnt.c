@@ -50,15 +50,29 @@
 #include "game_legacy.h"
 #include "map_events.h"
 #include "local_camera.h"
+#include "local_hand.h"
 #include "sprites.h"
 #include "timer.h"
 #include "replay_rewind.h"
 #include "vidmode.h"
+#include "config_objects.h"
+#include "config_spritecolors.h"
+#include "config_terrain.h"
+#include "config_trapdoor.h"
+#include "creature_control.h"
+#include "creature_instances.h"
+#include "creature_states.h"
+#include "engine_render.h"
+#include "gui_msgs.h"
+#include "player_instances.h"
+#include "power_hand.h"
+#include "thing_creature.h"
 
 #include "keeperfx.hpp"
 #include "post_inc.h"
 
 #define HIGHLIGHTED_TEXT_FADE_LEVEL 48
+#define PAUSED_MESSAGE_HOVER_PADDING_HEIGHTS 3
 extern int32_t multiplayer_speed_adjustment_ns;
 
 unsigned long TimerTurns = 0;
@@ -163,7 +177,7 @@ void gui_get_creature_in_battle(struct GuiButton *gbtn)
     if (battle_creature_over <= 0) {
         return;
     }
-    PowerKind pwkind = get_local_user_state()->chosen_power_kind;
+    PowerKind pwkind = get_local_user_state_prediction()->chosen_power_kind;
     struct Thing* thing = thing_get(battle_creature_over);
     if (!thing_exists(thing)) {
         WARNLOG("Nonexisting thing %d in battle",(int)battle_creature_over);
@@ -174,12 +188,12 @@ void gui_get_creature_in_battle(struct GuiButton *gbtn)
     // If a spell is selected, try to cast it
     if (pwkind > 0)
     {
-        if (can_cast_spell(my_player_number, pwkind, thing->mappos.x.stl.num, thing->mappos.y.stl.num, thing, CastChk_Default)) {
+        if (can_cast_spell(my_player_number, get_local_user(),pwkind, thing->mappos.x.stl.num, thing->mappos.y.stl.num, thing, CastChk_Default)) {
             set_packet_power_on_thing(get_local_packet(), pwkind, battle_creature_over);
         }
     } else
     {
-        if (can_cast_spell(my_player_number, PwrK_HAND, thing->mappos.x.stl.num, thing->mappos.y.stl.num, thing, CastChk_Default)) {
+        if (can_cast_spell(my_player_number, get_local_user(),PwrK_HAND, thing->mappos.x.stl.num, thing->mappos.y.stl.num, thing, CastChk_Default)) {
             struct Packet* pckt = get_local_packet();
             set_packet_action(pckt, PckA_UsePwrHandPick, battle_creature_over, 0, 0, 0);
         }
@@ -193,6 +207,18 @@ void gui_go_to_person_in_battle(struct GuiButton *gbtn)
     if (thing_exists(thing))
     {
         move_local_camera_to_position(thing->mappos.x.val, thing->mappos.y.val);
+    }
+}
+
+static void hover_cursor_over_creature_icon_in_battle_menu(struct GuiButton *gbtn, struct Thing *thing)
+{
+    if (!thing_exists(thing) || !thing_revealed(thing, my_player_number)) {
+        return;
+    }
+    battle_creature_over = thing->index;
+    TbBool dragging_spell_onto_creature = (left_button_held || left_button_released) && (get_local_user_state_prediction()->chosen_power_kind > 0);
+    if (dragging_spell_onto_creature) {
+        gbtn->button_state_left_pressed = 1;
     }
 }
 
@@ -210,10 +236,7 @@ void gui_setup_friend_over(struct GuiButton *gbtn)
                 thing = thing_get(friendly_battler_list[MESSAGE_BATTLERS_COUNT * visbtl_id + battlr_id]);
             }
         }
-        if (thing_exists(thing) && thing_revealed(thing, dungeon->owner))
-        {
-            battle_creature_over = thing->index;
-        }
+        hover_cursor_over_creature_icon_in_battle_menu(gbtn, thing);
     }
 }
 
@@ -232,7 +255,7 @@ void draw_battle_head(struct Thing *thing, long scr_x, long scr_y, int units_per
     int ps_units_per_px = (50 * units_per_px + spr->SHeight / 2) / spr->SHeight;
     int curscr_x = scr_x - (spr->SWidth * ps_units_per_px / 16) / 2;
     int curscr_y = scr_y - (spr->SHeight * ps_units_per_px / 16) / 2;
-    if ((thing->creature.health_bar_turns) && ((get_gameturn() % (2 * gui_blink_rate)) >= gui_blink_rate)) {
+    if (local_hand_shows_flash(thing, LocalHandFlash_HealthFlower) && ((get_gameturn() % (2 * gui_blink_rate)) >= gui_blink_rate)) {
         LbSpriteDrawResizedOneColour(curscr_x, curscr_y, ps_units_per_px, spr, player_flash_colours[get_player_color_idx(thing->owner)]);
     } else {
         LbSpriteDrawResized(curscr_x, curscr_y, ps_units_per_px, spr);
@@ -315,10 +338,7 @@ void gui_setup_enemy_over(struct GuiButton *gbtn)
                 thing = thing_get(enemy_battler_list[MESSAGE_BATTLERS_COUNT * visbtl_id + battlr_id]);
             }
         }
-        if (thing_exists(thing) && thing_revealed(thing, dungeon->owner))
-        {
-            battle_creature_over = thing->index;
-        }
+        hover_cursor_over_creature_icon_in_battle_menu(gbtn, thing);
     }
 }
 
@@ -527,7 +547,7 @@ void draw_timer(void)
     LbTextSetWindow(0/pixel_size, 0/pixel_size, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
 }
 
-struct BottomRightTextLayout {
+struct TextBoxLayout {
     int32_t scr_x;
     int32_t scr_y;
     int32_t width;
@@ -535,7 +555,7 @@ struct BottomRightTextLayout {
     int32_t icon_scale;
 };
 
-static void get_bottom_right_text_layout(const char *text, int line, TbBool player_icon, struct BottomRightTextLayout *layout)
+static void get_bottom_right_text_layout(const char *text, int line, TbBool player_icon, struct TextBoxLayout *layout)
 {
     LbTextSetFont(winfont);
     int textLength = strlen(text);
@@ -563,7 +583,7 @@ static void get_bottom_right_text_layout(const char *text, int line, TbBool play
     layout->scr_y = MyScreenHeight - (line + 1) * layout->height - 16 * units_per_pixel / 16;
 }
 
-static void draw_bottom_right_text(const char *text, const struct BottomRightTextLayout *layout, TbBool highlighted)
+static void draw_bottom_right_text(const char *text, const struct TextBoxLayout *layout, TbBool highlighted)
 {
     LbTextSetFont(winfont);
     RendererSetDrawFlags(Lb_TEXT_HALIGN_CENTER);
@@ -619,13 +639,13 @@ void draw_gameturn_timer(void)
     char text[32];
     if (!local_state.rewinding || !replay_rewind_at_limit() || ((get_time_tick_ns() / 250000000) % 2 == 0)) {
         snprintf(text, sizeof(text), "%sGameTurn %u", local_state.rewinding ? "< " : "", get_gameturn());
-        struct BottomRightTextLayout layout;
+        struct TextBoxLayout layout;
         get_bottom_right_text_layout(text, 0, false, &layout);
         draw_bottom_right_text(text, &layout, false);
     }
 }
 
-static TbBool get_watched_player_name_layout(char *text, size_t text_size, struct BottomRightTextLayout *layout)
+static TbBool get_watched_player_name_layout(char *text, size_t text_size, struct TextBoxLayout *layout)
 {
     const char *name = get_displayed_user_name();
     if (name == NULL && !(replay.load_enable && is_observer_camera_active())) {
@@ -647,25 +667,346 @@ static TbBool get_watched_player_name_layout(char *text, size_t text_size, struc
     return true;
 }
 
-static TbBool mouse_is_over_bottom_right_text(const struct BottomRightTextLayout *layout)
+static TbBool mouse_is_over_padded_area(int32_t x, int32_t y, int32_t width, int32_t height, int32_t padding)
 {
-    return GetMouseX() >= layout->scr_x - layout->height && GetMouseY() >= layout->scr_y - layout->height / 2;
+    int32_t mouse_x = GetMouseX();
+    int32_t mouse_y = GetMouseY();
+    return mouse_x >= x - padding && mouse_x < x + width + padding && mouse_y >= y - padding / 2 && mouse_y < y + height + padding / 2;
+}
+
+static TbBool mouse_is_over_bottom_right_text(const struct TextBoxLayout *layout)
+{
+    return mouse_is_over_padded_area(layout->scr_x, layout->scr_y, MyScreenWidth - layout->scr_x, MyScreenHeight - layout->scr_y, layout->height);
 }
 
 TbBool mouse_is_over_watched_player_name(void)
 {
     char text[sizeof(netstate.users[0].name) + 2];
-    struct BottomRightTextLayout layout;
+    struct TextBoxLayout layout;
     return get_watched_player_name_layout(text, sizeof(text), &layout) && mouse_is_over_bottom_right_text(&layout);
+}
+
+static long top_right_timers_bottom(void)
+{
+    LbTextSetFont(winfont);
+    long height = LbTextLineHeight() * units_per_pixel / 16;
+    height += height / 2;
+    if (MyScreenHeight < 400)
+        height *= 2;
+    long top = 16 * units_per_pixel / 16;
+    TbBool upper = bonus_timer_enabled() || script_timer_enabled() || display_variable_enabled() || (game.armageddon_cast_turn != 0);
+    long bottom = 0;
+    if (upper)
+        bottom = top + height;
+    if (timer_enabled())
+        bottom = (upper ? (top << 2) : top) + height;
+    return bottom;
+}
+
+static TbBool user_is_viewing_creature(const struct UserState *ustate)
+{
+    if ((ustate->view_type == PVT_CreatureContrl) || (ustate->view_type == PVT_CreaturePasngr))
+        return true;
+    return (ustate->work_state == PSt_CreatrQuery) || (ustate->work_state == PSt_CreatrInfo) || (ustate->work_state == PSt_CreatrInfoAll);
+}
+
+static long archon_user_status_icon(const struct UserState *ustate)
+{
+    PlayerNumber plyr_idx = ustate->player_id;
+    const struct PlayerInfo *player = get_player(plyr_idx);
+    if (flag_is_set(ustate->additional_flags, UsrAF_GameMenuOpen))
+        return GPS_symbols_symbol_idle;
+    if (flag_is_set(ustate->additional_flags, UsrAF_ChatOpen))
+        return GPS_symbols_symbol_typing;
+    if (player->victory_state == VicS_LostLevel)
+        return get_player_colored_icon_idx(GPS_plyrsym_symbol_player_red_dead, plyr_idx);
+    if (ustate->view_type == PVT_MapScreen)
+        return GPS_symbols_symbol_map;
+    const struct Thing *thing = thing_get(ustate->controlled_thing_idx);
+    if ((ustate->controlled_thing_idx > 0) && user_is_viewing_creature(ustate) && (thing_is_creature(thing) || thing_is_dead_creature(thing)))
+    {
+        long spr_idx = get_creature_model_graphics(thing->model, CGI_HandSymbol);
+        if (spr_idx > 0)
+        {
+            TbBool dis = thing_is_dead_creature(thing) || creature_is_dying(thing) || thing_is_picked_up(thing)
+                || (thing_is_creature(thing) && creature_under_spell_effect(thing, CSAfF_Freeze));
+            return dis ? spr_idx + 1 : spr_idx;
+        }
+    }
+    if ((ustate->instance_num == PI_Whip) || (ustate->instance_num == PI_WhipEnd))
+        return get_power_model_stats(PwrK_SLAP)->medsym_sprite_idx;
+    if ((ustate->last_dig_order_turn != 0) && (get_gameturn() - ustate->last_dig_order_turn < 10))
+        return ustate->last_dig_order_was_removal ? GPS_crspell_dig_std_s + 1 : GPS_crspell_dig_std_s;
+    if (flag_is_set(ustate->additional_flags, UsrAF_SpecialMenuOpen))
+        return GPS_trapdoor_bonus_box_std_s;
+    if ((ustate->chosen_power_kind > 0) && (get_power_model_stats(ustate->chosen_power_kind)->work_state == ustate->work_state))
+        return get_power_model_stats(ustate->chosen_power_kind)->medsym_sprite_idx;
+    switch (ustate->work_state)
+    {
+    case PSt_BuildRoom:
+        return get_room_kind_stats(ustate->chosen_room_kind)->medsym_sprite_idx;
+    case PSt_PlaceTrap:
+        return get_trap_model_stats(ustate->chosen_trap_kind)->medsym_sprite_idx;
+    case PSt_PlaceDoor:
+        return get_door_model_stats(ustate->chosen_door_kind)->medsym_sprite_idx;
+    case PSt_Sell:
+        return GPS_symbols_symbol_sell;
+    }
+    if (ustate->num_things_in_hand > 0)
+        return get_power_model_stats(PwrK_HAND)->medsym_sprite_idx;
+    if (player_has_heart(plyr_idx))
+        return get_player_colored_icon_idx(GPS_plyrsym_symbol_player_red_std_a, plyr_idx);
+    return get_player_colored_icon_idx(GPS_plyrsym_symbol_player_red_dead, plyr_idx);
+}
+
+/** range of rows [top, bottom) containing any non-transparent pixel */
+void sprite_visible_box(const struct TbSprite *spr, int *left, int *top, int *right, int *bottom)
+{
+    *left = spr->SWidth;
+    *top = spr->SHeight;
+    *right = 0;
+    *bottom = 0;
+    const unsigned char *data = spr->Data;
+    for (int row = 0; (data != NULL) && (row < spr->SHeight); row++)
+    {
+        int col = 0;
+        for (;;)
+        {
+            signed char cmd = (signed char)*data++;
+            if (cmd == 0)
+                break;
+            if (cmd > 0) {
+                *left = min(*left, col);
+                *right = max(*right, col + cmd);
+                *top = min(*top, row);
+                *bottom = row + 1;
+                data += cmd;
+                col += cmd;
+            } else {
+                col -= cmd;
+            }
+        }
+    }
+    if (*top >= *bottom) {
+        *left = 0;
+        *top = 0;
+        *right = spr->SWidth;
+        *bottom = spr->SHeight;
+    }
+}
+
+static void sprite_visible_rows(const struct TbSprite *spr, int *top, int *bottom)
+{
+    int left;
+    int right;
+    sprite_visible_box(spr, &left, top, &right, bottom);
+}
+
+/** Top-left at which the sprite's visible pixels are centred in the box. */
+static void hud_icon_origin(long x, long y, long box_w, long box_h, int units_per_px, long spr_idx, long *out_x, long *out_y)
+{
+    const struct TbSprite *spr = get_panel_sprite(spr_idx);
+    int top;
+    int bottom;
+    sprite_visible_rows(spr, &top, &bottom);
+    *out_x = x + (box_w - spr->SWidth * units_per_px / 16) / 2;
+    *out_y = y + (box_h - (bottom - top) * units_per_px / 16) / 2 - top * units_per_px / 16;
+}
+
+static void draw_hud_icon_centered(long x, long y, long box_w, long box_h, int units_per_px, long spr_idx, PlayerNumber plyr_idx)
+{
+    if (spr_idx <= 0)
+        return;
+    long icon_x;
+    long icon_y;
+    hud_icon_origin(x, y, box_w, box_h, units_per_px, spr_idx, &icon_x, &icon_y);
+    draw_gui_panel_sprite_left_player(icon_x, icon_y, units_per_px, spr_idx, plyr_idx);
+}
+
+static void draw_hud_text_right(long right, long y, long height, int tx_units_per_px, const char *text)
+{
+    LbTextSetWindow(0, y, right, height);
+    RendererSetDrawFlags(Lb_TEXT_HALIGN_RIGHT);
+    LbTextDrawResized(0, (height - LbTextLineHeight() * tx_units_per_px / 16) / 2, tx_units_per_px, text);
+    RendererSetDrawFlags(0);
+    LbTextSetWindow(0, 0, MyScreenWidth, MyScreenHeight);
+}
+
+/** Lists the other users sharing the displayed user's keeper (archon mode) */
+void draw_archon_co_users(void)
+{
+    const NetUserId displayed = get_displayed_user();
+    const struct UserState *dstate = get_user_state(displayed);
+    if (user_state_invalid(dstate) || (dstate->instance_num == PI_HeartZoom))
+        return;
+    const PlayerNumber plyr_idx = dstate->player_id;
+    if ((plyr_idx < 0) || (plyr_idx >= PLAYERS_COUNT))
+        return;
+    const struct TbSprite *ref = get_panel_sprite(GPS_trapdoor_bonus_box_std_s);
+    const int icon_upp = calculate_relative_upp(46, units_per_pixel_ui, ref->SHeight);
+    const long slot_w = ref->SWidth * icon_upp / 32;
+    const long icon_h = ref->SHeight * icon_upp / 16;
+    const long gap = 4 * units_per_pixel_ui / 16;
+    const long margin = 16 * units_per_pixel / 16;
+    const long right = MyScreenWidth - margin + 4 * units_per_pixel_ui / 16;
+    const long slot_x = right - slot_w;
+    LbTextSetFont(winfont);
+    const int tx_units_per_px = font_size_units_per_px(chat_font_size);
+    const long row_h = LbTextLineHeight() * tx_units_per_px / 16;
+    long y = top_right_timers_bottom() + 8 * units_per_pixel_ui / 16;
+    for (NetUserId user = 0; user < MAX_NET_USERS; user++)
+    {
+        const struct UserState *ustate = get_user_state(user);
+        if ((user == displayed) || !user_present(user) || (ustate->player_id != plyr_idx))
+            continue;
+        long spr_idx = archon_user_status_icon(ustate);
+        draw_hud_text_right(slot_x - gap, y, row_h, tx_units_per_px, ustate->name);
+        draw_hud_icon_centered(slot_x, y, slot_w, row_h, icon_upp, spr_idx, plyr_idx);
+        long status_icon_bottom = y + row_h;
+        if (spr_idx > 0)
+        {
+            long icon_x;
+            long icon_y;
+            int top_row;
+            int bottom_row;
+            hud_icon_origin(slot_x, y, slot_w, row_h, icon_upp, spr_idx, &icon_x, &icon_y);
+            sprite_visible_rows(get_panel_sprite(spr_idx), &top_row, &bottom_row);
+            status_icon_bottom = icon_y + bottom_row * icon_upp / 16;
+        }
+        y += row_h;
+        const struct Thing *thing = thing_get(ustate->controlled_thing_idx);
+        TbBool show_possession = (ustate->view_type == PVT_CreatureContrl) && thing_is_creature(thing);
+        TbBool show_hand = (ustate->num_things_in_hand > 0);
+        const long possession_h = max(0, (icon_h - row_h) / 2) + icon_h;
+        const long hand_margin = 8 * units_per_pixel_ui / 16;
+        const long hand_h = get_mini_things_in_hand_height() - 2 * hand_margin;
+        const long area_y = y;
+        
+        const long area_h = max(possession_h, hand_h);
+        if (show_possession && show_hand)
+        {
+            if (get_gameturn() % 16 >= 8)
+                show_possession = false;
+            else
+                show_hand = false;
+        }
+        if (show_possession)
+        {
+            const struct CreatureControl *cctrl = creature_control_get_from_thing(thing);
+            const struct InstanceInfo *inst_inf = creature_instance_info_get(cctrl->active_instance_id);
+            spr_idx = 0;
+            if (thing_is_picked_up(thing)) {
+                // Held in a co-user's hand
+                spr_idx = get_power_model_stats(PwrK_HAND)->medsym_sprite_idx;
+            } else
+            if (!creature_instance_info_invalid(inst_inf) && (inst_inf->symbol_spridx > 0)) {
+                spr_idx = inst_inf->symbol_spridx;
+                if (cctrl->instance_id != cctrl->active_instance_id)
+                    spr_idx++;
+            }
+            
+            const struct TbSprite *health_spr = get_button_sprite_for_player(choose_health_sprite(thing), thing->owner);
+            const struct TbSprite *level_spr = get_button_sprite(GBS_creature_flower_level_01 + cctrl->exp_level);
+            const int flower_upp = calculate_relative_upp(32, units_per_pixel_ui, health_spr->SHeight);
+            const long flower_w = health_spr->SWidth * flower_upp / 16;
+            const long flower_h = health_spr->SHeight * flower_upp / 16;
+            const long flower_cx = slot_x + slot_w / 2;
+            int flower_top_row;
+            int flower_bottom_row;
+            sprite_visible_rows(health_spr, &flower_top_row, &flower_bottom_row);
+            const long flower_bottom = status_icon_bottom + gap - flower_top_row * flower_upp / 16 + flower_h;
+            LbSpriteDrawResized(flower_cx - flower_w / 2, flower_bottom - flower_h, flower_upp, health_spr);
+            LbSpriteDrawResized(flower_cx - level_spr->SWidth * flower_upp / 32, flower_bottom - level_spr->SHeight * flower_upp / 16, flower_upp, level_spr);
+            
+            const long flower_cy = flower_bottom - flower_h + (flower_top_row + flower_bottom_row) * flower_upp / 32;
+            if (spr_idx > 0)
+            {
+                const long ability_w = get_panel_sprite(spr_idx)->SWidth * icon_upp / 16;
+                const long ability_right = flower_cx - flower_w / 2 - (gap + 5 * units_per_pixel_ui / 16) / 2;
+                draw_hud_icon_centered(ability_right - ability_w, flower_cy - icon_h / 2, ability_w, icon_h, icon_upp, spr_idx, plyr_idx);
+            }
+            y += icon_h;
+        }
+        if (show_hand)
+        {
+            draw_user_mini_things_in_hand(user, right - get_mini_things_in_hand_width(user), area_y + get_mini_things_in_hand_height() - hand_margin);
+        }
+        y = area_y + area_h + gap;
+    }
 }
 
 void draw_watched_player_name(void)
 {
     char text[sizeof(netstate.users[0].name) + 2];
-    struct BottomRightTextLayout layout;
+    struct TextBoxLayout layout;
     if (get_watched_player_name_layout(text, sizeof(text), &layout)) {
         draw_bottom_right_text(text, &layout, mouse_is_over_bottom_right_text(&layout));
     }
+}
+
+static TbBool get_paused_message_layout(struct TextBoxLayout *layout)
+{
+    if (((game.operation_flags & GOF_Paused) == 0) || ((game.operation_flags & GOF_WorldInfluence) != 0) || unpausing_in_progress) {
+        return false;
+    }
+    LbTextSetFont(winfont);
+    layout->width = LbTextStringWidth(get_string(GUIStr_PausedMsg)) * units_per_pixel / 16 + 2 * (LbTextCharWidth(' ') * units_per_pixel / 16);
+    layout->height = LbTextLineHeight() * units_per_pixel / 16;
+    if (get_local_view_type() != PVT_MapScreen) {
+        layout->scr_x = local_state.engine_window_x + (MyScreenWidth - layout->width - local_state.engine_window_x) / 2;
+    } else {
+        layout->scr_x = (MyScreenWidth - layout->width) / 2;
+    }
+    layout->scr_y = 16 * units_per_pixel / 16;
+    layout->icon_scale = 0;
+    if (MyScreenHeight < 400) {
+        layout->width *= 2;
+        layout->height *= 3;
+    }
+    return true;
+}
+
+static TbBool mouse_is_over_paused_message_layout(const struct TextBoxLayout *layout)
+{
+    if (observer_is_active() || (get_my_player()->victory_state == VicS_LostLevel)) {
+        return false;
+    }
+    int32_t padding = PAUSED_MESSAGE_HOVER_PADDING_HEIGHTS * LbTextLineHeight() * units_per_pixel / 16;
+    return mouse_is_over_padded_area(layout->scr_x, 0, layout->width, layout->scr_y + layout->height, padding);
+}
+
+TbBool mouse_is_over_paused_message(void)
+{
+    struct TextBoxLayout layout;
+    return get_paused_message_layout(&layout) && mouse_is_over_paused_message_layout(&layout);
+}
+
+TbBool mouse_is_over_clickable_hud_text(void)
+{
+    return mouse_is_over_paused_message() || mouse_is_over_watched_player_name();
+}
+
+void draw_paused_message(int tx_units_per_px)
+{
+    struct TextBoxLayout layout;
+    if (!get_paused_message_layout(&layout)) {
+        return;
+    }
+    int32_t text_x = layout.scr_x;
+    int32_t text_width = layout.width;
+    if ((MyScreenHeight < 400) && (dbc_initialized && dbc_enabled)) {
+        text_x -= 12;
+        text_width += 32;
+    }
+    RendererSetDrawFlags(Lb_TEXT_HALIGN_CENTER);
+    LbTextSetWindow(text_x, layout.scr_y, text_width, layout.height);
+    draw_slab64k(layout.scr_x, layout.scr_y, units_per_pixel, layout.width, layout.height);
+    if (mouse_is_over_paused_message_layout(&layout)) {
+        LbTextSetRemap(&pixmap.fade_tables[HIGHLIGHTED_TEXT_FADE_LEVEL * PALETTE_COLORS]);
+    }
+    LbTextDrawResized(0, 0, tx_units_per_px, get_string(GUIStr_PausedMsg));
+    LbTextSetRemap(NULL);
+    LbTextSetWindow(0/pixel_size, 0/pixel_size, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
 }
 
 TbBool timer_enabled(void)

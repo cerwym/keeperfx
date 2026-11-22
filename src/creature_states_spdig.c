@@ -22,7 +22,6 @@
 
 #include "bflib_sound.h"
 #include "config_sounds.h"
-#include "bflib_math.h"
 #include "bflib_planar.h"
 #include "creature_states.h"
 #include "thing_list.h"
@@ -41,11 +40,11 @@
 #include "thing_traps.h"
 #include "room_data.h"
 #include "room_lair.h"
-#include "room_jobs.h"
 #include "room_workshop.h"
 #include "room_library.h"
 #include "room_graveyard.h"
 #include "room_util.h"
+#include "room_treasure.h"
 #include "map_utils.h"
 #include "spdigger_stack.h"
 #include "tasks_list.h"
@@ -53,10 +52,11 @@
 #include "gui_topmsg.h"
 #include "gui_soundmsgs.h"
 #include "game_legacy.h"
-#include "keeperfx.hpp"
 #include "player_instances.h"
-#include "post_inc.h"
+#include "packets.h"
 #include "creature_states_lair.h"
+
+#include "post_inc.h"
 
 const unsigned char reinforce_edges[] = { 3, 0, 0, 3, 0, 1, 2, 2, 1, };
 
@@ -1261,14 +1261,17 @@ short imp_drops_gold(struct Thing *spdigtng)
     }
     else
     {
-        if (is_thing_directly_controlled_by_player(spdigtng, my_player_number))
+        // What the digger does next depends only on the synchronised control flag, never on
+        // which user is looking through it (a spectator must not change it). Only the sound is local.
+        if (flag_is_set(spdigtng->alloc_flags, TAlF_IsControlled))
         {
-            play_non_3d_sample(snd_refusal);
+            if (user_controls_thing(get_local_user(), spdigtng, UCT_Direct | UCT_Other))
+                play_non_3d_sample(snd_refusal);
             internal_set_thing_state(spdigtng, state);
             return 1;
         }
     }
-    if ((spdigtng->creature.gold_carried > 0) && (room->used_capacity < room->total_capacity))
+    if ((spdigtng->creature.gold_carried > 0) && (room->capacity_used_for_storage < max_gold_amount_in_room(room)))
     {
         if ((spdigtng->alloc_flags & TAlF_IsControlled) == 0)
         {
@@ -1377,7 +1380,7 @@ short imp_picks_up_gold_pile(struct Thing *spdigtng)
     if (crconf->gold_hold > spdigtng->creature.gold_carried)
     {
         MapSubtlCoord stl_x, stl_y;
-        if (is_thing_directly_controlled(spdigtng))
+        if (user_controls_thing(ANY_USER, spdigtng, UCT_Direct | UCT_PossessionEntryZoom))
         {
             struct CreatureControl *cctrl = creature_control_get_from_thing(spdigtng);
             struct Thing *goldtng = thing_get(cctrl->pickup_object_id);
@@ -2068,7 +2071,7 @@ short creature_arms_trap(struct Thing *thing)
         set_start_state(thing);
         return 0;
     }
-    if (is_thing_directly_controlled(thing))
+    if (user_controls_thing(ANY_USER, thing, UCT_Direct | UCT_PossessionEntryZoom))
     {
         return creature_arms_trap_first_person(thing);
     }

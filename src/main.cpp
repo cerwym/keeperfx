@@ -28,6 +28,7 @@
 #include "bflib_sprfnt.h"
 #include "bflib_fileio.h"
 #include "bflib_dernc.h"
+#include "kfx_memory.h"
 #include "bflib_sndlib.h"
 #include "bflib_cpu.h"
 #include "bflib_crash.h"
@@ -88,6 +89,7 @@
 #include "engine_lenses.h"
 #include "engine_camera.h"
 #include "local_camera.h"
+#include "local_hand.h"
 #include "engine_arrays.h"
 #include "engine_textures.h"
 #include "engine_redraw.h"
@@ -241,7 +243,7 @@ TbBool all_dungeons_destroyed(const struct PlayerInfo *win_player)
     {
       if (i == win_plyr_idx)
         continue;
-      if (player_defeat_settled(i))
+      if (player_defeat_settled(i) || player_is_placeholder(get_player(i)))
         continue;
       if (!player_is_friendly_or_defeated(i,win_plyr_idx))
         return false;
@@ -327,6 +329,9 @@ short setup_game(void)
   short result;
   // Do only a very basic setup
   cpu_detect(&cpu_info);
+  
+  SYNCMSG("CPU architecture: %s", cpu_info.architecture);
+#if defined(__i386__) || defined(__x86_64__)
   SYNCMSG("CPU %s type %d family %d model %d stepping %d features %08lx",cpu_info.vendor,
       (int)cpu_get_type(&cpu_info),(int)cpu_get_family(&cpu_info),(int)cpu_get_model(&cpu_info),
       (int)cpu_get_stepping(&cpu_info),cpu_info.feature_edx);
@@ -334,6 +339,7 @@ short setup_game(void)
   {
       SYNCMSG("%s", &cpu_info.brand[0]);
   }
+#endif
   SYNCMSG("Build image base: %p", PlatformManager_GetImageBase());
   SYNCMSG("Operating System: %s", PlatformManager_GetOSVersion());
 
@@ -375,6 +381,7 @@ short setup_game(void)
   // Start the sound system
   if (!init_sound())
     WARNMSG("Sound system disabled.");
+  load_settings();
   // Note: for some reason, signal handlers must be installed AFTER
   // init_sound(). This will probably change when we'll move sound
   // to SDL - then we'll put that line earlier, before setup_game().
@@ -487,7 +494,6 @@ short setup_game(void)
  */
 static bool players_cursor_is_at_top_of_view()
 {
-    const struct PlayerInfo *const player = get_displayed_player();
     const struct UserState *const ustate = get_user_state_prediction(get_displayed_user());
     switch (ustate->work_state)
     {
@@ -501,7 +507,7 @@ static bool players_cursor_is_at_top_of_view()
         return true;
 
     case PSt_OrderCreatr:
-        return (player->controlled_thing_idx > 0);
+        return (get_user_state(get_displayed_user())->controlled_thing_idx > 0);
 
     case PSt_CtrlDungeon:
         switch (ustate->primary_cursor_state)
@@ -515,7 +521,7 @@ static bool players_cursor_is_at_top_of_view()
 
             case CSt_PowerHand:
                 return (local_state.local_thing_under_hand == 0)
-                    || (! power_hand_is_empty(player));
+                    || (ustate->num_things_in_hand > 0);
         }
     }
     return false;
@@ -563,7 +569,7 @@ TbBool screen_to_map(struct Camera *camera, int32_t screen_x, int32_t screen_y, 
     result = false;
     if (camera != NULL)
     {
-      if (get_local_view_type(get_my_player()) == PVT_MapScreen)
+      if (get_local_view_type() == PVT_MapScreen)
           result = point_to_overhead_map(camera,screen_x/pixel_size,screen_y/pixel_size,&x,&y);
       else
           result = engine_point_to_map(camera,screen_x,screen_y,&x,&y);
@@ -674,7 +680,7 @@ void reset_gui_based_on_player_mode(void)
 {
     struct UserState* ustate = get_local_user_state();
     struct PlayerInfo *player = get_my_player();
-    if (get_player_view_type(player) == PVT_CreatureContrl)
+    if (get_user_view_type(get_my_user()) == PVT_CreatureContrl)
     {
         turn_on_menu(vid_change_query_menu);
         if (player->victory_state == VicS_LostLevel)
@@ -682,7 +688,7 @@ void reset_gui_based_on_player_mode(void)
             turn_off_query_menus();
         }
     }
-    else if (get_player_view_type(player) == PVT_CreaturePasngr)
+    else if (get_user_view_type(get_my_user()) == PVT_CreaturePasngr)
     {
         turn_on_menu(vid_change_query_menu);
         turn_off_query_menus();
@@ -774,10 +780,8 @@ void reinit_tagged_blocks_for_player(PlayerNumber plyr_idx)
 
 void instant_instance_selected(CrInstance check_inst_id)
 {
-    struct PlayerInfo *player;
-    player = get_player(my_player_number);
     struct Thing *ctrltng;
-    ctrltng = thing_get(player->controlled_thing_idx);
+    ctrltng = thing_get(get_local_user_state()->controlled_thing_idx);
     struct CreatureModelConfig *crconf;
     crconf = creature_stats_get_from_thing(ctrltng);
     long i;
@@ -835,26 +839,27 @@ TbBool toggle_computer_player(PlayerNumber plyr_idx)
     }
     struct Computer2 *comp;
     comp = get_computer_player(player->id_number);
-    computer_force_dump_held_things_on_map(comp, &dungeon->essential_pos);
+    struct Thing *heldtng = thing_get(comp->held_thing_idx);
+    if (!thing_is_invalid(heldtng)) {
+        queue_held_thing_drop(plyr_idx, heldtng);
+    }
+    comp->held_thing_idx = 0;
     return true;
 }
 
 void reinit_level_after_load(void)
 {
     struct PlayerInfo *player;
-    int i;
     SYNCDBG(6,"Starting");
     // Reinit structures from within the game
-    player = get_my_player();
     local_state.lens_palette = 0;
     local_state.main_palette = engine_palette;
     parchment_loaded = 0;
-    for (i=0; i < PLAYERS_COUNT; i++)
+    for (NetUserId user = 0; user < MAX_NET_USERS; user++)
     {
-        player = get_player(i);
-        if (player_exists(player))
+        if (user_present(user))
         {
-            update_engine_view(player, false);
+            update_local_view(user, false);
         }
     }
     start_rooms = &game.rooms[1];
@@ -890,6 +895,18 @@ void rederive_local_state(void)
     panel_map_update(0, 0, game.map_subtiles_x + 1, game.map_subtiles_y + 1);
     turn_off_event_box_if_stale();
     observer_validate_query();
+}
+
+// user (or spectator-attaché) state -> local render state
+// (lens and palette)
+void update_local_view_effects(void)
+{
+    update_local_lens();
+    struct Thing *thing = thing_get(get_user_state(get_displayed_user())->controlled_thing_idx);
+    TbBool frozen = thing_is_creature(thing) && flag_is_set(thing->alloc_flags, TAlF_IsControlled)
+        && creature_under_spell_effect(thing, CSAfF_Freeze);
+    if (frozen != local_state.freeze_palette_active)
+        PaletteSetUserPalette(get_local_user(), frozen ? blue_palette : engine_palette);
 }
 
 /**
@@ -1069,7 +1086,9 @@ void clear_game_for_summary(void)
     clear_columns();
     clear_action_points();
     clear_players();
-    clear_dungeons();
+    clear_dungeons();    
+    memset(game.script_variables, 0, sizeof(game.script_variables));
+    game.active_script_var_count = 0;
 }
 
 void clear_game(void)
@@ -1119,30 +1138,24 @@ void reset_creature_max_levels(void)
     }
 }
 
-void change_engine_window_relative_size(long w_delta, long h_delta)
-{
-    setup_engine_window(local_state.engine_window_x, local_state.engine_window_y,
-        local_state.engine_window_width+w_delta, local_state.engine_window_height+h_delta);
-}
-
 void PaletteSetUserPalette(NetUserId user, unsigned char *pal)
 {
     struct UserState* ustate = get_user_state(user);
     if (user_state_invalid(ustate))
         return;
-    if (pal == blue_palette) // if the requested palette is the Freeze palette
-    {
-      if ((ustate->additional_flags & UsrAF_FreezePaletteIsActive) != 0)
-        return; // Freeze palette is already on
-      ustate->additional_flags |= UsrAF_FreezePaletteIsActive; // flag Freeze palette is active
-    } else
-    {
-      ustate->additional_flags &= ~UsrAF_FreezePaletteIsActive; // flag Freeze palette is not active
-    }
     // an observer following a player sees that player's palette
     if ((user != get_local_user())
      && !(observer_is_active() && (get_player(get_net_user_player_number(user)) == get_displayed_player())))
         return;
+    if (pal == blue_palette) // if the requested palette is the Freeze palette
+    {
+      if (local_state.freeze_palette_active)
+        return; // Freeze palette is already on
+      local_state.freeze_palette_active = true;
+    } else
+    {
+      local_state.freeze_palette_active = false;
+    }
     if ( (local_state.lens_palette == 0) || ((pal != local_state.main_palette) && (pal == local_state.lens_palette)) )
     {
         local_state.main_palette = pal;
@@ -1191,16 +1204,6 @@ TbBool set_gamma(char corrlvl, TbBool do_set)
     return result;
 }
 
-void centre_engine_window(void)
-{
-    long window_center_x;
-    long window_center_y;
-    int32_t reserved = engine_window_reserved_left();
-    window_center_x = (MyScreenWidth-local_state.engine_window_width-reserved) / 2 + reserved;
-    window_center_y = (MyScreenHeight-local_state.engine_window_height) / 2;
-    setup_engine_window(window_center_x, window_center_y, local_state.engine_window_width, local_state.engine_window_height);
-}
-
 void turn_off_query(NetUserId user)
 {
     set_user_instance(user, PI_UnqueryCrtr, 0);
@@ -1214,8 +1217,9 @@ long filter_creatures_owned_by_keepers(const struct Thing *thing, MaxTngFilterPa
     return -1;
 }
 
-void level_lost_go_first_person(PlayerNumber plyr_idx)
+void level_lost_go_first_person(NetUserId user)
 {
+    const PlayerNumber plyr_idx = get_net_user_player_number(user);
     struct CreatureControl *cctrl;
     struct PlayerInfo *player;
     struct Dungeon *dungeon;
@@ -1236,7 +1240,7 @@ void level_lost_go_first_person(PlayerNumber plyr_idx)
         return;
     }
     struct Coord3d mappos = spawn_creatng->mappos;
-    thing = create_and_control_creature_as_controller(player, spectator_breed, &mappos);
+    thing = create_and_control_creature_as_controller(user, spectator_breed, &mappos);
     if (thing_is_invalid(thing)) {
         ERRORLOG("Unable to create spectator creature");
         return;
@@ -1395,7 +1399,6 @@ static void set_mouse_light(NetUserId user, TbBool valid, struct Coord3d pos)
 void update_local_mouse_light(void)
 {
     SYNCDBG(6,"Starting");
-    struct PlayerInfo *player = get_my_player();
 
     // Avoid glitching during level intro or possess animation
     if (get_local_user_state()->instance_num != PI_Unset)
@@ -1407,10 +1410,10 @@ void update_local_mouse_light(void)
     if (game_is_busy_doing_gui_string_input())
         return;
     // ... or in first person
-    if ((get_local_view_type(player) == PVT_CreatureContrl) || (get_local_view_type(player) == PVT_CreaturePasngr))
+    if ((get_local_view_type() == PVT_CreatureContrl) || (get_local_view_type() == PVT_CreaturePasngr))
         return;
 
-    struct Camera *cam = get_local_active_camera(player);
+    struct Camera *cam = get_local_active_camera();
     struct Coord3d pos;
     const TbBool valid = screen_to_map(cam, GetMouseX(), GetMouseY(), &pos);
 
@@ -1563,7 +1566,7 @@ void engine(struct PlayerInfo *player, struct Camera *cam)
     SYNCDBG(9,"Starting");
 
     flg_mem = RendererGetDrawFlags();
-    update_engine_settings(player);
+    update_engine_settings();
     mx = cam->mappos.x.val;
     my = cam->mappos.y.val;
     mz = cam->mappos.z.val;
@@ -1798,6 +1801,7 @@ static short process_command_line(unsigned short argc, char *argv[])
           narg++;
           default_loc_player = atoi(pr2str);
           force_player_num = true;
+          net_set_forced_user_players(pr2str);
       } else
       if (strcasecmp(parstr, "vidsmooth") == 0)
       {
@@ -1828,7 +1832,6 @@ static short process_command_line(unsigned short argc, char *argv[])
          start_params.packet_load_enable = true;
          start_params.packet_save_enable = false;
          snprintf(start_params.packet_fname, sizeof(start_params.packet_fname), "%s", pr2str);
-         set_flag(start_params.debug_flags, DFlg_ShowGameTurns | DFlg_FrameStep);
          narg++;
       } else
       if (strcasecmp(parstr,"packetsave") == 0)
@@ -1967,6 +1970,25 @@ static short process_command_line(unsigned short argc, char *argv[])
         strcpy(start_params.config_file, pr2str);
         start_params.overrides[Clo_ConfigFile] = true;
         narg++;
+      }
+      else if (strcasecmp(parstr, "cfg") == 0)
+      {
+        if (pr2str[0])
+        {
+            // append line to config_overrides
+            const char *line = argv[narg + 1];
+            size_t old_len = start_params.config_overrides ? strlen(start_params.config_overrides) : 0;
+            size_t add_len = strlen(line);
+            start_params.config_overrides = (char *)KfxRealloc(start_params.config_overrides, old_len + add_len + 2);
+            memcpy(start_params.config_overrides + old_len, line, add_len);
+            start_params.config_overrides[old_len + add_len] = '\n';
+            start_params.config_overrides[old_len + add_len + 1] = '\0';
+            narg++;
+        }
+        else
+        {
+            WARNMSG("No KEY=VALUE given after -cfg");
+        }
       }
       else if ( strcasecmp(parstr,"Bullfrog") == 0 ) // force playing the Bullfrog video
       {
@@ -2219,6 +2241,7 @@ int LbBullfrogMain(unsigned short argc, char *argv[])
     {
         api_init_server();
         game_loop();
+        LbNetwork_Stop();
     }
     reset_game();
     RendererResetScreen(true);

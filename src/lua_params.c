@@ -17,6 +17,7 @@
 #include "thing_effects.h"
 #include "keeperfx.hpp"
 #include "lua_base.h"
+#include "engine_textures.h"
 #include "lvl_script_lib.h"
 #include "map_data.h"
 #include "player_utils.h"
@@ -119,6 +120,21 @@ long luaL_checkNamedCommand(lua_State *L, int index,const struct NamedCommand * 
     }
     luaL_argerror(L,index,"unrecognized command");
     return 0;
+}
+
+long luaL_checkTexturePack(lua_State *L, int index)
+{
+    if (lua_isnumber(L, index))
+    {
+        long tmap_idx = lua_tointeger(L, index);
+        if (tmap_idx < 0)
+            return 0;
+        luaL_argcheck(L, tmap_idx < TEXTURE_VARIATIONS_COUNT - 1, index, "texture index out of range");
+        return tmap_idx + 1;
+    }
+    long slot = get_rid(texture_pack_desc, luaL_checkstring(L, index));
+    luaL_argcheck(L, slot != -1, index, "unrecognized texture");
+    return slot;
 }
 
 long luaL_optCheckinteger(lua_State* L, int index)
@@ -404,6 +420,14 @@ void luaL_checkMessageIcon(lua_State *L, int index, char* type, short* id)
     
 }
 
+long luaL_checkIcon(lua_State *L, int index)
+{
+    long id = (lua_type(L, index) == LUA_TNUMBER) ? lua_tointeger(L, index) : get_icon_id(luaL_checkstring(L, index));
+    if ((id <= 0) || (id == bad_icon_id))
+        return luaL_argerror(L, index, "unrecognized icon");
+    return id;
+}
+
 EffectOrEffElModel luaL_checkEffectOrEffElModel(lua_State *L, int index)
 {
     if (lua_isnumber(L, index))
@@ -431,16 +455,8 @@ long luaL_checkCreature_or_creature_wildcard(lua_State *L, int index)
     }
     else if(lua_isstring(L, index))
     {
-        const char* text = lua_tostring(L, index);
-        long id = get_rid(creature_desc, text);
-
-        if (0 == strcasecmp(text, "ANY_CREATURE"))
-        {
-            return CREATURE_NOT_A_DIGGER; //For scripts, when we say 'ANY_CREATURE' we exclude diggers.
-        }
-
-        luaL_argcheck(L,id != -1,index,"unrecognized creature type");
-
+        long id = parse_creature_name(lua_tostring(L, index));
+        luaL_argcheck(L, id != -1, index, "unrecognized creature type");
         return id;
     }
     luaL_argerror(L,index,"invalid creature type");

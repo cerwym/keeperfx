@@ -39,6 +39,7 @@ struct PlayerInfo;
 
 /******************************************************************************/
 extern struct TbNetworkUserInfo net_user_info[MAX_NET_USERS];
+extern TbBool net_startup_return_to_lobby;
 
 #pragma pack()
 /******************************************************************************/
@@ -52,8 +53,11 @@ int32_t network_session_join(void);
 
 TbBool network_user_active(NetUserId);
 const char *network_user_name(NetUserId);
+void net_set_forced_user_players(const char *list);
 TbBool network_human_contenders_remain(void);
 void resolve_placeholders(void);
+void hand_waiting_placeholders_to_ai(void);
+void seat_network_user(NetUserId user, PlayerNumber plyr_idx, const UserPreferences seat_prefs);
 void process_user_leave_game_packet(NetUserId user);
 void process_disconnected_network_players(void);
 TbBool user_present(NetUserId user);
@@ -62,8 +66,9 @@ void sync_initial_network_seed(void);
 void build_local_user_preferences(UserPreferences prefs);
 void apply_user_preferences(NetUserId user, const UserPreferences prefs, unsigned char flags);
 void apply_local_user_preferences(NetUserId user, unsigned char flags);
-void apply_user_start_tendencies(struct PlayerInfo *player);
+void apply_user_start_tendencies(NetUserId user);
 TbBool user_cheats_allowed(NetUserId user);
+TbBool computer_assistant_allowed(void);
 TbBool game_censorship_enabled(void);
 void apply_recorded_network_stop(void);
 TbBool get_startup_user_preferences(NetUserId user, UserPreferences prefs);

@@ -52,6 +52,7 @@
 #include "engine_render.h"
 #include "gui_draw.h"
 #include "local_camera.h"
+#include "local_hand.h"
 
 #include <math.h>
 #include "post_inc.h"
@@ -326,7 +327,7 @@ static void draw_overlay_spell_or_box(struct Thing *thing, const struct MinimapO
 
 static void draw_overlay_possessed_thing(const struct MinimapOverlay *ov, int32_t x, int32_t y, TbPixel col)
 {
-    if ((get_local_view_type(ov->player) != PVT_CreatureContrl) && (get_local_view_type(ov->player) != PVT_CreaturePasngr))
+    if ((get_local_view_type() != PVT_CreatureContrl) && (get_local_view_type() != PVT_CreaturePasngr))
         return;
     if ((get_gameturn() % (8 * gui_blink_rate)) >= 4 * gui_blink_rate)
     {
@@ -343,8 +344,9 @@ static void draw_overlay_possessed_thing(const struct MinimapOverlay *ov, int32_
 
 static void draw_overlay_creature(struct Thing *thing, const struct MinimapOverlay *ov)
 {
-    if (thing_is_picked_up(thing))
+    if (thing_is_picked_up(thing) || local_hand_holds_thing(thing)) {
         return;
+    }
     const PlayerNumber plyr_idx = ov->player->id_number;
     const TbBool blink_on = (get_gameturn() % (8 * gui_blink_rate)) < 4 * gui_blink_rate;
     TbPixel col1 = 31;
@@ -376,7 +378,7 @@ static void draw_overlay_creature(struct Thing *thing, const struct MinimapOverl
             panel_map_draw_creature_dot(x, y - offset, col2, ov->basic_zoom, ov->is_low_res);
             panel_map_draw_creature_dot(x, y, 31, ov->basic_zoom, ov->is_low_res);
         } else
-        if ((is_thing_directly_controlled_by_player(thing, my_player_number)) || (is_thing_passenger_controlled_by_player(thing, my_player_number)))
+        if (user_controls_thing(get_displayed_user(), thing, UCT_Direct | UCT_Passenger | UCT_Other))
         {
             draw_overlay_possessed_thing(ov, x, y, col2);
         } else
@@ -446,7 +448,7 @@ void panel_map_draw_overlay_things(int32_t units_per_px, int32_t scaled_zoom, in
     }
     struct MinimapOverlay ov;
     ov.player = get_my_player();
-    ov.cam = get_local_active_camera(ov.player);
+    ov.cam = get_local_active_camera();
     if (ov.cam == NULL)
         return;
     ov.zoom = scaled_zoom;
@@ -579,8 +581,7 @@ void panel_map_update(long x, long y, long w, long h)
 
 static void do_map_rotate_stuff(float relpos_x, float relpos_y, float *coord_x, float *coord_y, long zoom)
 {
-    struct PlayerInfo *player = get_my_player();
-    const struct Camera *cam = get_local_active_camera(player);
+    const struct Camera *cam = get_local_active_camera();
     const int angle = cam->rotation_angle_x & ANGLE_MASK_4;
     const int shift_x = -LbSinL(angle);
     const int shift_y = LbCosL(angle);
@@ -675,16 +676,14 @@ short do_right_map_click(long start_x, long start_y, long curr_mx, long curr_my,
     int32_t y;
     SYNCDBG(17,"Starting");
     struct PlayerInfo *player;
-    struct Thing *thing;
     do_map_rotate_stuff_subtile(curr_mx - start_x - MapDiagonalLength/2, curr_my - start_y - MapDiagonalLength/2, &x, &y, zoom);
     game.hand_over_subtile_x = x;
     game.hand_over_subtile_y = y;
     player = get_my_player();
-    thing = get_first_thing_in_power_hand(player);
-    if (!thing_is_invalid(thing))
-    {
-        if (can_place_thing_here(thing, x, y, player->id_number))
-          game.small_map_state = 1;
+    const struct UserState *ustate = get_local_user_state_prediction();
+    struct Thing *thing = get_first_held_thing(ustate);
+    if ((thing != NULL) && can_place_thing_here(thing, x, y, player->id_number)) {
+        game.small_map_state = 1;
     }
     if (right_button_clicked)
       right_button_clicked = 0;
@@ -895,8 +894,7 @@ void panel_map_draw_slabs(long x, long y, long units_per_px, long zoom)
     auto_gen_tables(units_per_px);
     s_minimap_pixels = UIRenderer_AcquireMinimapBuffer(PanelMapX, PanelMapY, MapDiagonalLength);
     update_panel_colors();
-    struct PlayerInfo *player = get_my_player();
-    struct Camera *cam = get_local_active_camera(player);
+    struct Camera *cam = get_local_active_camera();
 
     if ((cam == NULL) || (MapDiagonalLength < 1) || (s_minimap_pixels == NULL))
         return;

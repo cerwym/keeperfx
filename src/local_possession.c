@@ -31,6 +31,7 @@
 #include "observer.h"
 #include "packets.h"
 #include "player_data.h"
+#include "power_hand.h"
 #include "sounds.h"
 #include "thing_creature.h"
 #include "thing_data.h"
@@ -299,10 +300,9 @@ static void play_predicted_sounds(struct Thing *thing)
 
 void update_local_possession(void)
 {
-    struct PlayerInfo *player = get_my_player();
-    struct Thing *thing = thing_get(player->controlled_thing_idx);
-    if (!network_is_active() || observer_is_active() || (get_player_view_type(player) != PVT_CreatureContrl) || !thing_is_creature(thing)
-     || !flag_is_set(thing->alloc_flags, TAlF_IsControlled)) {
+    struct Thing *thing = thing_get(get_local_user_state()->controlled_thing_idx);
+    if (!network_is_active() || observer_is_active() || (get_user_view_type(get_my_user()) != PVT_CreatureContrl) || !thing_is_creature(thing)
+     || !flag_is_set(thing->alloc_flags, TAlF_IsControlled) || thing_is_picked_up(thing)) {
         prediction.valid = false;
         possession_pause_pending = false;
         return;
@@ -403,7 +403,7 @@ void offset_local_possession_shot(const struct Thing *shotng, struct Coord3d *po
 
 void set_packet_possession_target(struct Packet *pckt)
 {
-    struct Thing *thing = thing_get(get_my_player()->controlled_thing_idx);
+    struct Thing *thing = thing_get(get_local_user_state()->controlled_thing_idx);
     if ((packet_camera_context(pckt) != CamIV_FirstPerson) || !thing_is_creature(thing)) {
         return;
     }

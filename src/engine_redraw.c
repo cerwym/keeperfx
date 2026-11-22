@@ -19,6 +19,7 @@
 #include "pre_inc.h"
 #include "observer.h"
 #include <stdlib.h>
+#include <string.h>
 #include "kfx/renderer/RendererManager.h"
 #include "engine_redraw.h"
 #include "engine_textures.h"
@@ -47,6 +48,7 @@
 #include "engine_lenses.h"
 #include "kfx/ui/GameUI.h"
 #include "local_camera.h"
+#include "local_hand.h"
 #include "local_possession.h"
 #include "front_simple.h"
 #include "front_easter.h"
@@ -125,6 +127,46 @@ static void ensure_map_fade_buffers(int width, int height)
         map_fade_ghost_table = (unsigned char*)malloc(PALETTE_COLORS * PALETTE_COLORS);
 }
 /******************************************************************************/
+enum { CUSTOM_BUFF_SLOTS = 4, CUSTOM_BUFF_ICONS = 32 };
+struct CustomBuffSlot {
+    char name[COMMAND_WORD_LEN];
+    long icons[CUSTOM_BUFF_ICONS];
+    short dy[CUSTOM_BUFF_ICONS];
+    int count;
+};
+static struct CustomBuffSlot custom_buff_slots[CUSTOM_BUFF_SLOTS];
+
+void clear_custom_buff_icons(void)
+{
+    memset(custom_buff_slots, 0, sizeof(custom_buff_slots));
+}
+
+void set_custom_buff_icon_slot(const char *name, const long *icons, const short *dy, int count)
+{
+    struct CustomBuffSlot *slot = NULL;
+    struct CustomBuffSlot *blank = NULL;
+    for (int i = 0; i < CUSTOM_BUFF_SLOTS; i++)
+    {
+        if (strcasecmp(custom_buff_slots[i].name, name) == 0)
+            slot = &custom_buff_slots[i];
+        else if ((blank == NULL) && (custom_buff_slots[i].name[0] == 0))
+            blank = &custom_buff_slots[i];
+    }
+    if (slot == NULL)
+        slot = (count > 0) ? blank : NULL;
+    if (slot == NULL)
+        return;
+    if (count <= 0)
+    {
+        memset(slot, 0, sizeof(*slot));
+        return;
+    }
+    snprintf(slot->name, sizeof(slot->name), "%s", name);
+    slot->count = min(count, CUSTOM_BUFF_ICONS);
+    memcpy(slot->icons, icons, (size_t)slot->count * sizeof(long));
+    memcpy(slot->dy, dy, (size_t)slot->count * sizeof(short));
+}
+
 static void draw_creature_view_icons(struct Thing* creatng)
 {
     struct GuiMenu *gmnu = get_active_menu(menu_id_to_number(GMnu_MAIN));
@@ -177,6 +219,15 @@ static void draw_creature_view_icons(struct Thing* creatng)
         draw_gui_panel_sprite_left(x, y, ps_units_per_px, spridx);
         x += scale_ui_value_lofi(spr->SWidth);
     }
+    int drawn = 0;
+    for (int slot = 0; slot < CUSTOM_BUFF_SLOTS; slot++)
+    {
+        for (int i = 0; (i < custom_buff_slots[slot].count) && (drawn < CUSTOM_BUFF_ICONS); i++, drawn++)
+        {
+            draw_gui_panel_sprite_left(x, y + custom_buff_slots[slot].dy[i] * ps_units_per_px / 16, ps_units_per_px, custom_buff_slots[slot].icons[i]);
+            x += scale_ui_value_lofi(spr->SWidth);
+        }
+    }
     if ( (cctrl->dragtng_idx != 0) && ((creatng->alloc_flags & TAlF_IsDragged) == 0) )
     {
         struct Thing* dragtng = thing_get(cctrl->dragtng_idx);
@@ -221,8 +272,7 @@ static void draw_creature_view_icons(struct Thing* creatng)
     }
     else
     {
-        struct PlayerInfo* player = get_my_player();
-        if (get_player_view_type(player) == PVT_CreatureContrl)
+        if (get_user_view_type(get_my_user()) == PVT_CreatureContrl)
         {
             const CrInstance active_inst_id = get_local_creature_control(creatng)->active_instance_id;
             if (!creature_instance_is_available(creatng, active_inst_id))
@@ -466,27 +516,31 @@ long dummy_sound_line_of_sight(long a1, long a2, long a3, long a4, long a5, long
     return 1;
 }
 
-void set_engine_view(struct PlayerInfo *player, TbBool front_view, TbBool wibble)
+void set_user_dungeon_view(NetUserId user, TbBool front_view, TbBool wibble)
 {
-    struct UserState *ustate = get_player_user_state(player);
+    struct UserState *ustate = get_user_state(user);
+    if (user_state_invalid(ustate))
+        return;
     if ((ustate->prefs[UPref_FrontView] != 0) != front_view)
-        carry_local_dungeon_position(player, ustate->prefs[UPref_FrontView] != 0);
+        carry_local_dungeon_position(user, ustate->prefs[UPref_FrontView] != 0);
     ustate->prefs[UPref_FrontView] = front_view;
     ustate->prefs[UPref_Wibble] = wibble;
-    update_engine_view(player, true);
+    update_local_view(user, true);
 }
 
-void update_engine_view(struct PlayerInfo *player, TbBool keep_local_camera)
+void update_local_view(NetUserId user, TbBool keep_local_camera)
 {
-    if ((get_player_view_type(player) == PVT_MapFadeIn) || (get_player_view_type(player) == PVT_MapFadeOut))
+    if (!local_camera_shows_user(user))
         return;
-    const TbBool first_person = (get_player_view_type(player) == PVT_CreatureContrl) || (get_player_view_type(player) == PVT_CreaturePasngr);
-    update_local_dungeon_view_mode(player);
+    const unsigned char view_type = get_user_view_type(user);
+    if (view_type == PVT_MapFadeIn || view_type == PVT_MapFadeOut)
+        return;
+    update_local_dungeon_view_mode(user);
     if (!keep_local_camera)
-        sync_local_camera(player);
-    if (!is_my_player(player))
+        sync_local_camera(user);
+    if (!is_local_user(user))
         return;
-    if (first_person)
+    if (view_type == PVT_CreatureContrl || view_type == PVT_CreaturePasngr)
     {
         lens_mode = 2;
         S3DSetLineOfSightFunction(dummy_sound_line_of_sight);
@@ -494,10 +548,10 @@ void update_engine_view(struct PlayerInfo *player, TbBool keep_local_camera)
         LbMouseSetPosition((MyScreenWidth/pixel_size) >> 1,(MyScreenHeight/pixel_size) >> 1);
         return;
     }
-    if (get_player_view_type(player) != PVT_MapScreen)
+    if (view_type != PVT_MapScreen)
     {
         lens_mode = 0;
-        if (get_player_user_state(player)->prefs[UPref_FrontView] != 0)
+        if (get_user_state(user)->prefs[UPref_FrontView] != 0)
             temp_cluedo_mode = 0;
     }
     S3DSetLineOfSightFunction(dummy_sound_line_of_sight);
@@ -513,8 +567,7 @@ static void draw_compass_label(int x, int y, int units_per_px, const char *text)
 
 void draw_overlay_compass(long base_x, long base_y)
 {
-    struct PlayerInfo* player = get_my_player();
-    struct Camera* cam = get_local_active_camera(player);
+    struct Camera* cam = get_local_active_camera();
     unsigned short flg_mem = RendererGetDrawFlags();
     LbTextSetFont(winfont);
     RendererAddDrawFlags(Lb_SPRITE_TRANSPAR4);
@@ -551,7 +604,7 @@ void redraw_creature_view(void)
     SYNCDBG(6,"Starting");
     struct PlayerInfo* player = get_my_player();
     update_explored_flags_for_viewed_power_sights(player);
-    struct Thing* thing = thing_get(get_displayed_player()->controlled_thing_idx);
+    struct Thing* thing = thing_get(get_user_state(get_displayed_user())->controlled_thing_idx);
     TRACE_THING(thing);
     if (thing_exists(thing))
       draw_creature_view(thing);
@@ -577,7 +630,7 @@ void redraw_isometric_view(void)
     struct PlayerInfo* player = get_my_player();
     if (player_invalid(player))
         return;
-    struct Camera* render_cam = get_local_active_camera(player);
+    struct Camera* render_cam = get_local_active_camera();
     update_explored_flags_for_viewed_power_sights(player);
     engine(player,render_cam);
     remove_explored_flags_for_viewed_power_sights(player);
@@ -589,7 +642,7 @@ void redraw_frontview(void)
 {
     SYNCDBG(6,"Starting");
     struct PlayerInfo* player = get_my_player();
-    struct Camera* render_cam = get_local_active_camera(player);
+    struct Camera* render_cam = get_local_active_camera();
     update_explored_flags_for_viewed_power_sights(player);
     draw_frontview_engine(render_cam);
      remove_explored_flags_for_viewed_power_sights(player);
@@ -632,15 +685,19 @@ static TbBool draw_spell_cursor(NetUserId user, PowerKind pwkind, ThingIndex tng
     struct Thing* thing = thing_get(tng_idx);
     TbBool allow_cast = false;
     const struct PowerConfigStats* powerst = get_power_model_stats(pwkind);
-    allow_cast = can_cast_spell(player->id_number, pwkind, stl_x, stl_y, thing, CastChk_SkipThing);
+    allow_cast = can_cast_spell(player->id_number, user,pwkind, stl_x, stl_y, thing, CastChk_SkipThing);
+    if ((pwkind == PwrK_POSSESS) && thing_controlled_by_other_user(user, thing, UCT_Direct | UCT_Passenger | UCT_Other | UCT_PossessionEntryZoom)) {
+        allow_cast = false;
+    }
     if (!allow_cast) {
         set_pointer_graphic(MousePG_DenyMark);
         return false;
     }
-    unsigned char (*chkfunc)(NetUserId) = powermodel_expand_check_func_list[powerst->overcharge_check_idx];
+    unsigned char (*chkfunc)(PlayerNumber, const struct UserState *) = powermodel_expand_check_func_list[powerst->overcharge_check_idx];
+    const struct UserState *ustate = get_user_state_prediction(user);
     if (chkfunc != NULL) {
-        if (chkfunc(user)) {
-            i = get_power_overcharge_level(user);
+        if (chkfunc(player->id_number, ustate)) {
+            i = get_power_overcharge_level(ustate);
             set_pointer_graphic(MousePG_SpellCharge0+i);
             draw_spell_cost = compute_power_price(player->id_number, pwkind, i);
 
@@ -668,7 +725,7 @@ static void process_dungeon_top_pointer_graphic(NetUserId user)
         return;
     }
     if (is_observer_camera_active()) {
-        if (ustate->work_state == PSt_CreatrQuery || ustate->work_state == PSt_CreatrInfo) {
+        if ((ustate->work_state == PSt_CreatrQuery || ustate->work_state == PSt_CreatrInfo) && !gameplay_cursor_is_over_gui()) {
             set_pointer_graphic(MousePG_Query);
         } else {
             set_pointer_graphic(MousePG_Arrow);
@@ -681,7 +738,7 @@ static void process_dungeon_top_pointer_graphic(NetUserId user)
         return;
     }
     // Mouse over panel map
-    if (is_my_player(player) && local_state.show_gui
+    if (is_local_user(user) && local_state.show_gui
      && mouse_is_over_panel_map(local_state.minimap_pos_x, local_state.minimap_pos_y)) {
         if (game.small_map_state == 2) {
             set_pointer_graphic(MousePG_Invisible);
@@ -691,11 +748,11 @@ static void process_dungeon_top_pointer_graphic(NetUserId user)
         return;
     }
     // Mouse over battle message box
-    if (is_my_player(player) && battle_creature_over > 0) {
+    if (is_local_user(user) && battle_creature_over > 0) {
         PowerKind pwkind = ustate->chosen_power_kind;
         thing = thing_get(battle_creature_over);
         TRACE_THING(thing);
-        if (can_cast_spell(player->id_number, pwkind, thing->mappos.x.stl.num, thing->mappos.y.stl.num, thing, CastChk_Default)) {
+        if (can_cast_spell(player->id_number, user,pwkind, thing->mappos.x.stl.num, thing->mappos.y.stl.num, thing, CastChk_Default)) {
             draw_spell_cursor(user, pwkind, battle_creature_over, thing->mappos.x.stl.num, thing->mappos.y.stl.num);
         } else {
             set_pointer_graphic(MousePG_Arrow);
@@ -704,7 +761,7 @@ static void process_dungeon_top_pointer_graphic(NetUserId user)
     }
     // GUI action being processed
     if (gameplay_cursor_is_over_gui()) {
-        if (is_my_player(player) || a_menu_window_is_active()) {
+        if (is_local_user(user) || a_menu_window_is_active()) {
             set_pointer_graphic(MousePG_Arrow);
         } else {
             set_pointer_graphic(MousePG_Invisible);
@@ -723,10 +780,9 @@ static void process_dungeon_top_pointer_graphic(NetUserId user)
           i = ustate->secondary_cursor_state;
         else
           i = ustate->primary_cursor_state;
-        if (ustate->instance_num == PI_Grab || ustate->instance_num == PI_Drop || ustate->instance_num == PI_Whip || ustate->instance_num == PI_WhipEnd || power_hand_is_hovering(player) || (!power_hand_is_empty(player) && (i != CSt_DoorKey))) {
+        if ((get_hand_instance_animation(ustate->instance_num) != HndA_None) || power_hand_is_hovering(user) || ((ustate->num_things_in_hand > 0) && (i != CSt_DoorKey))) {
             i = CSt_PowerHand;
-        } else
-        if ((i == CSt_PowerHand) && power_hand_is_empty(player)) {
+        } else if ((i == CSt_PowerHand) && (ustate->num_things_in_hand == 0)) {
             i = CSt_DefaultArrow;
         }
         switch (i) {
@@ -738,22 +794,20 @@ static void process_dungeon_top_pointer_graphic(NetUserId user)
             set_pointer_graphic(MousePG_LockMark);
             break;
         case CSt_PowerHand:
-            thing_under_hand = ustate->thing_under_hand;
-            if (is_my_player(player) && local_state.local_thing_under_hand > 0) {
-                thing_under_hand = local_state.local_thing_under_hand;
-            }
+            thing_under_hand = get_user_thing_under_hand(user);
             thing = thing_get(thing_under_hand);
             TRACE_THING(thing);
             TbBool can_cast = false;
-            if ((ustate->input_crtr_control) && (thing_exists(thing)) && (dungeon->things_in_hand[0] != thing_under_hand)) {
+            if ((ustate->input_crtr_control) && (thing_exists(thing)) && (ustate->things_in_hand[0] != thing_under_hand)) {
                 PowerKind pwkind = PwrK_POSSESS;
-                if (can_cast_spell(player->id_number, pwkind, thing->mappos.x.stl.num, thing->mappos.y.stl.num, thing, CastChk_Default)) {
+                TbBool possessed_by_other = thing_controlled_by_other_user(user, thing, UCT_Direct | UCT_Passenger | UCT_Other | UCT_PossessionEntryZoom);
+                if (can_cast_spell(player->id_number, user,pwkind, thing->mappos.x.stl.num, thing->mappos.y.stl.num, thing, CastChk_Default)) {
                     // The condition above makes can_cast_spell() within draw_spell_cursor() to never fail; this is intentional
                     can_cast = true;
                 } else {
-                    thing = get_creature_near_for_controlling(player->id_number, thing->mappos.x.val, thing->mappos.y.val);
+                    thing = get_creature_near_for_controlling(player->id_number, user,thing->mappos.x.val, thing->mappos.y.val);
                     if (!thing_is_invalid(thing)) {
-                        if (can_cast_spell(player->id_number, pwkind, thing->mappos.x.stl.num, thing->mappos.y.stl.num, thing, CastChk_Default)) {
+                        if (can_cast_spell(player->id_number, user,pwkind, thing->mappos.x.stl.num, thing->mappos.y.stl.num, thing, CastChk_Default)) {
                             can_cast = true;
                         }
                     }
@@ -761,12 +815,12 @@ static void process_dungeon_top_pointer_graphic(NetUserId user)
                 if (can_cast) {
                     draw_spell_cursor(user, pwkind, 0, thing->mappos.x.stl.num, thing->mappos.y.stl.num);
                 } else {
-                    set_pointer_graphic(MousePG_Arrow);
+                    set_pointer_graphic(possessed_by_other ? MousePG_DenyMark : MousePG_Arrow);
                 }
 
                 local_state.display_needs_update = true;
             } else
-            if (((ustate->input_crtr_query) && !thing_is_invalid(thing)) && (dungeon->things_in_hand[0] != thing_under_hand)
+            if (((ustate->input_crtr_query) && !thing_is_invalid(thing)) && (ustate->things_in_hand[0] != thing_under_hand)
                 && can_thing_be_queried(thing, player->id_number)) {
                 set_pointer_graphic(MousePG_Query);
                 local_state.display_needs_update = true;
@@ -801,7 +855,7 @@ static void process_dungeon_top_pointer_graphic(NetUserId user)
             stl_x = coord_subtile(pckt->pos_x);
             stl_y = coord_subtile(pckt->pos_y);
         }
-        draw_spell_cursor(user, ustate->chosen_power_kind, 0, stl_x, stl_y);
+        draw_spell_cursor(user, ustate->chosen_power_kind, get_user_thing_under_hand(user), stl_x, stl_y);
         break;
     }
     case PsPg_Query:
@@ -830,7 +884,7 @@ static void process_dungeon_top_pointer_graphic(NetUserId user)
         set_pointer_graphic(MousePG_MkCreature);
         break;
     case PsPg_OrderCreatr: {
-        struct Thing* creatng = thing_get(player->controlled_thing_idx);
+        struct Thing* creatng = thing_get(get_user_state(user)->controlled_thing_idx);
         i = MousePG_Arrow;
         if (thing_is_creature(creatng)) {
             i = MousePG_MvCreature;
@@ -847,9 +901,8 @@ static void process_dungeon_top_pointer_graphic(NetUserId user)
 
 void process_pointer_graphic(void)
 {
-    struct PlayerInfo* player = get_my_player();
-    SYNCDBG(6,"Starting for view %d, player state %s, instance %d",(int)get_player_view_type(player),player_state_code_name(get_local_user_state()->work_state),(int)get_local_user_state()->instance_num);
-    switch (get_local_view_type(player)) {
+    SYNCDBG(6,"Starting for view %d, player state %s, instance %d",(int)get_user_view_type(get_my_user()),player_state_code_name(get_local_user_state()->work_state),(int)get_local_user_state()->instance_num);
+    switch (get_local_view_type()) {
     case PVT_DungeonTop:
         // This case is complicated
         process_dungeon_top_pointer_graphic(get_displayed_user());
@@ -879,7 +932,6 @@ void process_pointer_graphic(void)
 void redraw_display(void)
 {
     SYNCDBG(5,"Starting");
-    struct PlayerInfo* player = get_my_player();
     local_state.display_needs_update = false;
     if (game.game_kind == GKind_NonInteractiveState)
       return;
@@ -888,7 +940,7 @@ void redraw_display(void)
     else
       process_pointer_graphic();
     interpolate_local_cameras();
-    const unsigned char view_type = get_local_view_type(player);
+    const unsigned char view_type = get_local_view_type();
     if (view_type != PVT_DungeonTop) {
         observer_update_cursor();
     }
@@ -914,7 +966,7 @@ void redraw_display(void)
         redraw_parchment_view();
     } else
     {
-        if (get_local_active_camera(player)->view_mode == PVM_FrontView)
+        if (get_local_active_camera()->view_mode == PVM_FrontView)
             redraw_frontview();
         else
             redraw_isometric_view();
@@ -998,38 +1050,7 @@ void redraw_display(void)
         draw_consolelog();
     }
 
-    if (((game.operation_flags & GOF_Paused) != 0) && ((game.operation_flags & GOF_WorldInfluence) == 0) && !unpausing_in_progress)
-    {
-          LbTextSetFont(winfont);
-          const char * text = get_string(GUIStr_PausedMsg);
-          long w = (LbTextStringWidth(text) * units_per_pixel / 16 + 2 * (LbTextCharWidth(' ') * units_per_pixel / 16));
-          long pos_x;
-          if (get_local_view_type(player) != PVT_MapScreen) {
-              pos_x = local_state.engine_window_x + (MyScreenWidth - w - local_state.engine_window_x) / 2;
-          } else {
-              pos_x = (MyScreenWidth-w)/2;
-          }
-          long pos_y = 16 * units_per_pixel / 16;
-          RendererSetDrawFlags(Lb_TEXT_HALIGN_CENTER);
-          long h = LbTextLineHeight() * units_per_pixel / 16;
-          int text_w = w;
-          int text_x = pos_x;
-          if (MyScreenHeight < 400)
-          {
-              w *= 2;
-              h *= 3;
-              text_w = w;
-              if (dbc_initialized && dbc_enabled)
-              {
-                  text_w += 32;
-                  text_x -= 12;
-              }
-          }
-          LbTextSetWindow(text_x, pos_y, text_w, h);
-          draw_slab64k(pos_x, pos_y, units_per_pixel, w, h);
-          LbTextDrawResized(0/pixel_size, 0/pixel_size, tx_units_per_px, text);
-          LbTextSetWindow(0/pixel_size, 0/pixel_size, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
-    }
+    draw_paused_message(tx_units_per_px);
     if (game.armageddon_cast_turn != 0)
     {
         int i = 0;
@@ -1061,7 +1082,14 @@ void redraw_display(void)
         LbTextDrawResized(0/pixel_size, 0/pixel_size, tx_units_per_px, text);
         LbTextSetWindow(0/pixel_size, 0/pixel_size, MyScreenWidth/pixel_size, MyScreenHeight/pixel_size);
     }
+    draw_archon_co_users();
+    draw_co_user_cursors();
     draw_eastegg();
+    if (map_fade == PVT_None) {
+        RendererBeginOverlayCapture(OVERLAY_CAPTURE_TOOLTIP);
+        draw_tooltip();
+        RendererEndOverlayCapture(OVERLAY_CAPTURE_TOOLTIP);
+    }
     observer_draw_faded_cursor();
   //show_onscreen_msg(8, "Physical(%d,%d) Graphics(%d,%d) Lens(%d,%d)", (int)RendererPhysicalWidth(), (int)lbDisplay.PhysicalScreenHeight, (int)RendererScreenHeight(), (int)RendererScreenWidth(), (int)eye_lens_width, (int)eye_lens_height);
     SYNCDBG(7,"Finished");
@@ -1073,6 +1101,7 @@ void redraw_display(void)
 TbBool keeper_screen_redraw(void)
 {
     SYNCDBG(5,"Starting");
+    update_local_view_effects();
     RendererClearScreen(144);
     if (RendererBeginFrame())
     {

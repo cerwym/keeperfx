@@ -60,13 +60,13 @@ enum TbPacketAction {
         PckA_UnusedSlot018,
         PckA_UnusedSlot019,
         PckA_ToggleLights,//20
-        PckA_SwitchScrnRes,
+        PckA_UnusedSlot021,
         PckA_TogglePause,
         PckA_UnusedSlot023,
         PckA_SetUserPref,
-        PckA_ChangeWindowSize,//25
+        PckA_UnusedSlot025,//25
         PckA_BookmarkLoad,
-        PckA_SetGammaLevel,
+        PckA_UnusedSlot027,
         PckA_UnusedSlot028,
         PckA_SetMapRotation,
         PckA_UnusedSlot030,//30
@@ -204,6 +204,7 @@ enum TbPacketAction {
         PckA_CheatApplySpell,
         PckA_CheatKillCreature,
         PckA_SetTimestamp,
+        PckA_SetHandDropTarget,
 };
 
 /** Packet flags for non-action player operation. **/
@@ -230,6 +231,10 @@ enum TbPacketControl {
         PCtr_Ascend         = 0x80000,
         PCtr_Descend        = 0x100000,
         PCtr_ViewZoomPos    = 0x200000,
+        PCtr_GameMenuOpen   = 0x400000,
+        PCtr_SpecialMenuOpen = 0x800000,
+        PCtr_ChatOpen       = 0x1000000,
+        PCtr_ChatMessage    = 0x2000000,
 };
 
 /**
@@ -329,8 +334,30 @@ void unset_packet_control(struct Packet *pckt, unsigned long flag);
 void unset_players_packet_control(struct PlayerInfo *player, unsigned long flag);
 void set_players_packet_position(struct Packet *pckt, long x, long y, unsigned char context);
 void set_packet_pause_toggle(void);
-struct Thing *get_thing_under_hand(struct PlayerInfo *player, MapCoord x, MapCoord y);
+enum RightReleaseHandUse {
+    RRelease_Unused,
+    RRelease_Ignored,
+    RRelease_DropHeldThing,
+    RRelease_Slap,
+};
+
+enum HandCursorUse {
+    HandCursor_Remove,
+    HandCursor_Grabbing,
+    HandCursor_Idle,
+    HandCursor_Show,
+};
+
+struct Thing *get_thing_under_hand(NetUserId user, MapCoord x, MapCoord y);
+enum HandCursorUse begin_dungeon_control_input(struct UserState *ustate, const struct Packet *pckt, TbBool local_prediction);
+TbBool highlight_cursor_roomspace(struct UserState *ustate, struct PlayerInfo *player, const struct Packet *pckt);
+void press_cursor_buttons(struct UserState *ustate, const struct Packet *pckt);
+TbBool begin_left_release(struct UserState *ustate, struct Packet *pckt);
+void finish_left_release(struct UserState *ustate, struct Packet *pckt);
+enum RightReleaseHandUse begin_right_release(struct UserState *ustate, const struct Packet *pckt);
+void finish_cursor_release(struct UserState *ustate, struct Packet *pckt, enum RightReleaseHandUse release_use, TbBool dropped);
 TbBool process_dungeon_control_packet_clicks(NetUserId user);
+TbBool process_dungeon_control_packet_spell_overcharge(NetUserId user, const struct Packet *pckt);
 TbBool process_user_dungeon_control_packet_action(NetUserId user);
 void process_user_creature_control_packet_control(NetUserId user);
 void process_user_creature_passenger_packet_action(NetUserId user);
@@ -338,6 +365,9 @@ void process_user_creature_control_packet_action(NetUserId user);
 void process_map_packet_clicks(NetUserId user);
 void process_pause_packet(long a1, long a2);
 TbBool process_user_global_packet_action(NetUserId user);
+void apply_user_pref_packet_action(struct UserState *ustate, const struct Packet *pckt);
+void apply_first_person_packet_action(struct UserState *ustate, const struct Packet *pckt);
+void apply_creature_input_packet_values(struct UserState *ustate, const struct Packet *pckt);
 void clear_users_button_state(void);
 void process_camera_view_controls(struct Camera* cam, const struct Packet* pckt, const struct UserState *ustate);
 TbBool packet_action_has_camera_position(enum TbPacketAction action);
@@ -367,7 +397,7 @@ void set_local_packet_turn(void);
 void clear_packets(void);
 void post_init_packets(void);
 struct Room *keeper_build_room(NetUserId user,long stl_x,long stl_y,long plyr_idx,long rkind);
-TbBool player_sell_room_at_subtile(long plyr_idx, long stl_x, long stl_y);
+TbBool player_sell_room_at_subtile(PlayerNumber plyr_idx, NetUserId user, MapSubtlCoord stl_x, MapSubtlCoord stl_y);
 TbBool packets_process_cheats(NetUserId user, PlayerNumber plyr_idx, MapCoord x, MapCoord y,
     struct Packet* pckt, MapSubtlCoord stl_x, MapSubtlCoord stl_y, MapSlabCoord slb_x, MapSlabCoord slb_y);
 /******************************************************************************/

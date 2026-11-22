@@ -546,9 +546,8 @@ void reset_dungeon_build_room_ui_variables(NetUserId user)
     ustate->roomspace_detection_looseness = DEFAULT_USER_ROOMSPACE_DETECTION_LOOSENESS;
 }
 
-void get_dungeon_highlight_user_roomspace(struct RoomSpace *roomspace, struct PlayerInfo *player, NetUserId user, const struct Packet *pckt, MapSubtlCoord stl_x, MapSubtlCoord stl_y, const struct DigTagPrediction *prediction)
+void get_dungeon_highlight_user_roomspace(struct RoomSpace *roomspace, struct PlayerInfo *player, struct UserState *ustate, const struct Packet *pckt, MapSubtlCoord stl_x, MapSubtlCoord stl_y, const struct DigTagPrediction *prediction)
 {
-    struct UserState* ustate = get_user_state(user);
     PlayerNumber plyr_idx = player->id_number;
     MapSlabCoord slb_x = subtile_slab(stl_x);
     MapSlabCoord slb_y = subtile_slab(stl_y);
@@ -887,10 +886,9 @@ void get_dungeon_build_user_roomspace(struct RoomSpace *roomspace, NetUserId use
 
 TbBool update_dungeon_build_roomspace_preview(NetUserId user, MapSubtlCoord stl_x, MapSubtlCoord stl_y)
 {
-    struct PlayerInfo *player = get_user_player(user);
     struct UserState* ustate = get_user_state(user);
     ustate->full_slab_cursor = 1;
-    if (is_my_player(player)) {
+    if (is_local_user(user)) {
         gui_room_type_highlighted = ustate->chosen_room_kind;
     }
     get_dungeon_build_user_roomspace(&ustate->render_roomspace, user, ustate->chosen_room_kind, stl_x, stl_y, ustate->roomspace_mode);
@@ -987,15 +985,15 @@ static void sell_at_point(struct RoomSpace *roomspace)
     struct SlabMap *slb = get_slabmap_block(roomspace->buildx, roomspace->buildy);
     if (slabmap_owner(slb) == roomspace->plyr_idx)
     {
-        if (player_sell_trap_at_subtile(roomspace->plyr_idx, slab_subtile_center(roomspace->buildx), slab_subtile_center(roomspace->buildy),
+        if (player_sell_trap_at_subtile(roomspace->plyr_idx, roomspace->user, slab_subtile_center(roomspace->buildx), slab_subtile_center(roomspace->buildy),
                 get_user_state(roomspace->user)->full_slab_cursor != 0) ||
-            player_sell_door_at_subtile(roomspace->plyr_idx, slab_subtile(roomspace->buildx, 0), slab_subtile(roomspace->buildy, 0)) ) // Trying to sell trap
+            player_sell_door_at_subtile(roomspace->plyr_idx, roomspace->user, slab_subtile(roomspace->buildx, 0), slab_subtile(roomspace->buildy, 0)) ) // Trying to sell trap
         {
             // Nothing to do here - trap already sold
         } else
         if (subtile_is_sellable_room(roomspace->plyr_idx,slab_subtile(roomspace->buildx,0), slab_subtile(roomspace->buildy,0)))// Trying to sell room
         {
-            player_sell_room_at_subtile(roomspace->plyr_idx,slab_subtile(roomspace->buildx,0), slab_subtile(roomspace->buildy,0));
+            player_sell_room_at_subtile(roomspace->plyr_idx, roomspace->user, slab_subtile(roomspace->buildx,0), slab_subtile(roomspace->buildy,0));
         }
     }
 }
@@ -1111,22 +1109,33 @@ int apply_roomspace_dig_tag_selection(PlayerNumber plyr_idx, struct RoomSpace *r
 
 void keeper_start_roomspace(NetUserId user, const struct RoomSpace *roomspace, RoomKind rkind)
 {
-    struct PlayerInfo *player = get_user_player(user);
-    if (player->roomspace.is_active) {
+    struct UserState *ustate = get_user_state(user);
+    if (user_state_invalid(ustate) || ustate->roomspace.is_active) {
         return;
     }
-    player->roomspace = *roomspace;
-    player->roomspace.user = user;
-    player->roomspace.plyr_idx = player->id_number;
-    player->roomspace.rkind = rkind;
-    player->roomspace.is_active = true;
-    player->roomspace.buildx = roomspace->left;
-    player->roomspace.buildy = roomspace->top;
+    ustate->roomspace = *roomspace;
+    ustate->roomspace.user = user;
+    ustate->roomspace.plyr_idx = ustate->player_id;
+    ustate->roomspace.rkind = rkind;
+    ustate->roomspace.is_active = true;
+    ustate->roomspace.buildx = roomspace->left;
+    ustate->roomspace.buildy = roomspace->top;
     if (roomspace->drag_mode) {
-        player->roomspace.buildx = roomspace->drag_start_x;
-        player->roomspace.buildy = roomspace->drag_start_y;
+        ustate->roomspace.buildx = roomspace->drag_start_x;
+        ustate->roomspace.buildy = roomspace->drag_start_y;
     }
-    find_next_point(&player->roomspace, false);
+    find_next_point(&ustate->roomspace, false);
+}
+
+TbBool keeper_roomspace_is_active(PlayerNumber plyr_idx)
+{
+    for (NetUserId user = 0; user < MAX_NET_USERS; user++)
+    {
+        const struct UserState *ustate = get_user_state(user);
+        if ((ustate->player_id == plyr_idx) && ustate->roomspace.is_active)
+            return true;
+    }
+    return false;
 }
 
 static void keeper_update_roomspace(struct RoomSpace *roomspace)
@@ -1152,11 +1161,12 @@ static void keeper_update_roomspace(struct RoomSpace *roomspace)
 
 void update_roomspaces()
 {
-    for (PlayerNumber plyr_idx = 0; plyr_idx < DUNGEONS_COUNT; plyr_idx++)
+    for (NetUserId user = 0; user < MAX_NET_USERS; user++)
     {
-        if (is_active_keeper(get_player(plyr_idx)))
+        struct UserState *ustate = get_user_state(user);
+        if (ustate->roomspace.is_active && is_active_keeper(get_player(ustate->roomspace.plyr_idx)))
         {
-            keeper_update_roomspace(&get_player(plyr_idx)->roomspace);
+            keeper_update_roomspace(&ustate->roomspace);
         }
     }
 }
@@ -1190,7 +1200,7 @@ static void process_box_roomspace_inputs(struct Packet *pckt)
 
 void process_build_roomspace_inputs(PlayerNumber plyr_idx)
 {
-    const struct UserState* ustate = get_player_user_state_prediction(get_player(plyr_idx));
+    const struct UserState* ustate = get_local_user_state_prediction();
     struct Packet* pckt = get_local_packet() /* local input path */;
     if (room_role_matches(ustate->chosen_room_kind,RoRoF_PassLava|RoRoF_PassWater|RoRoF_PassAbyss)) {
         local_state.roomspace_size = DEFAULT_USER_ROOMSPACE_WIDTH;
@@ -1238,7 +1248,7 @@ void process_sell_roomspace_inputs(PlayerNumber plyr_idx)
 void process_highlight_roomspace_inputs(PlayerNumber plyr_idx)
 {
     struct PlayerInfo* player = get_player(plyr_idx);
-    const struct UserState* ustate = get_player_user_state_prediction(player);
+    const struct UserState* ustate = get_local_user_state_prediction();
     if (is_game_key_pressed(Gkey_BestRoomSpace, false, true)) {
         set_players_packet_action(player, PckA_SetRoomspaceHighlight, settings.highlight_mode ^ 1, settings.highlight_mode, 0, 0);
         reset_roomspace = true;

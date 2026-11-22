@@ -21,6 +21,7 @@
 
 #include "bflib_basics.h"
 #include "bflib_netsession.h"
+#include "user_prefs.h"
 #include "ver_defs.h"
 
 #ifdef __cplusplus
@@ -32,13 +33,11 @@ extern "C" {
 #define TIMEOUT_CONNECT_DIRECT_IPV4 5000
 #define TIMEOUT_JOIN_LOBBY 5000
 #define TIMEOUT_LOBBY_EXCHANGE 5000
-#define TIMEOUT_WAIT_FOR_ALL_PLAYERS 30000
 #define PEER_TIMEOUT_LIMIT 0
-#define PEER_TIMEOUT_MIN_MS 5000
-#define PEER_TIMEOUT_MAX_MS 30000
+#define PEER_TIMEOUT_MS 15000
 
 #define MIN_NET_USERS 2
-#define MAX_NET_USERS 4
+#define MAX_NET_USERS 8
 #define MAX_NET_SPECTATORS 50
 #define MAX_NET_CONNECTIONS (MAX_NET_USERS + MAX_NET_SPECTATORS)
 #define SPECTATOR_CONNECT_DATA 0x53504543
@@ -47,7 +46,9 @@ extern "C" {
 #define SERVER_ID 0
 #define SOLO_HUMAN_ID 0 /* human player's user id in non-multiplayer, when relevant */
 #define OBSERVER_USER MAX_NET_CONNECTIONS /* dummy user for observers */
-#define NET_MSG_BUFFER_SIZE 5000
+#define NO_USER -1
+#define NET_MSG_BUFFER_SIZE 20480
+#define NET_UNSEATED_MSG_MAX_SIZE 5000
 #define INVALID_USER_ID 23456
 
 typedef int NetUserId;
@@ -78,6 +79,7 @@ enum NetMessageType {
     NETMSG_SPECTATOR_NOTICE,
     NETMSG_SPECTATOR_CONVERSION,
     NETMSG_LOBBY_SETTINGS,
+    NETMSG_SPECTATOR_SEAT,
 };
 
 enum NetConnectionRole {
@@ -124,9 +126,11 @@ struct GameVersionPacket {
     int32_t build;
 };
 
+#define NET_USER_NAME_SIZE 32
+
 struct NetUser {
     NetUserId id;
-    char name[32];
+    char name[NET_USER_NAME_SIZE];
     enum NetUserProgress progress;
     int ack;
     struct GameVersionPacket version;
@@ -136,6 +140,10 @@ struct NetUser {
     TbBool spectator_resync_requested;
     uint32_t spectator_resync_requested_at;
     TbBool spectator_conversion_requested;
+    uint64_t reconnect_token;
+    TbBool seat_requested;
+    NetUserId seat_user;
+    UserPreferences seat_prefs;
 };
 
 struct NetFrame {
@@ -149,8 +157,7 @@ struct NetState {
     const struct NetSP *sp;
     struct NetUser users[MAX_NET_CONNECTIONS];
     TbBool users_timed_out[MAX_NET_CONNECTIONS];
-    enum NetJoinRejection users_leave_reason[MAX_NET_CONNECTIONS];
-    enum NetJoinRejection leave_reason;
+    uint64_t reconnect_tokens[MAX_NET_USERS];
     struct NetFrame *exchg_queue;
     char password[32];
     NetUserId my_id;
@@ -160,13 +167,14 @@ struct NetState {
     char msg_buffer[NET_MSG_BUFFER_SIZE];
     char msg_buffer_null;
     TbBool resync_pending;
+    TbBool simulating_disconnect;
     NetUserId pending_spectator_id;
     TbBool locked;
     enum NetSessionPhase phase;
 };
 
 struct TbNetworkUserInfo {
-    char name[32];
+    char name[NET_USER_NAME_SIZE];
     int32_t network_user_active;
     uint32_t connection_id;
 };

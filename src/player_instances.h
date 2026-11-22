@@ -64,9 +64,20 @@ enum PlayerInstanceNum {
     PI_UnusedSlot18,
 };
 /******************************************************************************/
+#define ANY_USER -2
+
+enum UserControllingThing {
+    UCT_Direct           = 0x01, /* user is possessing the creature normally */
+    UCT_Passenger        = 0x02, /* possession, but unable to control */
+    UCT_Other            = 0x04, /* mainly for intro heart zoom-in and post-defeat spectating in multiplayer */
+    UCT_PossessionEntryZoom = 0x08, /* the possession-start animation instance. (Without this flag, only counts if already in first-person.) */
+    UCT_Selected         = 0x10, /* misc. for querying, cheat menu, etc. */
+};
+
 #pragma pack(1)
 
 struct Thing;
+struct UserState;
 struct PlayerInfo;
 
 typedef int32_t (*InstncInfo_Func)(NetUserId user, int32_t *n);
@@ -93,33 +104,37 @@ struct PlayerInstanceInfo { // sizeof = 44
 extern struct PlayerInstanceInfo player_instance_info[PLAYER_INSTANCES_COUNT];
 /******************************************************************************/
 void set_user_instance(NetUserId user, int32_t ninum, TbBool force);
-TbBool slap_thing(struct PlayerInfo *player, struct Thing *thing);
+TbBool begin_user_instance(struct UserState *ustate, int32_t ninum, TbBool force);
+int32_t get_hand_instance_animation(unsigned char inum);
+int32_t get_hand_instance_end_animation(unsigned char inum);
+void show_power_slap_feedback(struct Thing *thing);
+TbBool slap_thing(struct PlayerInfo *player, NetUserId user, struct Thing *thing);
 TbBool player_instance_controls_camera(unsigned char inum);
 void process_user_instance(NetUserId user);
 void process_player_instances(void);
 
-void leave_creature_as_passenger(struct PlayerInfo *player, struct Thing *thing);
-void leave_creature_as_controller(struct PlayerInfo *player, struct Thing *thing);
-#define set_selected_creature(player,thing) set_selected_creature_f(player, thing, __func__)
-TbBool set_selected_creature_f(struct PlayerInfo *player, struct Thing *thing, const char *func_name);
-#define set_selected_thing(player,thing) set_selected_thing_f(player, thing, __func__)
-TbBool set_selected_thing_f(struct PlayerInfo *player, struct Thing *thing, const char *func_name);
-TbBool clear_selected_thing(struct PlayerInfo *player);
+void leave_creature_as_passenger(NetUserId user, struct Thing *thing);
+void leave_creature_as_controller(NetUserId user, struct Thing *thing);
+#define set_selected_creature(ustate,thing) set_selected_creature_f(ustate, thing, __func__)
+TbBool set_selected_creature_f(struct UserState *ustate, struct Thing *thing, const char *func_name);
+#define set_selected_thing(ustate,thing) set_selected_thing_f(ustate, thing, __func__)
+TbBool set_selected_thing_f(struct UserState *ustate, struct Thing *thing, const char *func_name);
+TbBool clear_selected_thing(struct UserState *ustate);
 
-TbBool is_thing_directly_controlled(const struct Thing *thing);
-TbBool is_thing_passenger_controlled(const struct Thing *thing);
-TbBool is_thing_some_way_controlled(const struct Thing *thing);
-TbBool is_thing_directly_controlled_by_player(const struct Thing *thing, PlayerNumber plyr_idx);
-TbBool is_thing_passenger_controlled_by_player(const struct Thing *thing, PlayerNumber plyr_idx);
+TbBool user_controls_thing(NetUserId user, const struct Thing *thing, uint32_t uct_flags);
+TbBool thing_controlled_by_other_user(NetUserId user, const struct Thing *thing, uint32_t uct_flags);
+TbBool leave_user_controlled_creature(NetUserId user);
+TbBool thing_is_possessed(const struct Thing *thing);
+NetUserId get_user_controlling_thing(const struct Thing *thing, uint32_t uct_flags);
 
 void set_player_zoom_to_position(struct PlayerInfo *player,struct Coord3d *pos);
 
-struct Room *player_build_room_at(MapSubtlCoord stl_x, MapSubtlCoord stl_y, PlayerNumber plyr_idx, RoomKind rkind, int slabs_left);
-TbBool player_place_trap_at(MapSubtlCoord stl_x, MapSubtlCoord stl_y, PlayerNumber plyr_idx, ThingModel tngmodel);
-TbBool player_place_trap_without_check_at(MapSubtlCoord stl_x, MapSubtlCoord stl_y, PlayerNumber plyr_idx, ThingModel tngmodel, TbBool free);
-TbBool player_place_door_at(MapSubtlCoord stl_x, MapSubtlCoord stl_y, PlayerNumber plyr_idx, ThingModel tngmodel);
-TbBool player_place_door_without_check_at(MapSubtlCoord stl_x, MapSubtlCoord stl_y, PlayerNumber plyr_idx, ThingModel tngmodel, TbBool free);
-long packet_place_door(MapSubtlCoord stl_x, MapSubtlCoord stl_y, PlayerNumber plyr_idx, ThingModel tngmodel, TbBool allowed);
+struct Room *player_build_room_at(MapSubtlCoord stl_x, MapSubtlCoord stl_y, PlayerNumber plyr_idx, NetUserId user, RoomKind rkind, int slabs_left);
+TbBool player_place_trap_at(MapSubtlCoord stl_x, MapSubtlCoord stl_y, PlayerNumber plyr_idx, NetUserId user, ThingModel tngmodel);
+TbBool player_place_trap_without_check_at(MapSubtlCoord stl_x, MapSubtlCoord stl_y, PlayerNumber plyr_idx, NetUserId user, ThingModel tngmodel, TbBool free);
+TbBool player_place_door_at(MapSubtlCoord stl_x, MapSubtlCoord stl_y, PlayerNumber plyr_idx, NetUserId user, ThingModel tngmodel);
+TbBool player_place_door_without_check_at(MapSubtlCoord stl_x, MapSubtlCoord stl_y, PlayerNumber plyr_idx, NetUserId user, ThingModel tngmodel, TbBool free);
+long packet_place_door(MapSubtlCoord stl_x, MapSubtlCoord stl_y, PlayerNumber plyr_idx, NetUserId user, ThingModel tngmodel, TbBool allowed);
 /******************************************************************************/
 #ifdef __cplusplus
 }

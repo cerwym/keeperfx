@@ -35,6 +35,8 @@
 #include "post_inc.h"
 
 #define NUM_CHANNELS 2
+// Nothing heard from a peer for this long counts as an outage (in a game peers send every turn).
+#define LINK_SILENCE_MS 1000
 #define HOLEPUNCH_CONNECT_DELAY_MS 1000
 #define HAPPY_EYEBALLS_DELAY_MS 250
 #define JOIN_CONNECT_POLL_DELAY_MS 16
@@ -60,6 +62,12 @@ namespace
     ENetPeer *client_peer = nullptr;
     enet_uint32 connection_ids[MAX_NET_CONNECTIONS] = {0};
     enet_uint32 resync_saved_window[MAX_NET_CONNECTIONS] = {0};
+    // When anything (including unsequenced gameplay data) last arrived from each peer, by peer
+    // index. ENet's own lastReceiveTime only moves on acknowledgements.
+    enet_uint32 peer_heard_at[MAX_NET_CONNECTIONS] = {0};
+    // Set when a peer is heard from again after LINK_SILENCE_MS of silence, cleared once the
+    // reliable messages sent to it meanwhile have been rescheduled.
+    bool peer_link_back[MAX_NET_CONNECTIONS] = {false};
     int host_is_dual_stack = 0;
     TransferRateTracker download_rate_tracker = {0, 0};
     TransferRateTracker upload_rate_tracker = {0, 0};
@@ -160,7 +168,7 @@ namespace
             enet_packet_destroy(packet);
             return;
         }
-        if ((source >= MAX_NET_USERS && (packet->dataLength > NET_MSG_BUFFER_SIZE || queued_packets[source] >= 32)) || (client_peer && net_join_role == NetRole_Spectator && (packet->dataLength > 16 * 1024 * 1024 || queued_bytes[source] + packet->dataLength > 32 * 1024 * 1024))) {
+        if ((source >= MAX_NET_USERS && (packet->dataLength > NET_UNSEATED_MSG_MAX_SIZE || queued_packets[source] >= 32)) || (client_peer && net_join_role == NetRole_Spectator && (packet->dataLength > 16 * 1024 * 1024 || queued_bytes[source] + packet->dataLength > 32 * 1024 * 1024))) {
             enet_packet_destroy(packet);
             netstate.sp->drop_user(source, NetJoin_Locked);
             return;
@@ -231,10 +239,12 @@ namespace
         client_peer = nullptr;
         memset(connection_ids, 0, sizeof(connection_ids));
         memset(resync_saved_window, 0, sizeof(resync_saved_window));
+        memset(peer_heard_at, 0, sizeof(peer_heard_at));
+        memset(peer_link_back, 0, sizeof(peer_link_back));
         if (host) {
             for (ENetPeer *peer = host->peers; peer < &host->peers[host->peerCount]; peer++) {
-                if (peer->state == ENET_PEER_STATE_CONNECTED) {
-                    enet_peer_disconnect(peer, netstate.leave_reason);
+                if (peer->state == ENET_PEER_STATE_CONNECTED && !netstate.simulating_disconnect) {
+                    enet_peer_disconnect(peer, 0);
                 }
             }
             enet_host_flush(host);
@@ -374,7 +384,7 @@ namespace
         LbNetLog("Join: connected successfully via %s (%s)\n", join_type, ip_version);
         net_join_rejection = NetJoin_Accepted;
         punch_phase_active = 0;
-        enet_peer_timeout(next_peer, PEER_TIMEOUT_LIMIT, PEER_TIMEOUT_MIN_MS, PEER_TIMEOUT_MAX_MS);
+        enet_peer_timeout(next_peer, PEER_TIMEOUT_LIMIT, PEER_TIMEOUT_MS, PEER_TIMEOUT_MS);
         cleanup_join_host(old_host, old_peer);
         log_peer_connection(next_peer, SERVER_ID, "connected");
         enet_host_set_intercept_callback(next_host, nullptr);
@@ -417,7 +427,7 @@ namespace
                 LbNetLog("Join: connected successfully via %s\n", join_type);
                 log_peer_connection(client_peer, SERVER_ID, "connected");
                 net_join_rejection = NetJoin_Accepted;
-                enet_peer_timeout(client_peer, PEER_TIMEOUT_LIMIT, PEER_TIMEOUT_MIN_MS, PEER_TIMEOUT_MAX_MS);
+                enet_peer_timeout(client_peer, PEER_TIMEOUT_LIMIT, PEER_TIMEOUT_MS, PEER_TIMEOUT_MS);
                 return Lb_OK;
             }
             if (service_result > 0 && (enet_event.type == ENET_EVENT_TYPE_DISCONNECT || enet_event.type == ENET_EVENT_TYPE_DISCONNECT_TIMEOUT)) {
@@ -709,6 +719,26 @@ namespace
         return connect_to_current_join_host(&connect_address, "LAN", LbTimerClock() + TIMEOUT_CONNECT_DIRECT_IPV4, TIMEOUT_CONNECT_DIRECT_IPV4);
     }
 
+    void report_dropped_peer(ENetPeer *peer, enet_uint32 data, enum NetDropReason drop_reason)
+    {
+        NetUserId user_id;
+        if (client_peer && client_peer == peer) {
+            user_id = SERVER_ID;
+            if (data >= NetJoin_InGame && data < NetJoin_Count) {
+                net_join_rejection = (enum NetJoinRejection)data;
+            }
+        } else {
+            user_id = NetUserId(reinterpret_cast<ptrdiff_t>(peer->data));
+        }
+        const char *disconnect_reason = "timed out";
+        if (drop_reason == NETDROP_DISCONNECT) {
+            disconnect_reason = "disconnected (clean)";
+        }
+        destroy_incoming_queue(user_id);
+        log_peer_connection(peer, user_id, disconnect_reason);
+        g_drop_callback(user_id, drop_reason);
+    }
+
     /*
      * @returns -1 if error, +1 if there is a packet, 0 if timeoout or no events
      */
@@ -719,6 +749,10 @@ namespace
         }
         for (size_t peer_index = 0; peer_index < host->peerCount; peer_index++) {
             ENetPeer *peer = &host->peers[peer_index];
+            if (peer->state == ENET_PEER_STATE_CONNECTED && peer->earliestTimeout != 0 && ENET_TIME_DIFFERENCE(host->serviceTime, peer->earliestTimeout) >= PEER_TIMEOUT_MS) {
+                enet_peer_reset(peer);
+                report_dropped_peer(peer, NetJoin_Accepted, NETDROP_TIMEOUT);
+            }
             if (peer->state == ENET_PEER_STATE_DISCONNECTED) {
                 resync_saved_window[peer_index] = 0;
                 continue;
@@ -732,22 +766,36 @@ namespace
             }
             NetUserId destination = NetUserId(reinterpret_cast<ptrdiff_t>(peer->data));
             bool spectator_peer = client_peer == nullptr && destination >= MAX_NET_USERS;
-            if (resync_saved_window[peer_index] == 0 && !spectator_peer) {
+            // ENet doubles a reliable command's retry time on every resend, so after a few seconds
+            // without a connection the next resend can be many seconds away and the peer times out
+            // (PEER_TIMEOUT_MS) although the link is back. When a peer is heard from again after
+            // an outage, the commands resent during it are resent once at the normal pace; ENet's
+            // back-off applies again after that.
+            bool link_back = peer_link_back[peer_index];
+            if (resync_saved_window[peer_index] == 0 && !spectator_peer && !link_back) {
                 continue;
+            }
+            if (link_back) {
+                peer_link_back[peer_index] = false;
             }
             enet_uint32 retry_interval = max(peer->roundTripTime + 4 * peer->roundTripTimeVariance, 100U) * 2;
             ENetList *commands = &peer->sentReliableCommands;
             for (ENetListIterator current = enet_list_begin(commands); current != enet_list_end(commands); current = enet_list_next(current)) {
                 ENetOutgoingCommand *command = reinterpret_cast<ENetOutgoingCommand *>(current);
-                if (command->packet == nullptr || command->packet->dataLength == 0) {
+                bool resent_in_outage = link_back && command->sendAttempts > 1;
+                bool spectator_command = false;
+                bool resync_command = false;
+                if (command->packet != nullptr && command->packet->dataLength > 0) {
+                    spectator_command = spectator_peer && command->packet->data[0] == NETMSG_SPECTATOR_TURN;
+                    resync_command = resync_saved_window[peer_index] != 0 && command->packet->dataLength > ENET_PROTOCOL_MAXIMUM_WINDOW_SIZE && command->packet->data[0] == NETMSG_RESYNC_DATA;
+                }
+                if (!spectator_command && !resync_command && !resent_in_outage) {
                     continue;
                 }
-                bool spectator_command = spectator_peer && command->packet->data[0] == NETMSG_SPECTATOR_TURN;
-                bool resync_command = resync_saved_window[peer_index] != 0 && command->packet->dataLength > ENET_PROTOCOL_MAXIMUM_WINDOW_SIZE && command->packet->data[0] == NETMSG_RESYNC_DATA;
-                if (!spectator_command && !resync_command) {
+                if (command->roundTripTimeout <= retry_interval) {
                     continue;
                 }
-                command->roundTripTimeout = min(command->roundTripTimeout, retry_interval);
+                command->roundTripTimeout = retry_interval;
                 enet_uint32 command_timeout = command->sentTime + command->roundTripTimeout;
                 if (ENET_TIME_LESS(command_timeout, peer->nextTimeout)) {
                     peer->nextTimeout = command_timeout;
@@ -782,7 +830,7 @@ namespace
                 }
                 if (reason == NetJoin_Accepted) {
                     log_peer_connection(enet_event.peer, user_id, "accepted");
-                    enet_peer_timeout(enet_event.peer, PEER_TIMEOUT_LIMIT, PEER_TIMEOUT_MIN_MS, PEER_TIMEOUT_MAX_MS);
+                    enet_peer_timeout(enet_event.peer, PEER_TIMEOUT_LIMIT, PEER_TIMEOUT_MS, PEER_TIMEOUT_MS);
                     enet_event.peer->data = reinterpret_cast<void *>(user_id);
                 } else {
                     log_peer_connection(enet_event.peer, INVALID_USER_ID, "rejected");
@@ -792,30 +840,21 @@ namespace
                 break;
             }
             case ENET_EVENT_TYPE_DISCONNECT:
-            case ENET_EVENT_TYPE_DISCONNECT_TIMEOUT: {
-                if (client_peer && client_peer == enet_event.peer) {
-                    user_id = SERVER_ID;
-                    if (enet_event.data >= NetJoin_InGame && enet_event.data < NetJoin_Count) {
-                        net_join_rejection = (enum NetJoinRejection)enet_event.data;
-                    }
-                } else {
-                    user_id = NetUserId(reinterpret_cast<ptrdiff_t>(enet_event.peer->data));
-                }
-                if (enet_event.data >= NetJoin_MapMismatch && enet_event.data < NetJoin_Count) {
-                    netstate.users_leave_reason[user_id] = (enum NetJoinRejection)enet_event.data;
-                }
-                const char *disconnect_reason = "timed out";
-                enum NetDropReason drop_reason = NETDROP_TIMEOUT;
-                if (enet_event.type == ENET_EVENT_TYPE_DISCONNECT) {
-                    disconnect_reason = "disconnected (clean)";
-                    drop_reason = NETDROP_DISCONNECT;
-                }
-                destroy_incoming_queue(user_id);
-                log_peer_connection(enet_event.peer, user_id, disconnect_reason);
-                g_drop_callback(user_id, drop_reason);
+                report_dropped_peer(enet_event.peer, enet_event.data, NETDROP_DISCONNECT);
                 break;
-            }
+            case ENET_EVENT_TYPE_DISCONNECT_TIMEOUT:
+                report_dropped_peer(enet_event.peer, enet_event.data, NETDROP_TIMEOUT);
+                break;
             case ENET_EVENT_TYPE_RECEIVE: {
+                {
+                    size_t index = enet_event.peer - host->peers;
+                    if (index < MAX_NET_CONNECTIONS) {
+                        if (peer_heard_at[index] != 0 && ENET_TIME_DIFFERENCE(host->serviceTime, peer_heard_at[index]) >= LINK_SILENCE_MS) {
+                            peer_link_back[index] = true;
+                        }
+                        peer_heard_at[index] = host->serviceTime | 1;
+                    }
+                }
                 user_id = SERVER_ID;
                 if (!client_peer) {
                     user_id = NetUserId(reinterpret_cast<ptrdiff_t>(enet_event.peer->data));
@@ -1073,6 +1112,12 @@ namespace
     void bf_enet_reassign_user(NetUserId old_id, NetUserId new_id)
     {
         destroy_incoming_queue(old_id);
+        destroy_incoming_queue(new_id);
+        ENetPeer *stale_peer = find_user_peer(new_id);
+        if (stale_peer != nullptr) {
+            log_peer_connection(stale_peer, new_id, "replaced");
+            enet_peer_disconnect_now(stale_peer, NetJoin_Accepted);
+        }
         ENetPeer *peer = find_user_peer(old_id);
         if (peer != nullptr) {
             peer->data = reinterpret_cast<void *>(new_id);
@@ -1109,6 +1154,22 @@ uint32_t GetPing(NetUserId id)
         ping = peer->lastRoundTripTime;
     }
     return ping;
+}
+
+uint32_t GetPingVariance(NetUserId id)
+{
+    ENetPeer *peer = client_peer;
+    if (peer != nullptr) {
+        if (id != SERVER_ID) {
+            return 0;
+        }
+    } else {
+        peer = find_user_peer(id);
+    }
+    if (!IsPeerConnected(peer)) {
+        return 0;
+    }
+    return peer->roundTripTimeVariance;
 }
 
 uint32_t GetPlayersPing(void)

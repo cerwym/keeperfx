@@ -25,6 +25,7 @@
 #include "bflib_datetm.h"
 #include "frontend.h"
 #include "game_legacy.h"
+#include "game_merge.h"
 #include "game_saves.h"
 #include "kfx/save/SaveManager.h"
 #include "kfx/save/core/save_schema.h"
@@ -971,7 +972,7 @@ TbBool open_packet_file_for_load(char *fname, struct CatalogueEntry *centry)
     TbBool g_present = false;
     struct SaveError err;
     enum SaveResult r = SaveManager_ReadReplayHeader(replay.fp, centry, &replay.head,
-        &game, &g_present, &packet_load_schema, &packet_load_dec, &err);
+        &game, &intralvl, &g_present, &packet_load_schema, &packet_load_dec, &err);
     if (r != SVR_Ok)
     {
         set_replay_crashlog(0, 0);
@@ -1027,16 +1028,15 @@ void restore_users_from_packet_save(void)
         }
         set_net_user_player_number(user, plyr_idx);
         struct PlayerInfo *player = get_player(plyr_idx);
-        snprintf(player->player_name, sizeof(player->player_name), "%s",
-            replay.head.user_names[user]);
-        init_user_state(user, plyr_idx);
+        init_user_state(user, plyr_idx, replay.head.user_names[user]);
+        name_player_after_primary_user(player);
         local_mapped |= (plyr_idx == my_player_number);
         SYNCLOG("Replay user %d -> player %d", (int)user, (int)plyr_idx);
     }
     if (!local_mapped)
     {
         set_net_user_player_number(SOLO_HUMAN_ID, my_player_number);
-        init_user_state(SOLO_HUMAN_ID, my_player_number);
+        init_user_state(SOLO_HUMAN_ID, my_player_number, "");
         SYNCLOG("Replay local user %d -> player %d (not in the recorded map)",
             (int)SOLO_HUMAN_ID, (int)my_player_number);
     }
@@ -1363,6 +1363,11 @@ void close_packet_file(void)
         replay.fp = NULL;
     }
     free_packet_load_decoder();
+    replay_rewind_deinit();
+    free(pending_resync);
+    pending_resync = NULL;
+    pending_resync_len = 0;
+    replay_checksum_pending = false;
 }
 
 TbBool reinit_packets_after_load(void)
@@ -1474,10 +1479,9 @@ TbBool setup_auto_replay_save(void)
     evict_old_replays(type, max_replays[type] - 1);
 
     int humans = 0;
-    for (int i = 0; i < PLAYERS_COUNT; i++)
+    for (NetUserId user = 0; user < MAX_NET_USERS; user++)
     {
-        struct PlayerInfo* player = get_player(i);
-        if (player_exists(player) && ((player->allocflags & PlaF_CompCtrl) == 0))
+        if (user_present(user))
             humans++;
     }
     time_t now = time(NULL);
@@ -1592,7 +1596,7 @@ TbBool open_new_packet_file_for_save(void)
     SaveManager_FillEntry(&centry, "Packet file");
     struct SaveError err;
     enum SaveResult r = SaveManager_WriteReplayHeader(replay.fp, &centry, &replay.head,
-        (get_gameturn() != 0) ? &game : NULL, &err);
+        (get_gameturn() != 0) ? &game : NULL, &intralvl, custom_intralevel_data, custom_intralevel_data_len, &err);
     if (r != SVR_Ok)
     {
         WARNMSG("Cannot write to packet file, \"%s\": %s", replay.fname, err.message);
@@ -1686,7 +1690,6 @@ void disable_packet_mode(void)
 {
     const NetUserId local_user = get_local_user();
     close_packet_file();
-    replay_rewind_reset();
     replay.load_enable = false;
     replay.save_enable = false;
     remap_user_to_solo(get_my_player(), local_user);

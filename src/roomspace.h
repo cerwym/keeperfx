@@ -116,6 +116,7 @@ struct RoomSpace {
     unsigned char drag_direction;
 };
 struct PlayerInfo;
+struct UserState;
 struct Packet;
 /******************************************************************************/
 /******************************************************************************/
@@ -145,7 +146,7 @@ struct RoomSpace get_current_room_as_roomspace(PlayerNumber current_plyr_idx,
                                                MapSlabCoord cursor_x, 
                                                MapSlabCoord cursor_y);
 
-void get_dungeon_highlight_user_roomspace(struct RoomSpace *roomspace, struct PlayerInfo *player, NetUserId user, const struct Packet *pckt, MapSubtlCoord stl_x, MapSubtlCoord stl_y, const struct DigTagPrediction *prediction);
+void get_dungeon_highlight_user_roomspace(struct RoomSpace *roomspace, struct PlayerInfo *player, struct UserState *ustate, const struct Packet *pckt, MapSubtlCoord stl_x, MapSubtlCoord stl_y, const struct DigTagPrediction *prediction);
 
 void get_dungeon_sell_user_roomspace(struct RoomSpace *roomspace, NetUserId user, MapSubtlCoord stl_x, MapSubtlCoord stl_y);
 
@@ -156,6 +157,7 @@ void apply_roomspace_packet_action(NetUserId user, const struct Packet *pckt);
 
 int apply_roomspace_dig_tag_selection(PlayerNumber plyr_idx, struct RoomSpace *roomspace, MapSlabCoord previous_slb_x, MapSlabCoord previous_slb_y, unsigned char highlight_mode, struct DigTagPrediction *prediction);
 void keeper_start_roomspace(NetUserId user, const struct RoomSpace *roomspace, RoomKind rkind);
+TbBool keeper_roomspace_is_active(PlayerNumber plyr_idx);
 
 void update_roomspaces();
 

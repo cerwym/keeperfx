@@ -83,13 +83,14 @@ enum NetAction {
 
 struct ScreenPacket {
   unsigned char networkstatus_flags;
-  char frontend_alliances;
+  int32_t frontend_alliances;
   short stored_data1; // Can contain: hand_position_x
   short stored_data2; // Can contain: hand_position_y
   short action_par1;
   unsigned char action_par2;
   int8_t player_settings[NetPlayerSetting_Count][MAX_NET_USERS];
   int8_t max_players;
+  int16_t level; // nonzero: host is forcing a particulsr level from the pack.
 };
 
 static inline unsigned char screen_packet_action(const struct ScreenPacket *nspck) {
