@@ -34,6 +34,7 @@ extern const struct ConfigFileData keeper_powerhands_file_data;
 #define NUM_ANIMS_PER_VARIANT 7
 
 enum HandAnims {
+    HndA_None = -1,
     HndA_Hold = 0,
     HndA_HoldGold,
     HndA_Hover,
@@ -45,7 +46,7 @@ enum HandAnims {
 
 struct PowerHandConfigStats {
     char  code_name[COMMAND_WORD_LEN];
-    short anim_idx[NUM_ANIMS_PER_VARIANT];
+    unsigned short anim_idx[NUM_ANIMS_PER_VARIANT];
     short anim_speed[NUM_ANIMS_PER_VARIANT];
 };
 

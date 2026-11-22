@@ -141,7 +141,7 @@ static void get_nearest_navigable_point_for_thing(struct Thing *thing, struct Co
       pos1->x.val, pos1->y.val, &px, &py);
     pos2->x.val = px;
     pos2->y.val = py;
-    pos2->z.val = get_thing_height_at(thing, pos2);
+    pos2->z.val = get_thing_height_at_xy(thing, pos2);
     if (thing_in_wall_at(thing, pos2))
         get_nearest_valid_position_for_creature_at(thing, pos2);
     nav_thing_can_travel_over_lava = 0;
@@ -252,6 +252,7 @@ struct ClosestGate
     ThingIndex index;
     TbBool friendly;
     MapCoordDelta distance;
+    int found_order;
 };
 int sortgates(const void* a, const void* b) 
 {
@@ -265,7 +266,9 @@ int sortgates(const void* a, const void* b)
     if (ga->distance < gb->distance) return -1;
     if (ga->distance > gb->distance) return 1;
 
-    return 0;
+    // Then the order they were found in: qsort() is not stable, and C libraries
+    // differ in how they order equal elements, which would let clients disagree
+    return (ga->found_order > gb->found_order) - (ga->found_order < gb->found_order);
 }
 
 /**
@@ -281,6 +284,8 @@ struct Thing *find_best_hero_gate_to_navigate_to(struct Thing *herotng)
     {
         hero_gates[g].index = 0;
         hero_gates[g].distance = INT32_MAX;
+        hero_gates[g].friendly = false;
+        hero_gates[g].found_order = g;
     }
 
     //Go through all objects to find gates and record distance
@@ -305,8 +310,9 @@ struct Thing *find_best_hero_gate_to_navigate_to(struct Thing *herotng)
         hero_gates[found_gates].index = thing->index;
         hero_gates[found_gates].distance = get_chessboard_distance(&thing->mappos, &herotng->mappos);;
         hero_gates[found_gates].friendly = (players_are_enemies(herotng->owner, get_slab_owner_thing_is_on(thing)) == false);
+        hero_gates[found_gates].found_order = found_gates;
         found_gates++;
-        if (found_gates > HERO_GATES_COUNT)
+        if (found_gates >= HERO_GATES_COUNT)
             break;
 
         // Per thing code ends
@@ -410,12 +416,8 @@ TbBool terrain_toxic_for_creature_at_position(const struct Thing *creatng, MapSu
     if (!thing_can_traverse_abyss_at(creatng, stl_x, stl_y)) {
         return true;
     }
-    struct CreatureModelConfig* crconf = creature_stats_get_from_thing(creatng);
-    // If the position is over lava, and we can't continuously fly, then it's toxic
-    if ((crconf->hurt_by_lava > 0) && map_pos_is_lava(stl_x,stl_y)) {
-        // Check not only if a creature is now flying, but also whether it's natural ability
-        if (!flag_is_set(creatng->movement_flags, TMvF_Flying) || (!crconf->flying))
-            return true;
+    if (map_pos_is_lava(stl_x, stl_y) && !creature_can_travel_over_lava(creatng)) {
+        return true;
     }
     return false;
 }
@@ -446,7 +448,7 @@ TbBool creature_can_get_to_dungeon_heart(struct Thing *creatng, PlayerNumber ply
 {
     SYNCDBG(18,"Starting");
     struct PlayerInfo* player = get_player(plyr_idx);
-    if (!player_exists(player) || ((player->is_active != 1) && !player_is_roaming(plyr_idx)))
+    if (!player_exists(player) || (!is_active_keeper(player) && !player_is_roaming(plyr_idx)))
     {
         SYNCDBG(18,"The %s index %d cannot get to inactive player %d",thing_model_name(creatng),(int)creatng->index,(int)plyr_idx);
         return false;
@@ -511,9 +513,8 @@ long creature_turn_to_face_angle(struct Thing *thing, long angle)
 
     thing->move_angle_xy = (thing->move_angle_xy + angle_delta) & ANGLE_MASK;
 
-    struct PlayerInfo* my_player = get_my_player();
-    if (my_player->controlled_thing_idx == thing->index && my_player->view_mode == PVM_CreatureView) {
-        set_local_camera_destination(my_player);
+    if (get_local_user_state()->controlled_thing_idx == thing->index && ((get_user_view_type(get_my_user()) == PVT_CreatureContrl) || (get_user_view_type(get_my_user()) == PVT_CreaturePasngr))) {
+        set_local_camera_destination(get_my_user());
     }
 
     return get_angle_difference(thing->move_angle_xy, angle);

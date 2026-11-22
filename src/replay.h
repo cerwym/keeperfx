@@ -1,0 +1,152 @@
+/******************************************************************************/
+// Free implementation of Bullfrog's Dungeon Keeper strategy game.
+/******************************************************************************/
+/** @file replay.h
+ *     Header file for replay.c.
+ * @par Purpose:
+ *     Replay recording and playback.
+ * @par Comment:
+ *     Just a header file - #defines, typedefs, function prototypes etc.
+ * @author   KeeperFX Team
+ * @par  Copying and copyrights:
+ *     This program is free software; you can redistribute it and/or modify
+ *     it under the terms of the GNU General Public License as published by
+ *     the Free Software Foundation; either version 2 of the License, or
+ *     (at your option) any later version.
+ */
+/******************************************************************************/
+#ifndef DK_REPLAY_H
+#define DK_REPLAY_H
+
+#include "bflib_basics.h"
+#include "globals.h"
+#include "net_main.h"
+#include "net_filecheck.h"
+#include "user_prefs.h"
+#include "packets.h"
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+/******************************************************************************/
+struct CatalogueEntry;
+
+#pragma pack(1)
+
+// save file header for .fxpkt files.
+// (Bump the version if PacketSaveHead, CatalogueEntry, Game or Packet's *set of
+// saved fields* changes in a way the schema decoder can't reconcile by name --
+// see SaveManager::ReadReplayHeader. A field rename/reorder/insertion
+// alone does NOT need a bump; the schema decode matches by name.)
+#define PACKET_SAVE_HEAD_VER 7
+
+enum PacketSaveHeadFlags {
+    PSHF_Checksum   = 0x01,
+    PSHF_Compressed = 0x02,
+    PSHF_MultiGame  = 0x04,
+};
+
+// Replay file header.
+struct PacketSaveHead {
+    unsigned short game_ver_major;
+    unsigned short game_ver_minor;
+    unsigned short game_ver_release;
+    unsigned short game_ver_build;
+    uint32_t level_num;
+    PlayerBitFlags players_exist;
+    PlayerBitFlags players_comp;
+    PlayerBitFlags players_seat;
+    uint8_t flags; // PacketSaveHeadFlags
+    uint32_t action_seed;
+    int64_t timestamp;
+    int32_t timestamp_tz;
+    GameTurn timestamp_turn;
+    TbBigChecksum map_checksums[NETWORK_STARTUP_MAP_FILE_COUNT];
+    UserPreferences user_prefs[MAX_NET_USERS];
+    signed char user_players[MAX_NET_USERS];
+    signed char recording_user;
+    int32_t frontend_alliances;
+    char user_names[MAX_NET_USERS][PLAYER_MP_NAME_LEN];
+};
+
+#pragma pack()
+/******************************************************************************/
+
+// where the replay reader is in the packet file, for rewinding
+struct PacketDecoderState {
+    int32_t file_pos;
+    uint32_t bits_acc;
+    int bits_count;
+    uint32_t dec_zeros;
+    unsigned char dec_lit[4];
+    int dec_lit_pos;
+    int dec_lit_len;
+    uint32_t dec_raw_left;
+};
+
+struct ReplayReaderPos {
+    struct PacketDecoderState dec;
+    struct Packet codec_prev[MAX_NET_USERS];
+    GameTurn pckt_gameturn;
+};
+
+/*
+ * State relating to watching and saving replays, including whether replay mode is enabled.
+ * Not stored in the main game struct, since resyncs shouldn't overwrite this, and shouldn't
+ * be part of game saves.
+ */
+struct ReplayState {
+    unsigned char save_enable;
+    unsigned char load_enable;
+    char fname[OS_ABSPATH_SIZE];
+    char fopened;
+    TbFileHandle fp;
+    unsigned int file_pos;
+    struct PacketSaveHead head;
+    uint32_t turns_stored;
+    uint32_t turns_fastforward;
+    unsigned char loading_in_progress;
+    unsigned char checksum_verify;
+    uint32_t log_things_start_turn;
+    uint32_t log_things_end_turn;
+    uint32_t turns_packetoff;
+    GameTurn pckt_gameturn;
+};
+
+extern struct ReplayState replay;
+extern char replay_crashlog_fname[OS_ABSPATH_SIZE];
+extern volatile uint8_t replay_crashlog_state;
+extern volatile GameTurn replay_crashlog_turn;
+
+extern unsigned long initial_replay_seed;
+
+TbBigChecksum compute_replay_integrity(void);
+void restore_users_from_packet_save(void);
+TbBool setup_auto_replay_save(void);
+TbBool open_new_packet_file_for_save(void);
+void load_packets_for_turn(GameTurn nturn);
+void verify_replay_checksum(void);
+TbBool open_packet_file_for_load(char *fname, struct CatalogueEntry *centry);
+short save_packets(void);
+void replay_forget_saved_turn(void);
+void replay_apply_pending_resync(void);
+void close_packet_file(void);
+void stop_replay_recording(const char *reason);
+void replay_record_chat_message(NetUserId user, const char *message, MapCoord cursor_x, MapCoord cursor_y);
+void replay_record_spectator_notice(const char *notice, size_t size);
+void replay_record_paused_action(NetUserId user, const struct Packet *pckt);
+void replay_record_resync(const void *message, size_t message_size);
+void replay_record_network_stopped(void);
+TbBool replay_playback_is_paused(void);
+void set_replay_playback_paused(TbBool paused);
+TbBool reinit_packets_after_load(void);
+void disable_packet_mode(void);
+TbBool verify_replay_map_checksums(void);
+void replay_save_reader_pos(struct ReplayReaderPos *pos);
+TbBool replay_restore_reader_pos(const struct ReplayReaderPos *pos);
+/******************************************************************************/
+#ifdef __cplusplus
+}
+#endif
+#endif

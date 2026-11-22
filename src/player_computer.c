@@ -101,9 +101,23 @@ GoldAmount get_computer_money_less_cost(const struct Computer2 *comp)
     return get_dungeon_money_less_cost(comp->dungeon);
 }
 
+int32_t get_computer_assist_model(uint8_t aptype)
+{
+    if (aptype < 1 || aptype > COMPUTER_ASSIST_TYPES_COUNT)
+        aptype = DEFAULT_COMPUTER_ASSIST;
+    return comp_player_conf.computer_assist_types[aptype-1];
+}
+
+int32_t get_random_skirmish_computer_model(void)
+{
+    int minSkirmishAI = comp_player_conf.skirmish_first;
+    int maxSkirmishAI = comp_player_conf.skirmish_last;
+    return GAME_RANDOM(maxSkirmishAI + 1 - minSkirmishAI) + minSkirmishAI;
+}
+
 long set_autopilot_type(PlayerNumber plyr_idx, long aptype)
 {
-    setup_a_computer_player(plyr_idx, comp_player_conf.computer_assist_types[aptype-1]);
+    setup_a_computer_player(plyr_idx, get_computer_assist_model(aptype));
     return 1;
 }
 
@@ -1328,7 +1342,6 @@ TbBool script_support_setup_player_as_computer_keeper(PlayerNumber plyr_idx, lon
     }
     player->allocflags |= PlaF_Allocated;
     player->id_number = plyr_idx;
-    player->is_active = 1;
     player->allocflags |= PlaF_CompCtrl;
     init_player_start(player, false);
     if (!setup_a_computer_player(plyr_idx, comp_model)) {
@@ -1409,7 +1422,7 @@ TbBool process_checks(struct Computer2 *comp)
             break;
         if ((ccheck->flags & ComChk_Unkn0001) == 0)
         {
-            long delta = (get_gameturn() - ccheck->last_run_turn);
+            GameTurnDelta delta = (GameTurnDelta)get_gameturn() - (GameTurnDelta)ccheck->last_run_turn;
             if ((delta > ccheck->turns_interval) && (computer_check_func_list[ccheck->func] != NULL))
             {
                 SYNCDBG(8,"Executing check %ld, \"%s\"",i,ccheck->name);
@@ -1559,7 +1572,7 @@ void process_computer_players2(void)
             continue;
         if (((player->allocflags & PlaF_CompCtrl) != 0) || ((dungeon->computer_enabled & 0x01) != 0))
         {
-          if (player->is_active == 1)
+          if (is_active_keeper(player))
           {
             process_computer_player2(i);
             if (computer_player_demands_gold_check(i))
@@ -1597,24 +1610,20 @@ void setup_computer_players2(void)
   for (i=0; i < PLAYERS_COUNT; i++)
   {
       player = get_player(i);
-      if (player_exists(player) && (player->is_active == 1))
+      if (is_active_keeper(player))
       {
-        // The range from which the computer model is selected
-        // is between minSkirmishAI and maxSkirmishAI, inclusive of both. User defined in keepcompp.cfg
-        int minSkirmishAI = comp_player_conf.skirmish_first;
-        int maxSkirmishAI = comp_player_conf.skirmish_last;
-
-        int skirmish_AI_type = GAME_RANDOM(maxSkirmishAI + 1 - minSkirmishAI) + minSkirmishAI;
-        if (i == game.local_plyr_idx)
+        int skirmish_AI_type = get_random_skirmish_computer_model();
+        const struct UserState *ustate = get_player_primary_user_state(player);
+        if (!user_state_invalid(ustate))
         {
-            skirmish_AI_type = comp_player_conf.player_assist_default;
+            skirmish_AI_type = get_computer_assist_model(ustate->prefs[UPref_StartingComputerAssistantKind]);
         }
         setup_a_computer_player(i, skirmish_AI_type);
         if ((game.computer_chat_flags & CChat_TasksScarce) != 0)
         {
             message_add_fmt(MsgType_Player, i, "Ai model %d", skirmish_AI_type);
         }
-        if (i != game.local_plyr_idx)
+        if (user_state_invalid(ustate))
         {
             JUSTMSG("No model defined for Player %d, assigned computer model %d", i, skirmish_AI_type);
         }
@@ -1638,7 +1647,7 @@ void restore_computer_player_after_load(void)
             comp->dungeon = INVALID_DUNGEON;
             continue;
         }
-        if (player->is_active != 1)
+        if (!is_active_keeper(player))
         {
             memset(comp, 0, sizeof(struct Computer2));
             comp->dungeon = get_players_dungeon(player);

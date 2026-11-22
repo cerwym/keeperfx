@@ -27,6 +27,7 @@
 #include "bflib_sprfnt.h"
 #include "config_strings.h"
 #include "game_saves.h"
+#include "kfx/save/SaveManager.h"
 #include "gui_draw.h"
 #include "gui_frontbtns.h"
 #include "gui_soundmsgs.h"
@@ -44,12 +45,12 @@
 int select_level_scroll_offset = 0;
 int select_campaign_scroll_offset = 0;
 int select_mappack_scroll_offset = 0;
-int select_mp_mappack_scroll_offset = 0;
 int number_of_freeplay_levels = 0;
 int frontend_select_level_items_visible = 0;
 int frontend_select_campaign_items_visible = 0;
 int frontend_select_mappack_items_visible = 0;
-int frontend_select_mp_mappack_items_visible = 0;
+static int32_t campaign_selected_idx = -1;
+static TbBool campaign_selected_has_progress = false;
 /******************************************************************************/
 void frontend_level_select_up(struct GuiButton *gbtn)
 {
@@ -207,6 +208,18 @@ void frontend_draw_level_select_mappack(struct GuiButton *gbtn)
     LbTextDrawResized(0, 0, tx_units_per_px, text);
 }
 
+static long campaign_select_count(void)
+{
+    return campaigns_list.items_num;
+}
+
+static struct GameCampaign *campaign_select_item(long i)
+{
+    if ((i < 0) || (i >= campaign_select_count()))
+        return NULL;
+    return &campaigns_list.items[i];
+}
+
 void frontend_campaign_select_up(struct GuiButton *gbtn)
 {
   if (select_campaign_scroll_offset > 0)
@@ -215,13 +228,13 @@ void frontend_campaign_select_up(struct GuiButton *gbtn)
 
 void frontend_campaign_select_down(struct GuiButton *gbtn)
 {
-  if (select_campaign_scroll_offset < campaigns_list.items_num-frontend_select_campaign_items_visible+1)
+  if (select_campaign_scroll_offset < campaign_select_count()-frontend_select_campaign_items_visible+1)
       select_campaign_scroll_offset++;
 }
 
 void frontend_campaign_select_scroll(struct GuiButton *gbtn)
 {
-    select_campaign_scroll_offset = frontend_scroll_tab_to_offset(gbtn, GetMouseY(), frontend_select_campaign_items_visible-2, campaigns_list.items_num);
+    select_campaign_scroll_offset = frontend_scroll_tab_to_offset(gbtn, GetMouseY(), frontend_select_campaign_items_visible-2, campaign_select_count());
 }
 
 void frontend_campaign_select_up_maintain(struct GuiButton *gbtn)
@@ -238,7 +251,7 @@ void frontend_campaign_select_down_maintain(struct GuiButton *gbtn)
 {
     if (gbtn == NULL)
         return;
-    if (select_campaign_scroll_offset < campaigns_list.items_num-frontend_select_campaign_items_visible+1)
+    if (select_campaign_scroll_offset < campaign_select_count()-frontend_select_campaign_items_visible+1)
         gbtn->flags |= LbBtnF_Enabled;
     else
         gbtn->flags &=  ~LbBtnF_Enabled;
@@ -250,7 +263,7 @@ void frontend_campaign_select_maintain(struct GuiButton *gbtn)
     return;
   long btn_idx = gbtn->content.lval;
   long i = select_campaign_scroll_offset + btn_idx - 45;
-  if (i < campaigns_list.items_num)
+  if (i < campaign_select_count())
       gbtn->flags |= LbBtnF_Enabled;
   else
       gbtn->flags &=  ~LbBtnF_Enabled;
@@ -262,25 +275,37 @@ void frontend_draw_campaign_select_button(struct GuiButton *gbtn)
       return;
     long btn_idx = gbtn->content.lval;
     long i = select_campaign_scroll_offset + btn_idx - 45;
-    struct GameCampaign* campgn = NULL;
-    if ((i >= 0) && (i < campaigns_list.items_num))
-      campgn = &campaigns_list.items[i];
+    struct GameCampaign* campgn = campaign_select_item(i);
     if (campgn == NULL)
       return;
-    if ((btn_idx > 0) && (frontend_mouse_over_button == btn_idx))
+    TbBool completed = (campgn->progress_percent >= 100);
+    if (((btn_idx > 0) && (frontend_mouse_over_button == btn_idx)) || (i == campaign_selected_idx))
       i = 2;
-    else
-/*    if (campaign has been passed)
+    else if (completed)
       i = 3;
-    else*/
+    else
       i = 1;
     RendererSetDrawFlags(Lb_TEXT_HALIGN_LEFT);
     LbTextSetFont(frontend_font[i]);
     // This text is a bit condensed - button size is smaller than text height
     int tx_units_per_px = (gbtn->height * 13 / 11) * 16 / LbTextLineHeight();
-    i = LbTextLineHeight() * tx_units_per_px / 16;
-    LbTextSetWindow(gbtn->scr_pos_x, gbtn->scr_pos_y, gbtn->width, i);
-    LbTextDrawResized(0, 0, tx_units_per_px, campgn->display_name);
+    int height = LbTextLineHeight() * tx_units_per_px / 16;
+    LbTextSetWindow(gbtn->scr_pos_x, gbtn->scr_pos_y, gbtn->width, height);
+    const char *stars = "";
+    if ((campgn->progress_percent >= 0) && !completed)
+        stars = (campgn->progress_percent < 26) ? "*" : (campgn->progress_percent < 72) ? "**" : "***";
+    if (stars[0] == '\0')
+    {
+        LbTextDrawResized(0, 0, tx_units_per_px, campgn->display_name);
+        return;
+    }
+    char text[LINEMSG_SIZE + 2];
+    snprintf(text, sizeof(text), "%s ", campgn->display_name);
+    LbTextDrawResized(0, 0, tx_units_per_px, text);
+    // asterisks sit very high in the font; compensate
+    int stars_x = LbTextStringWidthM(text, tx_units_per_px);
+    LbTextSetWindow(gbtn->scr_pos_x + stars_x, gbtn->scr_pos_y + 6 * tx_units_per_px / 16, gbtn->width - stars_x, height);
+    LbTextDrawResized(0, 0, tx_units_per_px, stars);
 }
 
 void frontend_campaign_select(struct GuiButton *gbtn)
@@ -289,22 +314,23 @@ void frontend_campaign_select(struct GuiButton *gbtn)
         return;
     long btn_idx = gbtn->content.lval;
     long i = select_campaign_scroll_offset + btn_idx - 45;
-    struct GameCampaign* campgn = NULL;
-    if ((i >= 0) && (i < campaigns_list.items_num))
-        campgn = &campaigns_list.items[i];
+    struct GameCampaign* campgn = campaign_select_item(i);
     if (campgn == NULL)
         return;
-    if (!frontend_start_new_campaign(campgn->fname))
-    {
-        ERRORLOG("Unable to start new campaign");
+    campaign_selected_idx = i;
+    campaign_selected_has_progress = SaveManager_CampaignHasProgress(campgn);
+    if (!frontend_register_click())
         return;
-    }
-    frontend_set_state(FeSt_CAMPAIGN_INTRO);
+    if (campaign_selected_has_progress)
+        frontend_campaign_continue(gbtn);
+    else
+        frontend_campaign_start_new(gbtn);
 }
 
 void frontend_campaign_select_update(void)
 {
-    if (campaigns_list.items_num <= 0)
+    int32_t count = campaign_select_count();
+    if (count <= 0)
     {
         select_campaign_scroll_offset = 0;
     } else
@@ -312,13 +338,13 @@ void frontend_campaign_select_update(void)
     {
         select_campaign_scroll_offset = 0;
     } else
-    if (select_campaign_scroll_offset > campaigns_list.items_num-frontend_select_campaign_items_visible+1)
+    if (select_campaign_scroll_offset > count-frontend_select_campaign_items_visible+1)
     {
-        select_campaign_scroll_offset = campaigns_list.items_num-frontend_select_campaign_items_visible+1;
+        select_campaign_scroll_offset = count-frontend_select_campaign_items_visible+1;
     }
     if (wheel_scrolled_down || (is_key_pressed(KC_DOWN,KMod_NONE)))
     {
-        if (select_campaign_scroll_offset < campaigns_list.items_num-frontend_select_campaign_items_visible+1)
+        if (select_campaign_scroll_offset < count-frontend_select_campaign_items_visible+1)
         {
             select_campaign_scroll_offset++;
         }
@@ -334,7 +360,41 @@ void frontend_campaign_select_update(void)
 
 void frontend_draw_campaign_scroll_tab(struct GuiButton *gbtn)
 {
-    frontend_draw_scroll_tab(gbtn, select_campaign_scroll_offset, frontend_select_campaign_items_visible-2, campaigns_list.items_num);
+    frontend_draw_scroll_tab(gbtn, select_campaign_scroll_offset, frontend_select_campaign_items_visible-2, campaign_select_count());
+}
+
+void frontend_campaign_continue_maintain(struct GuiButton *gbtn)
+{
+    if ((campaign_select_item(campaign_selected_idx) != NULL) && campaign_selected_has_progress)
+        gbtn->flags |= LbBtnF_Enabled;
+    else
+        gbtn->flags &= ~LbBtnF_Enabled;
+}
+
+void frontend_campaign_start_new_maintain(struct GuiButton *gbtn)
+{
+    if (campaign_select_item(campaign_selected_idx) != NULL)
+        gbtn->flags |= LbBtnF_Enabled;
+    else
+        gbtn->flags &= ~LbBtnF_Enabled;
+}
+
+void frontend_campaign_continue(struct GuiButton *gbtn)
+{
+    struct GameCampaign *campgn = campaign_select_item(campaign_selected_idx);
+    if ((campgn != NULL) && campaign_selected_has_progress && SaveManager_ResumeCampaign(campgn->fname))
+        frontend_set_state(FeSt_LAND_VIEW);
+}
+
+void frontend_campaign_start_new(struct GuiButton *gbtn)
+{
+    struct GameCampaign *campgn = campaign_select_item(campaign_selected_idx);
+    if ((campgn == NULL) || !frontend_start_new_campaign(campgn->fname))
+    {
+        ERRORLOG("Unable to start new campaign");
+        return;
+    }
+    frontend_set_state(FeSt_CAMPAIGN_INTRO);
 }
 
 void frontend_mappack_list_load(void)
@@ -411,132 +471,6 @@ void frontend_mappack_select(struct GuiButton *gbtn)
     frontend_set_state(FeSt_LEVEL_SELECT);
 }
 
-
-void frontend_mp_mappack_list_load(void)
-{
-    select_level_scroll_offset = 0; // Reset the scroll of the level select screen here, as it should only be reset when user returns to map pack select screen (Not from exiting level etc).
-    frontend_select_mp_mappack_items_visible = (mp_mappacks_list.items_num < frontend_select_mp_mappack_items_max_visible)?mp_mappacks_list.items_num+1:frontend_select_mp_mappack_items_max_visible;
-}
-
-void frontend_mp_mappack_select_up(struct GuiButton *gbtn)
-{
-  if (select_mp_mappack_scroll_offset > 0)
-      select_mp_mappack_scroll_offset--;
-}
-
-void frontend_mp_mappack_select_down(struct GuiButton *gbtn)
-{
-  if (select_mp_mappack_scroll_offset < mp_mappacks_list.items_num-frontend_select_mp_mappack_items_visible+1)
-      select_mp_mappack_scroll_offset++;
-}
-
-void frontend_mp_mappack_select_scroll(struct GuiButton *gbtn)
-{
-    select_mp_mappack_scroll_offset = frontend_scroll_tab_to_offset(gbtn, GetMouseY(), frontend_select_mp_mappack_items_visible-2, mp_mappacks_list.items_num);
-}
-
-void frontend_mp_mappack_select_up_maintain(struct GuiButton *gbtn)
-{
-    if (gbtn == NULL)
-        return;
-    if (select_mp_mappack_scroll_offset != 0)
-        gbtn->flags |= LbBtnF_Enabled;
-    else
-        gbtn->flags &=  ~LbBtnF_Enabled;
-}
-
-void frontend_mp_mappack_select_down_maintain(struct GuiButton *gbtn)
-{
-    if (gbtn == NULL)
-        return;
-    if (select_mp_mappack_scroll_offset < mp_mappacks_list.items_num-frontend_select_mp_mappack_items_visible+1)
-        gbtn->flags |= LbBtnF_Enabled;
-    else
-        gbtn->flags &=  ~LbBtnF_Enabled;
-}
-
-void frontend_mp_mappack_select_maintain(struct GuiButton *gbtn)
-{
-  if (gbtn == NULL)
-    return;
-  long btn_idx = gbtn->content.lval;
-  long i = select_mp_mappack_scroll_offset + btn_idx - 45;
-  if (i < mp_mappacks_list.items_num)
-      gbtn->flags |= LbBtnF_Enabled;
-  else
-      gbtn->flags &=  ~LbBtnF_Enabled;
-}
-
-void frontend_mp_mappack_select(struct GuiButton *gbtn)
-{
-    long i;
-    long btn_idx;
-    struct GameCampaign *campgn;
-    if (gbtn == NULL)
-        return;
-    btn_idx = gbtn->content.lval;
-    i = select_mp_mappack_scroll_offset + btn_idx-45;
-    campgn = NULL;
-    if ((i >= 0) && (i < mp_mappacks_list.items_num))
-        campgn = &mp_mappacks_list.items[i];
-    if (campgn == NULL)
-        return;
-
-    frontnet_send_campaign_change_message(campgn->fname);
-    
-    if (!change_campaign(CampgnT_MultiplayerMappack, campgn->fname))
-        return;
-    if (net_service_index_selected == FrontendNetSvc_Skirmish)
-    {
-        frontend_set_state(FeSt_NETLAND_VIEW);
-    }
-    else
-    {
-        frontend_set_state(FeSt_NET_START);
-    }
-}
-
-void frontend_back_from_mp_mappack_list(struct GuiButton *gbtn)
-{
-    if (net_service_index_selected == FrontendNetSvc_Skirmish)
-    {
-        frontend_set_state(FeSt_NET_SERVICE);
-    }
-    else
-    {
-        frontend_set_state(FeSt_NET_START);
-    }
-}
-
-void frontend_draw_mp_mappack_select_button(struct GuiButton *gbtn)
-{
-    struct GameCampaign *campgn;
-    long btn_idx;
-    long i;
-    if (gbtn == NULL)
-      return;
-    btn_idx = gbtn->content.lval;
-    i = select_mp_mappack_scroll_offset + btn_idx-45;
-    campgn = NULL;
-    if ((i >= 0) && (i < mp_mappacks_list.items_num))
-      campgn = &mp_mappacks_list.items[i];
-    if (campgn == NULL)
-      return;
-    if ((btn_idx > 0) && (frontend_mouse_over_button == btn_idx))
-      i = 2;
-    else
-      i = 1;
-
-    RendererSetDrawFlags(Lb_TEXT_HALIGN_LEFT);
-    LbTextSetFont(frontend_font[i]);
-    int tx_units_per_px;
-    // This text is a bit condensed - button size is smaller than text height
-    tx_units_per_px = (gbtn->height*13/11) * 16 / LbTextLineHeight();
-    i = LbTextLineHeight() * tx_units_per_px / 16;
-    LbTextSetWindow(gbtn->scr_pos_x, gbtn->scr_pos_y, gbtn->width, i);
-    LbTextDrawResized(0, 0, tx_units_per_px, campgn->display_name);
-}
-
 void frontend_draw_mappack_select_button(struct GuiButton *gbtn)
 {
     struct GameCampaign *campgn;
@@ -596,48 +530,17 @@ void frontend_mappack_select_update(void)
     }
 }
 
-void frontend_mp_mappack_select_update(void)
-{
-    if (mp_mappacks_list.items_num <= 0)
-    {
-        select_mp_mappack_scroll_offset = 0;
-    } else
-    if (select_mp_mappack_scroll_offset < 0)
-    {
-        select_mp_mappack_scroll_offset = 0;
-    } else
-    if (select_mp_mappack_scroll_offset > mp_mappacks_list.items_num-frontend_select_mp_mappack_items_visible+1)
-    {
-        select_mp_mappack_scroll_offset = mp_mappacks_list.items_num-frontend_select_mp_mappack_items_visible+1;
-    }
-    if (wheel_scrolled_down || (is_key_pressed(KC_DOWN,KMod_NONE)))
-    {
-        if (select_mp_mappack_scroll_offset < mp_mappacks_list.items_num-frontend_select_mp_mappack_items_visible+1)
-        {
-            select_mp_mappack_scroll_offset++;
-        }
-    }
-    if (wheel_scrolled_up || (is_key_pressed(KC_UP,KMod_NONE)))
-    {
-        if (select_mp_mappack_scroll_offset > 0)
-        {
-            select_mp_mappack_scroll_offset--;
-        }
-    }
-}
-
 void frontend_draw_mappack_scroll_tab(struct GuiButton *gbtn)
 {
     frontend_draw_scroll_tab(gbtn, select_mappack_scroll_offset, frontend_select_mappack_items_visible-2, mappacks_list.items_num);
 }
 
-void frontend_draw_mp_mappack_scroll_tab(struct GuiButton *gbtn)
-{
-    frontend_draw_scroll_tab(gbtn, select_mp_mappack_scroll_offset, frontend_select_mp_mappack_items_visible-2, mp_mappacks_list.items_num);
-}
-
 void frontend_campaign_list_load(void)
 {
+    SaveManager_UpdateCampaignPercents(&campaigns_list);
+    select_campaign_scroll_offset = 0;
+    campaign_selected_idx = -1;
+    campaign_selected_has_progress = false;
     frontend_select_campaign_items_visible = (campaigns_list.items_num < frontend_select_campaign_items_max_visible)?campaigns_list.items_num+1:frontend_select_campaign_items_max_visible;
 }
 void frontend_draw_variable_mappack_exit_button(struct GuiButton *gbtn)

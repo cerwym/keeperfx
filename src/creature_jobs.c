@@ -205,7 +205,7 @@ TbBool creature_free_for_anger_job(struct Thing *creatng)
     return !creature_affected_by_call_to_arms(creatng)
     && !player_uses_power_obey(creatng->owner)
     && !creature_under_spell_effect(creatng, CSAfF_Chicken)
-    && !thing_is_picked_up(creatng) && !is_thing_directly_controlled(creatng);
+    && !thing_is_picked_up(creatng) && !user_controls_thing(ANY_USER, creatng, UCT_Direct | UCT_PossessionEntryZoom);
 }
 
 TbBool attempt_anger_job_destroy_rooms(struct Thing *creatng)
@@ -371,7 +371,7 @@ TbBool attempt_anger_job_join_enemy(struct Thing *creatng)
         if ((n == game.neutral_player_num) || (n == creatng->owner))
             continue;
         struct PlayerInfo* player = get_player(n);
-        if (!player_exists(player) || (player->is_active != 1))
+        if (!is_active_keeper(player))
             continue;
         struct Thing* heartng = get_player_soul_container(n);
         if (thing_exists(heartng) && (heartng->active_state != 3))
@@ -397,14 +397,12 @@ long attempt_anger_job(struct Thing *creatng, long ajob_kind)
     case 2:
         if (!attempt_anger_job_destroy_rooms(creatng))
             break;
-        if (is_my_player_number(creatng->owner))
-            output_message(SMsg_CreatrDestroyRooms, MESSAGE_DURATION_CRTR_MOOD);
+        output_player_message(creatng->owner, SMsg_CreatrDestroyRooms, MESSAGE_DURATION_CRTR_MOOD);
         return true;
     case 4:
         if (!attempt_anger_job_leave_dungeon(creatng))
             break;
-        if (is_my_player_number(creatng->owner))
-            output_message(SMsg_CreatureLeaving, MESSAGE_DURATION_CRTR_MOOD);
+        output_player_message(creatng->owner, SMsg_CreatureLeaving, MESSAGE_DURATION_CRTR_MOOD);
         return true;
     case 8:
         if (!attempt_anger_job_steal_gold(creatng))
@@ -413,8 +411,7 @@ long attempt_anger_job(struct Thing *creatng, long ajob_kind)
     case 16:
         if (!attempt_anger_job_damage_walls(creatng))
             break;
-        if (is_my_player_number(creatng->owner))
-            output_message(SMsg_CreatrDestroyRooms, MESSAGE_DURATION_CRTR_MOOD);
+        output_player_message(creatng->owner, SMsg_CreatrDestroyRooms, MESSAGE_DURATION_CRTR_MOOD);
         return true;
     case 32:
         if (!attempt_anger_job_mad_psycho(creatng))
@@ -425,8 +422,7 @@ long attempt_anger_job(struct Thing *creatng, long ajob_kind)
             // If can't init persuade, then leave alone
             if (!attempt_anger_job_leave_dungeon(creatng))
                 break;
-            if (is_my_player_number(creatng->owner))
-                output_message(SMsg_CreatureLeaving, MESSAGE_DURATION_CRTR_MOOD);
+            output_player_message(creatng->owner, SMsg_CreatureLeaving, MESSAGE_DURATION_CRTR_MOOD);
         }
         return true;
     case 128:
@@ -623,8 +619,9 @@ TbBool get_drop_position_for_creature_job_in_room(struct Coord3d *pos, const str
         break;
     case JoKF_AssignOnAreaCenter:
         SYNCDBG(9,"Job %s requires dropping at %s center",creature_job_code_name(jobpref),room_code_name(room->kind));
+        // A room too small to have a centre area cannot take the job. Success was
+        // reported here even then, with pos never written.
         result = find_random_position_at_area_of_room(pos, room, RoArC_CENTER, thing);
-        result = true;
         break;
     case (JoKF_AssignOnAreaBorder|JoKF_AssignOnAreaCenter):
         SYNCDBG(9,"Job %s has no %s area preference",creature_job_code_name(jobpref),room_code_name(room->kind));
@@ -793,8 +790,8 @@ TbBool creature_can_do_research_near_pos(const struct Thing *creatng, MapSubtlCo
         struct Dungeon* dungeon = get_dungeon(room->owner);
         if (!is_neutral_thing(creatng) && (dungeon->current_research_idx < 0))
         {
-            if (is_my_player_number(dungeon->owner) && ((flags & JobChk_PlayMsgOnFail) != 0)) {
-                output_message(SMsg_NoMoreReseach, MESSAGE_DURATION_KEEPR_TAUNT);
+            if ((flags & JobChk_PlayMsgOnFail) != 0) {
+                output_player_message(dungeon->owner, SMsg_NoMoreReseach, MESSAGE_DURATION_KEEPR_TAUNT);
             }
         }
         return false;
@@ -1130,7 +1127,7 @@ TbBool attempt_job_in_state_internal_near_pos(struct Thing *creatng, MapSubtlCoo
  * @param creatng The creature to assign a job to.
  * @param jobpref Job preference flags.
  */
-TbBool attempt_job_preference(struct Thing *creatng, long jobpref)
+TbBool attempt_job_preference(struct Thing *creatng, CreatureJob jobpref)
 {
     // Start checking at random job
     if (game.conf.crtr_conf.jobs_count < 1) {
@@ -1156,11 +1153,11 @@ TbBool attempt_job_preference(struct Thing *creatng, long jobpref)
     return false;
 }
 
-TbBool attempt_job_secondary_preference(struct Thing *creatng, long jobpref)
+TbBool attempt_job_secondary_preference(struct Thing *creatng, CreatureJob jobpref)
 {
     // Count the amount of jobs set
-    long i = 0;
-    unsigned long k = jobpref;
+    int i = 0;
+    uint64_t k = jobpref;
     while (k)
     {
         k >>= 1;

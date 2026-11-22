@@ -23,15 +23,41 @@
 #include "bflib_basics.h"
 #include "game_legacy.h"
 #include "moonphase.h"
+#include "replay_rewind.h"
 #include "post_inc.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 /******************************************************************************/
-struct IntralevelData intralvl;
+kfx_rewindable struct IntralevelData intralvl;
+char *custom_intralevel_data = NULL;
+uint32_t custom_intralevel_data_len = 0;
 unsigned long game_flags2 = 0;
 /******************************************************************************/
+TbBool set_custom_intralevel_data(const void *data, uint32_t len)
+{
+    if (len > CUSTOM_INTRALEVEL_DATA_MAX_SIZE)
+        return false;
+    char *copy = NULL;
+    if (len > 0)
+    {
+        copy = (char *)malloc(len);
+        if (copy == NULL)
+            return false;
+        memcpy(copy, data, len);
+    }
+    free(custom_intralevel_data);
+    custom_intralevel_data = copy;
+    custom_intralevel_data_len = len;
+    return true;
+}
+
+void clear_custom_intralevel_data(void)
+{
+    set_custom_intralevel_data(NULL, 0);
+}
+
 /******************************************************************************/
 /**
  * Informs if we're going to emulate overflow for integer values with given amount of bits.
@@ -212,7 +238,7 @@ void update_extra_levels_visibility(void)
 
 struct LevelEnsignOverride *get_level_ensign_override(LevelNumber lvnum)
 {
-    for (int i = 0; i < CAMPAIGN_LEVELS_COUNT; i++)
+    for (int i = 0; i < ENSIGN_OVERRIDES_COUNT; i++)
     {
         struct LevelEnsignOverride *override = &intralvl.ensign_overrides[i];
         if (override->lvnum == lvnum)

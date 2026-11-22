@@ -4,8 +4,25 @@ function(kfx_status PREFIX MESSAGE)
     message(STATUS "[${PREFIX}] ${MESSAGE}")
 endfunction()
 
+# Flags that make the simulation compute the same results on every platform.
+# Multiplayer is lockstep: all clients (32-bit Windows, 64-bit Linux,
+# WebAssembly) must get bit-identical game state from the same input.
+#  - No contraction of a*b+c into a fused multiply-add on targets that have one.
+#  - 32-bit x86 computes float/double in SSE registers like x86-64 and wasm do,
+#    not in 80-bit x87 registers whose extra precision changes results.
+function(apply_keeperfx_determinism_flags TARGET)
+    if(MSVC)
+        return()
+    endif()
+    target_compile_options(${TARGET} PRIVATE -ffp-contract=off)
+    if(CMAKE_SIZEOF_VOID_P EQUAL 4 AND NOT EMSCRIPTEN)
+        target_compile_options(${TARGET} PRIVATE -msse2 -mfpmath=sse)
+    endif()
+endfunction()
+
 # Warning + optimisation flags, per platform (mirrors the hand Makefiles).
 function(apply_keeperfx_warnings TARGET)
+    apply_keeperfx_determinism_flags(${TARGET})
     if(MSVC)
         # Real cl.exe (Debug-MSVC preset) - a local-convenience build, not the
         # fork's canonical toolchain (that's GCC/MinGW-w64). The GNU-style
@@ -20,7 +37,7 @@ function(apply_keeperfx_warnings TARGET)
     elseif(WIN32)
         target_compile_options(${TARGET} PRIVATE
             -Wall -W -Wshadow -Wno-sign-compare -Wno-unused-parameter
-            -Wno-maybe-uninitialized -Wno-strict-aliasing -Wno-unknown-pragmas
+            -Wno-strict-aliasing -Wno-unknown-pragmas
             -Werror -Wno-format-truncation
             -march=x86-64 -fno-omit-frame-pointer -fmessage-length=0 -O3
             $<$<COMPILE_LANGUAGE:C>:-Wimplicit>)
@@ -30,6 +47,9 @@ function(apply_keeperfx_warnings TARGET)
             -Wno-format-truncation -Wno-sign-compare
             -g -O3 -march=x86-64
             $<$<COMPILE_LANGUAGE:C>:-Wno-absolute-value>)
+        if(KEEPERFX_TSAN)
+            target_compile_options(${TARGET} PRIVATE -fsanitize=thread)
+        endif()
     endif()
 endfunction()
 
@@ -54,11 +74,18 @@ function(apply_keeperfx_link_flags TARGET)
         target_link_libraries(${TARGET} PUBLIC -static stdc++ winpthread -dynamic)
     else()
         target_link_options(${TARGET} PRIVATE -g -rdynamic)
+        if(KEEPERFX_TSAN)
+            target_link_options(${TARGET} PRIVATE -fsanitize=thread)
+        endif()
     endif()
 endfunction()
 
+# Move debug info into <binary>.debug, linked from the stripped binary by
+# .gnu_debuglink. Always on for MinGW. On Linux only with KFX_SPLIT_DEBUG=ON
+# (release packaging): a dev or Steam Deck build keeps its symbols embedded, so
+# a copied binary still debugs without the .debug file next to it.
 function(apply_keeperfx_debug_split TARGET)
-    if(NOT WIN32 OR MSVC)
+    if(MSVC OR (NOT WIN32 AND NOT KFX_SPLIT_DEBUG))
         return()
     endif()
     if(NOT CMAKE_OBJCOPY)

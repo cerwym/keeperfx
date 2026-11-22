@@ -22,12 +22,17 @@
 #include "globals.h"
 
 #include "bflib_basics.h"
+#include "net_main.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 /******************************************************************************/
 #define frontend_services_menu_items_visible  6
+#define frontend_sessions_menu_items_visible  7
+#define frontend_messages_items_visible       3
+#define LOBBY_HEADER_HEIGHT 26
+#define LOBBY_HEADER_INSET 6
 
 #pragma pack(1)
 
@@ -39,19 +44,49 @@ struct GuiButton;
 extern struct GuiMenu frontend_net_service_menu;
 extern struct GuiMenu frontend_net_session_menu;
 extern struct GuiMenu frontend_net_start_menu;
-extern struct GuiMenu frontend_add_session_box;
+extern struct GuiMenu frontend_skirmish_lobby_menu;
+extern int32_t net_lobby_mappack_scroll_offset;
+extern TbBool net_lobby_mappack_list_open;
 /******************************************************************************/
+void frontnet_draw_lobby_columns(struct GuiButton *gbtn);
+void frontnet_draw_lobby_tooltip(struct GuiButton *gbtn);
+void frontnet_draw_lobby_option(struct GuiButton *gbtn);
+void frontnet_maintain_lobby_option(struct GuiButton *gbtn);
+void frontnet_maintain_lobby_players_panel(struct GuiButton *gbtn);
+void frontnet_maintain_lobby_chat_header(struct GuiButton *gbtn);
+short frontnet_lobby_campaign_fgroup(void);
+void frontnet_change_lobby_option(struct GuiButton *gbtn);
+void frontnet_draw_lobby_settings_panel(struct GuiButton *gbtn);
+void frontnet_open_mappack_list(struct GuiButton *gbtn);
+void frontnet_draw_mappack_list(struct GuiButton *gbtn);
+void frontnet_maintain_mappack_list(struct GuiButton *gbtn);
+void frontnet_mappack_list_click(struct GuiButton *gbtn);
+void frontnet_maintain_host_setting(struct GuiButton *gbtn);
+void frontnet_draw_lobby_name(struct GuiButton *gbtn);
+void frontnet_draw_lobby_tooltips(struct GuiButton *gbtn);
+void frontnet_mappack_up(struct GuiButton *gbtn);
+void frontnet_mappack_down(struct GuiButton *gbtn);
+void frontnet_mappack_up_maintain(struct GuiButton *gbtn);
+void frontnet_mappack_down_maintain(struct GuiButton *gbtn);
+void frontnet_mappack_scroll(struct GuiButton *gbtn);
+void frontnet_draw_mappack_scroll_tab(struct GuiButton *gbtn);
+void frontnet_maintain_mappack_scroll_tab(struct GuiButton *gbtn);
+void frontnet_draw_lobby_section_header(struct GuiButton *gbtn);
+void frontnet_draw_lobby_settings_header(struct GuiButton *gbtn);
+void frontnet_draw_lobby_players_header(struct GuiButton *gbtn);
+void frontnet_services_wheel_maintain(struct GuiButton *gbtn);
+void frontnet_sessions_wheel_maintain(struct GuiButton *gbtn);
+void frontnet_messages_wheel_maintain(struct GuiButton *gbtn);
 void frontnet_session_up_maintain(struct GuiButton *gbtn);
 void frontnet_session_down_maintain(struct GuiButton *gbtn);
 void frontnet_session_maintain(struct GuiButton *gbtn);
 void frontnet_players_up_maintain(struct GuiButton *gbtn);
 void frontnet_players_down_maintain(struct GuiButton *gbtn);
-void frontnet_join_game_maintain(struct GuiButton *gbtn);
-void frontnet_maintain_alliance(struct GuiButton *gbtn);
 void frontnet_messages_up_maintain(struct GuiButton *gbtn);
 void frontnet_messages_down_maintain(struct GuiButton *gbtn);
 void frontnet_start_game_maintain(struct GuiButton *gbtn);
 TbBool frontnet_start_input(void);
+void frontnet_service_scroll(struct GuiButton *gbtn);
 void frontnet_draw_services_scroll_tab(struct GuiButton *gbtn);
 void frontnet_draw_service_button(struct GuiButton *gbtn);
 void frontnet_service_maintain(struct GuiButton *gbtn);
@@ -61,40 +96,41 @@ void frontnet_service_up(struct GuiButton *gbtn);
 void frontnet_service_down(struct GuiButton *gbtn);
 void frontnet_service_select(struct GuiButton *gbtn);
 void frontnet_session_set_player_name(struct GuiButton *gbtn);
+void frontnet_session_set_lobby_name(struct GuiButton *gbtn);
 void frontnet_draw_text_bar(struct GuiButton *gbtn);
 void frontnet_session_up(struct GuiButton *gbtn);
 void frontnet_session_up_maintain(struct GuiButton *gbtn);
 void frontnet_session_down(struct GuiButton *gbtn);
 void frontnet_session_down_maintain(struct GuiButton *gbtn);
 void frontnet_session_maintain(struct GuiButton *gbtn);
+void frontnet_session_scroll(struct GuiButton *gbtn);
 void frontnet_draw_sessions_scroll_tab(struct GuiButton *gbtn);
 void frontnet_draw_session_selected(struct GuiButton *gbtn);
-void frontnet_session_select(struct GuiButton *gbtn);
 void frontnet_draw_session_button(struct GuiButton *gbtn);
+void frontnet_draw_lobby_panel(struct GuiButton *gbtn);
+void frontnet_draw_lobby_panel_without_scrollbar(struct GuiButton *gbtn);
+void frontnet_draw_tab_bar(struct GuiButton *gbtn);
+void frontnet_draw_section_header_with_name(struct GuiButton *gbtn, unsigned short draw_flags, const char *format, const char *name);
+int lobby_menu_scale(struct GuiButton *gbtn);
+void frontnet_draw_scroll_selection_box(struct GuiButton *gbtn, long font_idx, const char *text);
 void frontnet_players_up(struct GuiButton *gbtn);
 void frontnet_players_up_maintain(struct GuiButton *gbtn);
 void frontnet_players_down(struct GuiButton *gbtn);
 void frontnet_players_down_maintain(struct GuiButton *gbtn);
 void frontnet_draw_players_scroll_tab(struct GuiButton *gbtn);
 void frontnet_draw_net_session_players(struct GuiButton *gbtn);
-void frontnet_session_add(struct GuiButton *gbtn);
 void frontnet_session_join(struct GuiButton *gbtn);
 void frontnet_session_create(struct GuiButton *gbtn);
 void frontnet_return_to_main_menu(struct GuiButton *gbtn);
-void frontnet_add_session_done(struct GuiButton *gbtn);
-void frontnet_add_session_back(struct GuiButton *gbtn);
-void frontnet_join_game_maintain(struct GuiButton *gbtn);
-void frontnet_draw_alliance_box_tab(struct GuiButton *gbtn);
+void frontnet_draw_player_icon(NetUserId user, int pos_x, int pos_y, int units_per_px);
 void frontnet_draw_net_start_players(struct GuiButton *gbtn);
-void frontnet_select_alliance(struct GuiButton *gbtn);
-void frontnet_draw_alliance_grid(struct GuiButton *gbtn);
-void frontnet_draw_alliance_button(struct GuiButton *gbtn);
-void frontnet_maintain_alliance(struct GuiButton *gbtn);
+void frontnet_maintain_net_start_players(struct GuiButton *gbtn);
+void frontnet_change_player_setting(struct GuiButton *gbtn);
 void frontnet_messages_up(struct GuiButton *gbtn);
 void frontnet_messages_up_maintain(struct GuiButton *gbtn);
 void frontnet_messages_down(struct GuiButton *gbtn);
 void frontnet_messages_down_maintain(struct GuiButton *gbtn);
-void frontnet_draw_bottom_scroll_box_tab(struct GuiButton *gbtn);
+void frontnet_messages_scroll(struct GuiButton *gbtn);
 void frontnet_draw_messages_scroll_tab(struct GuiButton *gbtn);
 void frontnet_draw_current_message(struct GuiButton *gbtn);
 void frontnet_draw_messages(struct GuiButton *gbtn);

@@ -19,7 +19,11 @@
 /******************************************************************************/
 #ifndef BFLIB_NETSESSION_H
 #define BFLIB_NETSESSION_H
+#include <stddef.h>
+#include <stdint.h>
+#include "bflib_basics.h"
 
+#define PLAYER_MP_NAME_LEN 20
 
 #ifdef __cplusplus
 extern "C" {
@@ -30,6 +34,32 @@ extern "C" {
 #define SESSION_NAME_MAX_LEN     128
 #define SESSION_LOBBY_ID_MAX_LEN  64
 #define NETSP_PLAYER_NAME_MAX_LEN  32
+#define SESSION_HUMANS_MAX 8
+#define SESSION_METADATA_MAX 2048
+
+enum NetJoinRejection {
+    NetJoin_Accepted = 0,
+    NetJoin_InGame = 1,
+    NetJoin_Locked = 2,
+    NetJoin_Full = 3,
+    NetJoin_Version = 4,
+    NetJoin_SpectatorState = 5,
+    NetJoin_SpectatorsDisabled = 6,
+    NetJoin_SpectatorsFull = 7,
+    NetJoin_SpectatorsUnsupported = 8,
+    NetJoin_SpectatorDesynced = 9,
+    NetJoin_Count,
+};
+
+extern enum NetJoinRejection net_join_rejection;
+
+enum NetSessionPhase {
+    NetPhase_Unknown,
+    NetPhase_Lobby,
+    NetPhase_InGame,
+    NetPhase_InLandview,
+    NetPhase_Loading,
+};
 
 enum NetMsgType
 {
@@ -51,6 +81,18 @@ struct TbNetworkSessionNameEntry {
     char text[SESSION_NAME_MAX_LEN];
     char join_address[SESSION_LOBBY_ID_MAX_LEN];
     char lobby_id[SESSION_LOBBY_ID_MAX_LEN];
+    enum NetSessionPhase phase;
+    unsigned char roster_known;
+    unsigned char player_count;
+    unsigned char max_players;
+    int64_t created_at;
+    char version[32];
+    char players[SESSION_HUMANS_MAX][NETSP_PLAYER_NAME_MAX_LEN];
+    uint8_t spectator_support;
+    uint8_t spectators_enabled;
+    uint8_t max_spectators;
+    uint8_t spectator_count;
+    uint8_t rejoin_open;
 };
 
 struct TbNetworkPlayerEntry {
@@ -63,7 +105,7 @@ struct TbNetworkPlayerEntry {
 
 struct TbNetworkCallbackData {
   char svc_name[12];
-  char plyr_name[20];
+  char plyr_name[PLAYER_MP_NAME_LEN];
   char session_data[32];
 };
 
@@ -80,7 +122,15 @@ struct ReceiveCallbacks {
   void *(*unhandledMessageTypeCallback)(unsigned long, void *);
 };
 /******************************************************************************/
-void net_copy_name_string(char *dst,const char *src,long max_len);
+void net_copy_name_string(char *dst, const char *src, int32_t max_len);
+TbBool net_json_escape(char *output, size_t output_size, const char *input);
+int net_session_metadata_json(const struct TbNetworkSessionNameEntry *session, char *output, size_t size);
+struct VALUE;
+void net_session_parse_metadata(struct TbNetworkSessionNameEntry *session, const struct VALUE *root);
+int net_session_incompatible(const struct TbNetworkSessionNameEntry *session);
+enum NetJoinRejection net_session_join_rejection(const struct TbNetworkSessionNameEntry *session);
+enum NetJoinRejection net_session_spectator_rejection(const struct TbNetworkSessionNameEntry *session);
+const char *net_join_error_text(enum NetJoinRejection reason);
 /******************************************************************************/
 #ifdef __cplusplus
 };

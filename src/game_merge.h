@@ -26,6 +26,7 @@
 #include "globals.h"
 
 #include "actionpt.h"
+#include "config_campaigns.h"
 #include "creature_control.h"
 #include "dungeon_data.h"
 #include "gui_msgs.h"
@@ -45,6 +46,9 @@ extern "C" {
 #define CAMPAIGN_FLAGS_PER_PLAYER     8
 #define TRANSFER_CREATURE_STORAGE_COUNT     255
 #define ENSIGN_OVERRIDES_COUNT       64
+
+// enough to store all campaign levels and all secret levels
+#define LEVELS_COMPLETED_COUNT       (2 * CAMPAIGN_LEVELS_COUNT + EXTRA_LEVELS_COUNT)
 
 #define AROUND_MAP_LENGTH 9
 #define AROUND_SLAB_LENGTH 9
@@ -73,7 +77,6 @@ enum GameSystemFlags {
     GSF_CaptureMovie     = 0x0008,
     GSF_CaptureSShot     = 0x0010,
     GSF_AllowOnePlayer   = 0x0040,
-    GSF_RunAfterVictory  = 0x0080,
 };
 
 enum GameGUIFlags {
@@ -119,10 +122,10 @@ enum GameFlags2 {
  */
 struct TextScrollWindow {
     char text[MESSAGE_TEXT_LEN];
-    long start_y;
-    char action;
-    long text_height;
-    long window_height;
+    int32_t start_y;
+    int8_t action;
+    int32_t text_height;
+    int32_t window_height;
 };
 
 struct LevelEnsignOverride {
@@ -130,16 +133,25 @@ struct LevelEnsignOverride {
     TbBool active;
     unsigned short ensign_type;
 };
+
 /**
  * Structure which stores data copied between levels.
  * This data is not lost between levels of a campaign.
  */
+#define INTRALEVEL_DATA_VER 1
 struct IntralevelData {
     unsigned char bonuses_found[BONUS_LEVEL_STORAGE_COUNT];
     struct CreatureStorage transferred_creatures[PLAYERS_COUNT][TRANSFER_CREATURE_STORAGE_COUNT];
-    long campaign_flags[PLAYERS_FOR_CAMPAIGN_FLAGS][CAMPAIGN_FLAGS_PER_PLAYER];
+    int32_t campaign_flags[PLAYERS_FOR_CAMPAIGN_FLAGS][CAMPAIGN_FLAGS_PER_PLAYER];
     LevelNumber next_level;
     struct LevelEnsignOverride ensign_overrides[ENSIGN_OVERRIDES_COUNT];
+    
+    // 1 + level to continue campaign from
+    // TODO -- multiple options if there's a fork?
+    uint32_t continue_level;
+    
+    // list of (1 + levelnum) for all completed levels
+    uint32_t levels_completed[LEVELS_COMPLETED_COUNT];
 };
 
 
@@ -149,7 +161,14 @@ extern unsigned long game_flags2; // Should be reset to zero on new level
 
 /******************************************************************************/
 extern struct IntralevelData intralvl;
+#define CUSTOM_INTRALEVEL_DATA_MAX_SIZE (1024 * 1024)
+#define CUSTOM_INTRALEVEL_DATA_MAX_COMPRESSION_RATIO 64
+
+extern char *custom_intralevel_data;
+extern uint32_t custom_intralevel_data_len;
 /******************************************************************************/
+TbBool set_custom_intralevel_data(const void *data, uint32_t len);
+void clear_custom_intralevel_data(void);
 LevelNumber get_loaded_level_number(void);
 LevelNumber set_loaded_level_number(LevelNumber lvnum);
 LevelNumber get_continue_level_number(void);

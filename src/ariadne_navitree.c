@@ -72,6 +72,12 @@ long copy_tree_to_route(long tag_start_id, long tag_end_id, int32_t *route_pts, 
     return ipt;
 }
 
+void navitree_reset(void)
+{
+    memset(Tags, 0, sizeof(Tags));
+    tag_current = 0;
+}
+
 void tags_init(void)
 {
     //Note that tag_current is a tag value, not tag index
@@ -115,6 +121,10 @@ long border_tags_to_current(int32_t *border_pt, long border_len)
 
 TbBool is_current_tag(long tag_id)
 {
+    // Triangle edges without a neighbour have tag -1; treat them as visited
+    // instead of reading the byte before the array
+    if (tag_id < 0)
+        return true;
     return (tag_current == Tags[tag_id]);
 }
 

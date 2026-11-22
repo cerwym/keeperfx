@@ -148,6 +148,10 @@ void FreeVRes256Data(void)
 short LoadVResMinimal(void)
 {
     button_sprites = load_spritesheet("data/gui1-32.dat", "data/gui1-32.tab");
+    // Land View runs with the minimal front-end resource set, but its standalone
+    // information box recreates the normal in-game panel and therefore needs the
+    // high-resolution GUI2 art instead of the reduced gui2-32 sheet.
+    gui_panel_sprites = load_spritesheet("data/gui2-64.dat", "data/gui2-64.tab");
 #ifdef SPRITE_FORMAT_V2
     frontend_font[0] = load_font("ldata/frontft1-64.dat", "ldata/frontft1-64.tab");
     frontend_font[1] = load_font("ldata/frontft2-64.dat", "ldata/frontft2-64.tab");
@@ -159,7 +163,7 @@ short LoadVResMinimal(void)
     frontend_font[2] = load_font("ldata/frontft3.dat", "ldata/frontft3.tab");
     frontend_font[3] = load_font("ldata/frontft4.dat", "ldata/frontft4.tab");
 #endif
-    return button_sprites && frontend_font[0] && frontend_font[1] && frontend_font[2] &&
+    return button_sprites && gui_panel_sprites && frontend_font[0] && frontend_font[1] && frontend_font[2] &&
         frontend_font[3] && LbDataLoadAll(front_load_files_minimal_640) == 0;
 }
 
@@ -169,6 +173,7 @@ void FreeVResMinimal(void)
         free_font(&frontend_font[i]);
     }
     free_spritesheet(&button_sprites);
+    free_spritesheet(&gui_panel_sprites);
     LbDataFreeAll(front_load_files_minimal_640);
     LbTextInvalidateFontGeneration();
 }
@@ -644,7 +649,6 @@ TbScreenMode setup_screen_mode(TbScreenMode nmode, TbBool failsafe)
     }
   }
   TbBool hi_res = ((RendererScreenHeight() < 400) ? false : true);
-  long lens_mem = game.applied_lens_type;
   unsigned int flg_mem = RendererGetDrawFlags();
   TbBool was_minimal_res = (MinimalResolutionSetup || force_video_mode_reset);
   set_pointer_graphic_none();
@@ -724,7 +728,6 @@ TbScreenMode setup_screen_mode(TbScreenMode nmode, TbBool failsafe)
   update_screen_mode_data(new_mdinfo->Width, new_mdinfo->Height);
   if (parchment_loaded)
     reload_parchment_file(hi_res);
-  reinitialise_eye_lens(lens_mem);
   RendererSetDrawFlags(flg_mem);
   setup_heap_manager();
   force_video_mode_reset = false;
@@ -1026,7 +1029,7 @@ TbBool switch_to_next_video_mode(void)
   return true;
 }
 
-/** Needed until its contents are refactored, then we can just call switch_to_next_video_mode from PckA_SwitchScrnRes. */
+/** Needed until its contents are refactored, then callers can just call switch_to_next_video_mode. */
 void switch_to_next_video_mode_wrapper(void)
 {
   char percent_x = ((float)lbDisplay.MMouseX / (float)(lbDisplay.MouseWindowX + lbDisplay.MouseWindowWidth)) * 100;

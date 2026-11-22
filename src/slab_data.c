@@ -560,8 +560,8 @@ long calculate_effeciency_score_for_room_slab(SlabCodedCoords slab_num, PlayerNu
  */
 void reveal_whole_map(struct PlayerInfo *player)
 {
-    clear_dig_for_map_rect(player->id_number,0,game.map_tiles_x,0,game.map_tiles_y);
-    reveal_map_rect(player->id_number,1,game.map_subtiles_x,1,game.map_subtiles_y);
+    clear_dig_for_map_rect(player->id_number, 0, game.map_tiles_x, 0, game.map_tiles_y);
+    reveal_map_rect(player->id_number, 1, game.map_subtiles_x, 1, game.map_subtiles_y);
     panel_map_update(0, 0, game.map_subtiles_x+1, game.map_subtiles_y+1);
 }
 
@@ -633,6 +633,8 @@ void collect_rooms_around_slab(MapSlabCoord slb_x, MapSlabCoord slb_y, struct Ro
         if (slabst->category == SlbAtCtg_RoomInterior)
         {
             struct Room* room = slab_room_get(sslb_x, sslb_y);
+            if (room_is_invalid(room))
+                continue;
             for (int i = 0; i < room_list_len; i++)
             {
                 if (room_list[i] == room) {
@@ -888,7 +890,7 @@ TbBool player_can_claim_slab(PlayerNumber plyr_idx, MapSlabCoord slb_x, MapSlabC
 void set_player_texture(PlayerNumber plyr_idx, long texture_id)
 {
     struct Dungeon* dungeon = get_dungeon(plyr_idx);
-    TbBool reset = (texture_id < 0);
+    TbBool reset = (texture_id <= 0); // 0 is NONE/DEFAULT; a file index arrives as slot+1
     if (reset)
         dungeon->texture_pack = 0;
     else

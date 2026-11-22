@@ -34,17 +34,23 @@
 #include "frontmenu_ingame_map.h"
 #include "game_heap.h"
 #include "game_legacy.h"
+#include "replay.h"
 #include "game_merge.h"
 #include "gui_topmsg.h"
 #include "gui_soundmsgs.h"
 #include "kjm_input.h"
+#include "lens_api.h"
 #include "config_sounds.h"
 #include "lvl_filesdk1.h"
 #include "lua_base.h"
 #include "lua_triggers.h"
 #include "net_exchange_common.h"
 #include "net_game.h"
+#include "net_lobby.h"
+#include "net_spectator.h"
+#include "observer.h"
 #include "frontmenu_ingame_evnt.h"
+#include "net_filecheck.h"
 #include "net_resync.h"
 #include "room_library.h"
 #include "room_list.h"
@@ -73,7 +79,6 @@ extern TbBool FLEE_BUTTON_DEFAULT;
 extern unsigned long features_enabled;
 
 extern void setup_players_count();
-extern void set_skip_heart_zoom_feature(TbBool enable);
 
 CoroutineLoopState set_not_has_quit(CoroutineLoop *context);
 TbBool luascript_loaded = false;
@@ -101,7 +106,7 @@ void reset_script_timers_and_flags(void)
         for (k=0; k<SCRIPT_FLAGS_COUNT; k++)
         {
             dungeon->script_flags[k] = 0;
-            if (freeplay)
+            if (freeplay && (plyr_idx < PLAYERS_FOR_CAMPAIGN_FLAGS) && (k < CAMPAIGN_FLAGS_PER_PLAYER))
             {
                 intralvl.campaign_flags[plyr_idx][k] = 0;
             }
@@ -140,7 +145,7 @@ static void init_keepers_map_exploration(void)
     for (i=0; i < PLAYERS_COUNT; i++)
     {
       player = get_player(i);
-      if ((player_exists(player) && (player->is_active == 1)) || player_is_roaming(i))
+      if (is_active_keeper(player) || player_is_roaming(i))
       {
           // Additional init - the main one is in init_player()
           if ((player->allocflags & PlaF_CompCtrl) != 0) {
@@ -160,7 +165,7 @@ static TbBool init_level(void)
     //memcpy(&transfer_mem,&game.intralvl.transferred_creature,sizeof(struct CreatureStorage));
     memcpy(&transfer_mem,&intralvl,sizeof(struct IntralevelData));
     game.flags_gui = GGUI_SoloChatEnabled;
-    clear_flag(game.system_flags, GSF_RunAfterVictory);
+    game.run_after_victory = false;
     free_swipe_graphic();
     game.loaded_swipe_idx = -1;
     game.play_gameturn = 0;
@@ -173,14 +178,25 @@ static TbBool init_level(void)
     // above. No-op on software / before GL is active.
     RendererClearKeeperSpriteAtlas();
     lens_mode = 0;
+    reset_lens_failures();
     setup_heap_manager();
 
     wait_for_all_players();
     init_seeds();
+    if (replay.load_enable) {
+        game.timestamp = replay.head.timestamp;
+        game.timestamp_tz = replay.head.timestamp_tz;
+        game.timestamp_turn = replay.head.timestamp_turn;
+    } else {
+        take_game_timestamp();
+    }
     sync_initial_network_seed();
+    network_spectator_init_icons(initial_replay_seed);
 
     recheck_all_mod_exist();
 
+    reset_loaded_file_checksums();
+    add_loaded_file_checksum(prepare_file_path(campaign.fgroup, campaign.fname));
     luascript_loaded = open_lua_script(get_selected_level_number());
     // Restore campaign-layer sounds before creature configs load, so creature cfg custom
     // sounds are added to the already-restored bank (not wiped afterwards).
@@ -189,9 +205,15 @@ static TbBool init_level(void)
     level_load_time_phase(LevelLoadTime_Sprites);
     init_custom_sprites(get_selected_level_number());
     level_load_time_phase(LevelLoadTime_Configs);
+    // Map sounds must exist before tileset.toml reads FootstepSound.
+    load_level_sounds_config(get_level_fgroup(get_selected_level_number()), get_selected_level_number());
     load_stats_files();
     level_load_time_phase(LevelLoadTime_GameSetup);
     check_and_auto_fix_stats();
+    // Config is fully loaded and fixed up here, and the level script hasn't run
+    // any commands yet: this is the baseline the save-time config overlay diffs
+    // against (save-format spec 5.3/13.1 P5.3).
+    take_conf_baseline();
 
     // We should do this after 'load stats'
     update_room_tab_to_config();
@@ -216,7 +238,7 @@ static TbBool init_level(void)
     level_load_time_phase(LevelLoadTime_Data);
     TbBool script_preloaded = preload_script(level);
     if (!load_map_file(level)) {
-        create_frontend_error_box(15000, "Map content is missing or incompatible.");
+        create_frontend_error_box("Map content is missing or incompatible.");
         JUSTMSG("Unable to load level %d from %s", level, campaign.name);
         return false;
     }
@@ -248,6 +270,7 @@ static TbBool init_level(void)
     battle_initialise();
     ambient_sound_prepare();
     zero_messages();
+    render_onscreen_msg_time = 0;
     game.armageddon_cast_turn = 0;
     game.armageddon_over_turn = 0;
     clear_messages();
@@ -272,7 +295,10 @@ static TbBool init_level(void)
 static void post_init_level(void)
 {
     SYNCDBG(8,"Starting");
-    if (game.packet_save_enable)
+    if (!replay.save_enable && !replay.load_enable && (!network_is_active() || net_join_role != NetRole_Spectator)) {
+        setup_auto_replay_save();
+    }
+    if (replay.save_enable)
         open_new_packet_file_for_save();
     calculate_dungeon_area_scores();
     init_animating_texture_maps();
@@ -301,76 +327,80 @@ TbBool startup_saved_packet_game(void)
 {
     struct CatalogueEntry centry;
     clear_packets();
-    if (!open_packet_file_for_load(game.packet_fname,&centry))
+    if (!open_packet_file_for_load(replay.fname,&centry))
     {
         ERRORLOG("Cannot replay \"%s\": unreadable, or written by an incompatible version",
-            game.packet_fname);
+            replay.fname);
         return false;
     }
     if (!change_campaign(CampgnT_Default, centry.campaign_fname))
     {
         ERRORLOG("Unable to load campaign associated with packet file");
     }
-    set_selected_level_number(game.packet_save_head.level_num);
+    set_selected_level_number(replay.head.level_num);
     RendererSetDrawColour(colours[15][15][15]);
-    game.pckt_gameturn = 0;
+    replay.pckt_gameturn = 0;
 #if (BFDEBUG_LEVEL > 0)
     SYNCDBG(0,"Initialising level %d", (int)get_selected_level_number());
-    SYNCMSG("Packet Loading Active (File contains %u turns)", game.turns_stored);
-    SYNCMSG("Packet Checksum Verification %s",game.packet_checksum_verify ? "Enabled" : "Disabled");
-    SYNCMSG("Fast Forward through %u game turns", game.turns_fastforward);
-    if (game.turns_packetoff != -1)
-        SYNCMSG("Packet Quit at %u", game.turns_packetoff);
-    if (game.packet_load_enable)
+    SYNCMSG("Packet Loading Active (File contains %u turns)", replay.turns_stored);
+    SYNCMSG("Packet Checksum Verification %s",replay.checksum_verify ? "Enabled" : "Disabled");
+    SYNCMSG("Fast Forward through %u game turns", replay.turns_fastforward);
+    if (replay.turns_packetoff != -1)
+        SYNCMSG("Packet Quit at %u", replay.turns_packetoff);
+    if (replay.load_enable)
     {
-      if (game.log_things_end_turn != game.log_things_start_turn)
-        SYNCMSG("Logging things, game turns %u -> %u", game.log_things_start_turn, game.log_things_end_turn);
+      if (replay.log_things_end_turn != replay.log_things_start_turn)
+        SYNCMSG("Logging things, game turns %u -> %u", replay.log_things_start_turn, replay.log_things_end_turn);
     }
-    SYNCMSG("Packet file prepared on KeeperFX %d.%d.%d.%d",(int)game.packet_save_head.game_ver_major,(int)game.packet_save_head.game_ver_minor,
-        (int)game.packet_save_head.game_ver_release,(int)game.packet_save_head.game_ver_build);
+    SYNCMSG("Packet file prepared on KeeperFX %d.%d.%d.%d",(int)replay.head.game_ver_major,(int)replay.head.game_ver_minor,
+        (int)replay.head.game_ver_release,(int)replay.head.game_ver_build);
 #endif
-    if ((game.packet_save_head.game_ver_major != VER_MAJOR) || (game.packet_save_head.game_ver_minor != VER_MINOR)
-        || (game.packet_save_head.game_ver_release != VER_RELEASE) || (game.packet_save_head.game_ver_build != VER_BUILD)) {
+    if ((replay.head.game_ver_major != VER_MAJOR) || (replay.head.game_ver_minor != VER_MINOR)
+        || (replay.head.game_ver_release != VER_RELEASE) || (replay.head.game_ver_build != VER_BUILD)) {
         WARNLOG("Packet file was created with different version of the game; this rarely works");
     }
-    game.game_kind = GKind_LocalGame;
+    game.game_kind = flag_is_set(replay.head.flags, PSHF_MultiGame) ? GKind_MultiGame : GKind_LocalGame;
     {
         PlayerNumber view_plyr = -1;
-        NetUserId rec_user = game.packet_save_head.recording_user;
+        NetUserId rec_user = replay.head.recording_user;
         if (!force_player_num && (rec_user >= 0) && (rec_user < MAX_NET_USERS))
-            view_plyr = game.packet_save_head.user_players[rec_user];
+            view_plyr = replay.head.user_players[rec_user];
         if (view_plyr < 0)
             view_plyr = game.local_plyr_idx;
-        if (!flag_is_set(game.packet_save_head.players_exist, to_flag(view_plyr))
-            || flag_is_set(game.packet_save_head.players_comp, to_flag(view_plyr)))
+        if (!flag_is_set(replay.head.players_exist, to_flag(view_plyr))
+            || flag_is_set(replay.head.players_comp, to_flag(view_plyr)))
             my_player_number = 0;
         else
             my_player_number = view_plyr;
     }
-    settings.isometric_view_zoom_level = game.packet_save_head.isometric_view_zoom_level;
-    settings.frontview_zoom_level = game.packet_save_head.frontview_zoom_level;
-    settings.isometric_tilt = game.packet_save_head.isometric_tilt;
-    settings.highlight_mode = game.packet_save_head.highlight_mode;
-    IMPRISON_BUTTON_DEFAULT = game.packet_save_head.default_imprison_tendency;
-    FLEE_BUTTON_DEFAULT = game.packet_save_head.default_flee_tendency;
-    set_skip_heart_zoom_feature(game.packet_save_head.skip_heart_zoom);
     if (!init_level())
         return false;
+    if (!verify_replay_map_checksums())
+        ERRORLOG("Replay \"%s\": level on disk differs from original", replay.fname);
     setup_zombie_players();
-    init_players();
     restore_users_from_packet_save();
-    frontend_alliances = game.packet_save_head.frontend_alliances;
+    for (NetUserId user = 0; user < MAX_NET_USERS; user++)
+    {
+        if ((get_net_user_player_number(user) >= 0) && (replay.head.user_players[user] >= 0))
+            apply_user_preferences(user, replay.head.user_prefs[user], UPF_NewGame);
+    }
+    init_players();
+    for (NetUserId user = 0; user < MAX_NET_USERS; user++)
+    {
+        if ((get_net_user_player_number(user) >= 0) && (replay.head.user_players[user] >= 0))
+            apply_user_start_tendencies(user);
+    }
+    frontend_alliances = replay.head.frontend_alliances;
     setup_alliances();
-    are_disconnect_victories_allowed();
-    if (game.human_players_count == 1)
-        game.game_kind = GKind_LocalGame;
-    if (game.turns_stored < game.turns_fastforward)
-        game.turns_fastforward = game.turns_stored;
+    if (replay.turns_stored < replay.turns_fastforward)
+        replay.turns_fastforward = replay.turns_stored;
     post_init_level();
     post_init_players();
     set_selected_level_number(0);
-    struct PlayerInfo* player = get_my_player();
-    set_engine_view(player, rotate_mode_to_view_mode(game.packet_save_head.video_rotate_mode));
+    if ((game.mode_flags & MFlg_IsDemoMode) == 0) {
+        observer_init(my_player_number);
+    }
+    update_local_view(get_my_user(), false);
     return true;
 }
 
@@ -380,28 +410,24 @@ void startup_network_game(CoroutineLoop *context, TbBool local)
 {
     SYNCDBG(0,"Starting up network game");
     stop_streamed_samples();
-    unsigned int flgmem;
-    struct PlayerInfo *player;
     setup_count_players();
-    player = get_my_player();
-    flgmem = player->is_active;
     if (local && (campaign.human_player >= 0) && (!force_player_num))
     {
         default_loc_player = campaign.human_player;
         game.local_plyr_idx = default_loc_player;
         my_player_number = default_loc_player;
     }
+    net_lobby_empty_seats = 0;
     if (!init_level()) {
         coroutine_clear(context, true);
         return;
     }
-    player = get_my_player();
-    player->is_active = flgmem;
     //if (game.flagfield_14EA4A == 2) //was wrong because init_level sets this to 2. global variables are evil (though perhaps that's why they were chosen for DK? ;-))
     TbBool ShouldAssignCpuKeepers = 0;
     if (local)
     {
         game.game_kind = GKind_LocalGame;
+        frontnet_skirmish_resolve_seats();
         init_players_local_game();
         if (AssignCpuKeepers || campaign.assignCpuKeepers) {
             ShouldAssignCpuKeepers = 1;
@@ -410,6 +436,7 @@ void startup_network_game(CoroutineLoop *context, TbBool local)
     {
         game.game_kind = GKind_MultiGame;
         if (!init_players_network_game()) {
+            clear_flag(game.operation_flags, GOF_SingleLevel);
             coroutine_clear(context, true);
             return;
         }
@@ -421,23 +448,34 @@ void startup_network_game(CoroutineLoop *context, TbBool local)
 
 static CoroutineLoopState startup_network_game_tail(CoroutineLoop *context)
 {
-    TbBool ShouldAssignCpuKeepers = coroutine_args(context)[0];
-    if (game.game_kind == GKind_MultiGame) {
-        setup_alliances();
-        are_disconnect_victories_allowed();
+    if (net_join_role == NetRole_Spectator && network_is_active()) {
+        setup_zombie_players();
+        post_init_level();
+        if (!network_spectator_start()) {
+            LbNetwork_Stop();
+            coroutine_clear(context, true);
+            return CLS_CONTINUE;
+        }
+        set_selected_level_number(0);
+        return CLS_CONTINUE;
     }
+    TbBool ShouldAssignCpuKeepers = coroutine_args(context)[0];
     if (fe_computer_players || ShouldAssignCpuKeepers)
     {
         SYNCDBG(5,"Setting up uninitialized players as computer players");
-        setup_computer_players();
+        setup_computer_players(net_lobby_empty_seats);
     } else
     {
         SYNCDBG(5,"Setting up uninitialized players as zombie players");
         setup_zombie_players();
     }
+    setup_alliances();
     post_init_level();
     post_init_players();
     post_init_packets();
+    if (game.game_kind == GKind_MultiGame && network_is_active()) {
+        network_game_started();
+    }
     set_selected_level_number(0);
 
 #ifdef FUNCTESTING
@@ -451,7 +489,6 @@ static CoroutineLoopState startup_network_game_tail(CoroutineLoop *context)
 
 void faststartup_network_game(CoroutineLoop *context)
 {
-    struct PlayerInfo *player;
     SYNCDBG(3,"Starting");
     reenter_video_mode();
     my_player_number = default_loc_player;
@@ -461,8 +498,6 @@ void faststartup_network_game(CoroutineLoop *context)
         if (!change_campaign(CampgnT_Default,""))
             ERRORLOG("Unable to load campaign");
     }
-    player = get_my_player();
-    player->is_active = 1;
     startup_network_game(context, true);
     if (!context->error)
         coroutine_add(context, &set_not_has_quit);
@@ -484,10 +519,20 @@ CoroutineLoopState set_not_has_quit(CoroutineLoop *context)
 void clear_complete_game(void)
 {
     memset(&game, 0, sizeof(struct Game));
+    local_state.fast_forward = 0;
+    local_state.process_turn_time = 0;
+    local_state.delta_time = 0;
+    local_state.time_delta = 0;
+    local_state.show_gui = false;
+    local_state.show_panel = false;
+    for (NetUserId user = 0; user < MAX_NET_USERS; user++) {
+        game.user_states[user].player_id = PLAYER_NONE;
+    }
     memset(&intralvl, 0, sizeof(struct IntralevelData));
-    game.turns_packetoff = -1;
+    clear_custom_intralevel_data();
+    replay.turns_packetoff = -1;
     game.local_plyr_idx = default_loc_player;
-    game.packet_checksum_verify = start_params.packet_checksum_verify;
+    replay.checksum_verify = start_params.packet_checksum_verify;
     // Set levels to 0, as we may not have the campaign loaded yet
     set_continue_level_number(first_singleplayer_level());
     if ((start_params.operation_flags & GOF_SingleLevel) != 0)
@@ -499,13 +544,12 @@ void clear_complete_game(void)
     fps_limit_main = start_params.num_fps_draw_main;
     fps_limit_secondary = start_params.num_fps_draw_secondary;
     game.mode_flags = start_params.mode_flags;
-    game.easter_eggs_enabled = start_params.easter_egg;
-    set_flag_value(game.system_flags, GSF_AllowOnePlayer, start_params.one_player);
+    set_flag_value(local_system_flags, GSF_AllowOnePlayer, start_params.one_player);
     game.computer_chat_flags = start_params.computer_chat_flags;
     game.operation_flags = start_params.operation_flags;
-    snprintf(game.packet_fname,150, "%s", start_params.packet_fname);
-    game.packet_save_enable = start_params.packet_save_enable;
-    game.packet_load_enable = start_params.packet_load_enable;
+    snprintf(replay.fname, sizeof(replay.fname), "%s", start_params.packet_fname);
+    replay.save_enable = start_params.packet_save_enable;
+    replay.load_enable = start_params.packet_load_enable;
     my_player_number = default_loc_player;
 }
 
@@ -525,8 +569,8 @@ void init_seeds()
         game.sound_random_seed = calender_time * 7919 + 7927;
 
         // If doing -packetload then use the replay's stored seed
-        if ((game.packet_save_head.action_seed != 0) && (game.packet_load_enable == true)) {
-            game.action_random_seed = game.packet_save_head.action_seed;
+        if ((replay.head.action_seed != 0) && (replay.load_enable == true)) {
+            game.action_random_seed = replay.head.action_seed;
         } else {
             game.action_random_seed = calender_time * 9311 + 9319;
         }

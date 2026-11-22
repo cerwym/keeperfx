@@ -43,6 +43,7 @@
 #include "keeperfx.hpp"
 #include "player_instances.h"
 #include "custom_sprites.h"
+#include "net_filecheck.h"
 
 #include <toml.h>
 #include "post_inc.h"
@@ -129,6 +130,7 @@ unsigned char *load_single_map_file_to_buffer(LevelNumber lvnum,const char *fext
 {
   short fgroup = get_level_fgroup(lvnum);
   char* fname = prepare_file_fmtpath(fgroup, "map%05u.%s", lvnum, fext);
+  add_loaded_file_checksum(fname);
   long fsize = LbFileLengthRnc(fname);
   if (fsize < *ldsize)
   {
@@ -1322,6 +1324,7 @@ static void load_ext_slabs(LevelNumber lvnum)
 {
     short fgroup = get_level_fgroup(lvnum);
     char* fname = prepare_file_fmtpath(fgroup, "map%05lu.slx", (unsigned long)lvnum);
+    add_loaded_file_checksum(fname);
     if (LbFileExists(fname))
     {
         if (game.map_tiles_x * game.map_tiles_y != LbFileLoadAt(fname, game.slab_ext_data))
@@ -1480,8 +1483,8 @@ static TbBool load_level_file(LevelNumber lvnum)
         init_top_texture_to_cube_table();
         result = false;
     }
-    // Apply per-level sound overrides if levels/mapNNNNN.sounds.cfg exists.
-    // (Snapshot was already restored before load_stats_files in main_game.c.)
+    // Filesystem sounds were loaded before tileset.toml. This pass picks up samples
+    // that are only inside the map zip.
     load_level_sounds_config(fgroup, lvnum);
     return result;
 }

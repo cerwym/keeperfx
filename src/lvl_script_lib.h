@@ -130,7 +130,7 @@ enum TbScriptCommands {
     Cmd_MAKE_SAFE                          = 117,
     Cmd_LOCATE_HIDDEN_WORLD                = 118,
     Cmd_USE_SPECIAL_TRANSFER_CREATURE      = 119,
-    Cmd_CHANGE_CREATURES_ANNOYANCE         = 120,
+    Cmd_USE_SPECIAL_STEAL_HERO             = 120,
     Cmd_COMPUTER_DIG_TO_LOCATION           = 121,
     Cmd_DELETE_FROM_PARTY                  = 122,
     Cmd_SET_SACRIFICE_RECIPE               = 123,
@@ -210,6 +210,7 @@ enum TbScriptCommands {
     Cmd_TRIGGER_ACTION_POINT               = 197,
     Cmd_SET_LEVEL_ENSIGN                   = 198,
     Cmd_DISPLAY_VARIABLE_WITH_LABEL        = 199,
+    Cmd_CHANGE_CREATURES_ANNOYANCE         = 200,
 };
 
 struct ScriptLine {
@@ -314,6 +315,8 @@ enum ScriptVariables {
   SVar_PLAYER_SCORE                    = 89,
   SVar_MANAGE_SCORE                    = 90,
   SVar_CONTROLLED_THING                = 91,
+  SVar_BATTLES_LOST_VS                 = 92,
+  SVar_BATTLES_WON_VS                  = 93,
  };
 
 extern const struct NamedCommand player_desc[];
@@ -334,7 +337,7 @@ extern const struct NamedCommand variable_desc[];
 extern const struct NamedCommand dk1_variable_desc[];
 extern const struct NamedCommand fill_desc[];
 extern const struct NamedCommand set_door_desc[];
-extern const struct NamedCommand texture_pack_desc[];
+extern struct NamedCommand texture_pack_desc[];
 extern const struct NamedCommand locked_desc[];
 
 ThingModel parse_creature_name(const char *creature_name);
@@ -342,6 +345,7 @@ struct ScriptValue *allocate_script_value(void);
 struct Thing *script_process_new_object(ThingModel tngmodel, MapSubtlCoord stl_x, MapSubtlCoord stl_y, long arg, PlayerNumber plyr_idx, short move_angle);
 struct Thing* script_process_new_effectgen(ThingModel crmodel, TbMapLocation location, long range);
 struct Thing* script_process_new_corpse(ThingModel tngmodel, MapSubtlCoord stl_x, MapSubtlCoord stl_y, PlayerNumber plyr_idx, CrtrExpLevel exp_level, TbBool dying);
+void set_creature_property(ThingModel creature, int32_t property, TbBool enable);
 TbBool script_new_creature_type(const char* name);
 TbBool script_copy_creature_type(ThingModel source_id,const char* name);
 void command_init_value(struct ScriptValue* value, unsigned long var_index, unsigned long plr_range_id);

@@ -1188,21 +1188,16 @@ TbBool set_creature_combat_state(struct Thing *fighter, struct Thing *enemy, CrA
     }
     figctrl->combat.attack_type = attack_type;
     // If creatures weren't at combat before, then play a speech
-    if ((enmctrl->combat_flags & (CmbtF_Melee|CmbtF_Ranged|CmbtF_Waiting)) == 0)
-    {
-      if (is_my_player_number(fighter->owner))
-      {
-          if (is_my_player_number(enemy->owner)) {
-              output_message_far_from_thing(fighter,SMsg_FingthingFriends, MESSAGE_DURATION_FIGHT);
-          } else {
-              output_message_far_from_thing(fighter,SMsg_CreatureAttacking, MESSAGE_DURATION_FIGHT);
-          }
-      } else
-      {
-          if (is_my_player_number(enemy->owner)) {
-              output_message_far_from_thing(enemy,SMsg_CreatureDefending, MESSAGE_DURATION_FIGHT);
-          }
-      }
+    if ((enmctrl->combat_flags & (CmbtF_Melee|CmbtF_Ranged|CmbtF_Waiting)) == 0) {
+        if (is_my_player_number(fighter->owner)) {
+            if (is_my_player_number(enemy->owner)) {
+                output_message_far_from_thing(fighter, SMsg_FingthingFriends, MESSAGE_DURATION_FIGHT);
+            } else {
+                output_message_far_from_thing(fighter, SMsg_CreatureAttacking, MESSAGE_DURATION_FIGHT);
+            }
+        } else if (is_my_player_number(enemy->owner)) {
+            output_message_far_from_thing(enemy, SMsg_CreatureDefending, MESSAGE_DURATION_FIGHT);
+        }
     }
     // If we're supposed to enter ranged combat
     if (attack_type == AttckT_Ranged)
@@ -1470,7 +1465,7 @@ short creature_door_combat(struct Thing *creatng)
     struct Thing* doortng = thing_get(cctrl->combat.battle_enemy_idx);
     if ((cctrl->combat_flags & CmbtF_DoorFight) == 0)
     {
-        ERRORLOG("The %s index %d is not in door combat but should be", thing_model_name(creatng), (int)creatng->index);
+        ERRORLOG("The %s index %d at %d,%d is not in door combat but should be", thing_model_name(creatng), creatng->mappos.x.stl.num, creatng->mappos.y.stl.num, (int)creatng->index);
         set_start_state(creatng);
         return 0;
     }
@@ -3393,7 +3388,7 @@ TbResult creature_retreat_from_combat(struct Thing *figtng, struct Thing *enmtng
     {
         pos.x.val = figtng->mappos.x.val - dist_x;
         pos.y.val = figtng->mappos.y.val - dist_y;
-        pos.z.val = get_thing_height_at(figtng, &pos);
+        pos.z.val = get_thing_height_at_xy(figtng, &pos);
         if (creature_move_to(figtng, &pos, get_creature_speed(figtng), 0, 1) != -1)
         {
            return Lb_SUCCESS;
@@ -3415,7 +3410,7 @@ TbResult creature_retreat_from_combat(struct Thing *figtng, struct Thing *enmtng
       else
         pos.x.val -= COORD_PER_STL;
     }
-    pos.z.val = get_thing_height_at(figtng, &pos);
+    pos.z.val = get_thing_height_at_xy(figtng, &pos);
 
     if (setup_person_move_backwards_to_coord(figtng, &pos, NavRtF_Default))
     {
@@ -3433,7 +3428,7 @@ TbResult creature_retreat_from_combat(struct Thing *figtng, struct Thing *enmtng
       pos.x.val += 768 * i;
     else
       pos.y.val += 768 * i;
-    pos.z.val = get_thing_height_at(figtng, &pos);
+    pos.z.val = get_thing_height_at_xy(figtng, &pos);
     if (setup_person_move_backwards_to_coord(figtng, &pos, NavRtF_Default))
     {
         figtng->continue_state = continue_state;

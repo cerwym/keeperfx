@@ -13,11 +13,11 @@ extern "C" {
 extern struct TbNetworkSessionNameEntry lan_sessions[LAN_SESSIONS_MAX];
 extern int lan_session_count;
 
-void lan_host_start(const char *name, uint16_t port);
+void lan_host_start(uint16_t port);
 void lan_host_update(void);
+void lan_service(void);
 void lan_refresh_sessions(void);
 void lan_shutdown(void);
-void lan_set_lobby_id(const char *id);
 
 #ifdef __cplusplus
 }

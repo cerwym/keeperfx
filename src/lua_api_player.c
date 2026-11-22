@@ -42,24 +42,7 @@ static int lua_Set_texture(lua_State *L)
 {
     struct PlayerRange player_range = luaL_checkPlayerRange(L, 1);
     
-    long texture_id;
-    if (lua_isnumber(L, 2)) {
-        // Integer input is 0-based: ID 0 = tmapa000.dat
-        // set_player_texture uses slab_ext_data where slot 0 is the base map texture
-        // and slot N+1 holds tmapaN.dat, so we add 1 to convert. -1 means reset.
-        long n = lua_tointeger(L, 2);
-        if (n < 0) 
-            texture_id = -1;
-        else 
-            texture_id = n + 1; 
-    } else {
-        // String input is 1-based and uses texture_pack_desc values ("STANDARD"=1, "ANCIENT"=2, ...).
-        // These values already match the slab_ext_data slot layout.
-        // "NONE"=0 has no corresponding texture file, so treat it as reset (-1).
-        texture_id = luaL_checkNamedCommand(L, 2, texture_pack_desc);
-        if (texture_id == 0)
-            texture_id = -1;
-    }
+    long texture_id = luaL_checkTexturePack(L, 2);
     for (PlayerNumber i = player_range.start_idx; i < player_range.end_idx; i++)
     {
         set_player_texture(i, texture_id);
@@ -228,12 +211,14 @@ static int player_get_field(lua_State *L) {
             lua_pushstring(L, "Roaming");
         } else if (player_is_neutral(plyr_idx)) {
             lua_pushstring(L, "Neutral");
+        } else if (!player_exists(player)) {
+            lua_pushstring(L, "Inactive");
+        } else if (player_is_placeholder(player)) {
+            lua_pushstring(L, "Placeholder");
         } else if (player->allocflags & PlaF_CompCtrl) {
             lua_pushstring(L, "Computer");
-        } else if (player->is_active) {
-            lua_pushstring(L, "Human");
         } else {
-            lua_pushstring(L, "Inactive");
+            lua_pushstring(L, "Human");
         }
     } else if (strcmp(key, "max_creatures") == 0) {
         if (dungeon_invalid(dungeon)) {

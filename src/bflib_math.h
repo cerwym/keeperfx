@@ -31,6 +31,10 @@ extern "C" {
 /** Amount of fractional bits in resulting values of trigonometric operations. */
 #define LbFPMath_TrigmBits 16
 
+#ifndef M_TAU
+#define M_TAU 6.28318530717958647692
+#endif
+
 #define CEILING_POS(X) ((X-(int)(X)) > 0 ? (int)(X+1) : (int)(X))
 #define CEILING_NEG(X) ((X-(int)(X)) < 0 ? (int)(X-1) : (int)(X))
 #define CEILING(X) ( ((X) > 0) ? CEILING_POS(X) : CEILING_NEG(X) )
@@ -70,6 +74,8 @@ struct Proportion { // sizeof = 8
 long LbSinL(long x);
 long LbCosL(long x);
 long LbSqrL(long x);
+int LbCtz32(uint32_t x);
+int LbCtz64(uint64_t x);
 int32_t LbArcTanAngle(int32_t x,int32_t y);
 long LbMathOperation(unsigned char opkind, long first_operand, long second_operand);
 unsigned long LbRandomSeries(unsigned long range, uint32_t *seed, const char *func_name, unsigned long place);

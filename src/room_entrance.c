@@ -339,9 +339,7 @@ void generate_creature_for_dungeon(struct Dungeon * dungeon)
         if ((long)crconf->pay > dungeon->total_money_owned)
         {
             SYNCDBG(8,"The %s will not come as player %d has less than %d gold",creature_code_name(crmodel),(int)dungeon->owner,(int)crconf->pay);
-            if (is_my_player_number(dungeon->owner)) {
-                output_message(SMsg_GoldLow, MESSAGE_DURATION_TREASURY);
-            }
+            output_player_message(dungeon->owner, SMsg_GoldLow, MESSAGE_DURATION_TREASURY);
         }
         else if (lair_space >= 0)
         {
@@ -395,7 +393,7 @@ void process_entrance_generation(void)
             if (generation_due_for_dungeon(dungeon))
             {
                 due = true;
-                if ((plyr->is_active) && (plyr->victory_state != VicS_LostLevel) )
+                if (is_active_keeper(plyr) && (plyr->victory_state != VicS_LostLevel) )
                 {
                     if (generation_available_to_dungeon(dungeon)) {
                         generate_creature_for_dungeon(dungeon);

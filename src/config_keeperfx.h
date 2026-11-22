@@ -53,8 +53,11 @@ enum TbFeature {
     Ft_DeltaTime                    = 0x40000,
     Ft_NoCdMusic                    = 0x80000,
     Ft_RelativeMouseMode            = 0x100000,
-    Ft_ParchmentFade                = 0x200000,
 };
+
+#define PARCHMENT_MAP_FADE_ORIGINAL_TURNS 8
+#define PARCHMENT_MAP_FADE_FAST_TURNS 3
+#define PARCHMENT_MAP_FADE_MAX_TURNS 20
 
 enum TbLanguage {
     Lang_Unset    =  0,
@@ -130,6 +133,15 @@ extern short api_enabled;
 extern uint16_t api_port;
 extern TbBool exit_on_lua_error;
 extern uint32_t packetsave_max_kb;
+enum ReplayTypes {
+    ReplTyp_Campaign = 0,
+    ReplTyp_Freeplay,
+    ReplTyp_Multiplayer,
+    ReplTyp_Count,
+};
+extern TbBool replays_enabled;
+extern uint32_t max_replays[ReplTyp_Count];
+extern uint32_t replay_rewind_buffer_kb;
 extern TbBool FLEE_BUTTON_DEFAULT;
 extern TbBool IMPRISON_BUTTON_DEFAULT;
 /******************************************************************************/
@@ -141,7 +153,7 @@ int parse_draw_fps_config_val(const char *arg, int32_t *fps_draw_main, int32_t *
 TbBool is_feature_on(unsigned long feature);
 void set_skip_heart_zoom_feature(TbBool enable);
 TbBool get_skip_heart_zoom_feature(void);
-TbBool censorship_enabled(void);
+TbBool local_censorship_enabled(void);
 TbBool atmos_sounds_enabled(void);
 TbBool resize_movies_enabled(void);
 TbBool freeze_game_on_focus_lost(void);
@@ -150,7 +162,8 @@ TbBool lock_cursor_in_possession(void);
 TbBool use_relative_mouse_mode(void);
 TbBool pause_music_when_game_paused(void);
 TbBool mute_audio_on_focus_lost(void);
-TbBool use_parchment_fade(void);
+unsigned char get_parchment_map_fade_turns(void);
+long get_max_sound_voices(void);
 /******************************************************************************/
 const char *get_language_lwrstr(int lang_id);
 /******************************************************************************/

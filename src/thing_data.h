@@ -24,6 +24,7 @@
 
 /** Max amount of creatures supported on any map. */
 #define CREATURES_COUNT       1024
+#define HEALTH_BAR_FLASH_TURNS 8
 
 
 #ifdef __cplusplus
@@ -108,7 +109,6 @@ enum ThingMovementFlags {
     TMvF_GoThroughWalls     = 0x010,
     TMvF_Flying             = 0x020, // The creature is flying and can navigate in the air.
     TMvF_Immobile           = 0x040, // The creature cannot move.
-    TMvF_IsOnSnow           = 0x080, // The creature leaves footprints on snow path.
     TMvF_MagicFall          = 0x100, // The creature does a free fall with magical effect, ie. it was just created with some initial velocity.
     TMvF_Grounded           = 0x200, // For creature which are normally flying, this informs that its grounded due to spells or its condition.
 };
@@ -137,7 +137,7 @@ struct Thing {
       } valuable;
       struct {
         short life_remaining;
-        char freshness_state;
+        int8_t freshness_state;
         unsigned char possession_startup_timer;
         TbBool some_chicken_was_sacrificed;
         unsigned short angle;
@@ -282,7 +282,7 @@ struct Thing {
     unsigned short sprite_size;
     unsigned char current_frame;
     unsigned char max_frames;
-    char transformation_speed;
+    int8_t transformation_speed;
     unsigned short sprite_size_min;
     unsigned short sprite_size_max;
     unsigned char rendering_flags;
@@ -305,6 +305,8 @@ struct Thing {
     uint32_t flags; //ThingAddFlags
     GameTurn last_turn_drawn;
     GameTurn last_turn_damaged;
+    GameTurn last_turn_pushed;
+    PlayerNumber pushed_by_player;
     unsigned short previous_floor_height;
     struct Coord3d previous_mappos;
     uint32_t random_seed;
@@ -344,6 +346,7 @@ TbBool thing_is_dragged_or_pulled(const struct Thing *thing);
 struct PlayerInfo *get_player_thing_is_controlled_by(const struct Thing *thing);
 
 void set_thing_animation(struct Thing *thing, long animation_index, long speed);
+void advance_thing_animation(struct Thing *thing);
 void set_thing_draw(struct Thing *thing, long anim, long speed, long scale, char animate_once, char start_frame, unsigned char draw_class);
 
 void query_thing(struct Thing *thing);

@@ -15,6 +15,19 @@ elseif(UNIX AND NOT APPLE)
     list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX "/WindowCompositorWin\\.cpp$")
 endif()
 
+# ImGui overlay exclusion.
+# DevTools.cpp is the always-present facade (no-ops without ImGui) and must
+# stay compiled even when the tooling is off, so the rest of the engine can
+# call it unconditionally. DebugOverlay.cpp is the ImGui-dependent shell, and
+# backends/vendors need the imgui target to exist first -- both are filtered
+# here and added back explicitly, alongside the link, in the per-target loop
+# below (where KFX_TARGETS and the imgui::imgui target both exist yet).
+if(NOT KEEPERFX_IMGUI)
+    list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/kfx/imgui/DebugOverlay\\.cpp$")
+endif()
+list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/kfx/imgui/vendors/.*\\.cpp$")
+list(FILTER KEEPERFX_SOURCES_CXX EXCLUDE REGEX ".*/kfx/imgui/backends/.*\\.cpp$")
+
 # Window icon
 if(NOT WIN32)
     set(KFX_ICON_PNG "${CMAKE_SOURCE_DIR}/res/keeperfx_icon256-24bpp.png")
@@ -88,6 +101,41 @@ foreach(_t IN LISTS KFX_TARGETS)
     if(KEEPERFX_TRACY AND TARGET TracyClient)
         target_link_libraries(${_t} PRIVATE TracyClient)
     endif()
+    # ImGui overlay (optional — desktop + vcpkg only). vendors/ and backends/
+    # are excluded from the generic glob above because they need the imgui
+    # target to exist first; added back here, explicitly, once it does.
+    if(KEEPERFX_IMGUI AND TARGET imgui::imgui)
+        target_link_libraries(${_t} PRIVATE imgui::imgui)
+        target_sources(${_t} PRIVATE
+            "${CMAKE_SOURCE_DIR}/src/kfx/imgui/vendors/imgui_impl_sdl3.cpp"
+            "${CMAKE_SOURCE_DIR}/src/kfx/imgui/backends/GLImGuiBackend.cpp"
+        )
+    endif()
 endforeach()
 
 kfx_status("BUILD" "${CMAKE_CXX_COMPILER_ID} -> keeperfx, keeperfx_hvlog")
+
+# Save format tests (tests/save): links only the save codec, the field tables and zlib, no game code.
+# Off by default. Build with -DKFX_SAVE_TESTS=ON, run with ctest.
+option(KFX_SAVE_TESTS "Build the save format tests (kfx_save_tests)" OFF)
+if(KFX_SAVE_TESTS)
+    enable_testing()
+    file(GLOB KFX_SAVE_SOURCES CONFIGURE_DEPENDS
+        "${CMAKE_SOURCE_DIR}/src/kfx/save/core/*.cpp" "${CMAKE_SOURCE_DIR}/src/kfx/save/core/schema/*.c")
+    add_executable(kfx_save_tests
+        "${CMAKE_SOURCE_DIR}/tests/save/kfx_save_tests.c"
+        "${CMAKE_SOURCE_DIR}/tools/save-tool/save_digest.c"
+        "${CMAKE_SOURCE_DIR}/tools/save-tool/save_validate.c"
+        ${KFX_SAVE_SOURCES})
+    target_include_directories(kfx_save_tests PRIVATE
+        "${CMAKE_SOURCE_DIR}/src" "${CMAKE_SOURCE_DIR}/tools/save-tool" "${KFX_CENTITOML_SRC}"
+        $<TARGET_PROPERTY:kfx_sdl3,INTERFACE_INCLUDE_DIRECTORIES>)
+    target_compile_definitions(kfx_save_tests PRIVATE BFDEBUG_LEVEL=0 DEBUG=0)
+    if(WIN32)
+        target_link_libraries(kfx_save_tests PRIVATE zlib_static)
+    else()
+        target_link_libraries(kfx_save_tests PRIVATE PkgConfig::ZLIB)
+    endif()
+    add_test(NAME kfx_save_tests COMMAND kfx_save_tests)
+    kfx_status("TESTS" "kfx_save_tests (ctest)")
+endif()

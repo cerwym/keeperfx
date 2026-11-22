@@ -130,6 +130,12 @@ public:
      *  context is current on the calling thread. Returns nullptr on failure. */
     virtual std::unique_ptr<IGLContext> CreateGLContext() { return nullptr; }
 
+    /** The real native window handle (SDL_Window*, cast to void*), for code
+     *  that must bind directly to it (e.g. the ImGui debug overlay's SDL3
+     *  platform binding). Returns nullptr for any backend that doesn't
+     *  support it -- harmless everywhere except the one call site that
+     *  actually needs it. */
+    virtual void* GetNativeWindowHandle() const { return nullptr; }
 
     // ----- Display info -----
 

@@ -23,8 +23,6 @@
 #include "bflib_sound.h"
 #include "globals.h"
 
-#include <SDL3_mixer/SDL_mixer.h>
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -62,7 +60,6 @@ enum SoundSettingsFlags {
 };
 
 extern int atmos_sound_frequency;
-extern int sdl_flags;
 
 #pragma pack()
 
@@ -74,8 +71,13 @@ void update_player_sounds(void);
 void process_3d_sounds(void);
 
 void thing_play_sample(struct Thing *, SoundSmplTblID, SoundPitch, char repeats, unsigned char ctype, unsigned char flags, long priority, SoundVolume);
+void play_player_sample(PlayerNumber plyr_idx, SoundSmplTblID smptbl_idx);
+void play_user_sample(int user, SoundSmplTblID smptbl_idx);
+TbBool is_local_action(PlayerNumber plyr_idx, int user);
+void play_action_sample(PlayerNumber plyr_idx, int user, SoundSmplTblID smptbl_idx);
 void play_sound_if_close_to_receiver(struct Coord3d*, SoundSmplTblID);
 void stop_thing_playing_sample(struct Thing *, SoundSmplTblID smpl_idx);
+void play_creature_footstep(struct Thing *thing, SoundVolume loudness);
 void play_thing_walking(struct Thing *thing);
 
 TbBool ambient_sound_prepare(void);
@@ -86,8 +88,6 @@ void mute_audio(TbBool mute);
 
 void update_first_person_object_ambience(struct Thing *thing);
 
-int InitialiseSDLAudio();
-void ShutDownSDLAudio();
 TbBool play_streamed_sample(const char * fname, SoundVolume);
 void set_streamed_sample_volume(SoundVolume);
 void stop_streamed_samples();

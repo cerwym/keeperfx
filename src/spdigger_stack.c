@@ -145,7 +145,7 @@ long find_reachable_imp_tasks_excluding_start(struct Thing *creatng, SpDiggerTas
                 struct Coord3d pos;
                 pos.x.val = subtile_coord_center(stl_x);
                 pos.y.val = subtile_coord_center(stl_y);
-                pos.z.val = get_thing_height_at(creatng, &pos);
+                pos.z.val = get_thing_height_at_xy(creatng, &pos);
 
                 if (creature_can_navigate_to_with_storage(creatng, &pos, NavRtF_Default)) {
                     return n;
@@ -460,7 +460,7 @@ long check_out_unprettied_or_unconverted_area(struct Thing *thing)
             {
                 navpos.x.val = subtile_coord_center(stl_x);
                 navpos.y.val = subtile_coord_center(stl_y);
-                navpos.z.val = get_thing_height_at(thing, &navpos);
+                navpos.z.val = get_thing_height_at_xy(thing, &navpos);
                 if (creature_can_navigate_to_with_storage(thing, &navpos, NavRtF_Default))
                 {
                     min_taskid = 1;
@@ -482,7 +482,7 @@ long check_out_unprettied_or_unconverted_area(struct Thing *thing)
           {
               navpos.x.val = subtile_coord_center(stl_x);
               navpos.y.val = subtile_coord_center(stl_y);
-              navpos.z.val = get_thing_height_at(thing, &navpos);
+              navpos.z.val = get_thing_height_at_xy(thing, &navpos);
               if (creature_can_navigate_to_with_storage(thing, &navpos, NavRtF_Default))
               {
                   min_taskid = 2;
@@ -524,10 +524,8 @@ static TbBool imp_will_soon_be_converting_at_excluding(struct Thing *creatng, Ma
     struct CreatureControl *cctrl;
     struct Coord3d pos2;
 
-    pos2.x.stl.num = stl_x;
-    pos2.x.stl.pos = 0;
-    pos2.y.stl.num = stl_y;
-    pos2.y.stl.pos = 0;
+    pos2.x.val = subtile_coord(stl_x, 0);
+    pos2.y.val = subtile_coord(stl_y, 0);
     owner = creatng->owner;
     struct Dungeon *dungeon = get_dungeon(owner);
     struct Thing *thing = thing_get(dungeon->digger_list_start);
@@ -2720,7 +2718,7 @@ long check_out_imp_has_money_for_treasure_room(struct Thing *thing)
         return 0;
     }
     // Find a treasure room to drop the money
-    room = find_nearest_room_of_role_for_thing_with_spare_capacity(thing, thing->owner, RoRoF_GoldStorage, NavRtF_Default, 1);
+    room = find_nearest_room_of_role_for_thing_with_spare_gold_capacity(thing, thing->owner, RoRoF_GoldStorage, NavRtF_Default);
     if (room_is_invalid(room))
     {
         // Check why the treasure room search failed and inform the player
@@ -3329,8 +3327,7 @@ long check_out_worker_pickup_trap_for_workshop(struct Thing *thing, struct Digge
         if (evidx > 0)
         {
 
-            if ( (is_my_player_number(thing->owner)) && (!is_my_player_number(sectng->owner)) )
-            {
+            if ( (is_my_player_number(thing->owner)) && (!is_my_player_number(sectng->owner)) ) {
                 if (sectng->owner == game.neutral_player_num)
                 {
                     output_message(SMsg_DiscoveredTrap, 0);
@@ -3345,8 +3342,7 @@ long check_out_worker_pickup_trap_for_workshop(struct Thing *thing, struct Digge
           EvKind_DoorCrateFound, thing->owner, sectng->index);
         if (evidx > 0)
         {
-            if ( (is_my_player_number(thing->owner)) && (!is_my_player_number(sectng->owner)) )
-            {
+            if ( (is_my_player_number(thing->owner)) && (!is_my_player_number(sectng->owner)) ) {
                 if (sectng->owner == game.neutral_player_num)
                 {
                     output_message(SMsg_DiscoveredDoor, 0);
